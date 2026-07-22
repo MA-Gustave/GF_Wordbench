@@ -1,0 +1,50 @@
+schema_id = "gf-wordbench.project"
+schema_version = "1.0"
+
+[project]
+id = "sqi"
+name = "Albanian"
+language_code = "sqi"
+root = "."
+
+[sources]
+directory = "lib/src/albanian"
+glob = "*.gf"
+include_regex = "^[A-Z][A-Za-z0-9_]*\\.gf$"
+exclude_regex = "( - Copie\\.gf$|\\.bak\\.gf$|\\.tmp\\.gf$|\\.disabled\\.gf$|\\s)"
+
+[gf]
+path_parts = [
+  "lib/src",
+  "lib/src/albanian",
+  "abstract",
+  "common",
+  "prelude",
+]
+minimum_version = ""
+
+[modules]
+entrypoints = [
+  "GrammarSqi.gf",
+  "SyntaxSqi.gf",
+]
+checkpoints = [
+  "MorphoSqi.gf",
+  "NounSqi.gf",
+  "VerbSqi.gf",
+  "ExtendSqi.gf",
+  "StructuralSqi.gf",
+]
+
+[validation]
+required_scenarios = [
+  "load",
+  "missing",
+  "linearize",
+  "parse",
+]
+optional_scenarios = [
+  "generation",
+  "morphology",
+]
+release_requires_pgf = true
