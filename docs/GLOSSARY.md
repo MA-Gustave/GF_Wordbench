@@ -2,10 +2,12 @@
 
 **Document ID:** `GF-WB-GLOSSARY`  
 **Status:** Normative terminology reference  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\GLOSSARY.md`  
+**Target path:** `docs/GLOSSARY.md`  
 **Applies to:** GF Wordbench framework, active language project, validation assets, reports, schemas, and contract locks  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Terminology version:** `1.0.0`
+**Terminology version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -552,7 +554,7 @@ A helper becomes contractual when another module depends on its signature, repre
 
 A GF concrete module intentionally permitting missing linearizations.
 
-Its incomplete status must be explicit. It must not be mistaken for a fully implemented release concrete.
+Its incompleteness must be explicit. It must not be mistaken for a complete release concrete.
 
 ## Inheritance
 
@@ -1710,7 +1712,7 @@ A project document recording module providers, consumers, imports, entrypoints, 
 
 ## Known issue
 
-A currently accepted, blocked, or unresolved limitation with documented scope and impact.
+A documented unresolved limitation with defined scope and impact.
 
 ## Normative document
 
@@ -1728,23 +1730,13 @@ The project-specific conditions that must be satisfied before the active languag
 
 Persisted evidence proving that release criteria were evaluated against the intended current source state.
 
-## Status ledger
-
-The project’s structured record of stable, open, temporary, fallback, warning, blocked, stale, or resolved implementation items.
-
 ## Validation specification
 
 The project document defining required checkpoints, scenarios, inputs, golds, assertions, release gates, and acceptance criteria.
 
 ---
 
-# 19. Project development concepts
-
-## Blocked
-
-A project or contract status indicating that progress depends on unresolved external evidence, unavailable support, or another prerequisite.
-
-`blocked` is not a validation status.
+# 19. Project and release concepts
 
 ## Checkpoint
 
@@ -1758,26 +1750,6 @@ A documented statement of what was decided, why it was decided, and what alterna
 
 A top-level GF module used for compilation, loading, scenario execution, packaging, API exposure, or release validation.
 
-## Experimental
-
-A contract status indicating that the interface or behavior is not yet stable.
-
-## Project status
-
-A lifecycle classification used by project documentation or contract registries.
-
-Typical values:
-
-```text
-active
-experimental
-deprecated
-blocked
-retired
-```
-
-Project status is distinct from validation status.
-
 ## Release gate
 
 A mandatory validation criterion or collection of criteria that must pass before release.
@@ -1785,18 +1757,6 @@ A mandatory validation criterion or collection of criteria that must pass before
 ## Release target
 
 The configured entrypoint and artifact expected from a release build.
-
-## Retired
-
-A contract or project status indicating that the item is no longer active and its identifier must not be reused.
-
-## Stable
-
-A project-ledger status indicating that the implementation or decision is accepted and protected against casual change.
-
-## Temporary
-
-A project-ledger status indicating an intentionally provisional implementation that must not be mistaken for final behavior.
 
 ---
 
@@ -1873,16 +1833,6 @@ new
 removed
 ```
 
-## Contract or project lifecycle status
-
-```text
-active
-experimental
-deprecated
-blocked
-retired
-```
-
 ---
 
 # 21. Legacy and non-canonical aliases
@@ -1903,7 +1853,7 @@ retired
 | top-error mapping | ordered top-error record array | Migrate |
 | `sha1_short` | SHA-256 fingerprint fields | Read legacy only |
 | *root* without qualifier | project root, source root, run root, RGL root, or output root | Qualify |
-| *status* without qualifier | validation status, execution state, project status, or contract status | Qualify |
+| *status* without qualifier | validation status, overall status, execution state, ADR status, or document status | Qualify |
 | *output* without qualifier | stdout, stderr, raw evidence, normalized output, report, or artifact | Qualify |
 
 ---
@@ -1991,7 +1941,7 @@ Detailed rules belong to these documents:
 | Diagnostics | `docs/diagnostics/DIAGNOSTIC_OVERVIEW.md` |
 | Configuration | `docs/configuration/CONFIGURATION_OVERVIEW.md` |
 | Reports | `docs/reports/REPORTING_OVERVIEW.md` |
-| Project acceptance | `project/docs/VALIDATION_SPEC.md`, `RELEASE_CRITERIA.md` |
+| Project acceptance | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`, `RELEASE_CRITERIA.md` |
 
 When two documents appear to define the same term differently, this glossary controls the term’s general meaning, while the more specialized normative document controls its detailed operational rules.
 

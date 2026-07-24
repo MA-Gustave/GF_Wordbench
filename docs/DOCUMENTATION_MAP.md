@@ -2,8 +2,10 @@
 
 **Document ID:** `GF-WB-DOCUMENTATION-MAP`  
 **Status:** Normative navigation index  
-**Applies to:** Framework documentation, active-project documentation and project templates  
+**Applies to:** Framework documentation, active-project documentation, project templates and documentation governance  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
+**Last reviewed:** `2026-07-24`  
 **Update rule:** Update this map whenever a permanent document is added, removed, renamed or changes authority.
 
 ---
@@ -29,19 +31,20 @@ This map does not replace the documents it indexes.
 
 When two documents appear to overlap, use the following precedence.
 
-1. Contract-lock files for locked boundaries and persisted formats.
-2. Architectural decision records for accepted architectural decisions.
-3. Reference documents for canonical enumerations, schemas and command surfaces.
-4. Architecture and subsystem specifications for design and behavior.
-5. Usage documents for procedures.
-6. README files for orientation and navigation.
+1. Accepted architectural decision records.
+2. [`docs/DOCUMENTATION_ALIGNMENT_LOCK.md`](DOCUMENTATION_ALIGNMENT_LOCK.md) for cross-document interpretation.
+3. Specialized contract locks for framework, external-tool, persisted-schema, active-project and template boundaries.
+4. The document that owns the specific topic, schema, command surface or procedure.
+5. Overview, tutorial, quick-start, example and historical documents.
 
-A lower-authority document must link to the authoritative source instead of redefining it.
+A lower-authority document must link to the authoritative source instead of redefining it. The correction ledger coordinates work but does not create normative product behavior.
 
-### 2.1 Normative contract locks
+### 2.1 Documentation governance and contract locks
 
-| Document | Authority |
+| Document | Role |
 |---|---|
+| [`docs/DOCUMENTATION_ALIGNMENT_LOCK.md`](DOCUMENTATION_ALIGNMENT_LOCK.md) | Cross-document product identity, authority order, ownership boundaries and correction rules. |
+| [`docs/DOCUMENTATION_CORRECTION_LEDGER.md`](DOCUMENTATION_CORRECTION_LEDGER.md) | Coordination record for parallel documentation corrections and integration review. |
 | [`docs/INTERFILE_CONTRACT_LOCK.md`](INTERFILE_CONTRACT_LOCK.md) | Python and framework file-boundary contracts. |
 | [`docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`](EXTERNAL_TOOL_CONTRACT_LOCK.md) | GF, process, filesystem, environment and platform contracts. |
 | [`docs/PERSISTED_SCHEMA_LOCK.md`](PERSISTED_SCHEMA_LOCK.md) | Persisted formats, schema versions, paths and migrations. |
@@ -64,12 +67,12 @@ A lower-authority document must link to the authoritative source instead of rede
 ### 3.2 Language-project maintainer
 
 1. [`project/README.md`](../project/README.md)
-1. [`project/docs/00_PROJECT_START_HERE.md`](../project/docs/00_PROJECT_START_HERE.md)
+1. [`project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md`](../project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md)
 1. [`project/docs/LANGUAGE_ARCHITECTURE.md`](../project/docs/LANGUAGE_ARCHITECTURE.md)
 1. [`project/docs/INTERFILE_CONTRACT_LOCK.md`](../project/docs/INTERFILE_CONTRACT_LOCK.md)
-1. [`project/docs/VALIDATION_SPEC.md`](../project/docs/VALIDATION_SPEC.md)
-1. [`project/docs/STATUS_LEDGER.md`](../project/docs/STATUS_LEDGER.md)
-1. [`project/docs/RELEASE_CRITERIA.md`](../project/docs/RELEASE_CRITERIA.md)
+1. [`project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`](../project/docs/VALIDATION_SPEC__PROJECT_DOCS.md)
+1. [`project/docs/STATUS_LEDGER__PROJECT_DOCS.md`](../project/docs/STATUS_LEDGER__PROJECT_DOCS.md)
+1. [`project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`](../project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md)
 
 ### 3.3 Framework contributor
 
@@ -87,7 +90,7 @@ A lower-authority document must link to the authoritative source instead of rede
 1. [`docs/release/RELEASE_PROCESS.md`](release/RELEASE_PROCESS.md)
 1. [`docs/validation/RELEASE_GATES.md`](validation/RELEASE_GATES.md)
 1. [`docs/PERSISTED_SCHEMA_LOCK.md`](PERSISTED_SCHEMA_LOCK.md)
-1. [`project/docs/RELEASE_CRITERIA.md`](../project/docs/RELEASE_CRITERIA.md)
+1. [`project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`](../project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md)
 1. [`CHANGELOG.md`](../CHANGELOG.md)
 
 ### 3.5 Diagnostics investigator
@@ -96,8 +99,17 @@ A lower-authority document must link to the authoritative source instead of rede
 1. [`docs/diagnostics/ERROR_CLASSIFICATION.md`](diagnostics/ERROR_CLASSIFICATION.md)
 1. [`docs/diagnostics/DIRECT_AND_DOWNSTREAM_FAILURES.md`](diagnostics/DIRECT_AND_DOWNSTREAM_FAILURES.md)
 1. [`docs/diagnostics/GF_DIAGNOSTIC_PARSING.md`](diagnostics/GF_DIAGNOSTIC_PARSING.md)
+1. [`docs/diagnostics/TOOL_CATALOG.md`](diagnostics/TOOL_CATALOG.md)
 1. [`docs/reports/RAW_LOGS_REFERENCE.md`](reports/RAW_LOGS_REFERENCE.md)
 1. [`docs/reports/AI_READY_REFERENCE.md`](reports/AI_READY_REFERENCE.md)
+
+### 3.6 Documentation maintainer
+
+1. [`docs/DOCUMENTATION_ALIGNMENT_LOCK.md`](DOCUMENTATION_ALIGNMENT_LOCK.md)
+1. [`docs/DOCUMENTATION_MAP.md`](DOCUMENTATION_MAP.md)
+1. [`docs/DOCUMENTATION_CORRECTION_LEDGER.md`](DOCUMENTATION_CORRECTION_LEDGER.md)
+1. [`docs/decisions/README.md`](decisions/README.md)
+1. [`docs/REPOSITORY_STRUCTURE.md`](REPOSITORY_STRUCTURE.md)
 
 ---
 
@@ -106,7 +118,10 @@ A lower-authority document must link to the authoritative source instead of rede
 | Topic | Authoritative document |
 |---|---|
 | Product purpose and audience | [`docs/PRODUCT_OVERVIEW.md`](PRODUCT_OVERVIEW.md) |
+| Product and `gf-portfolio` boundaries | [`docs/architecture/PRODUCT_BOUNDARIES.md`](architecture/PRODUCT_BOUNDARIES.md) |
 | Scope and non-goals | [`docs/SCOPE_AND_NON_GOALS.md`](SCOPE_AND_NON_GOALS.md) |
+| Cross-document interpretation | [`docs/DOCUMENTATION_ALIGNMENT_LOCK.md`](DOCUMENTATION_ALIGNMENT_LOCK.md) |
+| Parallel correction coordination | [`docs/DOCUMENTATION_CORRECTION_LEDGER.md`](DOCUMENTATION_CORRECTION_LEDGER.md) |
 | Terminology | [`docs/GLOSSARY.md`](GLOSSARY.md) |
 | Repository layout | [`docs/REPOSITORY_STRUCTURE.md`](REPOSITORY_STRUCTURE.md) |
 | System architecture | [`docs/architecture/ARCHITECTURE_OVERVIEW.md`](architecture/ARCHITECTURE_OVERVIEW.md) |
@@ -116,6 +131,7 @@ A lower-authority document must link to the authoritative source instead of rede
 | External-tool contracts | [`docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`](EXTERNAL_TOOL_CONTRACT_LOCK.md) |
 | Persisted schema contracts | [`docs/PERSISTED_SCHEMA_LOCK.md`](PERSISTED_SCHEMA_LOCK.md) |
 | GF executable and RGL paths | [`docs/gf/GF_PATH_RESOLUTION.md`](gf/GF_PATH_RESOLUTION.md) |
+| GF command construction | [`docs/gf/GF_COMMAND_CONSTRUCTION.md`](gf/GF_COMMAND_CONSTRUCTION.md) |
 | Compilation | [`docs/gf/GF_COMPILATION.md`](gf/GF_COMPILATION.md) |
 | PGF construction | [`docs/gf/GF_PGF_BUILD.md`](gf/GF_PGF_BUILD.md) |
 | Validation modes | [`docs/validation/VALIDATION_MODES.md`](validation/VALIDATION_MODES.md) |
@@ -123,6 +139,7 @@ A lower-authority document must link to the authoritative source instead of rede
 | Gold updates | [`docs/scenarios/UPDATING_GOLD_FILES.md`](scenarios/UPDATING_GOLD_FILES.md) |
 | Status values | [`docs/reference/STATUS_VALUES.md`](reference/STATUS_VALUES.md) |
 | Diagnostic kinds | [`docs/reference/DIAGNOSTIC_KINDS.md`](reference/DIAGNOSTIC_KINDS.md) |
+| Diagnostic tool registry | [`docs/diagnostics/TOOL_CATALOG.md`](diagnostics/TOOL_CATALOG.md) |
 | Run-summary schema | [`docs/reports/SUMMARY_JSON_REFERENCE.md`](reports/SUMMARY_JSON_REFERENCE.md) |
 | Project configuration | [`docs/configuration/PROJECT_TOML_REFERENCE.md`](configuration/PROJECT_TOML_REFERENCE.md) |
 | CLI | [`docs/usage/CLI_REFERENCE.md`](usage/CLI_REFERENCE.md) |
@@ -130,7 +147,7 @@ A lower-authority document must link to the authoritative source instead of rede
 | Active language identity | [`project/project.toml`](../project/project.toml) |
 | Active-language architecture | [`project/docs/LANGUAGE_ARCHITECTURE.md`](../project/docs/LANGUAGE_ARCHITECTURE.md) |
 | Active-language contracts | [`project/docs/INTERFILE_CONTRACT_LOCK.md`](../project/docs/INTERFILE_CONTRACT_LOCK.md) |
-| Active-language release criteria | [`project/docs/RELEASE_CRITERIA.md`](../project/docs/RELEASE_CRITERIA.md) |
+| Active-language release criteria | [`project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`](../project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md) |
 
 ---
 
@@ -152,6 +169,7 @@ The inventory below defines the permanent target documentation set.
 
 | Path | Responsibility |
 |---|---|
+| [`docs/00_ERRATUM.md`](00_ERRATUM.md) | Controlled reconciliation record for legacy contradictions; it cannot override current owner documents. |
 | [`docs/00_START_HERE.md`](00_START_HERE.md) | First documentation entry point and recommended reading order. |
 | [`docs/PRODUCT_OVERVIEW.md`](PRODUCT_OVERVIEW.md) | Product purpose, capabilities, users and value. |
 | [`docs/SCOPE_AND_NON_GOALS.md`](SCOPE_AND_NON_GOALS.md) | Authoritative scope boundaries and explicit non-goals. |
@@ -164,6 +182,8 @@ The inventory below defines the permanent target documentation set.
 | Path | Responsibility |
 |---|---|
 | [`docs/architecture/ARCHITECTURE_OVERVIEW.md`](architecture/ARCHITECTURE_OVERVIEW.md) | System layers, responsibilities and architectural principles. |
+| [`docs/architecture/PRODUCT_BOUNDARIES.md`](architecture/PRODUCT_BOUNDARIES.md) | Product boundary, independent-product rules and public interoperability with `gf-portfolio`. |
+| [`docs/architecture/IMPLEMENTATION_ALIGNMENT.md`](architecture/IMPLEMENTATION_ALIGNMENT.md) | Traceability from accepted architecture to code ownership, interfaces, tests and evidence. |
 | [`docs/architecture/COMPONENT_MAP.md`](architecture/COMPONENT_MAP.md) | Component inventory, owners, inputs, outputs and dependencies. |
 | [`docs/architecture/EXECUTION_FLOW.md`](architecture/EXECUTION_FLOW.md) | End-to-end control flow for all validation modes. |
 | [`docs/architecture/DATA_MODEL.md`](architecture/DATA_MODEL.md) | In-memory models, field semantics and lifecycle. |
@@ -173,10 +193,12 @@ The inventory below defines the permanent target documentation set.
 | [`docs/architecture/EXTENSION_BOUNDARIES.md`](architecture/EXTENSION_BOUNDARIES.md) | Supported extension points and forbidden bypasses. |
 | [`docs/architecture/DEPENDENCY_RULES.md`](architecture/DEPENDENCY_RULES.md) | Allowed and forbidden dependency directions. |
 
-### 5.4 Contract locks
+### 5.4 Documentation governance and contract locks
 
 | Path | Responsibility |
 |---|---|
+| [`docs/DOCUMENTATION_ALIGNMENT_LOCK.md`](DOCUMENTATION_ALIGNMENT_LOCK.md) | Normative cross-document alignment and interpretation contract. |
+| [`docs/DOCUMENTATION_CORRECTION_LEDGER.md`](DOCUMENTATION_CORRECTION_LEDGER.md) | Coordination ledger for parallel corrections and integration review. |
 | [`docs/INTERFILE_CONTRACT_LOCK.md`](INTERFILE_CONTRACT_LOCK.md) | Normative Python/framework interfile contracts. |
 | [`docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`](EXTERNAL_TOOL_CONTRACT_LOCK.md) | Normative GF, process, filesystem and platform contracts. |
 | [`docs/PERSISTED_SCHEMA_LOCK.md`](PERSISTED_SCHEMA_LOCK.md) | Normative persisted schemas, versions and migrations. |
@@ -187,6 +209,7 @@ The inventory below defines the permanent target documentation set.
 |---|---|
 | [`docs/gf/GF_TOOLCHAIN_INTEGRATION.md`](gf/GF_TOOLCHAIN_INTEGRATION.md) | Complete boundary between GF Wordbench and GF. |
 | [`docs/gf/GF_PATH_RESOLUTION.md`](gf/GF_PATH_RESOLUTION.md) | GF executable, RGL and search-path resolution rules. |
+| [`docs/gf/GF_COMMAND_CONSTRUCTION.md`](gf/GF_COMMAND_CONSTRUCTION.md) | Structured GF argument construction, working directory and invocation rules. |
 | [`docs/gf/GF_COMPILATION.md`](gf/GF_COMPILATION.md) | Module compilation commands, evidence and success criteria. |
 | [`docs/gf/GF_PGF_BUILD.md`](gf/GF_PGF_BUILD.md) | Final PGF build, artifact verification and release behavior. |
 | [`docs/gf/GF_SCRIPT_EXECUTION.md`](gf/GF_SCRIPT_EXECUTION.md) | Native GF shell and `.gfs` scenario execution. |
@@ -228,6 +251,7 @@ The inventory below defines the permanent target documentation set.
 | [`docs/diagnostics/GF_DIAGNOSTIC_PARSING.md`](diagnostics/GF_DIAGNOSTIC_PARSING.md) | Parsing GF stdout and stderr without losing evidence. |
 | [`docs/diagnostics/KNOWN_DIAGNOSTIC_PATTERNS.md`](diagnostics/KNOWN_DIAGNOSTIC_PATTERNS.md) | Versioned registry of recognized GF diagnostic patterns. |
 | [`docs/diagnostics/TIMEOUTS_AND_PROCESS_FAILURES.md`](diagnostics/TIMEOUTS_AND_PROCESS_FAILURES.md) | Launch, timeout, cancellation and process failure handling. |
+| [`docs/diagnostics/TOOL_CATALOG.md`](diagnostics/TOOL_CATALOG.md) | Allowlisted diagnostic tools, prerequisites, budgets, evidence and result contracts. |
 
 ### 5.9 Reports
 
@@ -302,13 +326,19 @@ The inventory below defines the permanent target documentation set.
 | Path | Responsibility |
 |---|---|
 | [`docs/decisions/README.md`](decisions/README.md) | ADR conventions, status values and index. |
-| [`docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md`](decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md) | Decision to use one active language per repository copy. |
+| [`docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md`](decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md) | Decision to resolve one active GF language project per Wordbench workspace and run. |
 | [`docs/decisions/ADR-0002-GF-AS-EXECUTION-ENGINE.md`](decisions/ADR-0002-GF-AS-EXECUTION-ENGINE.md) | Decision to keep GF authoritative for GF semantics. |
 | [`docs/decisions/ADR-0003-SEPARATE-SCAN-AND-COMPILE.md`](decisions/ADR-0003-SEPARATE-SCAN-AND-COMPILE.md) | Decision to separate static scanning from native compilation. |
 | [`docs/decisions/ADR-0004-NATIVE-GFS-SCENARIOS.md`](decisions/ADR-0004-NATIVE-GFS-SCENARIOS.md) | Decision to use native GF shell scenarios. |
 | [`docs/decisions/ADR-0005-FILE-AND-SCENARIO-RESULTS.md`](decisions/ADR-0005-FILE-AND-SCENARIO-RESULTS.md) | Decision to model file and scenario outcomes separately. |
 | [`docs/decisions/ADR-0006-AI-READY-REPORT.md`](decisions/ADR-0006-AI-READY-REPORT.md) | Decision to generate a bounded AI-ready evidence packet. |
 | [`docs/decisions/ADR-0007-GOLDEN-OUTPUT-TESTING.md`](decisions/ADR-0007-GOLDEN-OUTPUT-TESTING.md) | Decision to use reviewed normalized golden outputs. |
+| [`docs/decisions/ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md`](decisions/ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md) | Decision to use a hexagonal modular-monolith architecture. |
+| [`docs/decisions/ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md`](decisions/ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md) | Decision to isolate GF through an anti-corruption boundary. |
+| [`docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md`](decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md) | Decision to enforce run budgets and controlled finalization. |
+| [`docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md`](decisions/ADR-0011-SEPARATE-PORTFOLIO.md) | Decision to move multi-workspace aggregation to the separate `gf-portfolio` product. |
+| [`docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md`](decisions/ADR-0012-INDEPENDENT-PRODUCTS.md) | Decision that Wordbench and `gf-portfolio` remain independently operable products. |
+| [`docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md`](decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md) | Decision to use an explicit allowlisted diagnostic-tool registry. |
 
 ### 5.17 Reference
 
@@ -328,7 +358,7 @@ The inventory below defines the permanent target documentation set.
 |---|---|
 | [`project/README.md`](../project/README.md) | Entry point for the active language project. |
 | [`project/project.toml`](../project/project.toml) | Authoritative active-project identity and validation configuration. |
-| [`project/docs/00_PROJECT_START_HERE.md`](../project/docs/00_PROJECT_START_HERE.md) | Project-documentation entry point and reading order. |
+| [`project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md`](../project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md) | Project-documentation entry point and reading order. |
 | [`project/docs/INTERFILE_CONTRACT_LOCK.md`](../project/docs/INTERFILE_CONTRACT_LOCK.md) | Normative active-project module and scenario contracts. |
 | [`project/docs/LANGUAGE_OVERVIEW.md`](../project/docs/LANGUAGE_OVERVIEW.md) | Language scope, linguistic goals and supported coverage. |
 | [`project/docs/LANGUAGE_ARCHITECTURE.md`](../project/docs/LANGUAGE_ARCHITECTURE.md) | Project-specific GF architecture and layers. |
@@ -336,12 +366,12 @@ The inventory below defines the permanent target documentation set.
 | [`project/docs/CATEGORY_AND_LINCAT_CONTRACT.md`](../project/docs/CATEGORY_AND_LINCAT_CONTRACT.md) | Cross-module category and lincat contracts. |
 | [`project/docs/MORPHOLOGY_SPEC.md`](../project/docs/MORPHOLOGY_SPEC.md) | Language-specific morphology specification. |
 | [`project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md`](../project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md) | Language-specific syntax and constructor policies. |
-| [`project/docs/VALIDATION_SPEC.md`](../project/docs/VALIDATION_SPEC.md) | Project acceptance criteria and scenario requirements. |
-| [`project/docs/TEST_COVERAGE_MATRIX.md`](../project/docs/TEST_COVERAGE_MATRIX.md) | Coverage mapping from requirements to evidence. |
-| [`project/docs/STATUS_LEDGER.md`](../project/docs/STATUS_LEDGER.md) | Implementation status, fallbacks, blockers and temporary states. |
+| [`project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`](../project/docs/VALIDATION_SPEC__PROJECT_DOCS.md) | Project acceptance criteria and scenario requirements. |
+| [`project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`](../project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md) | Coverage mapping from requirements to evidence. |
+| [`project/docs/STATUS_LEDGER__PROJECT_DOCS.md`](../project/docs/STATUS_LEDGER__PROJECT_DOCS.md) | Material exceptions, unresolved blockers, temporary waivers and required follow-up affecting validation or release. |
 | [`project/docs/DECISION_LOG.md`](../project/docs/DECISION_LOG.md) | Project-specific decisions not requiring framework ADRs. |
 | [`project/docs/KNOWN_ISSUES.md`](../project/docs/KNOWN_ISSUES.md) | Known project defects and limitations. |
-| [`project/docs/RELEASE_CRITERIA.md`](../project/docs/RELEASE_CRITERIA.md) | Language-project release conditions. |
+| [`project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`](../project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md) | Language-project release conditions. |
 | [`project/docs/RESEARCH_EVIDENCE.md`](../project/docs/RESEARCH_EVIDENCE.md) | Sources and evidence supporting linguistic decisions. |
 | [`project/validation/README.md`](../project/validation/README.md) | Project validation layout and execution guidance. |
 | [`project/validation/scenarios/README.md`](../project/validation/scenarios/README.md) | Scenario registry and authoring conventions. |
@@ -356,7 +386,7 @@ The inventory below defines the permanent target documentation set.
 |---|---|
 | [`templates/project/README.md`](../templates/project/README.md) | Entry point for the template project template. |
 | [`templates/project/project.toml`](../templates/project/project.toml) | Authoritative template-project identity and validation configuration. |
-| [`templates/project/docs/00_PROJECT_START_HERE.md`](../templates/project/docs/00_PROJECT_START_HERE.md) | Project-documentation entry point and reading order. |
+| [`templates/project/docs/00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md) | Project-documentation entry point and reading order. |
 | [`templates/project/docs/INTERFILE_CONTRACT_LOCK.md`](../templates/project/docs/INTERFILE_CONTRACT_LOCK.md) | Generic normative project-lock template. |
 | [`templates/project/docs/LANGUAGE_OVERVIEW.md`](../templates/project/docs/LANGUAGE_OVERVIEW.md) | Language scope, linguistic goals and supported coverage. |
 | [`templates/project/docs/LANGUAGE_ARCHITECTURE.md`](../templates/project/docs/LANGUAGE_ARCHITECTURE.md) | Project-specific GF architecture and layers. |
@@ -364,12 +394,12 @@ The inventory below defines the permanent target documentation set.
 | [`templates/project/docs/CATEGORY_AND_LINCAT_CONTRACT.md`](../templates/project/docs/CATEGORY_AND_LINCAT_CONTRACT.md) | Cross-module category and lincat contracts. |
 | [`templates/project/docs/MORPHOLOGY_SPEC.md`](../templates/project/docs/MORPHOLOGY_SPEC.md) | Language-specific morphology specification. |
 | [`templates/project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md`](../templates/project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md) | Language-specific syntax and constructor policies. |
-| [`templates/project/docs/VALIDATION_SPEC.md`](../templates/project/docs/VALIDATION_SPEC.md) | Project acceptance criteria and scenario requirements. |
-| [`templates/project/docs/TEST_COVERAGE_MATRIX.md`](../templates/project/docs/TEST_COVERAGE_MATRIX.md) | Coverage mapping from requirements to evidence. |
-| [`templates/project/docs/STATUS_LEDGER.md`](../templates/project/docs/STATUS_LEDGER.md) | Implementation status, fallbacks, blockers and temporary states. |
+| [`templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md) | Project acceptance criteria and scenario requirements. |
+| [`templates/project/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md) | Coverage mapping from requirements to evidence. |
+| [`templates/project/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md) | Generic structure for material exceptions, unresolved blockers, temporary waivers and required follow-up. |
 | [`templates/project/docs/DECISION_LOG.md`](../templates/project/docs/DECISION_LOG.md) | Project-specific decisions not requiring framework ADRs. |
 | [`templates/project/docs/KNOWN_ISSUES.md`](../templates/project/docs/KNOWN_ISSUES.md) | Known project defects and limitations. |
-| [`templates/project/docs/RELEASE_CRITERIA.md`](../templates/project/docs/RELEASE_CRITERIA.md) | Language-project release conditions. |
+| [`templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md) | Language-project release conditions. |
 | [`templates/project/docs/RESEARCH_EVIDENCE.md`](../templates/project/docs/RESEARCH_EVIDENCE.md) | Sources and evidence supporting linguistic decisions. |
 | [`templates/project/validation/README.md`](../templates/project/validation/README.md) | Project validation layout and execution guidance. |
 | [`templates/project/validation/scenarios/README.md`](../templates/project/validation/scenarios/README.md) | Scenario registry and authoring conventions. |
@@ -384,7 +414,7 @@ The inventory below defines the permanent target documentation set.
 
 Framework documentation under `docs/` describes reusable GF Wordbench behavior.
 
-It must not depend on the identity of the active language except in explicitly marked examples, migration fixtures or historical compatibility notes.
+It must not depend on the identity of the active language except in explicitly marked examples, migration fixtures or historical compatibility notes. Multi-workspace aggregation belongs to the independent `gf-portfolio` product; Wordbench documentation may define only its public export and interoperability boundary.
 
 ### 6.2 Active-project documentation
 
@@ -399,6 +429,8 @@ It may contain:
 - known linguistic limitations;
 - project release criteria.
 
+It must not contain a Portfolio registry, cross-workspace orchestration rules or a reverse dependency on `gf-portfolio`.
+
 ### 6.3 Template documentation
 
 Documentation under `templates/project/` defines the reusable shape of a project.
@@ -408,7 +440,8 @@ It must:
 - retain placeholders where project facts are required;
 - remain synchronized structurally with `project/`;
 - avoid active-language identifiers;
-- preserve the same required document names;
+- preserve corresponding required document roles; the five disambiguated template documents use `__TEMPLATES_PROJECT_DOCS.md`, while their active-project counterparts use `__PROJECT_DOCS.md`;
+- exclude Portfolio registries and cross-workspace orchestration;
 - be updated whenever the active-project documentation contract changes.
 
 ---
@@ -425,6 +458,8 @@ Documentation must follow a single-source-of-truth rule.
 - Keep enumerations synchronized with their reference owner.
 - Keep project-specific facts out of framework specifications.
 - Keep implementation details out of user procedures unless required to operate the system.
+- State accepted contracts directly instead of attaching progress labels to every material assertion.
+- Use code, tests and reproducible run artifacts when executable behavior must be verified; an accepted ADR establishes a decision, not execution evidence.
 
 ### 7.2 Prohibited behavior
 
@@ -433,6 +468,8 @@ Documentation must follow a single-source-of-truth rule.
 - Defining status semantics in report, GUI and diagnostic documents independently.
 - Copying active-language module names into framework architecture.
 - Treating a README as a substitute for a normative contract.
+- Maintaining a cross-document taxonomy of per-claim implementation progress labels.
+- Introducing Wordbench dependencies on `gf-portfolio` or Portfolio-owned registry concepts.
 - Leaving renamed paths in navigation indexes.
 
 ---
@@ -473,8 +510,9 @@ A documentation change is complete only when the following applicable checks pas
 [ ] Incoming links updated
 [ ] Outgoing links validated
 [ ] DOCUMENTATION_MAP.md updated
+[ ] DOCUMENTATION_CORRECTION_LEDGER.md updated for coordinated correction work
 [ ] README navigation reviewed
-[ ] Contract lock updated when behavior changed
+[ ] Alignment and specialized locks updated when authority or behavior changed
 [ ] ADR added or updated when architecture changed
 [ ] Project and template structures synchronized
 [ ] Examples match current schemas and commands
@@ -498,7 +536,7 @@ A filename change is a coordinated change affecting:
 - Permanent Markdown filenames use uppercase `SNAKE_CASE.md`, except conventional root files.
 - ADR filenames use `ADR-NNNN-SHORT-TITLE.md`.
 - Section directories use lowercase names.
-- The active project and its template use identical relative filenames.
+- The active project and its template use corresponding relative paths and roles. For `00_PROJECT_START_HERE`, `VALIDATION_SPEC`, `TEST_COVERAGE_MATRIX`, `STATUS_LEDGER` and `RELEASE_CRITERIA`, active-project files end in `__PROJECT_DOCS.md` and template files end in `__TEMPLATES_PROJECT_DOCS.md`.
 - A document name must describe one stable responsibility.
 - A new document is justified only when it has a distinct owner, audience or change lifecycle.
 - Tiny subtopics remain sections of an existing authoritative document.
@@ -507,9 +545,9 @@ A filename change is a coordinated change affecting:
 
 ## 11. Validation
 
-The documentation set should eventually be validated automatically.
+The documentation set is validated through the documentation checker.
 
-Recommended command:
+Canonical command:
 
 ```text
 gf-wordbench docs check
@@ -520,13 +558,15 @@ The checker should verify:
 1. every inventory path exists;
 2. internal links resolve;
 3. no undocumented permanent Markdown files exist;
-4. active-project and template structures match;
+4. active-project and template structures expose matching required roles, including the canonical project/template filename mapping;
 5. framework documents do not contain active-language identifiers outside allowed examples;
-6. contract-lock links resolve;
-7. referenced schema IDs and status values are canonical;
-8. ADR numbers are unique;
+6. all seven anti-drift documents are present and mutually linked;
+7. referenced schema IDs and validation status values are canonical;
+8. ADR numbers are unique and accepted ADR paths are current;
 9. required document metadata is present where applicable;
-10. deprecated paths are absent from current navigation.
+10. deprecated paths are absent from current navigation;
+11. Wordbench documents do not define Portfolio registries or cross-workspace orchestration;
+12. no document requires per-claim implementation progress labels.
 
 Strict mode:
 
@@ -538,9 +578,9 @@ gf-wordbench docs check --strict
 
 ## 12. Inventory count
 
-The permanent target inventory contains **141 files**:
+The permanent target inventory contains **155 files**:
 
-- repository and framework documentation: **99**;
+- repository and framework documentation: **113**;
 - active-language project documentation and configuration: **21**;
 - reusable project-template documentation and configuration: **21**.
 
@@ -548,7 +588,7 @@ Generated run reports, scenario files, gold files, language source files and tes
 
 ---
 
-## 13. Final rule
+## 13. Governing rule
 
 > Every permanent document must have one clear responsibility, one authoritative owner and one place in this map.
 

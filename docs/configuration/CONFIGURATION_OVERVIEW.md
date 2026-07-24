@@ -4,7 +4,7 @@
 **Status:** Normative overview  
 **Applies to:** Framework defaults, active-project configuration, application state, environment resolution, CLI, GUI, bootstrap, validation runs, reports, and migrations  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\configuration\CONFIGURATION_OVERVIEW.md`  
+**Canonical path:** `docs/configuration/CONFIGURATION_OVERVIEW.md`  
 **Configuration contract:** `1.0.0`  
 **Last reviewed:** `2026-07-21`
 
@@ -28,7 +28,7 @@ It explains:
 - how CLI and GUI remain semantically equivalent;
 - how the system avoids duplicated or hidden configuration.
 
-This is an overview document.
+This document is the normative overview of configuration ownership and resolution.
 
 Detailed field definitions belong to:
 
@@ -37,17 +37,38 @@ docs/configuration/PROJECT_TOML_REFERENCE.md
 docs/configuration/APPLICATION_STATE_REFERENCE.md
 docs/configuration/ENVIRONMENT_AND_PATHS.md
 docs/PERSISTED_SCHEMA_LOCK.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 ```
 
 ---
 
 ## 2. Core rule
 
-> Every configuration value must have one authoritative owner, one documented resolution path, and one final resolved value for a run.
+> Every configuration value must have one authoritative owner, one documented resolution path, and one resolved value for a run.
 
 Configuration must not be assembled through unrelated modules reading different files independently.
 
 All execution stages must consume the same resolved run configuration.
+
+### 2.1 Workspace and product boundary
+
+One GF Wordbench workspace contains exactly one active GF language project at `project/`.
+Selecting or remembering a workspace root does not create a multi-project registry inside Wordbench.
+
+The active project identity always comes from:
+
+```text
+<workspace-root>/project/project.toml
+```
+
+Configuration must not introduce:
+
+- a list of active projects inside one workspace;
+- a runtime language-profile selector;
+- cross-workspace aggregation state;
+- `gf-portfolio` private paths, schemas, credentials, services, or runtime settings.
+
+`gf-portfolio` may consume public, versioned Wordbench artifacts. GF Wordbench does not read Portfolio configuration and does not require Portfolio to resolve or execute a run.
 
 The compiler, scanner, scenario runner, PGF builder, reports, CLI, and GUI must not each decide independently:
 
@@ -128,7 +149,7 @@ A source may override a value only when it is authorized to own or select that v
 | Package metadata | Package/build system | App name and version | Yes | Yes | No |
 | Framework defaults | `app/config.py` or designated owner | Language-neutral defaults | Yes | Yes | No |
 | `project/project.toml` | Active project | Project identity and validation policy | Yes | Yes | Yes |
-| Application state | State service | Local preferences and last selections | No | Yes | No |
+| Application state | State service | Local environment and interface preferences | No | Yes | No |
 | Environment/discovery | Bootstrap/environment resolver | Local tool and path resolution | No | Usually no | No |
 | CLI input | CLI user/automation | Explicit run selection and local overrides | No | In run summary | No |
 | GUI input | GUI user | Same run selection and local overrides | No | State and run summary | No |
@@ -208,7 +229,7 @@ Framework defaults should have one owner, such as:
 app/config.py
 ```
 
-or a final equivalent configuration module.
+or the designated framework configuration module.
 
 Bootstrap may consume defaults.
 
@@ -302,7 +323,7 @@ The project configuration is authoritative for:
 - project ID;
 - display name;
 - language code;
-- project root semantics;
+- workspace-relative project semantics;
 - source directory;
 - source glob;
 - include and exclude rules;
@@ -379,7 +400,7 @@ Deleting the state file must not damage the project.
 Application state may store:
 
 ```text
-last selected project root
+last selected workspace root
 last selected RGL root
 last selected GF executable
 last selected output root
@@ -514,7 +535,7 @@ Typical selections:
 ```text
 mode
 target
-project root
+workspace root
 GF executable
 RGL root
 output root
@@ -628,7 +649,7 @@ They must be recorded in the run summary where relevant.
 | Artifact filenames | Artifact model/schema owner |
 | Stage timeouts | Framework defaults plus permitted run override |
 | Effective run configuration | Bootstrap |
-| Final run truth | Structured run result and summary |
+| Run truth | Structured run result and summary |
 
 A value must not have two competing owners.
 
@@ -645,8 +666,8 @@ Resolution depends on the configuration domain.
 ## 14.1 Project identity precedence
 
 ```text
-explicit project root
-→ project/project.toml
+explicit or startup workspace root
+→ <workspace-root>/project/project.toml
 → failure
 ```
 
@@ -658,7 +679,7 @@ Project identity must not come from:
 - GUI labels;
 - framework defaults.
 
-Application state may remember a project root, but the selected project’s identity still comes from its `project.toml`.
+Application state may remember a workspace root, but the selected project’s identity still comes from its `project.toml`.
 
 ---
 
@@ -856,7 +877,7 @@ It should:
 
 1. load package metadata;
 2. load framework defaults;
-3. identify the selected project root;
+3. identify and validate the workspace root;
 4. load and validate `project.toml`;
 5. load application state safely;
 6. collect explicit CLI or GUI inputs;
@@ -905,7 +926,7 @@ The resolved configuration should be:
 
 ## 17.3 Conceptual domains
 
-A final run configuration may contain structured domains such as:
+A resolved run configuration may contain structured domains such as:
 
 ```text
 project
@@ -939,7 +960,7 @@ A stage receives the values it needs from the resolved configuration or a bounde
 
 ```text
 CLI selects:
-  project_root = C:/work/GF_Wordbench
+  workspace_root = C:/work/GF_Wordbench
   mode = checkpoint
   target = morphology
   gf_executable = C:/tools/gf/gf.exe
@@ -1030,7 +1051,7 @@ release_requires_pgf = true
 
 This example illustrates responsibility.
 
-`PROJECT_TOML_REFERENCE.md` remains authoritative for final field definitions.
+`PROJECT_TOML_REFERENCE.md` remains authoritative for canonical field definitions.
 
 ---
 
@@ -1041,7 +1062,7 @@ This example illustrates responsibility.
   "schema_id": "gf-wordbench.app-state",
   "schema_version": "1.0",
   "environment": {
-    "project_root": "C:/work/GF_Wordbench",
+    "workspace_root": "C:/work/GF_Wordbench",
     "rgl_root": "C:/work/gf-rgl/src",
     "gf_executable": "C:/tools/gf/gf.exe",
     "output_root": "C:/work/gf-wordbench-runs"
@@ -1075,22 +1096,23 @@ It does not define project truth.
 
 Configuration paths belong to explicit classes.
 
-## 21.1 Project root
+## 21.1 Workspace root
 
-The selected GF Wordbench active-project root.
+The root of one GF Wordbench workspace. Its active project is always located at `project/`.
 
-It contains or resolves:
+It contains:
 
 ```text
 project/project.toml
 project/docs/
 project/validation/
-active GF source roots
 ```
+
+The active project configuration may resolve GF source roots inside or outside the workspace according to the path contract.
 
 ## 21.2 Project-relative path
 
-Stored relative to project root.
+Stored relative to the workspace root.
 
 Examples:
 
@@ -1442,7 +1464,7 @@ Validate:
 
 Validate:
 
-- project root;
+- workspace root;
 - source root;
 - executable;
 - RGL root;
@@ -1620,7 +1642,7 @@ gf_executable:
 
 Provenance makes precedence visible and debuggable.
 
-The final persisted schema may store provenance selectively rather than for every field.
+The persisted schema may store provenance selectively rather than for every field.
 
 ---
 
@@ -1632,7 +1654,7 @@ Recommended run metadata includes:
 
 ```text
 project ID
-project root
+workspace root
 source directory
 GF executable
 GF version
@@ -1901,7 +1923,7 @@ launcher forwards explicit arguments to the same CLI semantics
 Bad:
 
 ```text
-next run parses summary.md to recover project root
+next run parses summary.md to recover workspace root
 ```
 
 Correct:
@@ -2014,7 +2036,7 @@ tests/configuration/
 
 - explicit CLI executable wins;
 - GUI and CLI resolve equivalently;
-- explicit project root wins over remembered root;
+- explicit workspace root wins over remembered root;
 - project identity wins over state;
 - release gates cannot be weakened;
 - explicit timeout wins where permitted;
@@ -2057,7 +2079,7 @@ A configuration change is complete only when:
 [ ] Path semantics reviewed
 [ ] Persistence impact reviewed
 [ ] Schema version impact classified
-[ ] Migration implemented where needed
+[ ] Migration provided where needed
 [ ] CLI impact reviewed
 [ ] GUI impact reviewed
 [ ] Report impact reviewed
@@ -2119,7 +2141,7 @@ Detailed reference documents may repeat concise context, but one document must r
 
 ---
 
-# 49. Final configuration contract
+# 49. Configuration contract
 
 GF Wordbench configuration is divided into distinct responsibilities:
 
@@ -2143,7 +2165,7 @@ CLI and GUI
     own explicit run selection
 
 bootstrap
-    owns final resolution and validation
+    owns resolution and validation
 
 resolved run configuration
     owns effective values for one run
@@ -2152,7 +2174,7 @@ run summary
     records the effective configuration used
 ```
 
-The final invariants are:
+The configuration invariants are:
 
 ```text
 one active project

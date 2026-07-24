@@ -3,11 +3,14 @@
 **Document ID:** `GF-WB-REF-TERMINOLOGY`  
 **Status:** Canonical reference  
 **Applies to:** Framework code, persisted schemas, reports, project documentation, tests and release materials  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
 **Related glossary:** `docs/GLOSSARY.md`  
 **Related status reference:** `docs/reference/STATUS_VALUES.md`  
 **Related diagnostic reference:** `docs/reference/DIAGNOSTIC_KINDS.md`  
-**Related schema reference:** `docs/reference/SCHEMA_INDEX.md`
+**Related schema reference:** `docs/reference/SCHEMA_INDEX.md`  
+**Reference version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -76,9 +79,15 @@ docs/
 templates/
 ```
 
+### Workspace
+
+The local GF Wordbench working boundary containing the reusable framework, exactly one active project, configuration context and run outputs.
+
+A workspace does not contain a registry of several active projects.
+
 ### Active project
 
-The one language project represented by the current repository copy.
+The one GF language project configured in the current workspace.
 
 Canonical location:
 
@@ -96,9 +105,42 @@ Canonical location:
 templates/project/
 ```
 
-### Repository copy
+### `gf-portfolio`
 
-One clone or duplicate of GF Wordbench containing one active project.
+An independent optional companion product for registering several Wordbench workspaces and presenting aggregated views.
+
+Permitted dependency direction:
+
+```text
+gf-portfolio → public versioned GF Wordbench artifacts
+```
+
+GF Wordbench does not depend on Portfolio code, runtime, storage or configuration.
+
+### Functional module
+
+One of the five product-capability owners:
+
+```text
+projects
+runs
+validation
+diagnostics
+reporting
+```
+
+### Architectural ring
+
+One of the six hexagonal dependency rings:
+
+```text
+domain
+application
+ports
+adapters
+entrypoints
+bootstrap
+```
 
 ### Active language
 
@@ -172,7 +214,7 @@ Typed framework/application defaults and environment-derived configuration.
 
 ### `RunConfig`
 
-Complete immutable or effectively immutable configuration required to execute one non-interactive audit.
+Complete immutable or effectively immutable configuration required to execute one non-interactive audit for one active project and one normative language target.
 
 ### Configuration builder
 
@@ -206,11 +248,15 @@ A path resolved against the GF Wordbench repository root.
 
 ### Audit
 
-One GF Wordbench validation execution.
+One GF Wordbench validation execution for one active project and one normative language target.
 
 ### Run
 
-A single persisted audit instance with one run ID and one run directory.
+A single persisted audit instance with one run ID, one run directory, one active project identity and one normative language target.
+
+### Normative language target
+
+The single active language identity against which the run's selected files, modules, checkpoints, scenarios and release criteria are evaluated.
 
 ### Run ID
 
@@ -731,7 +777,7 @@ Compilation focused on one `.gf` source file.
 
 Compilation or load validation of a configured dependency-layer module.
 
-### Final entrypoint validation
+### Release entrypoint validation
 
 Validation of the configured top-level grammar or API module.
 
@@ -837,13 +883,13 @@ Cross-module agreement concerning public GF constructors and their behavior.
 
 ### Fallback
 
-Explicit temporary or compatible alternative behavior selected under a documented rule.
+Explicit alternative behavior selected under a documented compatibility or project rule.
 
 ### Placeholder
 
-Unresolved template or planned value such as `<ENTRYPOINT>`.
+Unresolved template value such as `<ENTRYPOINT>`.
 
-Unresolved placeholders are prohibited in final normative project files.
+Unresolved placeholders are prohibited in active normative project files.
 
 ---
 
@@ -1099,6 +1145,12 @@ Persisted file or directory with a defined role, owner, path base and lifecycle.
 
 Artifact owned by one run.
 
+### Public Wordbench artifact
+
+A versioned run artifact whose schema and role are documented for external read-only consumers such as `gf-portfolio`.
+
+Publishing an artifact does not transfer ownership to the consumer.
+
 ### Control artifact
 
 Artifact describing run identity or inventory.
@@ -1169,7 +1221,7 @@ Stable semantic classification recorded in the manifest.
 
 ### Artifact finalization
 
-Transition after all writers close, checks pass and final metadata/hashes are produced.
+Transition after all writers close, checks pass and publication metadata and hashes are produced.
 
 ### Artifact integrity
 
@@ -1199,7 +1251,7 @@ Incomplete or untrusted artifact retained after abnormal execution.
 
 ### Ephemeral file
 
-Temporary implementation file not part of the finalized artifact set.
+Transient work file that is not part of the published artifact set.
 
 ---
 
@@ -1287,7 +1339,7 @@ Structured description of a change between compatible runs.
 
 ### Result builder
 
-Owner that combines process, diagnostic, artifact and comparison evidence into final typed results.
+Owner that combines process, diagnostic, artifact and comparison evidence into completed typed results.
 
 ### Result ordering
 
@@ -1466,19 +1518,11 @@ Stable identifier of one contract entry.
 
 Independent version identifying observable contract behavior.
 
-### Contract status
+### Contract completeness
 
-Lifecycle state of a contract entry.
+The condition in which a required contract has concrete providers, consumers, inputs, outputs, ownership, error behavior, tests and compatibility rules.
 
-Typical values:
-
-```text
-active
-experimental
-deprecated
-blocked
-retired
-```
+A required contract must be complete or explicitly not applicable with a rationale. No lifecycle-status registry is required.
 
 ### Locked invariant
 
@@ -1486,7 +1530,7 @@ Rule that provider and consumers must preserve.
 
 ### Forbidden behavior
 
-Explicitly prohibited implementation or integration behavior.
+Explicitly prohibited code or integration behavior.
 
 ### Coordinated change
 
@@ -1494,7 +1538,7 @@ One change unit updating provider, consumers, tests, schemas, migrations and doc
 
 ### Drift
 
-Undocumented divergence between implementation, consumers, schemas or documentation.
+Undocumented divergence between code, consumers, schemas or documentation.
 
 ### Anti-drift check
 
@@ -1536,7 +1580,7 @@ Version reported by the GF executable.
 
 ### Prerelease
 
-Version published before final stability.
+Version published before a stable release.
 
 Examples:
 
@@ -1548,7 +1592,7 @@ rc
 
 ### Release candidate
 
-Prerelease intended to become final unless blocking defects are found.
+Prerelease intended to become the stable release unless blocking defects are found.
 
 ### Build metadata
 
@@ -1662,9 +1706,9 @@ Project authority defining what must be proven.
 
 Mapping from requirements to providers, scenarios, inputs, golds and evidence.
 
-### Status ledger
+### Project issue record
 
-Tracked record of incomplete, temporary, blocked or fallback states.
+A concrete entry in `KNOWN_ISSUES.md` describing an unresolved defect, limitation, missing evidence or release blocker that materially affects correctness, validation, compatibility or release.
 
 ### Decision log
 
@@ -1676,7 +1720,7 @@ Documented defect, limitation or risk.
 
 ### Release criteria
 
-Project-specific final gate definition.
+Project-specific release-gate definition.
 
 ### Research evidence
 
@@ -1815,9 +1859,11 @@ Behavior demonstrated in the recorded test matrix.
 
 Tested does not always imply fully supported.
 
-### Experimental
+### Unverified compatibility
 
-Available behavior whose compatibility may change and is explicitly not stable.
+Compatibility not established by the declared capability checks and test matrix.
+
+Use the canonical machine or document value defined by the compatibility owner; do not infer support from absence of a known failure.
 
 ### Supported with warnings
 
@@ -1869,7 +1915,9 @@ The following terms are ambiguous or non-canonical unless explicitly qualified.
 | expected output | gold, when referring to project acceptance |
 | current output | actual normalized output |
 | build | compilation, PGF build or package build |
-| project | active project, repository or project template |
+| project | active project, workspace or project template |
+| repository copy | workspace |
+| multi-project Wordbench | `gf-portfolio` for cross-workspace aggregation |
 | language | active language, GF language module or concrete language |
 | result | file result, scenario result, process result or run result |
 | version | application, schema, contract, project, parser, profile or GF version |
@@ -2046,7 +2094,9 @@ Terminology drift exists when:
 - report prose introduces a new status word;
 - legacy names appear in new canonical APIs;
 - one project-specific linguistic term enters framework machine vocabulary;
-- documentation uses “root cause” without direct-classification evidence.
+- documentation uses “root cause” without direct-classification evidence;
+- `repository copy` is used where `workspace` is meant;
+- Wordbench terminology implies a runtime dependency on `gf-portfolio`.
 
 Every drift indicator requires correction or an explicit terminology decision.
 
@@ -2054,6 +2104,8 @@ Every drift indicator requires correction or an explicit terminology decision.
 
 ## 34. Related documents
 
+- `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
+- `docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md`
 - `docs/GLOSSARY.md`
 - `docs/reference/STATUS_VALUES.md`
 - `docs/reference/DIAGNOSTIC_KINDS.md`
@@ -2072,7 +2124,7 @@ Every drift indicator requires correction or an explicit terminology decision.
 
 ---
 
-## 35. Final enforcement rule
+## 35. Terminology rule
 
 Canonical terminology is part of the architecture.
 

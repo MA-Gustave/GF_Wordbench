@@ -190,7 +190,7 @@ Meanings:
 Every non-stable entry MUST be registered in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 with:
@@ -1712,7 +1712,7 @@ This specification should summarize open morphology issues by reference, not dup
 
 | Issue ID | Summary | Affected provider | Status | Release blocking | Source |
 |---|---|---|---|---:|---|
-| `<ISSUE_ID>` | `<SUMMARY>` | `<PATH>` | `<STATUS>` | Yes/No | `STATUS_LEDGER.md` or `KNOWN_ISSUES.md` |
+| `<ISSUE_ID>` | `<SUMMARY>` | `<PATH>` | `<STATUS>` | Yes/No | `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` or `KNOWN_ISSUES.md` |
 
 No issue should exist only in this table.
 
@@ -1750,9 +1750,9 @@ No issue should exist only in this table.
 [ ] Align CATEGORY_AND_LINCAT_CONTRACT.md
 [ ] Align MODULE_DEPENDENCY_MAP.md
 [ ] Align INTERFILE_CONTRACT_LOCK.md
-[ ] Align VALIDATION_SPEC.md
-[ ] Align TEST_COVERAGE_MATRIX.md
-[ ] Add incomplete behavior to STATUS_LEDGER.md
+[ ] Align VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
+[ ] Align TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md
+[ ] Add incomplete behavior to STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
 [ ] Add release-significant gaps to KNOWN_ISSUES.md
 [ ] Record breaking decisions
 [ ] Execute baseline compile coverage
@@ -1814,18 +1814,18 @@ Any drift indicator requires coordinated review.
 
 | Topic | Document |
 |---|---|
-| Project start | `project/docs/00_PROJECT_START_HERE.md` |
+| Project start | `project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md` |
 | Project contracts | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
 | Language architecture | `project/docs/LANGUAGE_ARCHITECTURE.md` |
 | Module dependencies | `project/docs/MODULE_DEPENDENCY_MAP.md` |
 | Category and lincat shapes | `project/docs/CATEGORY_AND_LINCAT_CONTRACT.md` |
 | Syntax boundary | `project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md` |
-| Validation semantics | `project/docs/VALIDATION_SPEC.md` |
-| Coverage obligations | `project/docs/TEST_COVERAGE_MATRIX.md` |
-| Temporary states | `project/docs/STATUS_LEDGER.md` |
+| Validation semantics | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` |
+| Coverage obligations | `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` |
+| Temporary states | `project/docs/STATUS_LEDGER__PROJECT_DOCS.md` |
 | Known issues | `project/docs/KNOWN_ISSUES.md` |
 | Decisions | `project/docs/DECISION_LOG.md` |
-| Release criteria | `project/docs/RELEASE_CRITERIA.md` |
+| Release criteria | `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` |
 | Scenario format | `docs/scenarios/SCENARIO_FORMAT.md` |
 | Gold updates | `docs/scenarios/UPDATING_GOLD_FILES.md` |
 | GF compilation | `docs/gf/GF_COMPILATION.md` |

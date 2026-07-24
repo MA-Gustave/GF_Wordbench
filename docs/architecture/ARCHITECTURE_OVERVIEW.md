@@ -2,17 +2,17 @@
 
 **Document ID:** `GF-WB-ARCH-OVERVIEW`  
 **Status:** Normative architectural overview  
-**Applies to:** GF Wordbench framework, active language project, project template, and generated run artifacts  
+**Applies to:** GF Wordbench framework, active language project, project template, generated run artifacts, and the public interoperability boundary  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Architecture version:** `1.0`  
-**Target product state:** Final architecture  
-**Last reviewed:** 2026-07-22  
+**Architecture version:** `2.0`  
+**Last reviewed:** 2026-07-24  
 
 ---
 
 ## 1. Purpose
 
-This document defines the final high-level architecture of GF Wordbench.
+This document defines the high-level architecture of GF Wordbench.
 
 It explains:
 
@@ -25,16 +25,18 @@ It explains:
 - how one active language project is separated from the permanent framework;
 - which architectural constraints prevent drift.
 
-This document is an overview. Detailed contracts remain authoritative in:
+This document is an overview. Accepted ADRs and the documentation alignment lock govern cross-document interpretation. Detailed boundary contracts remain authoritative in:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
-When this overview and a contract lock appear to disagree, the contract lock governs the affected boundary.
+When documents appear to disagree, use the precedence defined by `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`. This overview must summarize owner documents rather than create a competing contract.
 
 ---
 
@@ -69,11 +71,20 @@ GF Wordbench does not manage several active languages concurrently inside one pr
 
 A multi-language GF grammar may still be compiled when the active project itself intentionally defines such a grammar. The architectural rule concerns project ownership and configuration, not GF’s language capabilities.
 
+Multi-workspace registration, cross-project aggregation, portfolio readiness, comparison, and navigation belong to the independent companion product `gf-portfolio`. Interoperability is optional and uses public versioned GF Wordbench artifacts only.
+
+```text
+gf-portfolio → public versioned GF Wordbench artifacts
+GF Wordbench -X→ gf-portfolio runtime, code, private schemas, storage, or configuration
+```
+
+GF Wordbench must start, validate, report, release, and pass its tests without `gf-portfolio` installed or reachable.
+
 ---
 
 ## 3. Architectural goals
 
-The final architecture is designed to achieve the following goals.
+The architecture is designed to achieve the following goals.
 
 ### 3.1 Correctness
 
@@ -87,7 +98,7 @@ The final architecture is designed to achieve the following goals.
 
 - Keep the framework independent of any active language.
 - Store language-specific facts in `project/`.
-- provide a clean `templates/project/` source for initialization.
+- Provide a clean `templates/project/` source for initialization.
 - Make project replacement possible without rewriting framework code.
 
 ### 3.3 Traceability
@@ -126,7 +137,7 @@ The final architecture is designed to achieve the following goals.
 
 ## 4. Non-goals
 
-The final architecture does not include:
+The architecture does not include:
 
 - a replacement GF parser;
 - a replacement GF type checker;
@@ -140,6 +151,9 @@ The final architecture does not include:
 - a package marketplace;
 - an unrestricted runtime plugin system;
 - simultaneous management of unrelated active language projects;
+- a Wordbench-owned registry of several workspaces;
+- cross-workspace or multilingual portfolio aggregation;
+- a mandatory dependency on `gf-portfolio` or another external product;
 - automatic linguistic design decisions;
 - automatic acceptance of changed gold outputs;
 - report generators that rerun validation stages.
@@ -182,9 +196,10 @@ External actors are:
 - the GF executable;
 - the GF Resource Grammar Library;
 - the local filesystem;
-- optional explicitly contracted tools.
+- optional explicitly contracted tools;
+- optional consumers of public versioned artifacts, including `gf-portfolio`.
 
-The core architecture does not require remote services.
+The core architecture does not require remote services. Optional consumers remain outside the Wordbench runtime boundary and cannot control project identity, validation semantics, or release outcomes.
 
 ---
 
@@ -251,6 +266,15 @@ The core architecture does not require remote services.
 - artifact layout;
 - compatibility policy;
 - framework release policy.
+
+### 6.5 `gf-portfolio` is authoritative for
+
+- registration of several isolated Wordbench workspaces;
+- cross-workspace and multilingual aggregation;
+- portfolio readiness, comparison, and navigation;
+- consumer-specific ingestion adapters for Wordbench public artifacts.
+
+Wordbench documentation may define the artifacts it publishes. It must not define `gf-portfolio` internals, private storage, registry schemas, or runtime behavior.
 
 ---
 
@@ -331,37 +355,53 @@ A run must be reproducible from:
 
 ---
 
-## 8. Layered architecture
+## 8. Hexagonal modular monolith
 
-GF Wordbench uses the following logical layers.
+GF Wordbench is one deployable modular monolith with five stable functional modules:
 
 ```text
-1. Presentation
-2. Application assembly
-3. Configuration and project loading
-4. Orchestration
-5. Validation stages
-6. External process integration
-7. Diagnostics and classification
-8. Shared domain models
-9. Reporting and persistence
-10. Filesystem artifacts
+projects
+runs
+validation
+diagnostics
+reporting
 ```
 
-Dependencies flow downward or laterally through explicit contracts.
+| Module | Architectural ownership |
+|---|---|
+| `projects` | Active-project identity, project configuration, source declarations, template initialization, and project-owned policy loading. |
+| `runs` | Run identity, lifecycle, budgets, cancellation, finalization, history, and release-gate coordination. |
+| `validation` | File selection, static scanning, GF-backed compilation, PGF construction, scenarios, normalization, assertions, and gold comparison. |
+| `diagnostics` | Diagnostic vocabulary, normalization, causal classification, known-pattern handling, and controlled diagnostic-tool registry. |
+| `reporting` | Machine and human reports, artifact manifests, raw-log publication, and public versioned exports. |
 
-A lower layer must not depend on a presentation layer.
+Each module follows the same architectural rings:
+
+```text
+domain
+application
+ports
+adapters
+entrypoints
+bootstrap
+```
+
+The domain and application rings own Wordbench rules. Ports describe external or unstable boundaries. Adapters implement filesystem, process, GF, persistence, and presentation concerns. Entrypoints translate CLI or GUI requests into application calls. Bootstrap assembles the product.
+
+Public intermodule APIs must remain narrow and typed. A module must not depend on another module's private implementation. External processes, GF syntax, persisted formats, and interface frameworks must not leak into the domain model.
+
+The detailed sections below describe responsibilities within these modules and rings; they do not define a second competing layer model.
 
 ---
 
-## 9. Presentation layer
+## 9. Entrypoint adapters
 
 ### 9.1 Command-line interface
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/main_cli.py
+entrypoints.cli
 ```
 
 Responsibilities:
@@ -371,7 +411,7 @@ Responsibilities:
 - request application and run configuration;
 - invoke the application orchestrator;
 - render concise terminal output;
-- convert final outcomes into documented process exit codes.
+- convert completed outcomes into documented process exit codes.
 
 The CLI must not:
 
@@ -384,12 +424,10 @@ The CLI must not:
 
 ### 9.2 Desktop GUI
 
-Canonical owners:
+Architectural owner:
 
 ```text
-app/main_gui.py
-app/gui/
-app/state.py
+entrypoints.gui
 ```
 
 Responsibilities:
@@ -419,19 +457,24 @@ Interface differences may affect presentation, not audit semantics.
 
 ---
 
-## 10. Application assembly layer
+## 10. Bootstrap and composition
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/bootstrap.py
+bootstrap
 ```
 
-Related owners:
+Collaborating boundaries:
 
 ```text
-app/config.py
-app/project_config.py
+projects.application
+runs.application
+validation.application
+diagnostics.application
+reporting.application
+ports
+adapters
 ```
 
 Responsibilities:
@@ -463,10 +506,10 @@ Configuration is divided by ownership.
 
 ### 11.1 Framework defaults
 
-Owned by:
+Architectural owner:
 
 ```text
-app/config.py
+bootstrap configuration provider
 ```
 
 Examples:
@@ -482,16 +525,16 @@ Framework defaults must not name an active language or active-language module.
 
 ### 11.2 Project configuration
 
-Owned by:
+Normative source:
 
 ```text
 project/project.toml
 ```
 
-Loaded by:
+Architectural loader:
 
 ```text
-app/project_config.py
+projects.application through configuration ports and adapters
 ```
 
 Examples:
@@ -508,10 +551,10 @@ Examples:
 
 ### 11.3 Local application state
 
-Owned by:
+Architectural owner:
 
 ```text
-app/state.py
+local-state persistence adapter
 .gf_wordbench_state.json
 ```
 
@@ -537,7 +580,7 @@ They must not silently disable mandatory release gates.
 
 ### 11.5 Configuration precedence
 
-The final resolved configuration follows:
+The resolved configuration follows:
 
 ```text
 framework defaults
@@ -557,27 +600,20 @@ The source of each significant resolved value should remain inspectable.
 
 ---
 
-## 12. Shared domain models
+## 12. Domain models and published contracts
 
-Canonical owner:
+Each functional module owns its domain models. Cross-module data is exposed only through narrow, typed published contracts. A central catch-all model module must not become a dependency shortcut.
 
-```text
-app/models.py
-```
-
-Supporting construction logic:
-
-```text
-app/audit/result_model.py
-```
-
-The final model set includes, at minimum:
+The contract model set includes, at minimum:
 
 ```text
 AppConfig
 ProjectConfig
 RunConfig
+RunBudget
 RunPaths
+GfOperationRequest
+GfOperationResult
 ProcessRequest
 ProcessResult
 ScanCounts
@@ -585,6 +621,7 @@ SourceFingerprint
 CompileSummary
 FileResult
 ScenarioResult
+DiagnosticToolSpec
 DiffEntry
 ArtifactRecord
 RunResult
@@ -629,12 +666,12 @@ Serialization occurs at designated boundaries, not opportunistically throughout 
 
 ---
 
-## 13. Orchestration layer
+## 13. Run orchestration
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/audit_core.py
+runs.application
 ```
 
 The orchestrator coordinates the run but does not absorb stage implementation.
@@ -644,17 +681,27 @@ Responsibilities:
 1. validate the resolved run configuration;
 2. create the run directory;
 3. initialize logging and run metadata;
-4. probe GF when required;
-5. select files, checkpoints, entrypoints, and scenarios;
-6. invoke validation stages in mode-defined order;
-7. collect stage results;
-8. classify causal relationships;
-9. compare with the previous compatible run;
-10. evaluate release gates;
-11. finalize the run result;
-12. invoke report writers;
-13. invoke manifest creation;
-14. return one final `RunResult`.
+4. establish the global run budget, stage budgets, and finalization reserve;
+5. probe GF when required;
+6. select files, checkpoints, entrypoints, and scenarios;
+7. invoke validation stages in mode-defined order;
+8. collect stage results;
+9. classify causal relationships;
+10. compare with the previous compatible run;
+11. evaluate release gates;
+12. finalize the run through the designated finalizer;
+13. invoke report writers and manifest creation within the reserved budget;
+14. return one authoritative `RunResult`.
+
+### 13.1 Run budget and finalization
+
+Every run has:
+
+- one global duration budget;
+- bounded budgets for process-backed and non-process stages;
+- a reserved budget for child-process cleanup, result persistence, report completion, and manifest publication.
+
+Timeout, cancellation, or a late failure must still produce a terminal, inspectable run state when safe persistence remains possible. The finalizer writes available results atomically, preserves completed evidence, records incomplete stages explicitly, terminates owned child processes, and never publishes an incomplete release as `OK`.
 
 The orchestrator must not:
 
@@ -723,11 +770,13 @@ A stage must not modify another stage’s result after ownership has transferred
 
 ## 15. File discovery
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/file_selector.py
+validation.application
 ```
+
+The stage consumes resolved project identity and source rules from `projects.application`.
 
 Responsibilities:
 
@@ -752,10 +801,10 @@ File discovery must not:
 
 ## 16. Static scanning
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/scanner.py
+validation.application
 ```
 
 Responsibilities:
@@ -777,25 +826,39 @@ Language-specific lint rules must be declared by project policy or implemented t
 
 ---
 
-## 17. External process integration
+## 17. GF anti-corruption and process boundary
 
-Canonical owner:
+Canonical application port:
 
 ```text
+GfToolPort
+```
+
+Canonical adapters include the designated GF anti-corruption layer and the shared process runner, such as:
+
+```text
+app/adapters/gf/
 app/utils/process_runner.py
 ```
 
-or the final designated process utility.
+Concrete paths may evolve, but the port and ownership boundary remain stable.
 
-Supporting command owners:
+### 17.1 GF anti-corruption responsibilities
 
-```text
-app/audit/compiler.py
-app/audit/pgf_builder.py
-app/audit/scenario_runner.py
-```
+All GF interactions pass through `GfToolPort` and the dedicated anti-corruption layer. This boundary owns:
 
-### 17.1 Process runner responsibilities
+- typed GF operation requests;
+- operation-specific command construction;
+- executable and version differences;
+- GF search-path and working-directory translation;
+- stdin and `.gfs` invocation details;
+- expected `.gfo`, `.pgf`, and other GF artifact verification;
+- interpretation of GF stdout, stderr, exit state, and native diagnostics;
+- links from interpreted results to preserved raw evidence.
+
+Validation stages express the operation they require. They must not embed GF command syntax, version branches, or private parsing rules.
+
+### 17.2 Process runner responsibilities
 
 The process runner owns:
 
@@ -813,42 +876,32 @@ The process runner owns:
 - output-size policy;
 - raw process result creation.
 
-### 17.2 Command builder responsibilities
+The process runner is tool-neutral. It does not assign GF meaning, validation status, or causal classification.
 
-A command-owning stage owns:
+### 17.3 No duplicate execution logic
 
-- operation-specific GF arguments;
-- expected inputs;
-- expected artifacts;
-- success criteria beyond the exit code;
-- operation timeout class;
-- interpretation handoff.
+CLI, GUI, reports, classifiers, project loaders, and validation stages must not launch GF directly.
 
-### 17.3 No duplicate process logic
-
-CLI, GUI, reports, classifiers, and project loaders must not launch GF.
-
-All GF execution passes through the process boundary.
+All GF execution passes through `GfToolPort`, its anti-corruption adapter, and the shared process boundary.
 
 ---
 
 ## 18. GF compilation
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/compiler.py
+validation.application
 ```
 
 Responsibilities:
 
-- build the GF compilation request;
-- resolve declared GF paths through the shared path resolver;
-- invoke the process runner;
-- verify required `.gfo` artifacts when applicable;
-- preserve raw stdout and stderr;
+- select the configured compilation subject and required outcome;
+- submit a typed compilation operation through `GfToolPort`;
+- consume the returned process evidence, GF diagnostics, and artifact verification;
+- preserve references to raw stdout and stderr;
 - produce a `CompileSummary`;
-- hand diagnostics to the normalization layer.
+- hand structured diagnostics to classification and reporting.
 
 Compilation status must consider:
 
@@ -865,20 +918,19 @@ A zero exit code alone is not sufficient when a required artifact is missing.
 
 ## 19. PGF construction
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/pgf_builder.py
+validation.application
 ```
 
 Responsibilities:
 
 - select configured release entrypoints;
-- build the documented GF command;
-- invoke the process runner;
-- verify the expected `.pgf`;
-- catalog the artifact;
-- return a process-backed build result.
+- submit a typed PGF-build operation through `GfToolPort`;
+- require the anti-corruption layer to verify the expected `.pgf`;
+- catalog the verified artifact;
+- return a process-backed build result with raw-evidence references.
 
 PGF construction is required only when the active project and validation mode require it.
 
@@ -893,10 +945,10 @@ The PGF builder must not:
 
 ## 20. Scenario execution
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/scenario_runner.py
+validation.application
 ```
 
 Scenario sources:
@@ -916,9 +968,9 @@ Responsibilities:
 
 - load the configured scenario registry;
 - validate scenario paths and identifiers;
-- invoke GF with the `.gfs` script;
-- enforce scenario timeout and output limits;
-- capture stdout and stderr separately;
+- submit the native `.gfs` operation through `GfToolPort`;
+- apply the scenario timeout and output limits through the shared run budget;
+- preserve separate stdout and stderr references;
 - verify required markers and sections;
 - normalize stable output;
 - compare with gold when configured;
@@ -933,13 +985,13 @@ Native `.gfs` scripts remain the execution language.
 
 ## 21. Output normalization
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/normalization.py
+validation.application
 ```
 
-or the final designated normalization component.
+Normalization is exposed through an explicit versioned contract.
 
 Responsibilities:
 
@@ -970,10 +1022,10 @@ Diagnostics are divided into two architectural responsibilities.
 
 ### 22.1 Diagnostic normalization
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/diagnostics.py
+diagnostics.application
 ```
 
 Responsibilities:
@@ -988,10 +1040,10 @@ It must not decide upstream versus downstream causality.
 
 ### 22.2 Causal classification
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/classifier.py
+diagnostics.domain
 ```
 
 Responsibilities:
@@ -1012,7 +1064,7 @@ error_kind
 diagnostic_class
 ```
 
-Recommended final meanings:
+Canonical meanings:
 
 ```text
 validation_status:
@@ -1034,16 +1086,31 @@ A process layer does not assign direct or downstream causality.
 
 A classifier does not rewrite raw process evidence.
 
+### 22.4 Diagnostic tool registry
+
+Executable diagnostic tools are controlled by a static allowlist. Each registered tool contract declares:
+
+- stable tool identity and owner;
+- executable resolution policy;
+- permitted commands and flags;
+- input and output contracts;
+- timeout and output-size limits;
+- mutability and filesystem effects;
+- evidence role and trust level;
+- whether the result is normative, advisory, or informational.
+
+Arbitrary command execution and unrestricted runtime plugins are prohibited. AI-assisted tools are optional, visible, and non-normative; their output cannot replace GF evidence or release criteria.
+
 ---
 
 ## 23. Fingerprints and regression comparison
 
 ### 23.1 Source fingerprints
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/fingerprint.py
+projects.domain
 ```
 
 Responsibilities:
@@ -1055,10 +1122,10 @@ Responsibilities:
 
 ### 23.2 Previous-run comparison
 
-Canonical owner:
+Architectural owner:
 
 ```text
-app/audit/diff.py
+runs.application
 ```
 
 Responsibilities:
@@ -1078,7 +1145,7 @@ The diff component must not compare Markdown prose.
 
 ## 24. Validation modes
 
-GF Wordbench defines four final modes.
+GF Wordbench defines four validation modes.
 
 ### 24.1 Quick
 
@@ -1204,16 +1271,13 @@ The run result should preserve completed-stage results and identify the stage th
 
 ## 26. Reporting architecture
 
-Canonical report owners:
+Architectural owner:
 
 ```text
-app/reports/report_json.py
-app/reports/report_md.py
-app/reports/report_ai_ready.py
-app/reports/report_logs.py
-app/reports/report_details.py
-app/reports/report_manifest.py
+reporting.application
 ```
+
+Filesystem and format-specific writers are reporting adapters.
 
 ### 26.1 Report rules
 
@@ -1274,7 +1338,7 @@ provides:
 manifest.json
 ```
 
-catalogs final artifacts with:
+catalogs completed-run artifacts with:
 
 - role;
 - path;
@@ -1552,6 +1616,7 @@ Required controls:
 - explicit working directory;
 - bounded timeout;
 - bounded output policy;
+- static allowlisting for executable diagnostic tools;
 - controlled environment overlay;
 - child-process termination policy;
 - separate stdout and stderr capture.
@@ -1599,7 +1664,7 @@ GF Wordbench supports controlled extension, not unrestricted plugins.
 - a new report field;
 - a new report format;
 - a new schema minor version;
-- a new optional external tool contract;
+- a new optional external tool contract registered in the diagnostic tool allowlist;
 - a new project documentation specialization.
 
 ### 33.2 Extension requirements
@@ -1728,7 +1793,7 @@ project fixture
 
 ## 35. Backward compatibility
 
-The final architecture supports migration from the GF Audit baseline.
+The architecture supports migration from the GF Audit baseline.
 
 Legacy elements include:
 
@@ -1793,7 +1858,7 @@ A run may be initiated by:
 The process completes by returning:
 
 - an exit code to CLI or automation;
-- a final result to the GUI;
+- a completed result to the GUI;
 - persisted run artifacts.
 
 Cancellation is cooperative through the application and process boundaries.
@@ -1836,7 +1901,7 @@ A language project release must record the GF Wordbench and GF versions used.
 
 ## 38. Architectural decision summary
 
-| Decision | Final choice |
+| Decision | Accepted choice |
 |---|---|
 | Active project model | One active language project per repository copy |
 | GF semantics | Delegated to native GF |
@@ -1848,52 +1913,70 @@ A language project release must record the GF Wordbench and GF versions used.
 | Artifact integrity | Versioned `manifest.json` with SHA-256 |
 | Persistent project config | `project/project.toml` |
 | Local preferences | `.gf_wordbench_state.json` |
+| Product structure | One deployable hexagonal modular monolith |
+| Functional modules | `projects`, `runs`, `validation`, `diagnostics`, `reporting` |
+| GF boundary | `GfToolPort` and a dedicated anti-corruption layer |
 | Process execution | Centralized, shell-free by default |
+| Run lifecycle | Global budget, bounded stages, and reserved finalization |
+| Diagnostic tools | Static allowlist with explicit contracts and limits |
+| Portfolio boundary | Independent `gf-portfolio`; optional public-artifact consumption only |
 | Storage | Filesystem; no mandatory database |
 | Extensibility | Controlled explicit extension points |
 | Compatibility | Versioned schemas and tested migrations |
-| Anti-drift | Interfile, external-tool, persisted-schema, and project locks |
+| Anti-drift | Alignment, correction-ledger, interfile, external-tool, persisted-schema, active-project, and template locks |
 
 ---
 
 ## 39. Architecture invariants
 
-The following invariants define the final architecture.
+The following invariants define the architecture.
 
 1. Exactly one active project configuration exists per GF Wordbench copy.
-2. The permanent framework contains no active-language defaults.
-3. GF remains authoritative for GF semantics.
-4. CLI and GUI use the same application and orchestration boundaries.
-5. External execution is centralized.
-6. Every external process has an explicit executable, ordered arguments, working directory, and finite timeout.
-7. Stdout and stderr are preserved separately.
-8. Raw evidence is captured before normalization.
-9. Reports consume results and never rerun validation.
-10. Every generated artifact has one owner.
-11. Machine-consumed data uses explicit versioned schemas.
-12. Project paths and run paths use explicit path models.
-13. Required release artifacts must exist; exit code alone is insufficient.
-14. Gold files change only through an explicit update workflow.
-15. Validation status, execution state, error kind, and diagnostic class remain distinct.
-16. Legacy compatibility remains isolated in loaders and migrators.
-17. A component may change internally when its external contracts remain compatible.
-18. A cross-file contract change is one coordinated change.
-19. A failure in a later stage must not erase valid earlier evidence.
-20. Complexity must correspond to a stable responsibility or contract.
+2. Every run resolves one active project identity and one normative language target.
+3. The permanent framework contains no active-language defaults.
+4. GF remains authoritative for GF semantics.
+5. GF interaction passes through `GfToolPort` and the dedicated anti-corruption layer.
+6. CLI and GUI use the same application and orchestration boundaries.
+7. Wordbench remains one deployable hexagonal modular monolith.
+8. External execution is centralized.
+9. Every external process has an explicit executable, ordered arguments, working directory, and finite timeout.
+10. Every run reserves time for safe finalization.
+11. Stdout and stderr are preserved separately.
+12. Raw evidence is captured before normalization.
+13. Reports consume results and never rerun validation.
+14. Every generated artifact has one owner.
+15. Machine-consumed data uses explicit versioned schemas.
+16. Project paths and run paths use explicit path models.
+17. Required release artifacts must exist; exit code alone is insufficient.
+18. Gold files change only through an explicit update workflow.
+19. Validation status, execution state, error kind, and diagnostic class remain distinct.
+20. Executable diagnostic tools are statically allowlisted with explicit contracts.
+21. Legacy compatibility remains isolated in loaders and migrators.
+22. GF Wordbench has no runtime, storage, or private-schema dependency on `gf-portfolio`.
+23. A component may change internally when its external contracts remain compatible.
+24. A cross-file contract change is one coordinated change.
+25. A failure in a later stage must not erase valid earlier evidence.
+26. Complexity must correspond to a stable responsibility or contract.
 
 ---
 
 ## 40. Architecture compliance checklist
 
-A final implementation is architecture-compliant when:
+A codebase is architecture-compliant when:
 
 ```text
 [ ] Framework code contains no active-language paths or module names
 [ ] project.toml is the active-project authority
 [ ] CLI and GUI resolve the same RunConfig for equivalent inputs
-[ ] audit_core is the only validation orchestrator
-[ ] all GF launches use the shared process runner
+[ ] runs.application is the only run orchestrator
+[ ] functional modules respect hexagonal dependency direction
+[ ] all GF operations pass through GfToolPort and the GF anti-corruption layer
+[ ] all process launches use the shared process runner
 [ ] compilation, PGF, and scenarios have distinct stage owners
+[ ] every run has global, stage, and finalization budgets
+[ ] executable diagnostic tools are statically allowlisted
+[ ] Wordbench starts and runs without gf-portfolio
+[ ] public interoperability uses versioned Wordbench artifacts only
 [ ] raw stdout and stderr are preserved
 [ ] every process-backed result records command and working directory
 [ ] reports do not launch GF or rescan sources
@@ -1918,6 +2001,7 @@ A final implementation is architecture-compliant when:
 ### Architecture details
 
 ```text
+docs/architecture/PRODUCT_BOUNDARIES.md
 docs/architecture/COMPONENT_MAP.md
 docs/architecture/EXECUTION_FLOW.md
 docs/architecture/DATA_MODEL.md
@@ -1928,13 +2012,16 @@ docs/architecture/EXTENSION_BOUNDARIES.md
 docs/architecture/DEPENDENCY_RULES.md
 ```
 
-### Normative locks
+### Normative locks and documentation governance
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/DOCUMENTATION_CORRECTION_LEDGER.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 ### GF and validation
@@ -1946,6 +2033,7 @@ docs/validation/VALIDATION_MODES.md
 docs/scenarios/SCENARIO_FORMAT.md
 docs/scenarios/GOLDEN_TESTS.md
 docs/diagnostics/DIAGNOSTIC_OVERVIEW.md
+docs/diagnostics/TOOL_CATALOG.md
 ```
 
 ### Configuration and reports
@@ -1967,11 +2055,17 @@ docs/decisions/ADR-0004-NATIVE-GFS-SCENARIOS.md
 docs/decisions/ADR-0005-FILE-AND-SCENARIO-RESULTS.md
 docs/decisions/ADR-0006-AI-READY-REPORT.md
 docs/decisions/ADR-0007-GOLDEN-OUTPUT-TESTING.md
+docs/decisions/ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md
+docs/decisions/ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
+docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
 ```
 
 ---
 
-## 42. Final rule
+## 42. Coherence rule
 
 GF Wordbench is not a collection of independent utilities.
 

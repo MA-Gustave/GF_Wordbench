@@ -36,7 +36,7 @@ For Albanian project facts:
 4. project owner documents such as architecture, dependency, category/lincat and morphology specifications;
 5. overview and historical records.
 
-A conflict is recorded in `project/docs/KNOWN_ISSUES.md`, `project/docs/STATUS_LEDGER.md` or `project/docs/DECISION_LOG.md`; it is not silently resolved in a downstream document.
+A conflict is recorded in `project/docs/KNOWN_ISSUES.md`, `project/docs/STATUS_LEDGER__PROJECT_DOCS.md` or `project/docs/DECISION_LOG.md`; it is not silently resolved in a downstream document.
 
 ## 3. Locked project identity
 
@@ -122,18 +122,18 @@ Locked rules:
 
 | Subject | Owner document |
 |---|---|
-| Project identity and navigation | `project/README.md`, `project/docs/00_PROJECT_START_HERE.md` |
+| Project identity and navigation | `project/README.md`, `project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md` |
 | Language scope and variety | `project/docs/LANGUAGE_OVERVIEW.md` |
 | Linguistic/module architecture | `project/docs/LANGUAGE_ARCHITECTURE.md` |
 | Imports and provider/consumer map | `project/docs/MODULE_DEPENDENCY_MAP.md` |
 | Categories and `lincat` records | `project/docs/CATEGORY_AND_LINCAT_CONTRACT.md` |
 | Syntax and constructor rules | `project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md` |
 | Morphology contracts | `project/docs/MORPHOLOGY_SPEC.md` |
-| Validation requirements | `project/docs/VALIDATION_SPEC.md` |
-| Coverage claims | `project/docs/TEST_COVERAGE_MATRIX.md` |
+| Validation requirements | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` |
+| Coverage claims | `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` |
 | Research authorities and evidence | `project/docs/RESEARCH_EVIDENCE.md` |
-| Current blockers | `project/docs/KNOWN_ISSUES.md`, `project/docs/STATUS_LEDGER.md` |
-| Release gates | `project/docs/RELEASE_CRITERIA.md` |
+| Current blockers | `project/docs/KNOWN_ISSUES.md`, `project/docs/STATUS_LEDGER__PROJECT_DOCS.md` |
+| Release gates | `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` |
 | Accepted project decisions | `project/docs/DECISION_LOG.md` |
 
 A document may summarize another owner but cannot redefine its normative facts independently.

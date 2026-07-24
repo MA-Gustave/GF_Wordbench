@@ -5,14 +5,14 @@
 **Applies to:** GF Wordbench validation architecture and one active GF language project  
 **Owner:** GF Wordbench maintainers  
 **Validation contract version:** `1.0.0`  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\validation\VALIDATION_OVERVIEW.md`  
-**Last structural review:** 2026-07-22
+**Canonical path:** `docs/validation/VALIDATION_OVERVIEW.md`  
+**Last structural review:** 2026-07-24
 
 ---
 
 ## 1. Purpose
 
-GF Wordbench validates the coherence, compilability, behavior, release readiness, and regression stability of one active Grammatical Framework language project.
+GF Wordbench validates the coherence, compilability, behavior, release readiness, and regression stability of exactly one active Grammatical Framework language project per workspace and per run.
 
 This document defines the validation system at overview level:
 
@@ -25,7 +25,7 @@ This document defines the validation system at overview level:
 - which outputs every run must preserve;
 - which responsibilities belong to the framework and which belong to the active language project.
 
-This document is normative for the final GF Wordbench architecture.
+This document is normative for GF Wordbench validation.
 
 Detailed algorithms, command syntax, schemas, scenario formats, and release criteria belong to the specialized documents referenced later.
 
@@ -96,7 +96,8 @@ GF Wordbench validation does not:
 - silently update gold files;
 - silently change release requirements;
 - execute arbitrary Python supplied by the active project;
-- support multiple active language profiles in one project configuration;
+- support multiple active language profiles or several active projects in one workspace;
+- perform cross-workspace or multilingual portfolio aggregation;
 - treat human-readable reports as the primary machine data source;
 - use a zero process exit code as the only success criterion;
 - treat all failed modules as independent root failures;
@@ -172,7 +173,20 @@ The active language project is authoritative for:
 - project-level interfile contracts;
 - linguistic design documentation.
 
-### 5.4 No duplicated authority
+### 5.4 Portfolio boundary
+
+Multi-workspace discovery, multilingual aggregation, cross-project comparison, and portfolio readiness belong to the independent `gf-portfolio` product.
+
+The dependency direction is one-way:
+
+```text
+gf-portfolio → public versioned GF Wordbench artifacts
+GF Wordbench -X→ gf-portfolio runtime, storage, code, or configuration
+```
+
+GF Wordbench validation starts, executes, reports, and passes its tests without `gf-portfolio`.
+
+### 5.5 No duplicated authority
 
 No component may create a second source of truth for a responsibility owned elsewhere.
 
@@ -237,7 +251,7 @@ Given equivalent:
 - normalization version;
 - gold files;
 
-GF Wordbench should produce equivalent validation decisions and deterministically ordered results.
+GF Wordbench produces equivalent validation decisions and deterministically ordered results.
 
 Where an operation is inherently variable, the scenario must:
 
@@ -248,9 +262,9 @@ Where an operation is inherently variable, the scenario must:
 
 ### 6.4 Failure isolation
 
-One source or scenario failure should not unnecessarily destroy evidence from independent validation work.
+One source or scenario failure does not unnecessarily destroy evidence from independent validation work.
 
-GF Wordbench should continue sufficiently to:
+GF Wordbench continues sufficiently to:
 
 - identify direct and downstream failures;
 - collect remaining safe evidence;
@@ -280,14 +294,31 @@ Explicit maintenance commands may update controlled assets under separate policy
 
 ### 6.7 One active project
 
-One GF Wordbench copy validates one active language project.
+One GF Wordbench workspace validates exactly one active language project.
 
-The project identity must be resolved from the active project configuration, not from:
+The project identity is resolved from the active project configuration, not from:
 
 - previous output;
 - UI history;
 - source-name guessing;
-- a list of runtime profiles.
+- a list of runtime profiles;
+- a `gf-portfolio` workspace registry.
+
+### 6.8 Run budget and finalization reserve
+
+Every run has one global budget, explicit stage budgets, and a protected finalization reserve.
+
+Normal validation stages cannot consume the finalization reserve. When the usable execution budget is exhausted, insufficient, or cancelled:
+
+- no new validation stage starts;
+- active child processes receive controlled termination;
+- partial evidence remains preserved;
+- unstarted work receives an explicit reason;
+- the run enters finalization using the protected reserve.
+
+A run cannot be `OK` or release-ready when required work or required evidence is incomplete.
+
+The governing decision is `docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md`.
 
 ---
 
@@ -302,7 +333,7 @@ release
 diagnostic
 ```
 
-Historical values may be accepted only as migration aliases:
+Historical values are accepted only as migration aliases:
 
 ```text
 file → quick
@@ -406,7 +437,7 @@ Decide whether the active project satisfies all configured release requirements.
 - release candidate validation;
 - publication gate;
 - tagged version preparation;
-- final language-project acceptance.
+- language-project acceptance.
 
 **Release semantics**
 
@@ -655,7 +686,7 @@ Release policy may include:
 
 ## 11. High-level validation pipeline
 
-The final validation pipeline consists of the following logical phases.
+The validation pipeline consists of the following logical phases.
 
 ```text
 1. Resolve request
@@ -673,7 +704,7 @@ The final validation pipeline consists of the following logical phases.
 13. Build and verify PGF when applicable
 14. Compare with previous run
 15. Evaluate mode and release gates
-16. Build final structured result
+16. Build structured run result
 17. Write reports and manifest
 18. Finalize run
 ```
@@ -733,7 +764,7 @@ Project identity remains authoritative in:
 project/project.toml
 ```
 
-The final resolved configuration must be explicit enough to reproduce the run.
+The resolved configuration must be explicit enough to reproduce the run.
 
 A configuration failure must occur before affected validation stages launch.
 
@@ -855,7 +886,7 @@ Fingerprints support:
 - change detection;
 - evidence integrity.
 
-Canonical fingerprints should use the algorithm defined by the persisted schema.
+Canonical fingerprints use the algorithm defined by the persisted schema.
 
 Fingerprint failure must not erase:
 
@@ -889,7 +920,7 @@ For every compile operation, GF Wordbench records:
 - produced artifacts;
 - missing required artifact condition.
 
-Compilation should proceed in deterministic target order.
+Compilation proceeds in deterministic target order.
 
 Dependency-aware ordering may improve diagnostics but must not be used as unsupported proof of causality.
 
@@ -1056,9 +1087,9 @@ Gate evaluation must not reparse raw logs when structured results exist.
 
 ---
 
-## 27. Phase 16 — Build the final structured result
+## 27. Phase 16 — Build structured run result
 
-The final run result aggregates:
+The structured run result aggregates:
 
 - resolved configuration;
 - run paths;
@@ -1074,7 +1105,7 @@ The final run result aggregates:
 - warnings;
 - overall status.
 
-The final result is the source of truth for report generation.
+The structured run result is the source of truth for report generation.
 
 ---
 
@@ -1097,7 +1128,7 @@ generated GF artifacts
 
 Reports must remain projections of the same structured result.
 
-The manifest is generated after final owned artifacts have been written and stabilized.
+The manifest is generated after all owned artifacts have been written and stabilized.
 
 The manifest must not hash itself.
 
@@ -1105,20 +1136,26 @@ The manifest must not hash itself.
 
 ## 29. Phase 18 — Finalize run
 
-Finalization must:
+Finalization uses the protected reserve defined by ADR-0010 and must:
 
+- stop or account for every owned child process;
+- preserve partial stdout, stderr, timing, and artifact evidence;
 - set the finish timestamp;
-- compute final duration;
-- finalize totals;
-- finalize overall status;
+- compute the run duration;
+- lock aggregate totals;
+- lock the overall status;
+- record incomplete, cancelled, timed-out, and unstarted work explicitly;
 - ensure required report paths are recorded;
-- verify required artifacts where possible;
-- write or finalize the manifest;
+- verify required artifacts;
+- write terminal results atomically or through a recoverable replacement protocol;
+- write and publish the manifest;
 - leave the run directory inspectable.
 
-A report-generation error must remain distinguishable from a language validation failure.
+Finalization is idempotent. Repeating it cannot erase valid evidence, corrupt published artifacts, or transform an incomplete run into success.
 
-Already captured evidence should remain available.
+A report-generation error remains distinguishable from a language validation failure.
+
+Already captured evidence remains available.
 
 ---
 
@@ -1217,7 +1254,7 @@ FAIL
 ERROR
 ```
 
-Recommended precedence:
+Canonical precedence:
 
 ```text
 ERROR > FAIL > OK
@@ -1464,7 +1501,7 @@ Rules:
 - directness must be evidence-based;
 - processing order alone is insufficient;
 - a blocker should be recorded when known;
-- downstream results remain failures but should not inflate root-cause counts;
+- downstream results remain failures but do not inflate root-cause counts;
 - reports must preserve both the immediate diagnostic and causal classification.
 
 Detailed rules belong to:
@@ -1529,7 +1566,7 @@ Gold files are not:
 
 Release mode evaluates at least the configured required domains.
 
-A balanced final release policy should normally require:
+The release policy requires:
 
 1. valid project configuration;
 2. supported GF toolchain;
@@ -1551,48 +1588,41 @@ It must not weaken mandatory framework integrity or security gates.
 
 ---
 
-## 41. Current implementation transition
+## 41. Legacy compatibility with `gf-audit`
 
-The predecessor implementation currently provides a substantial subset of the final system:
+GF Wordbench preserves the useful validation semantics inherited from `gf-audit`:
 
-- file selection;
+- deterministic file selection and exclusion reasons;
 - static scanning;
 - source fingerprinting;
 - GF version probing;
 - per-file compilation;
 - diagnostic parsing;
-- direct/downstream/ambiguous classification;
+- direct, downstream, and ambiguous causal classification;
 - previous-run comparison;
 - structured run results;
 - JSON, Markdown, AI-ready, raw-log, and detail reports;
 - CLI and GUI entrypoints.
 
-The final GF Wordbench validation architecture adds or formalizes:
+Canonical Wordbench validation adds the contracts defined in this documentation set:
 
 - canonical modes;
-- active-project configuration;
+- one active-project configuration;
 - checkpoint policy;
-- scenario execution;
-- marker assertions;
+- native `.gfs` scenario execution;
+- marker and assertion verification;
 - output normalization;
-- gold comparison;
-- PGF release build;
-- manifest finalization;
+- reviewed gold comparison;
+- PGF release validation;
+- manifest publication;
 - explicit execution state;
+- run budgets and protected finalization;
 - release gates;
-- contract and schema checks.
+- contract and schema validation.
 
-Migration aliases may preserve compatibility, but final documentation and canonical output use only final GF Wordbench terminology.
+Compatibility readers may accept documented legacy aliases and schemas. Canonical writers emit only canonical GF Wordbench names, statuses, schemas, and artifact contracts.
 
-Implementation status belongs in:
-
-```text
-project/docs/STATUS_LEDGER.md
-CHANGELOG.md
-docs/release/MIGRATION_AND_DEPRECATION.md
-```
-
-This overview defines the target contract, not a claim that every target feature is already implemented.
+Legacy compatibility never restores a multi-project model, duplicates project authority, or weakens release requirements.
 
 ---
 
@@ -1602,7 +1632,7 @@ This overview defines the target contract, not a claim that every target feature
 |---|---|
 | Application defaults | `app/config.py` |
 | Configuration construction | `app/bootstrap.py` |
-| Active-project loading | `app/project_config.py` or final designated loader |
+| Active-project loading | `app/project_config.py` |
 | Shared models | `app/models.py` |
 | Run-path construction | bootstrap/path owner |
 | File discovery | `app/audit/file_selector.py` |
@@ -1610,13 +1640,13 @@ This overview defines the target contract, not a claim that every target feature
 | Source fingerprints | `app/audit/fingerprint.py` |
 | GF compilation | `app/audit/compiler.py` |
 | Process execution | `app/utils/process_utils.py` |
-| GF path utilities | designated GF/path owner |
+| GF path utilities | GF path service |
 | Diagnostic parsing | `app/audit/diagnostics.py` |
 | Causal classification | `app/audit/classifier.py` |
 | Scenario execution | `app/audit/scenario_runner.py` |
-| Output normalization | designated normalization owner |
-| Gold comparison | designated gold-comparison owner |
-| PGF build | designated PGF build owner |
+| Output normalization | normalization service |
+| Gold comparison | gold-comparison service |
+| PGF build | PGF build service |
 | Regression comparison | `app/audit/diff.py` |
 | Result construction | `app/audit/result_model.py` |
 | Audit orchestration | `app/audit/audit_core.py` |
@@ -1625,7 +1655,7 @@ This overview defines the target contract, not a claim that every target feature
 | AI-ready packet | `app/reports/report_ai_ready.py` |
 | Raw and aggregate logs | `app/reports/report_logs.py` |
 | Detail evidence | `app/reports/report_details.py` |
-| Manifest | designated manifest writer |
+| Manifest | manifest writer |
 | CLI | `app/main_cli.py` |
 | GUI | `app/main_gui.py`, `app/gui/` |
 | Persistent UI state | `app/state.py` |
@@ -1633,7 +1663,7 @@ This overview defines the target contract, not a claim that every target feature
 | Project scenarios | `project/validation/scenarios/` |
 | Project gold files | `project/validation/gold/` |
 
-A final implementation may refine filenames, but responsibility ownership must remain singular and documented.
+Concrete filenames may evolve through coordinated contract changes, but responsibility ownership remains singular and documented.
 
 ---
 
@@ -1760,11 +1790,11 @@ Security failure is not a language validation failure.
 
 ## 46. Performance policy
 
-Validation should remain useful at different feedback speeds.
+Validation remains useful at different feedback speeds.
 
 ### 46.1 Quick responsiveness
 
-Quick mode should:
+Quick mode:
 
 - avoid unrelated full-project work;
 - bound target count;
@@ -1774,7 +1804,7 @@ Quick mode should:
 
 ### 46.2 Checkpoint efficiency
 
-Checkpoint mode should:
+Checkpoint mode:
 
 - execute only the declared layer and dependencies;
 - reuse configuration resolution;
@@ -1805,7 +1835,7 @@ Concurrency may be introduced only when:
 - logs remain attributable;
 - contract tests prove equivalence.
 
-Sequential execution remains valid and should be preferred until concurrency provides measured value.
+Sequential execution remains the default until concurrency provides measured value and preserves every validation contract.
 
 ---
 
@@ -1926,7 +1956,7 @@ The following invariants apply to every mode.
 
 ### 48.5 Reporting invariants
 
-- reports consume one final structured result;
+- reports consume one structured run result;
 - reports do not launch validation;
 - artifact paths come from their owner;
 - canonical persistent schemas are versioned;
@@ -1963,6 +1993,8 @@ Probable validation drift exists when:
 - a required PGF is absent but release passes;
 - previous-run Markdown is parsed instead of JSON;
 - project identity comes from UI state;
+- one run resolves several active projects;
+- Wordbench validation reads a `gf-portfolio` registry or private state;
 - source selection depends on filesystem order;
 - language-specific paths appear in framework defaults;
 - optional work silently becomes release-required;
@@ -2001,7 +2033,7 @@ docs/validation/REGRESSION_COMPARISON.md
     Previous-run discovery and change classification
 
 docs/validation/RELEASE_GATES.md
-    Final release requirements and exception policy
+    Release requirements and exception policy
 
 docs/scenarios/
     Scenario format, markers, normalization, gold workflow
@@ -2022,41 +2054,43 @@ docs/gf/
 Normative lock documents remain authoritative when a detail overlaps:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 ---
 
-## 51. Implementation completion criteria
+## 51. Validation-system conformance
 
-The final validation system is complete when:
+The validation system conforms to this contract when:
 
 ```text
-[ ] Canonical modes are implemented
+[ ] Canonical modes govern every entrypoint
 [ ] Legacy mode aliases migrate correctly
 [ ] Active-project configuration is authoritative
 [ ] CLI and GUI use the same core path
-[ ] Project and environment preflight are implemented
+[ ] Project and environment preflight precede dependent work
 [ ] File selection is deterministic
 [ ] Static scans preserve structured findings
 [ ] Compile evidence includes command, stdout, stderr, exit, duration, and timeout
 [ ] Diagnostic parsing preserves unrecognized evidence
-[ ] Direct/downstream/ambiguous classification is implemented
+[ ] Direct/downstream/ambiguous classification follows preserved evidence
 [ ] Scenario runner executes native .gfs scripts
-[ ] Marker and assertion verification is implemented
+[ ] Marker and assertion verification follows the scenario contract
 [ ] Output normalization is versioned
 [ ] Gold comparison is explicit and deterministic
 [ ] Normal validation cannot update gold
-[ ] PGF release validation is implemented
+[ ] PGF release validation enforces artifact and release contracts
 [ ] Previous-run comparison uses structured summaries
 [ ] Requiredness is mode-aware
 [ ] Overall status uses documented semantics
 [ ] Raw evidence remains immutable
-[ ] Reports consume the final structured result
-[ ] Manifest verifies finalized artifacts
+[ ] Reports consume the structured run result
+[ ] Manifest verifies stabilized artifacts
 [ ] Persistent schemas are versioned
 [ ] Contract tests cover component boundaries
 [ ] Real-GF integration tests cover the core pipeline
@@ -2066,7 +2100,7 @@ The final validation system is complete when:
 
 ---
 
-## 52. Final enforcement rule
+## 52. Governing rule
 
 GF Wordbench validation is valid only when the result can be explained from preserved evidence.
 

@@ -2,13 +2,12 @@
 
 **Document ID:** `GF-WB-EXT-TOOL-LOCK`  
 **Status:** Normative  
-**Contract version:** `2.0.0`  
+**Contract version:** `2.1.0`  
 **Applies to:** external executables and operating-system process services used by GF Wordbench for one active project and one run  
 **Primary external tool:** Grammatical Framework (`gf` or `gf.exe`)  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Last reviewed:** `2026-07-24`  
-**Implementation note:** exact supported flags and versions must be verified against current source and executable evidence before being documented as implemented
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -110,15 +109,15 @@ Locked rules:
 
 Compatibility claims require reproducible evidence from the current executable or supported test matrix.
 
-Documentation must distinguish:
+Documentation must state:
 
-- minimum required version;
-- tested versions;
-- unsupported versions;
-- unknown compatibility;
-- accepted target policy not yet enforced by code.
+- the minimum required version;
+- the tested versions;
+- the unsupported versions;
+- any unresolved compatibility;
+- the accepted compatibility policy.
 
-Unknown output from version probing cannot be silently interpreted as compatible.
+An unrecognized version-probe result cannot be treated as compatible without explicit evidence.
 
 ## 7. GF search paths and working directory
 
@@ -249,7 +248,7 @@ mutability
 network policy
 evidence role
 normalization and parser
-implementation and verification status
+availability and verification evidence
 ```
 
 Locked rules:
@@ -259,7 +258,7 @@ Locked rules:
 - mutating tools require explicit user intent and cannot run during normal read-only validation;
 - AI-assisted tools are optional, visible and non-normative;
 - tool absence cannot invalidate core GF evidence unless the tool is explicitly required by an accepted release contract;
-- a registry entry marked planned is not executable capability.
+- a registry entry without a verified executable binding and allowed invocation contract is not executable capability.
 
 ## 14. Security boundary
 
@@ -302,7 +301,7 @@ Changing an external-tool contract requires coordinated review of:
 6. artifact ownership and persisted schemas;
 7. tests and fixtures;
 8. security consequences;
-9. implementation alignment;
+9. source, executable and documentation alignment;
 10. this lock and correction ledger.
 
 ## 17. Validation checklist
@@ -320,5 +319,5 @@ Changing an external-tool contract requires coordinated review of:
 [ ] scenario and gold mutation requires explicit workflow
 [ ] diagnostic tools are allowlisted
 [ ] Wordbench does not execute Portfolio workspaces
-[ ] implementation claims have executable or source evidence
+[ ] capability claims have executable or source evidence
 ```

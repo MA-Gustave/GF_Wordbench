@@ -1550,7 +1550,7 @@ Any detected template drift must be corrected before the template is used for a 
 | Framework dependency contracts | `docs/architecture/DEPENDENCY_RULES.md` |
 | Persisted schemas | `docs/reference/SCHEMA_INDEX.md` |
 | Template project lock | `templates/project/docs/INTERFILE_CONTRACT_LOCK.md` |
-| Active project start | `project/docs/00_PROJECT_START_HERE.md` |
+| Active project start | `project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md` |
 
 ---
 

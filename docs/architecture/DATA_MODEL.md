@@ -3,13 +3,14 @@
 **Document ID:** `GF-WB-ARCH-DATA-MODEL`  
 **Status:** Normative architecture  
 **Applies to:** GF Wordbench shared runtime models, project configuration, application state, validation results, run aggregation, report serialization and schema migration  
-**Primary owner:** `app/models.py` or its final equivalent shared-model package  
+**Primary owner:** canonical shared-model package  
 **Serialization owners:** schema and report modules  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Related schema authority:** `docs/PERSISTED_SCHEMA_LOCK.md`  
 **Related status authority:** `docs/reference/STATUS_VALUES.md`  
 **Related artifact authority:** `docs/architecture/ARTIFACT_MODEL.md`  
 **Related interfile authority:** `docs/INTERFILE_CONTRACT_LOCK.md`  
-**Last structural review:** 2026-07-23
+**Last structural review:** 2026-07-24
 
 ---
 
@@ -101,6 +102,22 @@ This document does not define:
 - language-specific GF categories, lincats or constructors;
 - report layout beyond the structured fields reports consume;
 - database entities, because GF Wordbench does not require a database for the core model.
+
+### 3.1 Product boundary
+
+The shared data model represents one active GF language project, one resolved run configuration and one normative language target per run.
+
+Wordbench runtime and persisted models MUST NOT contain:
+
+- a registry of several active Wordbench workspaces;
+- a selectable collection of active language projects;
+- portfolio-wide inventory, comparison, trend or readiness state;
+- `gf-portfolio` private identifiers, configuration, migrations or storage;
+- a mandatory connection to an external product.
+
+`gf-portfolio` may consume finalized public Wordbench artifacts through their versioned persisted schemas. Consumer-specific ingestion, indexing and aggregation models belong to `gf-portfolio`, not to the Wordbench shared model.
+
+Application state may retain non-authoritative environment convenience values, but it MUST NOT override the active project identity declared by `project/project.toml`.
 
 ---
 
@@ -239,6 +256,12 @@ Reports MUST NOT:
 - reconstruct artifact paths by filename convention;
 - reclassify direct and downstream failures;
 - infer success from a missing result.
+
+### 5.8 No portfolio state in Wordbench models
+
+Shared Wordbench models MUST NOT encode cross-workspace aggregation, external-product lifecycle, Portfolio registry membership or consumer-specific indexing state.
+
+Public Wordbench artifacts expose only Wordbench-owned facts. External products derive their own models from those artifacts without extending or mutating the Wordbench runtime model.
 
 ---
 
@@ -652,7 +675,7 @@ Rules:
 
 It is not active-project configuration and not application state.
 
-Recommended canonical decomposition:
+Canonical decomposition:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -951,7 +974,7 @@ Runtime-only fields MUST NOT be serialized into the canonical state file.
 
 Environment resolution converts untrusted or optional path expressions into validated runtime values.
 
-Recommended conceptual model:
+Canonical model:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -981,7 +1004,7 @@ Rules:
 
 It is the only configuration object consumed by orchestration.
 
-Recommended canonical model:
+Canonical model:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1331,13 +1354,15 @@ class ScenarioSectionResult:
     completed: bool
 ```
 
-Optional future compatible fields may include:
+Compatible optional fields are:
 
 ```text
 message
 begin_line
 end_line
 ```
+
+When present, they follow the same section identity, ordering and evidence rules.
 
 Rules:
 
@@ -1511,7 +1536,7 @@ lib/src/example/GrammarEx.gf
 
 It is derived, not independent.
 
-A future major schema may remove it after all readers use `diagnostic_class`.
+Removing it requires a major schema version after all supported readers use `diagnostic_class`.
 
 ---
 
@@ -2695,14 +2720,7 @@ Contract tests MUST verify:
 - active-language values do not appear in framework defaults;
 - migrations normalize legacy shapes without rewriting sources during read-only load.
 
-Suggested command family:
-
-```text
-gf-wordbench contracts check
-gf-wordbench schemas check
-```
-
-The exact CLI surface is owned by the CLI specification.
+The exact command surface for contract and schema verification is owned by `docs/usage/CLI_REFERENCE.md`. This data-model contract does not define competing command names.
 
 ---
 
@@ -2813,13 +2831,16 @@ docs/reference/TERMINOLOGY_REFERENCE.md
 ### Decisions
 
 ```text
+docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
 docs/decisions/ADR-0003-SEPARATE-SCAN-AND-COMPILE.md
 docs/decisions/ADR-0005-FILE-AND-SCENARIO-RESULTS.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 ```
 
 ---
 
-## 55. Final enforcement rule
+## 55. Contract enforcement rule
 
 GF Wordbench may change internal implementation details without changing this contract.
 
@@ -2838,6 +2859,6 @@ aggregation precedence
 migration behavior
 ```
 
-The final rule is:
+The governing rule is:
 
 > Configuration is resolved once, evidence is captured once, structured results are assembled once, and every report derives from those same typed facts.

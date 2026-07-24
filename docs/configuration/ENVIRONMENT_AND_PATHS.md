@@ -2,12 +2,13 @@
 
 **Document ID:** `GF-WB-CONFIG-ENVIRONMENT-PATHS`  
 **Status:** Normative configuration and path-resolution specification  
-**Applies to:** Framework bootstrap, CLI, GUI, project loading, GF invocation, run creation, reporting, migration, and tests  
-**Primary implementation owners:** `app/bootstrap.py`, `app/project_config.py`, `app/state.py`, `app/utils/path_utils.py`  
-**Execution consumer:** `app/utils/process_utils.py`  
+**Applies to:** one GF Wordbench workspace, its one active project, CLI, GUI, automation, GF invocation, run creation, reporting, migration and tests  
+**Owner:** GF Wordbench maintainers  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Configuration authority:** `docs/configuration/PROJECT_TOML_REFERENCE.md`, `docs/configuration/APPLICATION_STATE_REFERENCE.md`  
+**Boundary authorities:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`  
 **Specification version:** `1.0`  
-**Target product state:** Final architecture  
-**Last reviewed:** 2026-07-22  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -54,12 +55,31 @@ No local environment path may become a language-project fact.
 
 ---
 
+## Workspace and product boundary
+
+One GF Wordbench workspace resolves exactly one active GF language project. One run uses exactly one `project_root` and one normative language target.
+
+Environment and path configuration may select the workspace or its active project for the current invocation. It must not create:
+
+- a registry of several Wordbench projects;
+- a runtime language-profile list;
+- cross-workspace path discovery;
+- portfolio-wide output roots or aggregation state;
+- a dependency on `gf-portfolio` configuration, schemas, storage or runtime.
+
+The independent `gf-portfolio` product may read finalized, public, versioned run artifacts. It does not participate in Wordbench project discovery, path precedence, GF search-path construction, run-directory creation or application-state resolution.
+
+---
+
 ## 3. Related authority
 
 The following documents remain authoritative for their domains:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/architecture/PRODUCT_BOUNDARIES.md
 docs/architecture/ARCHITECTURE_OVERVIEW.md
+docs/architecture/DEPENDENCY_RULES.md
 docs/architecture/PROCESS_EXECUTION_MODEL.md
 docs/architecture/ARTIFACT_MODEL.md
 docs/architecture/DATA_MODEL.md
@@ -75,11 +95,13 @@ docs/operations/RUN_DIRECTORY_LIFECYCLE.md
 
 Priority when rules overlap:
 
-1. `PERSISTED_SCHEMA_LOCK.md` governs canonical persisted path representation;
-2. `EXTERNAL_TOOL_CONTRACT_LOCK.md` governs executable, working-directory, and GF command boundaries;
-3. `INTERFILE_CONTRACT_LOCK.md` governs path ownership between Python components;
-4. this document governs environment and path resolution;
-5. report and operation-specific references govern presentation details.
+1. accepted ADRs govern architectural decisions;
+2. `DOCUMENTATION_ALIGNMENT_LOCK.md` governs cross-document interpretation and the Wordbench/Portfolio boundary;
+3. `PERSISTED_SCHEMA_LOCK.md` governs canonical persisted path representation;
+4. `EXTERNAL_TOOL_CONTRACT_LOCK.md` governs executable, working-directory and GF command boundaries;
+5. `INTERFILE_CONTRACT_LOCK.md` governs ownership and dependency direction;
+6. this document governs environment and path resolution;
+7. report and operation-specific references govern presentation details.
 
 ---
 
@@ -130,7 +152,8 @@ This specification does not define:
 - remote execution;
 - container orchestration;
 - cloud storage;
-- arbitrary environment-variable expansion in project files.
+- arbitrary environment-variable expansion in project files;
+- Portfolio workspace discovery or aggregation.
 
 ---
 
@@ -138,28 +161,21 @@ This specification does not define:
 
 Environment and path values are divided by owner.
 
-### 6.1 Framework-owned values
+### 6.1 Projects module
 
-Owned by:
+The `projects` module owns:
 
-```text
-app/config.py
-app/bootstrap.py
-```
+- locating the active project boundary;
+- loading `project/project.toml`;
+- validating project identity;
+- resolving project-relative source, entrypoint, checkpoint, scenario, input and gold paths;
+- producing the resolved project-path model.
 
-Examples:
+It does not resolve machine-local GF or output locations from project metadata.
 
-- canonical default project directory name;
-- canonical state filename;
-- canonical default output directory name;
-- supported environment-variable names;
-- path-normalization policy;
-- generated artifact filenames;
-- timeout defaults unrelated to project semantics.
+### 6.2 Active project
 
-### 6.2 Project-owned values
-
-Owned by:
+The active project owns portable declarations in:
 
 ```text
 project/project.toml
@@ -169,48 +185,61 @@ Examples:
 
 - source directory;
 - source glob;
-- GF path parts;
+- GF path parts owned by the project;
 - entrypoint paths;
 - checkpoint paths;
 - scenario paths;
 - input paths;
 - gold paths.
 
-Project-owned paths are portable and project-relative.
+Project-owned paths are project-relative, portable and source-controlled.
 
-### 6.3 Machine-local values
+### 6.3 Application configuration and state adapter
 
-Owned by environment configuration or disposable application state.
+Machine-local values are supplied through explicit invocation values, documented environment variables or disposable application state.
 
 Examples:
 
-- active project root;
+- active project root for the current workspace;
 - GF executable;
 - RGL root;
 - output root;
 - optional state-file override.
 
-These values may be absolute.
+These values may be absolute. They remain non-authoritative for language identity and project policy.
 
-### 6.4 Run-owned values
+### 6.4 Runs module
 
-Owned by:
-
-```text
-RunPaths
-```
+The `runs` module owns the run identity, run directory and immutable run-path allocation.
 
 Examples:
 
 - run directory;
-- report paths;
-- raw log directories;
+- raw evidence directories;
+- temporary directory;
 - artifact directories;
-- per-file log paths;
-- per-scenario log paths;
-- manifest path.
+- per-file and per-scenario evidence roots.
 
 Run-owned paths are derived once per run.
+
+### 6.5 Reporting module
+
+The `reporting` module owns canonical report and manifest paths supplied through the run-path model.
+
+Examples:
+
+- `summary.json`;
+- `summary.md`;
+- `AI_READY.md`;
+- aggregate logs;
+- detail reports;
+- `manifest.json`.
+
+Consumers receive owned paths from the run context and never reconstruct them through duplicated filename constants.
+
+### 6.6 Adapters
+
+Filesystem, process, state and platform adapters implement path operations through application ports. Domain and application rules do not depend on GUI widgets, CLI parser objects, operating-system process APIs or private `gf-portfolio` state.
 
 ---
 
@@ -239,7 +268,7 @@ Examples:
 
 ```text
 docs/
-app/
+application package/
 tests/
 templates/project/
 ```
@@ -383,7 +412,7 @@ These paths:
 
 # 14. Root model
 
-The final resolved path model includes:
+The resolved path model includes:
 
 ```text
 framework_root
@@ -410,7 +439,7 @@ Each value has one owner and one documented derivation.
 Expected contents include:
 
 ```text
-app/
+application package/
 docs/
 project/
 templates/
@@ -432,25 +461,23 @@ A developer-only override requires an explicit test or development contract.
 
 ## 16. `project_root`
 
-`project_root` is the root containing the active project configuration.
+`project_root` is the root of the workspace's one active project.
 
-It must contain:
+It contains:
 
 ```text
 project.toml
 ```
 
-or a configured equivalent only if a future schema explicitly permits one.
-
-Canonical default:
+Canonical workspace location:
 
 ```text
 <framework_root>/project
 ```
 
-The resolved project root may be elsewhere when explicitly selected.
+An explicit invocation may select another valid active-project root for that invocation. This selects one workspace boundary; it does not create a multi-project registry or permit one run to combine projects.
 
-One GF Wordbench run uses exactly one `project_root`.
+One GF Wordbench run uses exactly one immutable `project_root`.
 
 ---
 
@@ -685,7 +712,7 @@ Adding, renaming, or removing one requires documentation and compatibility revie
 
 An unset variable contributes no value.
 
-An empty variable is treated as unset unless a future field explicitly defines empty semantics.
+An empty variable is treated as unset. A different empty-value meaning requires an explicit configuration-contract revision.
 
 ---
 
@@ -706,7 +733,7 @@ Rules:
 - application state should contain resolved absolute paths;
 - environment variables override complete configuration values;
 - CLI input may be expanded at the user-input boundary only when documented;
-- the resolved path, not the original expression, enters `RunConfig`.
+- the resolved path, not the original expression, enters the resolved run request.
 
 This prevents hidden machine-specific behavior inside portable files.
 
@@ -749,7 +776,7 @@ removal target
 tests
 ```
 
-No GF Audit environment-variable alias is assumed unless explicitly registered.
+Legacy GF Audit environment-variable aliases are accepted only through an explicit compatibility contract.
 
 ---
 
@@ -824,7 +851,7 @@ If `PATH` discovery succeeds:
 2. explicit current GUI RGL root
 3. GF_WORDBENCH_RGL_ROOT
 4. application-state environment.rgl_root
-5. documented installation-specific discovery, if implemented
+5. documented installation-specific discovery
 6. null when operation permits it
 7. failure when required
 ```
@@ -1038,7 +1065,7 @@ GrammarFre.gf
 lib/src/french/GrammarFre.gf
 ```
 
-The final project reference must choose and document one preferred style.
+`PROJECT_TOML_REFERENCE.md` defines the canonical entrypoint representation.
 
 ---
 
@@ -1046,7 +1073,7 @@ The final project reference must choose and document one preferred style.
 
 Checkpoint paths follow the same resolution rules as entrypoints.
 
-Declared order is semantically significant for reporting and planned validation order.
+Declared order is semantically significant for reporting and validation order.
 
 The resolver must not sort checkpoints if the project configuration deliberately orders them.
 
@@ -1180,7 +1207,7 @@ Rules:
 - unknown bare names are treated as project-relative paths;
 - adding another reserved alias is a configuration-contract change.
 
-An explicit future alias syntax may be introduced only through a schema-compatible documented extension.
+Any alias syntax extension requires a schema-compatible documented contract change.
 
 ---
 
@@ -1237,7 +1264,7 @@ Default behavior:
 - release mode → no silent missing required path;
 - diagnostic mode → may continue only when the affected operation can still execute meaningfully.
 
-Version `1.0` treats configured `path_parts` as required unless a future field adds optionality.
+Version `1.0` treats configured `path_parts` as required. Optional path parts require a configuration-schema revision.
 
 ---
 
@@ -1358,7 +1385,7 @@ After discovery:
 - record that path;
 - do not rerun discovery for each operation.
 
-Changing `PATH` after `RunConfig` finalization must not change the selected executable.
+Changing `PATH` after request resolution must not change the selected executable.
 
 ---
 
@@ -1384,7 +1411,7 @@ A child tool’s private temporary behavior is external-tool behavior and should
 
 Locale variables may affect tool wording or encoding.
 
-The final policy should:
+The policy:
 
 - use explicit UTF-8 file and stream handling;
 - record relevant explicit locale overrides;
@@ -1623,7 +1650,7 @@ Project files do not use `~`.
 CLI machine-local input may support `~` expansion when:
 
 - the expansion is explicit and documented;
-- expansion occurs before `RunConfig`;
+- expansion occurs before the run request is resolved;
 - the resolved absolute path is recorded;
 - Windows behavior is tested.
 
@@ -1645,7 +1672,7 @@ This avoids:
 - unresolved placeholders;
 - double expansion.
 
-A future explicit interpolation feature would require a new configuration contract.
+Inline interpolation can be introduced only by a new configuration contract.
 
 ---
 
@@ -2073,7 +2100,7 @@ run_20260722_184500_02
 
 Creation must be exclusive.
 
-The implementation must not check-then-create without handling race conditions.
+Run-directory creation must be exclusive and handle race conditions.
 
 ---
 
@@ -2263,7 +2290,7 @@ Each field is:
 string or null
 ```
 
-State is convenience data.
+State is convenience data for one invocation environment. It is not a project registry, language selector or source of project identity.
 
 Project-owned source configuration must not migrate into state after `project.toml` is authoritative.
 
@@ -2296,13 +2323,13 @@ State saving must:
 - omit project entrypoints and scenario policy;
 - use canonical separators.
 
-The GUI may save user-confirmed current fields after validation.
+The GUI may save user-confirmed machine-local fields after validation. It must not persist a list of selectable language projects.
 
 ---
 
 # 110. CLI and GUI equivalence
 
-Equivalent resolved values from CLI and GUI must produce equivalent `RunConfig`.
+Equivalent resolved values from CLI and GUI produce equivalent resolved run requests.
 
 Both interfaces use:
 
@@ -2321,45 +2348,36 @@ Interface-specific path normalization is prohibited after bootstrap.
 
 ## 111. CLI display
 
-A configuration inspection command should display:
+The CLI configuration-inspection surface displays, for each significant path:
 
 ```text
-value
-source/provenance
-validation state
+resolved value
+source or provenance
+validation result
 ```
 
-Suggested command:
+Exact command spelling and options are owned by `docs/usage/CLI_REFERENCE.md`.
 
-```text
-gf-wordbench config show --resolved
-```
-
-A path-check command may be:
-
-```text
-gf-wordbench paths check
-```
-
-These commands are recommended interfaces, not substitutes for internal validation.
+The CLI inspection surface does not replace internal validation and does not expose secrets or a complete inherited environment.
 
 ---
 
 ## 112. GUI display
 
-The GUI should display resolved:
+The GUI displays resolved:
 
 - project root;
-- project config;
+- project configuration;
 - source root;
 - GF executable;
 - GF version after probe;
 - RGL root;
 - output root;
 - next run location;
-- configuration warnings.
+- configuration warnings;
+- provenance when an environment value overrides stored convenience state.
 
-It should not hide that an environment variable overrode a stored state value.
+The GUI uses the same projects and configuration application boundaries as the CLI. It does not maintain a separate project registry or path-resolution policy.
 
 ---
 
@@ -2557,7 +2575,8 @@ Required protections:
 - no complete environment dump;
 - no secret interpolation;
 - explicit executable path;
-- output collision control.
+- output collision control;
+- no `gf-portfolio` path or state dependency.
 
 ---
 
@@ -2597,7 +2616,7 @@ This document does not define the full project lifecycle.
 
 # 126. Testing architecture
 
-Recommended test structure:
+Required coverage is organized around:
 
 ```text
 tests/paths/
@@ -2769,7 +2788,7 @@ Required cases:
 
 ## 134. Cross-platform fixture policy
 
-Tests should use temporary roots and avoid a developer’s real environment.
+Tests use temporary roots and avoid a developer’s real environment.
 
 Real-GF integration tests may read explicit test-only environment values.
 
@@ -2787,83 +2806,64 @@ happen to contain usable local values.
 
 ---
 
-# 135. Recommended public API
+# 135. Path-resolution application boundary
 
-Conceptual path-resolution API:
-
-```python
-def resolve_environment(
-    app_config: AppConfig,
-    project_candidate: Path | None,
-    explicit_values: EnvironmentOverrides,
-    state: AppState | None,
-    environ: Mapping[str, str],
-) -> ResolvedEnvironment:
-    ...
-```
+The application exposes cohesive operations equivalent to:
 
 ```python
-def load_project_config(
-    project_root: Path,
-) -> ProjectConfig:
-    ...
+resolve_environment(...)
+resolve_active_project(...)
+resolve_project_paths(...)
+allocate_run_paths(...)
 ```
 
-```python
-def resolve_project_paths(
-    project_config: ProjectConfig,
-    environment: ResolvedEnvironment,
-) -> ResolvedProjectPaths:
-    ...
-```
+The exact model and operation names are governed by `docs/architecture/DATA_MODEL.md` and `docs/architecture/COMPONENT_MAP.md`.
 
-```python
-def build_run_paths(
-    output_root: Path,
-    run_id: str,
-) -> RunPaths:
-    ...
-```
+Required boundaries:
 
-The exact model names are governed by `DATA_MODEL.md`.
+- entrypoints provide explicit values;
+- the projects module resolves active-project paths;
+- the runs module allocates run-owned paths;
+- adapters perform filesystem and platform operations through ports;
+- reporting receives canonical artifact paths from the run context;
+- no consumer reconstructs an owned path independently.
 
 ---
 
-## 136. Shared path utilities
+## 136. Shared path operations
 
-Recommended cohesive utilities:
+Cohesive path operations cover:
 
 ```text
-normalize_user_path
-resolve_environment_path
-resolve_project_path
-resolve_run_path
-serialize_project_path
-serialize_run_path
-serialize_environment_path
-ensure_contained
-safe_artifact_key
-create_run_directory
+normalize user-supplied environment path
+resolve environment path
+resolve project-relative path
+resolve run-relative path
+serialize project path
+serialize run path
+serialize environment path
+verify containment
+build a safe artifact key
+create an exclusive run directory
 ```
 
-A utility must not hide business policy that belongs to bootstrap, project loading, or artifact ownership.
+A shared operation does not hide ownership or business policy. It receives explicit values, roots and path classes.
 
 ---
 
-## 137. Utility restrictions
+## 137. Shared path-operation restrictions
 
-`path_utils.py` must not:
+Shared path operations must not:
 
 - read GUI widgets;
-- read CLI arguments directly;
-- load `project.toml`;
+- read CLI parser objects;
+- load project configuration independently of the projects module;
 - launch GF;
 - decide release policy;
 - own report prose;
 - invent active-language paths;
-- silently expand arbitrary environment expressions.
-
-It receives explicit values and bases.
+- silently expand arbitrary environment expressions;
+- read or write `gf-portfolio` configuration.
 
 ---
 
@@ -2879,7 +2879,7 @@ Environment or path drift exists when:
 - GF path order changes;
 - compilation and scenarios construct different GF paths;
 - tests rely on ambient `GF_LIB_PATH`;
-- a relative machine path survives into `RunConfig`;
+- a relative machine path survives into the resolved run request;
 - project paths persist with drive letters;
 - run artifact paths persist as absolute without reason;
 - an inline `%VAR%`, `$VAR`, or `~` is silently expanded in project config;
@@ -2892,7 +2892,8 @@ Environment or path drift exists when:
 - a run directory is reused;
 - a generated filename differs between components;
 - state corruption prevents command-line use;
-- a migration guesses an ambiguous path base.
+- a migration guesses an ambiguous path base;
+- Wordbench reads a Portfolio registry to resolve its active project.
 
 Any drift indicator requires coordinated review.
 
@@ -2904,10 +2905,10 @@ Any drift indicator requires coordinated review.
 
 Examples:
 
-- faster containment implementation;
+- faster containment algorithm with unchanged semantics;
 - private helper refactor;
 - clearer error text with same semantic fields;
-- platform-specific implementation improvement.
+- platform-specific internal optimization with unchanged semantics.
 
 Requirements:
 
@@ -2990,7 +2991,7 @@ Requires:
 
 ---
 
-# 141. Final invariants
+# 141. Governing invariants
 
 1. Every path has a declared class and base.
 2. Portable project paths are project-relative.
@@ -3022,10 +3023,13 @@ Requires:
 28. Full inherited environments and secrets are not persisted.
 29. Migration never guesses an ambiguous path base silently.
 30. Path-contract changes are coordinated across configuration, execution, persistence, tests, and documentation.
+31. One run resolves exactly one active project root and one normative language target.
+32. Wordbench path resolution does not read a Portfolio registry or depend on `gf-portfolio`.
+33. Portfolio consumption, when used, begins only at finalized public Wordbench artifacts.
 
 ---
 
-# 142. Final rule
+# 142. Governing rule
 
 GF Wordbench path resolution follows one explicit chain:
 

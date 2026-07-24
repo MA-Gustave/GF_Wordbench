@@ -3,17 +3,19 @@
 **Document ID:** `GF-WB-VALIDATION-COMPILATION`  
 **Status:** Normative validation specification  
 **Applies to:** GF module compilation, checkpoint validation, entrypoint validation, PGF release construction, compile evidence, and compile-related result aggregation  
-**Primary owner:** `app/audit/compiler.py`  
-**Orchestration owner:** `app/audit/audit_core.py`  
+**Primary owner:** `validation` module  
+**Run orchestration owner:** `runs` module  
+**Diagnostic owner:** `diagnostics` module  
 **External authority:** Grammatical Framework (`gf` / `gf.exe`)  
-**Target architecture:** Final GF Wordbench architecture  
-**Last structural review:** 2026-07-22
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Product-boundary authority:** ADR-0001, ADR-0011 and ADR-0012  
+**Last structural review:** 2026-07-24
 
 ---
 
 ## 1. Purpose
 
-Compilation validation proves that the active GF language project can be processed by the selected Grammatical Framework toolchain under a reproducible configuration.
+Compilation validation proves that the single active GF language project can be processed by the selected Grammatical Framework toolchain under a reproducible configuration. Every compile plan belongs to one active project and one Wordbench run.
 
 It must answer:
 
@@ -40,11 +42,11 @@ Compilation validation is not a replacement for:
 - gold comparison;
 - linguistic review;
 - project contract review;
-- final PGF behavior validation.
+- release PGF behavior validation.
 
 A project can compile successfully and still fail required scenarios.
 
-A set of individual modules can compile successfully and still fail final PGF construction.
+A set of individual modules can compile successfully and still fail release PGF construction.
 
 ---
 
@@ -53,6 +55,11 @@ A set of individual modules can compile successfully and still fail final PGF co
 This specification must remain consistent with:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/architecture/PRODUCT_BOUNDARIES.md
+docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 docs/architecture/COMPONENT_MAP.md
 docs/architecture/ERROR_HANDLING_MODEL.md
 docs/INTERFILE_CONTRACT_LOCK.md
@@ -69,8 +76,8 @@ docs/diagnostics/GF_DIAGNOSTIC_PARSING.md
 project/project.toml
 project/docs/INTERFILE_CONTRACT_LOCK.md
 project/docs/MODULE_DEPENDENCY_MAP.md
-project/docs/VALIDATION_SPEC.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 Authority boundaries:
@@ -84,7 +91,7 @@ Authority boundaries:
 | Status and exception semantics | `ERROR_HANDLING_MODEL.md` |
 | Active project entrypoints/checkpoints | `project/project.toml` |
 | Module-to-module GF contracts | project interfile lock |
-| Final mode stage plan | `VALIDATION_MODES.md` and `audit_core.py` |
+| Validation-mode stage plan | `VALIDATION_MODES.md` |
 | GF semantics and diagnostics | GF itself |
 
 This document may summarize rules owned elsewhere, but must not redefine them incompatibly.
@@ -122,7 +129,7 @@ This document governs:
 - effective GF search-path construction;
 - source-file compile requests;
 - checkpoint compile requests;
-- final entrypoint compile requests;
+- release entrypoint compile requests;
 - PGF release builds;
 - command and working-directory evidence;
 - stdout and stderr capture;
@@ -147,7 +154,11 @@ This document does not govern:
 - GUI widget layout;
 - human wording outside required report semantics;
 - GF's internal dependency resolver;
-- GF's type checker implementation.
+- GF's internal type-checker behavior;
+- discovery or aggregation of several Wordbench workspaces;
+- `gf-portfolio` registries, storage, comparisons, trends, or orchestration.
+
+`gf-portfolio` may consume finalized public Wordbench artifacts. It does not participate in compilation, artifact production, validation status, or release decisions inside Wordbench.
 
 ---
 
@@ -157,7 +168,7 @@ This document does not govern:
 - **SOURCE COMPILE**: validation of one selected `.gf` file.
 - **CHECKPOINT**: configured module proving that a project layer is coherent.
 - **ENTRYPOINT**: top-level configured module used for integration or release validation.
-- **PGF BUILD**: construction of the final Portable Grammar Format artifact.
+- **PGF BUILD**: construction of the release Portable Grammar Format artifact.
 - **RAW EVIDENCE**: command, working directory, streams, exit facts, timing, and produced files before interpretation.
 - **EXPECTED ARTIFACT**: file required by the current compile request.
 - **FRESH ARTIFACT**: artifact proven to belong to the current request and source state.
@@ -173,114 +184,116 @@ This document does not govern:
 
 # 6. Component ownership
 
-## 6.1 Compiler component
+## 6.1 Compilation service
 
 **Owner**
 
 ```text
-app/audit/compiler.py
+validation module
 ```
 
 Responsibilities:
 
 - construct compile and PGF requests;
-- call the generic process runner;
+- call the external-tool port;
 - preserve raw compile evidence;
-- request shared diagnostic interpretation;
+- request diagnostic interpretation from the diagnostics module;
 - verify compile artifacts;
 - return structured compile results;
-- remain independent of reports and GUI;
+- remain independent of reports and entrypoints;
 - avoid direct/downstream classification.
 
-Recommended final public operations:
+Canonical operations:
 
-```python
-probe_gf_version(...)
-build_compile_request(...)
-compile_file(...)
-compile_checkpoint(...)
-compile_entrypoint(...)
-build_release_pgf(...)
-verify_compile_artifacts(...)
+```text
+probe_gf_version
+build_compile_request
+compile_source
+compile_checkpoint
+compile_entrypoint
+build_release_pgf
+verify_compile_artifacts
 ```
 
-The exact public symbols are locked in `INTERFILE_CONTRACT_LOCK.md`.
+Exact public symbols and port signatures are owned by `docs/INTERFILE_CONTRACT_LOCK.md`.
 
-## 6.2 Audit orchestrator
+## 6.2 Run coordinator
 
 **Owner**
 
 ```text
-app/audit/audit_core.py
+runs module
 ```
 
 Responsibilities:
 
-- choose which compile requests belong to the active mode;
+- resolve the validation mode into an ordered stage plan;
+- coordinate the validation module without constructing GF arguments;
 - preserve configured order;
-- decide continuation and fail-fast behavior;
-- combine compile results with scan and scenario results;
-- request causal classification;
-- compute overall outcome.
+- apply continuation, fail-fast, cancellation and run-budget policies;
+- combine validation, diagnostic and reporting results;
+- derive the terminal run outcome from structured stage results.
 
-The orchestrator must not construct raw GF arguments directly.
+The run coordinator does not invoke GF directly.
 
-## 6.3 Process runner
+## 6.3 External-tool port and process adapter
 
 **Owner**
 
 ```text
-app/utils/process_utils.py
+external-tool port
+process adapter
 ```
 
 Responsibilities:
 
 - launch the ordered executable request;
-- enforce timeout;
+- enforce timeout and cancellation;
 - capture stdout and stderr separately;
 - record duration and execution facts;
-- terminate timed-out owned processes;
+- terminate owned process trees;
 - return generic process evidence.
 
-It must not interpret GF diagnostics.
+The process adapter does not interpret GF diagnostics and does not know project-specific module names.
 
-## 6.4 Diagnostic normalizer
+## 6.4 Diagnostic interpreter
 
 **Owner**
 
 ```text
-app/audit/diagnostics.py
+diagnostics module
 ```
 
 Responsibilities:
 
-- inspect both streams;
+- inspect both streams and process facts;
 - identify GF error kinds;
 - preserve raw evidence references;
-- produce a stable primary message and detail;
-- distinguish recognized GF failure from diagnostic parser error.
+- produce a stable primary message and bounded detail;
+- distinguish recognized GF failure from diagnostic interpretation failure.
 
-## 6.5 Classifier
+## 6.5 Causal classifier
 
 **Owner**
 
 ```text
-app/audit/classifier.py
+diagnostics module
 ```
 
 Responsibilities:
 
-- classify file-result causality after compile evidence exists;
-- resolve blockers;
-- distinguish direct, downstream, and ambiguous failures.
+- classify causality after the relevant compile results exist;
+- resolve known blockers;
+- distinguish direct, downstream and ambiguous failures;
+- preserve uncertainty when the dependency evidence is insufficient.
 
-It must not execute GF or rebuild compile requests.
+The classifier does not execute GF or rebuild compile requests.
 
 ---
 
 # 7. Compile-subject model
 
-The final compiler supports four compile-subject kinds.
+The compiler supports four compile-subject kinds.
 
 ```text
 source
@@ -289,7 +302,7 @@ entrypoint
 pgf
 ```
 
-Recommended model:
+Canonical model:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -338,7 +351,7 @@ Purpose:
 
 - validate a configured architectural layer;
 - prove provider/consumer integration at a meaningful boundary;
-- catch downstream breakage earlier than final release.
+- catch downstream breakage earlier than release.
 
 Examples of checkpoint roles:
 
@@ -371,7 +384,7 @@ Entrypoints come from `project/project.toml`.
 
 Purpose:
 
-- construct the final release artifact;
+- construct the release artifact;
 - validate compatibility of configured top-level modules;
 - establish a deployable grammar artifact for release scenarios.
 
@@ -390,7 +403,7 @@ release
 diagnostic
 ```
 
-Recommended compile participation:
+Canonical compile participation:
 
 | Compile level | Quick | Checkpoint | Release | Diagnostic |
 |---|---:|---:|---:|---:|
@@ -399,7 +412,7 @@ Recommended compile participation:
 | Checkpoints | No by default | Required | Required | Included |
 | Entrypoints | Optional | Required when configured | Required | Included |
 | PGF build | No | Optional | Required when configured | Optional |
-| Clean artifact isolation | Recommended | Recommended | Required | Configurable |
+| Clean artifact isolation | Default | Default | Required | Configurable |
 | Full raw evidence | Required | Required | Required | Required |
 
 The precise plan is owned by `VALIDATION_MODES.md`.
@@ -412,7 +425,7 @@ Mode rules must not be duplicated separately in CLI and GUI.
 
 The orchestrator constructs one deterministic plan.
 
-Recommended order:
+Canonical order:
 
 ```text
 1. version preflight
@@ -427,14 +440,14 @@ Rules:
 
 - duplicate target identities are prohibited;
 - the same module may be compiled once per distinct compile purpose when evidence requirements differ;
-- redundant equivalent requests should be deduplicated;
+- redundant equivalent requests are deduplicated;
 - deduplication must not remove a required artifact check;
 - target order must be recorded;
 - project order is semantically meaningful for checkpoints and entrypoints;
 - filesystem enumeration order must not affect the plan;
 - optional targets remain visible.
 
-Recommended plan record:
+Canonical plan record:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -508,7 +521,7 @@ Safe output-directory creation is permitted when the directory belongs to the ru
 
 ## 12.1 Executable resolution
 
-The final `RunConfig` contains the resolved executable actually used.
+The resolved `RunConfig` contains the executable actually used.
 
 A convenience value such as `gf` from `PATH` may be accepted before resolution.
 
@@ -516,7 +529,7 @@ The recorded run evidence must contain an explicit resolved executable.
 
 ## 12.2 Version probe
 
-Recommended conceptual request:
+Canonical version-probe request:
 
 ```text
 <gf> --version
@@ -558,7 +571,7 @@ warning or error
 
 Compilation and scenarios must use the same path-resolution service.
 
-Recommended precedence:
+Canonical precedence:
 
 ```text
 1. explicit path in resolved RunConfig
@@ -590,7 +603,7 @@ Process-native path rendering may use the platform form required by GF.
 
 ## 14.1 Structured request
 
-Recommended request model:
+Canonical request model:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -628,7 +641,7 @@ Normal compilation must not depend on shell quoting or redirection.
 
 Argument order is part of the external contract.
 
-The source path must occupy the documented final source position for source compilation when required by the external contract.
+The source path must occupy the documented terminal source-argument position for source compilation when required by the external contract.
 
 The logged structured command must equal the executed structured command.
 
@@ -636,7 +649,7 @@ The logged structured command must equal the executed structured command.
 
 The working directory is explicit.
 
-Recommended default:
+Canonical default:
 
 ```text
 resolved GF project root
@@ -685,7 +698,7 @@ Rules:
 - optional CPU statistics require explicit configuration;
 - unsupported options must not be passed;
 - compatibility adapters must be documented;
-- final source argument ordering must be deterministic;
+- terminal source-argument ordering must be deterministic;
 - source path must be the intended target;
 - source must not be modified;
 - generated output belongs to run-owned artifact directories when supported;
@@ -773,7 +786,7 @@ entrypoint compilation
 PGF build
 ```
 
-Recommended configuration separates at least:
+Configuration separates at least:
 
 ```text
 version_timeout_sec
@@ -885,7 +898,7 @@ manifest registration
 
 Artifact existence alone is insufficient.
 
-Recommended freshness proof uses one or more:
+Freshness proof uses one or more:
 
 ```text
 clean isolated artifact directory
@@ -939,7 +952,7 @@ When this occurs:
 
 ## 23.1 Quick mode
 
-A clean artifact directory is recommended.
+A run-owned artifact directory is the default.
 
 Reuse may be allowed for speed only when:
 
@@ -949,7 +962,7 @@ Reuse may be allowed for speed only when:
 
 ## 23.2 Checkpoint mode
 
-Checkpoint validation should use isolated run artifacts.
+Checkpoint validation uses isolated run artifacts.
 
 ## 23.3 Release mode
 
@@ -995,7 +1008,7 @@ Rules:
 
 - cache hit is explicit;
 - cached evidence remains traceable;
-- release mode should default to no cache or validated clean rebuild;
+- release mode uses no cache or a validated clean rebuild;
 - unknown dependency changes invalidate cache;
 - a stale `.gfo` is not a cache;
 - cache failure must not become language failure;
@@ -1009,7 +1022,7 @@ Correctness is more important than build-speed complexity.
 
 # 25. Parallelism
 
-Compilation should be serial by default until safe concurrency is proven.
+Compilation is serial by default. Concurrency is enabled only under the safeguards below.
 
 Parallel compilation may be enabled only when:
 
@@ -1022,7 +1035,7 @@ Parallel compilation may be enabled only when:
 - Windows behavior is tested;
 - GF version behavior is compatible.
 
-Release entrypoint and PGF construction should remain serial unless a documented need proves otherwise.
+Release entrypoint and PGF construction remain serial unless an approved contract enables bounded concurrency.
 
 Parallel completion order must not change persisted result order.
 
@@ -1079,7 +1092,7 @@ Diagnostic rules:
 
 Canonical persisted file results currently embed a compile summary.
 
-Recommended final in-memory compile model:
+Canonical in-memory compile model:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1104,7 +1117,7 @@ class CompileSummary:
     artifact_checks_passed: bool
 ```
 
-This is a target design.
+This model defines the compile boundary.
 
 Persisting new fields requires a schema-compatible extension or versioned migration.
 
@@ -1209,11 +1222,11 @@ Classification happens after enough related results exist.
 
 Rules:
 
-- compiler returns no final dependency-cascade classification;
+- compiler returns no dependency-cascade classification;
 - classifier inspects project-relative GF references and known failed subjects;
 - direct failure indicates likely root subject;
 - downstream failure includes `blocked_by`;
-- blocker chains should collapse to root failures where reliable;
+- blocker chains collapse to root failures where the evidence is reliable;
 - cycles are detected;
 - uncertain causality remains `ambiguous`;
 - `ERROR` from framework execution must not be presented as a project dependency failure.
@@ -1249,7 +1262,7 @@ Skip dependent work when:
 
 ## 31.3 Release behavior
 
-Release mode should gather all safe, meaningful gating evidence.
+Release mode gathers all safe, meaningful gating evidence.
 
 A failed checkpoint may still permit compiling an entrypoint for diagnostic value, but:
 
@@ -1273,7 +1286,7 @@ When enabled:
 - overall outcome reflects the triggering result;
 - reports show incomplete plan execution.
 
-Fail-fast should not be the default for release evidence.
+Fail-fast is not the default for release evidence.
 
 ---
 
@@ -1284,7 +1297,7 @@ On cancellation:
 1. stop launching new compile targets;
 2. terminate owned active process safely;
 3. preserve partial stdout and stderr;
-4. mark active compile `ERROR` or the future versioned cancellation representation;
+4. mark the active compile `ERROR` with `execution_state = cancelled`;
 5. mark remaining targets `SKIPPED`;
 6. record cancellation cause;
 7. finalize partial run evidence when safe.
@@ -1307,7 +1320,7 @@ Rules:
 - release mode cannot be release-ready when required compilation is skipped;
 - reports state why compilation was omitted.
 
-Legacy implementations that encode skipped compile as exit code zero must migrate to explicit status semantics.
+Legacy source behaviors that encode skipped compile as exit code zero must migrate to explicit status semantics.
 
 ---
 
@@ -1323,7 +1336,7 @@ Rules:
 - release policy may make selected scan findings gating;
 - compile success does not erase scan findings;
 - scan failure does not automatically prevent compile when execution remains safe;
-- final file result preserves both.
+- the file result preserves both.
 
 GF execution is authoritative for actual GF compile success.
 
@@ -1426,7 +1439,7 @@ No report may launch GF.
 
 Every retained compile artifact must be catalogued.
 
-Recommended manifest roles:
+Canonical manifest roles:
 
 ```text
 compile_stdout
@@ -1453,7 +1466,7 @@ Rules:
 - raw streams appear when retained;
 - required `.gfo`/`.pgf` appear;
 - missing required artifact prevents valid manifest finalization;
-- manifest hashes final bytes;
+- manifest hashes finalized bytes;
 - generated grammar artifacts are not rewritten after hashing;
 - manifest does not hash itself.
 
@@ -1535,7 +1548,7 @@ Compiler execution must not require a visible console.
 
 ## 42.2 Other platforms
 
-Platform-neutral orchestration should use:
+Platform-neutral orchestration uses:
 
 ```text
 pathlib
@@ -1551,7 +1564,7 @@ Platform-specific process-tree termination remains isolated in infrastructure.
 
 # 43. Performance boundaries
 
-Compilation validation should avoid unnecessary work without sacrificing correctness.
+Compilation validation avoids unnecessary work without sacrificing correctness.
 
 Allowed optimizations:
 
@@ -1577,7 +1590,7 @@ Prohibited optimizations:
 
 # 44. Legacy migration from `gf-audit`
 
-The current implementation supplies a useful baseline but final compilation validation requires coordinated changes.
+`gf-audit` supplies the legacy behavior that Wordbench preserves or migrates through the contracts below.
 
 ## 44.1 Legacy modes
 
@@ -1586,7 +1599,7 @@ file → quick
 all  → diagnostic
 ```
 
-Canonical writers emit only final mode names.
+Canonical writers emit only the Wordbench mode names.
 
 ## 44.2 Legacy compile status
 
@@ -1596,19 +1609,19 @@ Legacy behavior may derive status directly from:
 exit_code == 0
 ```
 
-Final behavior evaluates full success criteria.
+Wordbench evaluates the complete success criteria.
 
 ## 44.3 Legacy timeout code
 
 Legacy timeout may use a sentinel exit code.
 
-Final behavior uses explicit timeout facts as authoritative.
+Wordbench uses explicit timeout facts as authoritative.
 
 ## 44.4 Legacy script errors
 
 Broad exceptions may currently become `FAIL` with `SCRIPT`.
 
-Final behavior distinguishes:
+Wordbench distinguishes:
 
 ```text
 language FAIL
@@ -1622,7 +1635,7 @@ tool ERROR
 
 Legacy output directories and source-adjacent `.gfo` may be readable for historical runs.
 
-Final release validation uses run-owned or request-isolated artifacts.
+Release validation uses run-owned or request-isolated artifacts.
 
 ## 44.6 Legacy fingerprint
 
@@ -1640,15 +1653,15 @@ compile_file(...)
 probe_gf_version(...)
 ```
 
-may remain compatibility wrappers temporarily.
+are compatibility wrappers.
 
-They must delegate to one final request and execution path.
+They delegate to one canonical request and execution path.
 
 ---
 
 # 45. Unit tests
 
-Recommended tests:
+Required unit-test groups:
 
 ```text
 tests/validation/test_compile_plan.py
@@ -1695,7 +1708,7 @@ report does not rerun compile
 
 # 46. Contract tests
 
-Recommended contract files:
+Required contract-test groups:
 
 ```text
 tests/contracts/test_gf_compile_contract.py
@@ -1724,7 +1737,7 @@ They must verify:
 
 # 47. Integration tests with real GF
 
-A small language-neutral fixture grammar should test:
+A small language-neutral fixture grammar tests:
 
 ```text
 version probe
@@ -1741,7 +1754,7 @@ UTF-8 grammar content
 
 Tests requiring real GF are separately marked.
 
-Integration evidence should record tested GF versions.
+Integration evidence records tested GF versions.
 
 A real-GF test must not depend on:
 
@@ -1803,7 +1816,9 @@ Probable compilation-contract drift exists when:
 - summary schema changes without version update;
 - release succeeds without required PGF;
 - artifact path is reconstructed by a consumer;
-- fingerprint failure is replaced with a valid-looking empty value.
+- fingerprint failure is replaced with a valid-looking empty value;
+- a compile plan contains more than one active project identity;
+- Wordbench compilation depends on `gf-portfolio` runtime, storage, configuration, or availability.
 
 Any indicator requires contract review.
 
@@ -1853,6 +1868,8 @@ Required checklist:
 [ ] Windows behavior tested
 [ ] External-tool lock updated
 [ ] Interfile lock updated
+[ ] Documentation alignment lock reviewed
+[ ] Product boundary and independent-product ADRs reviewed
 [ ] Persisted schema updated when needed
 [ ] Migration notes added
 [ ] Changelog updated when user-visible
@@ -1862,7 +1879,7 @@ Required checklist:
 
 # 51. Review checklist
 
-Reviewers should ask:
+Reviewers verify:
 
 ```text
 Is the correct target being compiled?
@@ -1882,13 +1899,13 @@ Is no-compile SKIPPED?
 Does classifier own causality?
 Do reports avoid execution?
 Are entrypoint and PGF rules release-safe?
-Does the implementation remain language-neutral?
+Does the framework remain language-neutral?
 Do tests prove the external boundary?
 ```
 
 ---
 
-# 52. Final invariants
+# 52. Invariants
 
 Compilation validation must always preserve:
 
@@ -1917,7 +1934,7 @@ Compilation validation must always preserve:
 
 ---
 
-# 53. Final rule
+# 53. Governing rule
 
 > GF Wordbench may claim that a compile target passed only when it can reproduce the request, preserve the response, verify the required artifacts, and show that the evidence belongs to the current source state.
 

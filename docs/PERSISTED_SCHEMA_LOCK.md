@@ -2,12 +2,12 @@
 
 **Document ID:** `GF-WB-PERSISTED-SCHEMA-LOCK`  
 **Status:** Normative  
-**Contract version:** `2.0.0`  
+**Contract version:** `2.1.0`  
 **Applies to:** Wordbench configuration, application state, run directories, summaries, manifests, scenario evidence, gold expectations and public artifact contracts  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
 **Last reviewed:** `2026-07-24`  
-**Implementation note:** exact field inventories belong to their schema reference documents and must be marked implemented only when verified against current writers and readers
+**Schema inventory authority:** exact field inventories belong to their schema reference documents and must remain synchronized with the corresponding writers and readers
 
 ---
 
@@ -46,7 +46,7 @@ path representation
 serialization encoding
 migration policy
 retention or lifecycle when applicable
-implementation and verification status
+verification method and owning tests
 ```
 
 Locked rules:
@@ -57,7 +57,7 @@ Locked rules:
 - breaking changes use a new major version and migration path;
 - writers serialize deterministically;
 - readers do not silently reinterpret malformed data;
-- examples are not evidence that a writer or reader is implemented.
+- examples illustrate contracts but do not replace schema definitions, writers, readers or tests.
 
 ## 4. Encoding and serialization
 
@@ -106,7 +106,7 @@ GF executable, RGL installation and output-root locations are environment or app
 | normalized scenario output | validation module | scenario ID, normalization profile/version, source evidence reference | run evidence |
 | `.gold` files | active project | scenario ID, reviewed expected normalized output | project-local contract |
 
-An exact filename not verified in current implementation must be labeled target or planned in reference documentation rather than silently presented as current output.
+Canonical filenames are defined by their owner reference documents and must remain synchronized with the writers, readers, manifests and tests that use them.
 
 ## 7. `project/project.toml` contract
 
@@ -136,7 +136,7 @@ Invariants:
 - executable and machine-specific output paths are not stored as language-project facts;
 - Portfolio fields are prohibited.
 
-The detailed field inventory belongs to `docs/configuration/PROJECT_TOML_REFERENCE.md` and must agree with the actual parser before being marked implemented.
+The detailed field inventory belongs to `docs/configuration/PROJECT_TOML_REFERENCE.md` and must remain synchronized with the parser, validation rules, examples and tests.
 
 ## 8. Application state contract
 
@@ -294,7 +294,7 @@ Schema verification should include:
 - public artifact compatibility fixtures;
 - proof that Wordbench works without Portfolio state.
 
-A planned test must not be documented as passing.
+Documented schema tests must correspond to executable tests or fixtures maintained with the owning schema.
 
 ## 16. Change control checklist
 
@@ -309,6 +309,6 @@ A planned test must not be documented as passing.
 [ ] stale artifacts cannot satisfy current runs
 [ ] public artifact impact is reviewed
 [ ] no Portfolio registry or private state entered Wordbench
-[ ] implementation status is verified or labeled planned/unknown
+[ ] schema definitions, writers, readers, references and tests agree
 [ ] schema references, tests, release notes and ledger are updated
 ```

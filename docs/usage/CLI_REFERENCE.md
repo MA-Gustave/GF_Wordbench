@@ -2,19 +2,19 @@
 
 **Document ID:** `GF-WB-USAGE-CLI`  
 **Status:** Normative command-line reference  
+**Canonical path:** `docs/usage/CLI_REFERENCE.md`  
 **Applies to:** GF Wordbench command-line interface  
 **Canonical executable:** `gf-wordbench`  
-**Primary implementation:** `app/main_cli.py`  
-**Primary orchestration entry point:** `app/audit/audit_core.py::run_audit(...)`  
 **Owner:** GF Wordbench maintainers  
-**CLI contract version:** `1.0`  
-**Last structural review:** 2026-07-22  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**CLI contract version:** `1.1`  
+**Last structural review:** 2026-07-24  
 
 ---
 
 ## 1. Purpose
 
-This document defines the final command-line interface of GF Wordbench.
+This document defines the command-line interface of GF Wordbench.
 
 It specifies:
 
@@ -37,6 +37,20 @@ The CLI is a user-facing adapter.
 It collects arguments, asks shared bootstrap code to resolve configuration, invokes the shared application layer, displays a concise result, and returns a stable process exit code.
 
 The CLI does not own validation semantics.
+
+### 1.1 Product boundary
+
+One CLI invocation resolves one GF Wordbench workspace, one active project and one run request.
+
+The CLI does not provide:
+
+- a project registry;
+- a language-profile selector;
+- a multi-workspace batch run;
+- portfolio aggregation or portfolio readiness commands;
+- any dependency on `gf-portfolio` runtime, storage or configuration.
+
+`gf-portfolio` may invoke separate `gf-wordbench` processes and consume finalized public Wordbench artifacts. It does not alter Wordbench command semantics, project identity or run results.
 
 ---
 
@@ -64,7 +78,7 @@ parse CLI arguments
     -> resolve project and environment configuration
     -> validate the resolved request
     -> build RunConfig
-    -> call run_audit(...)
+    -> invoke the shared run application service
     -> print a concise structured summary
     -> return a documented exit code
 ```
@@ -79,28 +93,15 @@ Installed command:
 gf-wordbench
 ```
 
-Python module form:
+Package metadata exposes this console script. The internal Python module path is not part of the public CLI contract.
 
-```text
-python -m app.main_cli
-```
-
-The package metadata must expose the console script:
-
-```toml
-[project.scripts]
-gf-wordbench = "app.main_cli:main"
-```
-
-The legacy executable name:
+The predecessor executable name:
 
 ```text
 gf-audit
 ```
 
-may remain as a temporary compatibility alias.
-
-Canonical documentation, help, reports, and examples use:
+is accepted only as a compatibility alias. Canonical documentation, help, reports and examples use:
 
 ```text
 gf-wordbench
@@ -110,7 +111,7 @@ gf-wordbench
 
 ## 4. Windows launchers
 
-Recommended Windows launcher:
+Canonical Windows launcher:
 
 ```text
 launch_cli.bat
@@ -142,7 +143,7 @@ call "%~dp0.venv\Scripts\gf-wordbench.exe" %*
 exit /b %ERRORLEVEL%
 ```
 
-A real launcher may use `python -m app.main_cli` when the console entry point is unavailable.
+The launcher invokes the installed console script and preserves its exit code.
 
 ---
 
@@ -172,7 +173,7 @@ Global informational options:
 --version
 ```
 
-No additional top-level command should be added unless it represents a stable responsibility not already covered by the application or existing commands.
+An additional top-level command requires a distinct stable responsibility not already covered by the existing commands.
 
 ---
 
@@ -266,7 +267,7 @@ Use stdout for:
 - help;
 - version;
 - normal progress when enabled;
-- final run summary;
+- run summary;
 - successful checker results;
 - artifact paths.
 
@@ -293,15 +294,9 @@ Color is optional.
 
 Canonical text must remain understandable without color.
 
-When color is implemented:
+Color is disabled when output is not an interactive terminal.
 
-```text
---color auto|always|never
-```
-
-may be added as a compatible option.
-
-Automation must not need color parsing.
+Automation must not depend on color or terminal escape sequences.
 
 ## 8.5 Interactive prompts
 
@@ -347,8 +342,6 @@ The active project configuration is then:
 ```text
 <project-root>/project/project.toml
 ```
-
-A direct project-directory option may be introduced later only through an explicit project-layout contract.
 
 Example:
 
@@ -415,7 +408,7 @@ Resolution precedence:
 4. framework-safe default
 ```
 
-Recommended default:
+Canonical default:
 
 ```text
 <project-root>/_gf_wordbench
@@ -438,7 +431,7 @@ The shell handles user-entered quoting.
 
 # 10. Environment variables
 
-The final CLI recognizes only documented environment variables.
+The CLI recognizes only documented environment variables.
 
 Canonical environment variables:
 
@@ -488,7 +481,7 @@ For one CLI request, precedence from lowest to highest is:
 4. explicit command-line options
 ```
 
-Compatibility aliases are normalized before the final `RunConfig` is built.
+Compatibility aliases are normalized before `RunConfig` is built.
 
 Rules:
 
@@ -503,7 +496,7 @@ Rules:
 
 # 12. Project-owned settings
 
-The final canonical CLI does not normally expose these inherited options:
+The canonical CLI does not expose these predecessor project-owned options:
 
 ```text
 --scan-dir
@@ -526,13 +519,13 @@ Reasons:
 - GUI, CLI, and automation must share one project definition;
 - release validation must not be changed by accidental local flags.
 
-Temporary legacy aliases may remain during migration.
+The compatibility adapter may accept these options only for predecessor invocations.
 
-When used, they must:
+When accepted, they:
 
-- print a deprecation warning;
-- be recorded as explicit overrides;
-- be rejected in strict release mode unless explicitly allowed;
+- print one compatibility warning;
+- are recorded as explicit overrides;
+- are rejected in strict release mode;
 - never become canonical report fields.
 
 ---
@@ -604,7 +597,7 @@ file -> quick
 all  -> diagnostic
 ```
 
-Canonical output always uses the final value.
+Canonical output always uses the normalized value.
 
 ---
 
@@ -640,7 +633,7 @@ gf-wordbench validate `
 
 `--target` is required unless the active project defines one unambiguous default quick target.
 
-Recommended policy:
+Canonical policy:
 
 ```text
 explicit --target required
@@ -755,7 +748,7 @@ Syntax:
 gf-wordbench validate --mode release
 ```
 
-Recommended:
+Canonical:
 
 ```text
 gf-wordbench validate --mode release --strict
@@ -903,7 +896,7 @@ Canonical use:
 quick mode
 ```
 
-The final option name is:
+The canonical option name is:
 
 ```text
 --target
@@ -1128,7 +1121,7 @@ Migration behavior:
 
 - maps to compile timeout;
 - may supply scenario and PGF fallback values only during compatibility migration;
-- prints a deprecation warning;
+- prints one compatibility warning;
 - canonical reports record resolved operation-specific timeouts.
 
 ## 25.5 Timeout behavior
@@ -1154,7 +1147,7 @@ A timeout:
 
 Default is mode/project policy.
 
-Recommended:
+Canonical defaults:
 
 ```text
 quick: enabled when compatible target baseline exists
@@ -1243,19 +1236,17 @@ Print:
 
 ## 28.2 `--quiet`
 
-Suppress normal progress and final human summary.
+Suppress normal progress and the human run summary.
 
 Errors and warnings remain on stderr.
 
 Exit codes and persisted artifacts remain authoritative.
 
-Recommended successful quiet output:
+Canonical successful quiet output:
 
 ```text
 none
 ```
-
-A future `--print-run-dir` option may be added for scripting, but must have a stable contract.
 
 ## 28.3 `--verbose`
 
@@ -1289,9 +1280,9 @@ is invalid.
 
 ---
 
-# 29. Final validation output
+# 29. Validation output
 
-Recommended default console output:
+Canonical default console output:
 
 ```text
 GF Wordbench 1.0.0
@@ -1311,7 +1302,7 @@ AI packet: C:\work\GF_Wordbench\_gf_wordbench\run_20260722_181542\AI_READY.md
 Manifest: C:\work\GF_Wordbench\_gf_wordbench\run_20260722_181542\manifest.json
 ```
 
-The wording may improve in minor releases.
+Human-facing wording may change compatibly.
 
 The structured meanings and exit code must remain stable.
 
@@ -1588,15 +1579,7 @@ User-declined confirmation returns:
 0
 ```
 
-with no changes, unless non-interactive policy chooses `2`.
-
-The final implementation must choose and test one consistent behavior.
-
-Recommended:
-
-```text
-0, no changes
-```
+and performs no changes.
 
 ---
 
@@ -1668,7 +1651,7 @@ gold/output canonical text rules
 Supported legacy assets may produce:
 
 ```text
-valid legacy, migration recommended
+valid legacy, canonical migration available
 ```
 
 They are not rewritten.
@@ -1677,7 +1660,7 @@ They are not rewritten.
 
 `schemas check` is read-only.
 
-Migration requires a separate explicit command when implemented.
+Schema migration is a separate explicit project-lifecycle operation.
 
 ## 33.7 Exit behavior
 
@@ -1760,7 +1743,7 @@ The checker must not repair or rewrite a run.
 
 # 35. Commands intentionally omitted
 
-The final balanced CLI does not require separate commands for:
+The public CLI does not expose separate commands for:
 
 ```text
 scan
@@ -1857,7 +1840,7 @@ Examples:
 
 `Ctrl+C` should use controlled cancellation where possible.
 
-Recommended final exit:
+Canonical exit:
 
 ```text
 3
@@ -1894,9 +1877,9 @@ Argument/configuration errors detected before execution:
 exit 2
 ```
 
-The legacy implementation maps only `fail_count > 0`.
+The predecessor CLI mapped only `fail_count > 0`.
 
-The final implementation must use canonical overall status so that:
+Canonical overall status drives the exit code so that:
 
 - runtime errors do not return success;
 - scenario failures affect the exit code;
@@ -1979,15 +1962,9 @@ A useful error identifies:
 
 Normal CLI use does not print a traceback by default.
 
-A future:
+Tracebacks are not a public console-output contract.
 
-```text
---debug
-```
-
-may enable traceback output.
-
-Tracebacks must not be included in normal reports without bounded handling.
+When retained for diagnosis, they are bounded and written through the framework logging and evidence policy.
 
 ---
 
@@ -2016,9 +1993,9 @@ Automation uses:
 - `manifest.json`;
 - documented artifact paths.
 
-## 40.4 Final path discovery
+## 40.4 Run-path discovery
 
-Automation should set a known `--out-root` and discover the newest finalized run through documented run layout or capture a future structured run-path option.
+Automation sets a known `--out-root` and discovers the completed run through the documented run layout and persisted run identity.
 
 It must not parse decorative console prose when a structured mechanism exists.
 
@@ -2087,7 +2064,7 @@ gf-wordbench gold update linearize-basic `
 
 # 42. CI guidance
 
-CI should:
+CI:
 
 - use explicit project root;
 - use an explicit or trusted resolved GF executable;
@@ -2102,7 +2079,7 @@ CI should:
 - avoid automatic gold update;
 - avoid unbounded diagnostic generation.
 
-Recommended release command:
+Canonical release command:
 
 ```text
 gf-wordbench validate --mode release --strict --quiet
@@ -2110,7 +2087,7 @@ gf-wordbench validate --mode release --strict --quiet
 
 `--quiet` is optional.
 
-CI should retain stderr and the run directory.
+CI retains stderr and the complete run directory.
 
 ---
 
@@ -2210,7 +2187,7 @@ It returns:
 3 = runtime exception
 ```
 
-The final CLI retains the useful four-code shape while generalizing success to the complete `RunResult`.
+The canonical CLI retains the four-code shape while mapping success to the complete `RunResult`.
 
 ---
 
@@ -2218,80 +2195,80 @@ The final CLI retains the useful four-code shape while generalizing success to t
 
 | Legacy | Canonical | Policy |
 |---|---|---|
-| `gf-audit` | `gf-wordbench` | Temporary executable alias |
+| `gf-audit` | `gf-wordbench` | Compatibility input alias; canonical output uses `gf-wordbench` |
 | `--mode file` | `--mode quick` | Read alias, emit canonical |
 | `--mode all` | `--mode diagnostic` | Read alias, emit canonical |
-| `--target-file` | `--target` | Deprecated alias |
-| `--skip-version-probe` | `--no-version-probe` | Deprecated alias |
-| `--emit-cpu-stats` | `--cpu-stats` | Deprecated alias |
-| `--timeout-sec` | `--compile-timeout` | Deprecated alias |
-| `--diff-previous` | `--compare-previous` | Deprecated alias |
+| `--target-file` | `--target` | Compatibility input alias |
+| `--skip-version-probe` | `--no-version-probe` | Compatibility input alias |
+| `--emit-cpu-stats` | `--cpu-stats` | Compatibility input alias |
+| `--timeout-sec` | `--compile-timeout` | Compatibility input alias |
+| `--diff-previous` | `--compare-previous` | Compatibility input alias |
 | `--scan-dir` | `project.toml` source config | Migration-only override |
 | `--scan-glob` | `project.toml` source config | Migration-only override |
 | `--include-regex` | `project.toml` selection config | Migration-only override |
 | `--exclude-regex` | `project.toml` selection config | Migration-only override |
 | `--gf-path` | project toolchain + resolved environment | Migration-only override |
 
-Deprecated use prints one warning per invocation.
+Compatibility use prints one warning per invocation.
 
 Canonical writers never persist legacy mode names or option labels as model values.
 
 ---
 
-# 46. Deprecation stages
+# 46. Compatibility alias rules
 
-Recommended lifecycle:
+Compatibility aliases are accepted only at the CLI boundary.
+
+The adapter:
 
 ```text
-Stage 1
-  alias accepted
-  warning printed
-  canonical model value emitted
-
-Stage 2
-  alias accepted only with compatibility flag or legacy executable
-  strong warning printed
-
-Stage 3
-  alias removed in next major CLI contract
+accepts the legacy spelling
+emits one compatibility warning
+normalizes immediately to the canonical command or option
+builds only canonical RunConfig values
+writes only canonical values to reports and schemas
 ```
 
-Removing a legacy alias must be documented in:
+Compatibility aliases do not appear in canonical help examples.
+
+Removing a compatibility alias is a breaking CLI-contract change and requires:
 
 ```text
 CHANGELOG.md
 docs/release/MIGRATION_AND_DEPRECATION.md
+a major CLI contract version
+compatibility and help tests
 ```
 
 ---
 
-# 47. Suggested parser architecture
+# 47. CLI adapter structure
 
-Recommended logical structure:
+The CLI adapter has four responsibilities:
 
-```python
-def build_argument_parser() -> argparse.ArgumentParser:
-    parser = ArgumentParser(prog="gf-wordbench")
-    parser.add_argument("--version", action=...)
-    subparsers = parser.add_subparsers(dest="command", required=True)
+```text
+argument parser
+    defines commands, options, aliases and local syntax validation
 
-    add_validate_parser(subparsers)
-    add_project_parser(subparsers)
-    add_scenarios_parser(subparsers)
-    add_gold_parser(subparsers)
-    add_schemas_parser(subparsers)
-    add_reports_parser(subparsers)
+configuration adapter
+    converts CLI values into the shared bootstrap request
 
-    return parser
+command dispatcher
+    invokes the appropriate application use case
+
+console presenter
+    renders concise human output and maps structured results to exit codes
 ```
 
-Dispatch:
+Conceptual dispatch:
 
 ```python
 def main(argv=None) -> int:
     try:
-        args = parse_args(argv)
-        return dispatch(args)
+        request = parse_cli_request(argv)
+        result = dispatch_application_request(request)
+        present_cli_result(result)
+        return determine_exit_code(result)
     except CliConfigurationError as exc:
         print_error(exc)
         return EXIT_USAGE_OR_CONFIG
@@ -2306,27 +2283,15 @@ def main(argv=None) -> int:
         return EXIT_RUNTIME_ERROR
 ```
 
-Validation:
-
-```python
-def run_validate_command(args) -> int:
-    run_config = build_cli_run_config(args)
-    run_result = run_audit(run_config)
-    print_run_summary(run_result, quiet=args.quiet)
-    return determine_exit_code(run_result)
-```
-
-Private names may differ.
-
-Responsibilities and exit behavior are normative.
+Private module and function names are internal. The responsibility boundaries and exit behavior are normative.
 
 ---
 
 # 48. Shared configuration contract
 
-`build_cli_run_config(...)` must delegate to shared bootstrap/configuration code.
+The CLI configuration adapter delegates to shared bootstrap and configuration code.
 
-It may normalize CLI-specific values:
+It normalizes CLI-specific values:
 
 ```text
 Path
@@ -2345,16 +2310,16 @@ It must not:
 - infer release gates;
 - mutate application state.
 
-Equivalent CLI and GUI input must produce equivalent `RunConfig`.
+Equivalent CLI and GUI requests produce equivalent `RunConfig`.
 
 ---
 
 # 49. CLI summary contract
 
-Recommended logical API:
+Conceptual presenter contract:
 
 ```python
-print_run_summary(run_result: RunResult, *, quiet: bool = False) -> None
+present_run_summary(run_result: RunResult, *, quiet: bool = False) -> None
 ```
 
 The summary reads structured fields.
@@ -2375,7 +2340,7 @@ It may print artifact paths from `RunPaths`.
 
 # 50. Determining the exit code
 
-Recommended:
+Canonical mapping:
 
 ```python
 def determine_exit_code(run_result: RunResult) -> int:
@@ -2398,7 +2363,7 @@ The function must not depend only on:
 file fail_count
 ```
 
-because the final run includes scenarios, release gates, report requirements, and integrity failures.
+because a run includes scenarios, release gates, report requirements and integrity failures.
 
 ---
 
@@ -2445,13 +2410,13 @@ On `Ctrl+C`:
 
 A second interrupt may force immediate termination.
 
-The CLI should warn that the run may remain unfinalized.
+The CLI warns that the run may remain unfinalized.
 
 ## 52.3 Partial run
 
 A cancelled partial run must not be represented as finalized.
 
-Future baseline discovery skips it unless policy explicitly supports partial baselines.
+Automatic baseline discovery skips it unless the baseline policy explicitly supports partial runs.
 
 ---
 
@@ -2506,7 +2471,7 @@ Do not depend on:
 
 Relative CLI paths are resolved according to the documented CLI path policy.
 
-Recommended:
+Canonical path policy:
 
 - `--project-root` resolves from current shell directory;
 - project-relative assets then resolve from the project root;
@@ -2533,13 +2498,13 @@ The CLI prints high-value paths.
 
 It does not generate reports itself.
 
-The audit/report layer owns them.
+The run and reporting modules own them.
 
 ---
 
 # 56. CLI tests
 
-Recommended structure:
+CLI test structure:
 
 ```text
 tests/cli/
@@ -2598,12 +2563,12 @@ Verify:
 Verify:
 
 - CLI calls shared configuration builder;
-- CLI calls `run_audit`;
+- CLI invokes the shared run application service;
 - CLI does not call compiler directly;
 - CLI does not call scanner directly;
 - CLI does not call report writers directly when orchestration owns reporting;
 - result summary uses `RunResult`;
-- final paths print.
+- artifact paths print.
 
 ## 56.5 Mode tests
 
@@ -2709,7 +2674,7 @@ Rules:
 
 # 58. Contract checker for CLI help
 
-A release test should execute:
+The release contract test executes:
 
 ```text
 gf-wordbench --help
@@ -2781,7 +2746,7 @@ Exit-code impact:
 Automation impact:
 Security impact:
 Compatibility alias:
-Deprecation period:
+Compatibility period:
 Tests:
 Documentation:
 ```
@@ -2789,7 +2754,7 @@ Documentation:
 Required checklist:
 
 ```text
-[ ] main_cli.py updated
+[ ] CLI entrypoint updated
 [ ] package console script updated
 [ ] bootstrap reviewed
 [ ] RunConfig reviewed
@@ -2818,7 +2783,7 @@ May:
 - add an optional non-conflicting flag;
 - add a new checker option;
 - add richer default console summaries;
-- add a deprecation warning;
+- add a compatibility warning;
 - support another path representation;
 - improve error detail.
 
@@ -2829,7 +2794,7 @@ Must not:
 - weaken release gates;
 - change default project ownership;
 - make reports machine-authoritative;
-- remove an accepted option without deprecation policy.
+- remove an accepted option without a compatibility and migration policy.
 
 ## 61.2 Breaking changes
 
@@ -2848,41 +2813,38 @@ Breaking changes require a major CLI contract version.
 
 ---
 
-# 62. Implementation completion checklist
-
-The final CLI is complete when:
+# 62. CLI conformance checklist
 
 ```text
 [ ] installed command is gf-wordbench
 [ ] --version uses package metadata
 [ ] subcommand help is complete
 [ ] validate uses shared bootstrap
-[ ] validate calls run_audit
+[ ] validate invokes the shared run application service
 [ ] CLI does not own validation stages
 [ ] project.toml owns language-specific selection
-[ ] four canonical modes are implemented
+[ ] four canonical modes are accepted and normalized
 [ ] quick target rules are enforced
-[ ] checkpoint selection is implemented
+[ ] checkpoint selection follows project configuration
 [ ] release gates cannot be bypassed
 [ ] diagnostic selection is deterministic
-[ ] strict mode is implemented
-[ ] operation-specific timeouts are implemented
+[ ] strict mode enforces its documented rules
+[ ] operation-specific timeouts are validated
 [ ] registered scenario IDs are supported
 [ ] arbitrary script execution is absent
-[ ] previous-run comparison options are implemented
+[ ] previous-run comparison options follow the comparison contract
 [ ] explicit baseline is validated
-[ ] concise console output is implemented
-[ ] quiet and verbose are implemented
+[ ] concise console output follows the summary contract
+[ ] quiet and verbose behavior is enforced
 [ ] overall status drives exit code
 [ ] four exit codes are stable
 [ ] controlled cancellation returns runtime error code
-[ ] project check is implemented
-[ ] scenarios check is implemented
+[ ] project check is read-only and complete
+[ ] scenarios check is read-only and complete
 [ ] gold update is explicit and atomic
 [ ] schemas check is read-only
 [ ] reports check verifies manifests
-[ ] legacy mode aliases migrate
-[ ] legacy project-owned options are deprecated
+[ ] compatibility aliases normalize to canonical values
 [ ] Windows launcher forwards arguments and exit code
 [ ] path handling supports spaces and Unicode
 [ ] secrets are not printed
@@ -2898,6 +2860,10 @@ The final CLI is complete when:
 
 ```text
 README.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 docs/usage/INSTALLATION.md
 docs/usage/QUICK_START.md
 docs/usage/GUI_REFERENCE.md
@@ -2922,7 +2888,7 @@ SECURITY.md
 
 ---
 
-# 64. Final rule
+# 64. Governing rule
 
 The GF Wordbench CLI is a stable adapter over shared application behavior.
 

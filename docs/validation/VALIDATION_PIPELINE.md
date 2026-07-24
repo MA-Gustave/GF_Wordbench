@@ -3,9 +3,11 @@
 **Document ID:** `GF-WB-VALIDATION-PIPELINE`  
 **Status:** Normative validation architecture  
 **Applies to:** GF Wordbench framework and one active GF language project  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\validation\VALIDATION_PIPELINE.md`  
-**Document version:** `1.0.0`
+**Target path:** `docs/validation/VALIDATION_PIPELINE.md`  
+**Document version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -77,7 +79,7 @@ The pipeline is successful only when every required criterion for the selected m
 
 The pipeline must:
 
-- build one resolved run configuration;
+- build one resolved run configuration for one active project and one normative language target;
 - create one owned run directory;
 - use one GF executable and one compatibility decision per run;
 - preserve raw stdout and stderr before parsing;
@@ -156,6 +158,26 @@ with supporting project specifications under:
 ```text
 project/docs/
 ```
+
+### 4.4 Portfolio boundary
+
+`gf-portfolio` is an independent optional consumer of finalized public Wordbench artifacts.
+
+The permitted direction is:
+
+```text
+gf-portfolio -> public versioned GF Wordbench artifacts
+```
+
+GF Wordbench must not:
+
+- discover Portfolio workspaces during a validation run;
+- aggregate several active projects in one pipeline;
+- import or call `gf-portfolio`;
+- require Portfolio storage, configuration or runtime services;
+- write Portfolio registry or aggregation state into Wordbench schemas.
+
+A Portfolio ingestion failure cannot change the status or artifacts of a completed Wordbench run.
 
 ---
 
@@ -237,7 +259,7 @@ An explicit override must be validated and recorded.
 
 ## 6. Configuration precedence
 
-Recommended final precedence:
+Canonical precedence:
 
 ```text
 framework safe defaults
@@ -267,7 +289,8 @@ The following are prohibited:
 - a scenario silently selecting another project;
 - launcher scripts changing validation semantics;
 - stale previous-run data filling missing current configuration;
-- reports reconstructing configuration from prose.
+- reports reconstructing configuration from prose;
+- Portfolio state selecting, replacing or aggregating the active project.
 
 ---
 
@@ -304,7 +327,7 @@ emit_cpu_stats
 strict
 ```
 
-Not every implementation field must use these exact names, but the information must be available.
+Concrete field names may differ internally, but this information must remain available through the canonical run configuration.
 
 ### 7.1 Configuration immutability
 
@@ -321,7 +344,7 @@ A run uses one configuration snapshot.
 
 ## 8. Canonical pipeline overview
 
-The final logical pipeline is:
+The canonical logical pipeline is:
 
 ```text
 VAL-000  accept invocation
@@ -1063,7 +1086,7 @@ Infrastructure errors may trigger a circuit breaker when repeated execution is n
 
 ## 16.2 Compile scheduling
 
-The final implementation may compile:
+Compilation may run:
 
 - sequentially; or
 - with bounded parallelism.
@@ -1908,7 +1931,7 @@ phase 2: validate and atomically publish
 
 ### 28.1.3 Completion marker
 
-The implementation may use a final completion marker such as:
+The persisted schema may define a completion marker such as:
 
 ```text
 .run_complete
@@ -1963,7 +1986,7 @@ Recommended baseline:
 3 = framework/runtime ERROR
 ```
 
-The final mapping is defined in:
+The canonical mapping is defined in:
 
 ```text
 docs/reference/EXIT_CODES.md
@@ -2302,12 +2325,14 @@ The following are always required.
 18. A failed report cannot rewrite raw evidence.
 19. The active language is not inferred from old runs.
 20. Finalization does not silently overwrite another run.
+21. A run never aggregates several active projects.
+22. GF Wordbench validation does not depend on `gf-portfolio`.
 
 ---
 
-# 40. Current implementation migration
+# 40. GF Audit compatibility baseline
 
-The existing GF audit foundation already performs a useful subset:
+GF Wordbench preserves the following established GF Audit responsibilities:
 
 ```text
 build run paths
@@ -2324,9 +2349,7 @@ build run paths
 → write reports
 ```
 
-The final GF Wordbench pipeline retains these responsibilities.
-
-It adds or formalizes:
+The Wordbench pipeline also defines:
 
 ```text
 active project schema loading
@@ -2343,17 +2366,15 @@ two-phase finalization
 canonical overall status
 ```
 
-### 40.1 Migration rule
+### 40.1 Compatibility rules
 
-Existing behavior should be migrated stage by stage.
-
-A temporary compatibility path may exist, but:
-
-- canonical result fields must converge on the schema lock;
-- legacy modes `file` and `all` become input aliases only;
-- reports must not remain the only source of run facts;
-- new scenario and manifest stages must not be bolted onto report generation;
-- final orchestration remains centralized in `audit_core.py` or its deliberate successor.
+- legacy modes `file` and `all` are accepted only as documented input aliases;
+- legacy summaries are read only through documented compatibility or migration rules;
+- canonical writers emit the schemas and names defined by the persisted-schema lock;
+- reports are never the sole source of run facts;
+- scenario, manifest and release stages remain pipeline stages rather than report-generation side effects;
+- orchestration remains centralized in `audit_core.py` or its designated application service;
+- compatibility adapters must not change validation semantics or introduce a second pipeline.
 
 ---
 
@@ -2576,7 +2597,7 @@ Examples of pipeline contract changes:
 - adding concurrency;
 - changing cancellation behavior.
 
-Such changes must not be made through an isolated implementation edit.
+Such changes must not be made through an isolated code edit.
 
 ---
 
@@ -2608,13 +2629,13 @@ docs/scenarios/GOLDEN_TESTS.md
 docs/reports/REPORTING_OVERVIEW.md
 docs/reports/ARTIFACT_MANIFEST.md
 project/project.toml
-project/docs/VALIDATION_SPEC.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 ---
 
-# 46. Final rule
+# 46. Pipeline rule
 
 The validation pipeline is a chain of evidence, not a chain of assumptions.
 

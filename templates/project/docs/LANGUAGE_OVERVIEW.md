@@ -44,11 +44,11 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
@@ -168,8 +168,8 @@ Identity values must agree with:
 ```text
 project/project.toml
 project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/STATUS_LEDGER.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 ---
@@ -340,7 +340,7 @@ Validation normalization must not erase meaningful orthographic distinctions.
 Project-specific orthographic normalization must be documented in:
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 ```
 
@@ -771,7 +771,7 @@ Checkpoint definitions belong to:
 
 ```text
 project/project.toml
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 This table is a readable summary.
@@ -821,8 +821,8 @@ This table is a readable summary.
 Validation details belong to:
 
 ```text
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 project/validation/
 ```
 
@@ -885,9 +885,9 @@ Current state:
 The authoritative live status belongs to:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 ---
@@ -919,7 +919,7 @@ Temporary behavior must not be described as stable.
 The full record belongs in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 ---
@@ -989,7 +989,7 @@ The legal and evidentiary details belong in:
 
 ```text
 project/docs/RESEARCH_EVIDENCE.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 Ambiguous rights block public distribution until reviewed.
@@ -1046,12 +1046,12 @@ Exact artifact ownership belongs to project configuration and release criteria.
 | What are the lincats and fields? | `CATEGORY_AND_LINCAT_CONTRACT.md` |
 | How does morphology work? | `MORPHOLOGY_SPEC.md` |
 | How do constructors and syntax work? | `SYNTAX_AND_CONSTRUCTOR_RULES.md` |
-| What must validation execute? | `VALIDATION_SPEC.md` |
-| Which requirement has which test? | `TEST_COVERAGE_MATRIX.md` |
-| What is temporary or blocked? | `STATUS_LEDGER.md` |
+| What must validation execute? | `VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md` |
+| Which requirement has which test? | `TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md` |
+| What is temporary or blocked? | `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` |
 | Why were major choices made? | `DECISION_LOG.md` |
 | Which known issues remain? | `KNOWN_ISSUES.md` |
-| What blocks or permits release? | `RELEASE_CRITERIA.md` |
+| What blocks or permits release? | `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` |
 | Which sources support linguistic claims? | `RESEARCH_EVIDENCE.md` |
 | Which files promise what to each other? | `INTERFILE_CONTRACT_LOCK.md` |
 
@@ -1064,7 +1064,7 @@ This file must link to specialized documents instead of copying their full rules
 A contributor should read the project in this order:
 
 ```text
-1. project/docs/00_PROJECT_START_HERE.md
+1. project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 2. project/docs/LANGUAGE_OVERVIEW.md
 3. project/project.toml
 4. project/docs/LANGUAGE_ARCHITECTURE.md
@@ -1072,8 +1072,8 @@ A contributor should read the project in this order:
 6. project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 7. project/docs/MORPHOLOGY_SPEC.md
 8. project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-9. project/docs/VALIDATION_SPEC.md
-10. project/docs/STATUS_LEDGER.md
+9. project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+10. project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 11. project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
@@ -1153,9 +1153,9 @@ entrypoint names exist
 checkpoint names exist
 required scenarios exist
 expected PGF name matches release configuration
-project status matches STATUS_LEDGER.md
-release claims match RELEASE_CRITERIA.md
-scope claims map to TEST_COVERAGE_MATRIX.md
+project status matches STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
+release claims match RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md
+scope claims map to TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md
 known limitations map to KNOWN_ISSUES.md
 linguistic claims map to RESEARCH_EVIDENCE.md
 ```
@@ -1231,11 +1231,11 @@ Use this checklist for every review.
 [ ] Category summary matches CATEGORY_AND_LINCAT_CONTRACT.md
 [ ] Entrypoints match project.toml
 [ ] Checkpoints match project.toml
-[ ] Validation summary matches VALIDATION_SPEC.md
-[ ] Coverage claims match TEST_COVERAGE_MATRIX.md
-[ ] Temporary items match STATUS_LEDGER.md
+[ ] Validation summary matches VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
+[ ] Coverage claims match TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md
+[ ] Temporary items match STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
 [ ] Known limitations match KNOWN_ISSUES.md
-[ ] Release claims match RELEASE_CRITERIA.md
+[ ] Release claims match RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md
 [ ] Research claims have evidence
 [ ] Licensing summary is current
 [ ] Compatibility values are current

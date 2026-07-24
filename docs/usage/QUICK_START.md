@@ -1,12 +1,12 @@
 # GF Wordbench — Quick Start
 
 **Document ID:** `GF-WB-QUICK-START`  
-**Status:** Final user guide  
+**Status:** User guide  
 **Applies to:** First local installation, first active-project validation, CLI and GUI startup  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\usage\QUICK_START.md`  
+**Canonical path:** `docs/usage/QUICK_START.md`  
 **Guide version:** `1.0.0`  
-**Last reviewed:** `2026-07-21`
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -25,7 +25,7 @@ install Python environment
 → open the generated summary
 ```
 
-GF Wordbench manages one active GF language project per copy.
+One GF Wordbench workspace contains exactly one active GF language project.
 
 The active project is defined by:
 
@@ -35,27 +35,35 @@ project/project.toml
 
 GF remains the execution engine.
 
-GF Wordbench selects, runs, captures, classifies and reports the validation evidence.
+GF Wordbench selects targets, invokes GF, captures evidence, classifies results and writes reports.
+
+Multi-workspace and multilingual aggregation belong to the independent `gf-portfolio` product. GF Wordbench does not require `gf-portfolio` to install, validate or report one active project.
 
 ---
 
-## 2. Expected repository root
+## 2. Open the repository root
 
-Examples in this guide assume the repository root is:
+Open PowerShell, Command Prompt or a POSIX shell in the GF Wordbench repository root.
 
-```text
-C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench
-```
-
-Open PowerShell or Command Prompt in that directory before running commands.
-
-PowerShell example:
+PowerShell:
 
 ```powershell
-Set-Location "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench"
+Set-Location "<WORKSPACE_ROOT>"
 ```
 
-The repository root should contain at least:
+Command Prompt:
+
+```bat
+cd /d "<WORKSPACE_ROOT>"
+```
+
+POSIX shell:
+
+```bash
+cd "<WORKSPACE_ROOT>"
+```
+
+The repository root contains at least:
 
 ```text
 app/
@@ -66,7 +74,7 @@ tests/
 pyproject.toml
 ```
 
-The active project should contain:
+The active project contains:
 
 ```text
 project/
@@ -75,7 +83,7 @@ project/
 └── validation/
 ```
 
-The GF language sources may live inside the repository or in the project-relative source location declared by `project.toml`.
+GF language sources may live inside the repository or at the project-relative source location declared by `project/project.toml`.
 
 ---
 
@@ -84,13 +92,13 @@ The GF language sources may live inside the repository or in the project-relativ
 Required:
 
 ```text
-Python supported by pyproject.toml
+Python version supported by pyproject.toml
 Grammatical Framework executable: gf or gf.exe
-GF Resource Grammar Library sources or equivalent GF library root
+GF Resource Grammar Library sources or another configured GF library root
 one initialized active project
 ```
 
-Recommended:
+Useful local tools:
 
 ```text
 Git
@@ -100,28 +108,16 @@ an editor with TOML and Markdown support
 
 GF Wordbench does not install or replace Grammatical Framework.
 
-Before continuing, know the local paths to:
+Before continuing, identify:
 
 ```text
-GF executable
-RGL root
-output root
+<WORKSPACE_ROOT>  GF Wordbench repository root
+<GF>              absolute path to gf or gf.exe
+<RGL>             absolute path to the RGL source root
+<OUT>             writable output root for run directories
 ```
 
-Windows example:
-
-```text
-GF executable:
-C:\tools\gf\gf.exe
-
-RGL root:
-C:\work\gf-rgl\src
-
-Output root:
-C:\work\gf-wordbench-runs
-```
-
-Paths containing spaces are supported.
+Paths containing spaces are supported when passed as one quoted argument.
 
 ---
 
@@ -132,22 +128,26 @@ Run GF outside GF Wordbench first.
 PowerShell:
 
 ```powershell
-& "C:\tools\gf\gf.exe" --version
+& "<GF>" --version
 ```
 
 Command Prompt:
 
 ```bat
-"C:\tools\gf\gf.exe" --version
+"<GF>" --version
 ```
 
-A version line should be returned.
+POSIX shell:
+
+```bash
+"<GF>" --version
+```
+
+A version line must be returned.
 
 A missing executable, launch failure or timeout must be corrected before required GF validation can run.
 
-Do not rely on an unknown `gf` from `PATH` when several GF installations exist.
-
-GF Wordbench records the exact executable used for each run.
+Do not rely on an unknown `gf` from `PATH` when several GF installations exist. GF Wordbench records the exact executable used for each run.
 
 ---
 
@@ -190,13 +190,13 @@ Install GF Wordbench in editable mode:
 python -m pip install -e .
 ```
 
-Install development dependencies only when working on the framework:
+Install development dependencies when working on the framework:
 
 ```powershell
 python -m pip install -e ".[dev]"
 ```
 
-The exact optional dependency groups are defined by `pyproject.toml`.
+The optional dependency groups are defined by `pyproject.toml`.
 
 ---
 
@@ -206,23 +206,24 @@ Run:
 
 ```powershell
 gf-wordbench --version
-```
-
-Then:
-
-```powershell
 gf-wordbench --help
 ```
 
-The command should be available inside the activated virtual environment.
+The command must be available inside the activated virtual environment.
 
-When the console script is unavailable during source development, the package module entrypoint may be used if supported by the final package configuration:
+The canonical source entrypoint is:
 
 ```powershell
 python -m app.main_cli --help
 ```
 
-The installed console command remains the preferred interface.
+The installed `gf-wordbench` command remains the primary interface.
+
+Command names, options and argument semantics are owned by:
+
+```text
+docs/usage/CLI_REFERENCE.md
+```
 
 ---
 
@@ -234,9 +235,9 @@ Open:
 project/project.toml
 ```
 
-It must identify one active language project.
+It identifies the single active language project for the workspace.
 
-At minimum, verify:
+Verify at least:
 
 ```text
 project ID
@@ -304,31 +305,29 @@ Use the exact schema documented in:
 docs/configuration/PROJECT_TOML_REFERENCE.md
 ```
 
-Do not store local absolute paths to `gf.exe`, the RGL or run output inside `project.toml`.
-
-Those values belong to local environment configuration or explicit run input.
+Do not store local absolute paths to GF, the RGL or run output inside `project.toml`. Those values belong to local environment configuration or explicit run input.
 
 ---
 
 ## 8. Validate configuration before running GF
 
-Use the configuration checker:
+Run the configuration checker:
 
 ```powershell
 gf-wordbench config check `
-  --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" `
-  --gf-executable "C:\tools\gf\gf.exe" `
-  --rgl-root "C:\work\gf-rgl\src" `
-  --output-root "C:\work\gf-wordbench-runs"
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-executable "<GF>" `
+  --rgl-root "<RGL>" `
+  --output-root "<OUT>"
 ```
 
 Single-line equivalent:
 
 ```powershell
-gf-wordbench config check --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" --gf-executable "C:\tools\gf\gf.exe" --rgl-root "C:\work\gf-rgl\src" --output-root "C:\work\gf-wordbench-runs"
+gf-wordbench config check --project-root "<WORKSPACE_ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
 ```
 
-The checker should verify:
+The checker validates:
 
 ```text
 project schema
@@ -348,7 +347,7 @@ mode and target compatibility
 
 Correct configuration errors before starting a validation run.
 
-Typical configuration failures:
+Typical failures include:
 
 ```text
 configured entrypoint does not exist
@@ -364,19 +363,17 @@ unsupported project schema version
 
 ## 9. Choose a first target
 
-For the first run, choose one small GF source file that should compile.
+Choose one small GF source file that is expected to compile.
 
-Use a project-relative path.
-
-Example:
+Use a project-relative path, for example:
 
 ```text
 lib/src/example/MorphoXxx.gf
 ```
 
-Do not begin with `release` mode when the project has not yet passed a focused compile.
+Start with focused validation rather than release validation.
 
-The recommended progression is:
+The normal progression is:
 
 ```text
 quick
@@ -390,29 +387,27 @@ Use `diagnostic` whenever the cause of failure is unclear.
 
 ## 10. Run the first quick validation
 
-Canonical command:
-
 ```powershell
 gf-wordbench validate `
   --mode quick `
   --target "file:lib/src/example/MorphoXxx.gf" `
-  --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" `
-  --gf-executable "C:\tools\gf\gf.exe" `
-  --rgl-root "C:\work\gf-rgl\src" `
-  --output-root "C:\work\gf-wordbench-runs"
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-executable "<GF>" `
+  --rgl-root "<RGL>" `
+  --output-root "<OUT>"
 ```
 
 Single-line equivalent:
 
 ```powershell
-gf-wordbench validate --mode quick --target "file:lib/src/example/MorphoXxx.gf" --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" --gf-executable "C:\tools\gf\gf.exe" --rgl-root "C:\work\gf-rgl\src" --output-root "C:\work\gf-wordbench-runs"
+gf-wordbench validate --mode quick --target "file:lib/src/example/MorphoXxx.gf" --project-root "<WORKSPACE_ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
 ```
 
-A standard `quick` run performs the bounded workflow:
+A `quick` run performs a bounded workflow:
 
 ```text
 configuration
-environment resolution
+local environment resolution
 GF version probe
 target selection
 static scan
@@ -420,15 +415,18 @@ fingerprint
 GF compilation
 failure classification
 report generation
+run finalization
 ```
 
 `quick` answers:
 
 ```text
-Did this focused change introduce an obvious source, scan or compilation problem?
+Did this focused target satisfy its configured source, scan and compilation contract?
 ```
 
 It does not prove release readiness.
+
+Every run has a global budget, stage budgets and a protected finalization reserve. The reserve is used to stop child processes, preserve available evidence and publish a coherent terminal result when normal execution times out or is cancelled.
 
 ---
 
@@ -443,27 +441,26 @@ ERROR
 SKIPPED
 ```
 
-Interpretation:
-
 | Status | Meaning |
 |---|---|
 | `OK` | The selected validation contract passed |
 | `FAIL` | Execution completed, but a validation criterion failed |
-| `ERROR` | GF Wordbench could not reliably evaluate a required criterion |
-| `SKIPPED` | A stage was explicitly omitted under an allowed non-release policy |
+| `ERROR` | GF Wordbench could not reliably execute or interpret a required criterion |
+| `SKIPPED` | Work was explicitly omitted under the selected mode or dependency policy |
 
-Execution state is separate.
-
-Examples:
+Execution state is separate:
 
 ```text
 completed
 timed_out
 cancelled
 launch_failed
+not_started
 ```
 
-A completed diagnostic run may still have validation status `FAIL`.
+A completed operation may still have validation status `FAIL`.
+
+A timed-out or cancelled required operation cannot produce an overall `OK` result.
 
 ---
 
@@ -472,10 +469,10 @@ A completed diagnostic run may still have validation status `FAIL`.
 Each run creates an owned directory:
 
 ```text
-<output-root>\run_<run-id>\
+<OUT>/run_<run-id>/
 ```
 
-Typical structure:
+Canonical structure:
 
 ```text
 run_<run-id>/
@@ -522,15 +519,13 @@ raw/scenarios/
 raw/master.log
 ```
 
-Reports do not rerun GF.
-
-They are derived from captured evidence.
+Reports are projections of captured structured evidence. They do not rerun GF.
 
 ---
 
 ## 13. A successful quick run
 
-A successful focused run should show:
+A successful focused run shows:
 
 ```text
 mode: quick
@@ -541,17 +536,15 @@ compile status: OK
 required reports: present
 ```
 
-The generated `.gfo`, when expected and retained, appears under the current run’s artifact tree.
+A generated `.gfo`, when required and retained, appears under the current run’s artifact tree.
 
-A successful `quick` run proves only the selected quick contract.
-
-Continue to a checkpoint before treating a subsystem as complete.
+A successful `quick` run proves only the selected quick contract. Continue to the applicable checkpoint before treating a subsystem as validated.
 
 ---
 
 ## 14. A failed quick run
 
-A failed run should preserve:
+A failed or errored run preserves, when available:
 
 ```text
 exact GF executable
@@ -565,11 +558,11 @@ stderr
 source fingerprint
 scan findings
 primary diagnostic
-classification
+causal classification
 artifact paths
 ```
 
-Common causal classes:
+Canonical causal classes:
 
 ```text
 direct
@@ -579,39 +572,35 @@ noise
 skipped
 ```
 
-For a focused file, the most useful files are usually:
+For a focused file, inspect:
 
 ```text
 summary.md
 AI_READY.md
-raw/compile/<target>.stdout.txt
-raw/compile/<target>.stderr.txt
-raw/scan/<target>.scan.txt
+raw/compile/<safe-target-key>.stdout.txt
+raw/compile/<safe-target-key>.stderr.txt
+raw/scan/<safe-target-key>.scan.txt
 ```
 
-Do not edit a gold file to fix a compilation failure.
-
-Gold files validate reviewed scenario output, not compiler success.
+Do not edit a gold file to repair a compilation failure. Gold files validate reviewed scenario output, not compiler success.
 
 ---
 
 ## 15. Run a checkpoint
 
-After the focused files compile, validate a configured subsystem.
-
-Example:
+After the focused providers compile, validate a configured subsystem.
 
 ```powershell
 gf-wordbench validate `
   --mode checkpoint `
   --target "checkpoint:morphology" `
-  --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" `
-  --gf-executable "C:\tools\gf\gf.exe" `
-  --rgl-root "C:\work\gf-rgl\src" `
-  --output-root "C:\work\gf-wordbench-runs"
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-executable "<GF>" `
+  --rgl-root "<RGL>" `
+  --output-root "<OUT>"
 ```
 
-Checkpoint IDs come from the active project.
+Checkpoint IDs come from the active project configuration.
 
 A checkpoint run may validate:
 
@@ -624,7 +613,7 @@ applicable required scenarios
 declared gold comparisons
 ```
 
-An arbitrary file group is not automatically a checkpoint.
+An arbitrary file group is not a checkpoint unless the project contract defines it as one.
 
 ---
 
@@ -636,10 +625,10 @@ Use a registered scenario ID:
 gf-wordbench validate `
   --mode quick `
   --target "scenario:load-main" `
-  --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" `
-  --gf-executable "C:\tools\gf\gf.exe" `
-  --rgl-root "C:\work\gf-rgl\src" `
-  --output-root "C:\work\gf-wordbench-runs"
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-executable "<GF>" `
+  --rgl-root "<RGL>" `
+  --output-root "<OUT>"
 ```
 
 Scenarios are stored under:
@@ -648,11 +637,9 @@ Scenarios are stored under:
 project/validation/scenarios/
 ```
 
-A scenario must be registered in the active-project configuration.
+A scenario is registered in the active-project configuration.
 
-A scenario result requires more than a zero process exit code.
-
-GF Wordbench also checks:
+A zero process exit code is insufficient. GF Wordbench also checks:
 
 ```text
 timeout
@@ -664,7 +651,7 @@ gold comparison
 required artifacts
 ```
 
-Normal validation never updates `.gold`.
+Normal validation never updates `.gold` files.
 
 ---
 
@@ -673,36 +660,32 @@ Normal validation never updates `.gold`.
 Use `diagnostic` when:
 
 ```text
-the first failing file is unclear
+the first failing provider is unclear
 several modules fail downstream
 a scenario fails without a clear cause
-full raw evidence is needed
-a previous regression must be compared
+broader raw evidence is required
+a regression must be compared
 ```
-
-Example:
 
 ```powershell
 gf-wordbench validate `
   --mode diagnostic `
   --target "entrypoint:GrammarXxx" `
-  --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" `
-  --gf-executable "C:\tools\gf\gf.exe" `
-  --rgl-root "C:\work\gf-rgl\src" `
-  --output-root "C:\work\gf-wordbench-runs"
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-executable "<GF>" `
+  --rgl-root "<RGL>" `
+  --output-root "<OUT>"
 ```
 
-Diagnostic mode may continue after independent failures to collect broader evidence.
+Diagnostic mode may continue after independent failures to collect bounded evidence safely.
 
-It is not release evidence.
-
-After fixing the defect, rerun the mode that must prove the change.
+It is not release evidence. After repairing the defect, rerun the mode that owns the required proof.
 
 ---
 
 ## 18. Run release validation
 
-Run `release` only when:
+Run `release` when:
 
 ```text
 required checkpoints are defined
@@ -713,59 +696,49 @@ release criteria are documented
 known blocking issues are resolved
 ```
 
-Command:
-
 ```powershell
 gf-wordbench validate `
   --mode release `
-  --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" `
-  --gf-executable "C:\tools\gf\gf.exe" `
-  --rgl-root "C:\work\gf-rgl\src" `
-  --output-root "C:\work\gf-wordbench-runs"
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-executable "<GF>" `
+  --rgl-root "<RGL>" `
+  --output-root "<OUT>"
 ```
 
-Release mode validates the complete configured release scope.
-
-It may require:
+Release mode validates the complete configured release scope, including applicable:
 
 ```text
-all required source scans
-all required checkpoints
-all required entrypoints
+required source scans
+required checkpoints
+required entrypoints
 PGF construction
-all required scenarios
-all required assertions
-all required gold comparisons
+required scenarios
+required assertions
+required gold comparisons
 release gates
 required reports
 artifact manifest
 manifest verification
 ```
 
-Only a completed successful `release` run may be release-eligible.
+Only a completed successful `release` run is release-eligible.
 
-A successful `quick`, `checkpoint` or `diagnostic` run cannot be promoted afterward.
+A successful `quick`, `checkpoint` or `diagnostic` run cannot be promoted afterward into release evidence.
 
 ---
 
 ## 19. Start the GUI
 
-When the GUI dependencies are installed:
+When GUI dependencies are installed:
 
 ```powershell
 gf-wordbench gui
 ```
 
-The Windows convenience launcher may also be used:
-
-```powershell
-.\launch_gui.bat
-```
-
-The GUI should request or resolve the same values as the CLI:
+The GUI resolves the same inputs as the CLI:
 
 ```text
-project root
+workspace root
 GF executable
 RGL root
 output root
@@ -774,46 +747,50 @@ target
 allowed run options
 ```
 
-Equivalent GUI and CLI inputs must produce equivalent resolved run configuration.
+Equivalent GUI and CLI inputs produce equivalent resolved run configuration.
 
 The GUI does not define separate validation behavior.
 
 ---
 
-## 20. Use the Windows CLI launcher
+## 20. Use a Windows launcher
 
-When supplied by the repository:
+Repository launchers are convenience entrypoints only.
 
-```powershell
-.\launch_cli.bat --help
-```
-
-Example forwarding a validation request:
+PowerShell launcher:
 
 ```powershell
-.\launch_cli.bat validate --mode quick --target "file:lib/src/example/MorphoXxx.gf"
+.\run-gf-wordbench.ps1 --help
+.\run-gf-wordbench.ps1 gui
+.\run-gf-wordbench.ps1 validate --mode quick --target "file:lib/src/example/MorphoXxx.gf"
 ```
 
-Launchers are convenience entrypoints.
+Command Prompt launcher:
 
-They must not contain hidden validation policy.
+```bat
+run-gf-wordbench.cmd --help
+run-gf-wordbench.cmd gui
+run-gf-wordbench.cmd validate --mode quick --target "file:lib/src/example/MorphoXxx.gf"
+```
 
-The Python package must remain runnable without them.
+A launcher forwards arguments to the canonical CLI. It does not contain hidden validation policy, project identity or personal absolute paths.
+
+GF Wordbench remains runnable without launchers.
 
 ---
 
 ## 21. Remember local paths
 
-After a valid GUI or CLI run, GF Wordbench may store local preferences in:
+GF Wordbench may store local convenience values in:
 
 ```text
 .gf_wordbench_state.json
 ```
 
-Typical remembered values:
+Typical values include:
 
 ```text
-project root
+workspace root
 RGL root
 GF executable
 output root
@@ -822,9 +799,9 @@ last target
 last run path
 ```
 
-This file is local and disposable.
+The state file is local and disposable.
 
-It must not define:
+It does not define:
 
 ```text
 language identity
@@ -833,15 +810,15 @@ entrypoints
 checkpoints
 required scenarios
 release requirements
+project registry
+portfolio membership
 ```
 
-Deleting it must not damage the active project.
+Deleting it does not damage the active project or change its contract.
 
 ---
 
 ## 22. First-day workflow
-
-Recommended first-day sequence:
 
 ```text
 1. verify gf --version
@@ -856,11 +833,7 @@ Recommended first-day sequence:
 10. inspect summary.md and raw evidence
 ```
 
-Do not begin by rewriting multiple project contracts before a baseline run exists.
-
-Preserve the first diagnostic evidence.
-
-It becomes useful for regression comparison.
+Preserve the first diagnostic evidence. It provides a useful regression baseline.
 
 ---
 
@@ -877,7 +850,7 @@ edit one coherent provider/consumer change
 → rerun checkpoint
 ```
 
-When a public GF contract changes, also review:
+When a public GF contract changes, review:
 
 ```text
 direct consumers
@@ -885,15 +858,18 @@ downstream entrypoints
 scenario coverage
 gold expectations
 module dependency map
-status ledger
+known issues
+release criteria
+decision log
 project interfile contract
 ```
+
 
 ---
 
 ## 24. Gold changes
 
-A normal run must never change:
+A normal run never changes:
 
 ```text
 project/validation/gold/*.gold
@@ -915,7 +891,7 @@ Never accept a new gold merely to make a failure disappear.
 
 ## 25. Exit-code expectations
 
-The exact exit-code mapping is defined in:
+The exact mapping is defined in:
 
 ```text
 docs/reference/EXIT_CODES.md
@@ -930,9 +906,7 @@ General expectation:
 3+ runtime, tool or framework error according to the reference
 ```
 
-Automation should use the documented exit codes and `summary.json`.
-
-It should not parse human report prose.
+Automation uses documented exit codes and `summary.json`. It does not parse human report prose.
 
 ---
 
@@ -940,50 +914,44 @@ It should not parse human report prose.
 
 ### 26.1 `gf-wordbench` is not recognized
 
-Check:
-
 ```powershell
 .\.venv\Scripts\Activate.ps1
 python -m pip show gf-wordbench
 python -m pip install -e .
 ```
 
-Then reopen the shell if required.
+Reopen the shell when environment activation changes are not visible.
 
 ### 26.2 GF executable is missing
 
-Verify the path directly:
-
 ```powershell
-Test-Path "C:\tools\gf\gf.exe"
-& "C:\tools\gf\gf.exe" --version
+Test-Path "<GF>"
+& "<GF>" --version
 ```
 
-Do not select a directory instead of the executable file.
+Select the executable file, not its parent directory.
 
 ### 26.3 RGL root is wrong
-
-The configured root must lead to the path components required by the active project.
 
 Run:
 
 ```powershell
-gf-wordbench config check ...
+gf-wordbench config check --project-root "<WORKSPACE_ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
 ```
 
-Inspect the effective GF path reported by the checker.
+Inspect the resolved GF path reported by the checker.
 
 ### 26.4 Source directory is missing
 
-Correct `project.toml` or restore the project files.
+Correct `project/project.toml` or restore the project files.
 
-GF Wordbench must not create a missing source directory automatically.
+GF Wordbench does not create a missing source directory automatically.
 
 ### 26.5 Entrypoint is missing
 
 Correct the configured filename or create the intended GF module.
 
-GF Wordbench must not guess another entrypoint from filename conventions.
+GF Wordbench does not guess another entrypoint from naming conventions.
 
 ### 26.6 Required scenario is missing
 
@@ -997,21 +965,21 @@ Then verify that the registry and script ID agree.
 
 ### 26.7 Required gold is missing
 
-Create it only through the explicit reviewed gold workflow.
+Create it only through the reviewed gold-update workflow.
 
-A release run must not create it automatically.
+A release run does not create it automatically.
 
 ### 26.8 Output root is not writable
 
-Select a writable directory outside the source tree.
+Select a writable directory outside protected source locations.
 
-Run-owned directories may be created automatically.
+Run-owned directories may be created automatically under the approved output root.
 
 ### 26.9 Paths contain spaces
 
-Pass them as one quoted argument.
+Pass each path as one quoted argument.
 
-Do not add embedded quote characters inside stored path values.
+Do not store embedded quote characters inside path values.
 
 ### 26.10 GF works manually but not in GF Wordbench
 
@@ -1026,7 +994,7 @@ ordered command arguments
 environment overrides
 ```
 
-Use the raw run evidence rather than the rendered summary alone.
+Use raw run evidence rather than the rendered summary alone.
 
 ---
 
@@ -1035,16 +1003,19 @@ Use the raw run evidence rather than the rendered summary alone.
 Do not:
 
 - hardcode the active language in framework configuration;
-- store `gf.exe` in portable `project.toml`;
+- store the GF executable in portable `project.toml`;
 - use application state as project truth;
+- define several active projects in one Wordbench workspace;
+- store or read private `gf-portfolio` state from Wordbench;
 - run release mode with required stages disabled;
-- treat a zero scenario exit code as full success;
+- treat a zero scenario exit code as complete success;
 - update gold during ordinary validation;
 - parse `summary.md` in automation when `summary.json` exists;
 - reuse old `.gfo` files as unverified release proof;
-- run untrusted `.gfs` scenarios outside a suitable sandbox;
+- run untrusted `.gfs` scenarios outside an appropriate trust boundary;
 - edit raw evidence after the run;
-- infer project identity from an old run directory.
+- infer project identity from an old run directory;
+- treat incomplete finalization as an `OK` run.
 
 ---
 
@@ -1068,31 +1039,31 @@ gf-wordbench --help
 Configuration:
 
 ```powershell
-gf-wordbench config check --project-root "<ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
+gf-wordbench config check --project-root "<WORKSPACE_ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
 ```
 
 Focused validation:
 
 ```powershell
-gf-wordbench validate --mode quick --target "file:<PROJECT-RELATIVE-PATH>" --project-root "<ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
+gf-wordbench validate --mode quick --target "file:<PROJECT-RELATIVE-PATH>" --project-root "<WORKSPACE_ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
 ```
 
 Checkpoint:
 
 ```powershell
-gf-wordbench validate --mode checkpoint --target "checkpoint:<ID>" --project-root "<ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
+gf-wordbench validate --mode checkpoint --target "checkpoint:<ID>" --project-root "<WORKSPACE_ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
 ```
 
 Diagnostic:
 
 ```powershell
-gf-wordbench validate --mode diagnostic --target "entrypoint:<MODULE>" --project-root "<ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
+gf-wordbench validate --mode diagnostic --target "entrypoint:<MODULE>" --project-root "<WORKSPACE_ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
 ```
 
 Release:
 
 ```powershell
-gf-wordbench validate --mode release --project-root "<ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
+gf-wordbench validate --mode release --project-root "<WORKSPACE_ROOT>" --gf-executable "<GF>" --rgl-root "<RGL>" --output-root "<OUT>"
 ```
 
 GUI:
@@ -1104,8 +1075,6 @@ gf-wordbench gui
 ---
 
 ## 29. Next documents
-
-Read next according to the task.
 
 ### Installation and environment
 
@@ -1144,6 +1113,7 @@ docs/scenarios/GOLDEN_TESTS.md
 ```text
 docs/usage/CLI_REFERENCE.md
 docs/usage/GUI_REFERENCE.md
+docs/operations/WINDOWS_LAUNCHERS.md
 ```
 
 ### Project lifecycle
@@ -1163,6 +1133,13 @@ docs/reports/SUMMARY_JSON_REFERENCE.md
 docs/reports/AI_READY_REFERENCE.md
 ```
 
+### Run lifecycle
+
+```text
+docs/operations/RUN_DIRECTORY_LIFECYCLE.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
+```
+
 ---
 
 ## 30. Quick-start completion checklist
@@ -1175,7 +1152,7 @@ docs/reports/AI_READY_REFERENCE.md
 [ ] GF executable launches
 [ ] GF version recorded
 [ ] RGL root identified
-[ ] Active project.toml validated
+[ ] project/project.toml validated
 [ ] Source directory exists
 [ ] Entrypoint exists
 [ ] Output root is writable
@@ -1190,9 +1167,9 @@ docs/reports/AI_READY_REFERENCE.md
 
 ---
 
-## 31. Final quick-start rule
+## 31. Governing rule
 
-The reliable first run is:
+A reliable first run has:
 
 ```text
 one active project
@@ -1211,8 +1188,6 @@ config check
 → release
 ```
 
-Use `diagnostic` whenever the failure needs more evidence.
+Use `diagnostic` whenever a failure needs broader evidence.
 
-Do not weaken a mode to make it pass.
-
-Fix the project, configuration or environment, then rerun the mode that must provide the proof.
+Do not weaken a mode to make it pass. Correct the project, configuration or local environment, then rerun the mode that owns the required proof.

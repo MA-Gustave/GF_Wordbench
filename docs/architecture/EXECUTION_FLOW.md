@@ -2,10 +2,13 @@
 
 **Document ID:** `GF-WB-ARCH-EXECUTION-FLOW`  
 **Status:** Normative architecture specification  
-**Applies to:** GF Wordbench framework  
-**Primary entry point:** `app/audit/audit_core.py::run_audit(...)`  
+**Applies to:** one GF Wordbench run for one active project and one normative language target  
 **Owner:** GF Wordbench maintainers  
-**Last structural review:** 2026-07-22  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Framework boundary:** `docs/INTERFILE_CONTRACT_LOCK.md`  
+**External-tool boundary:** `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`  
+**Persisted-artifact boundary:** `docs/PERSISTED_SCHEMA_LOCK.md`  
+**Last structural review:** `2026-07-24`
 
 ---
 
@@ -42,99 +45,145 @@ Those are owned by the corresponding contract and reference documents.
 
 ---
 
+## Product and run boundary
+
+One GF Wordbench workspace contains exactly one active GF language project. One execution resolves exactly one project identity and one normative language target.
+
+GF Wordbench owns validation orchestration, evidence capture, classification, comparison, reporting and run finalization for that project.
+
+GF Wordbench does not:
+
+- discover or orchestrate several Wordbench workspaces in one run;
+- maintain a portfolio registry;
+- aggregate multilingual readiness across projects;
+- depend on `gf-portfolio` code, runtime, schemas, storage or configuration.
+
+The independent `gf-portfolio` product may consume finalized, public, versioned Wordbench artifacts. That consumer relationship does not alter Wordbench execution flow.
+
+---
+
 ## 2. Core execution rule
 
-> Every supported validation request must pass through one authoritative orchestration flow.
+> Every supported validation request passes through one authoritative application use case.
 
-The authoritative application-level entry point is:
+The canonical logical operation is:
 
 ```python
-run_audit(
-    run_config: RunConfig,
-    run_paths: RunPaths | None = None,
+execute_run(
+    request: RunRequest,
 ) -> RunResult
 ```
 
-Equivalent resolved configuration must produce equivalent stage selection, ordering, and success semantics regardless of whether the request originates from:
+`RunRequest` represents resolved user intent for one active project. Private class and function names may vary, but all entrypoints call the same application boundary.
+
+Equivalent resolved requests produce equivalent:
+
+- stage selection;
+- stage ordering;
+- path resolution;
+- evidence policy;
+- success and failure semantics;
+- artifact contracts.
+
+This rule applies whether the request originates from:
 
 - the CLI;
 - the GUI;
 - automation;
 - tests;
-- a future supported API wrapper.
+- a supported API adapter.
 
-CLI and GUI code must not reconstruct the pipeline independently.
+CLI, GUI and adapters must not reconstruct the pipeline independently.
 
 ---
 
 ## 3. Execution authority
 
-### 3.1 CLI and GUI own interaction
+### 3.1 Entrypoints own interaction
 
-The CLI and GUI own:
+CLI, GUI and supported API adapters own:
 
-- collecting user input;
-- presenting validation errors before execution when possible;
-- calling the shared configuration builder;
-- calling `run_audit`;
-- presenting the returned result;
-- mapping the final result to an exit code or GUI state.
+- collecting user intent;
+- presenting input errors when possible;
+- converting external values into application requests;
+- invoking the run application use case;
+- rendering the returned result;
+- mapping the result to an exit code, response or GUI state.
 
-They do not own:
+Entrypoints do not own:
 
-- file selection rules;
-- scanner invocation;
-- GF process invocation;
+- project selection rules;
+- source selection;
+- static scanning;
+- GF command construction;
+- process execution;
 - scenario execution;
 - classification;
 - regression comparison;
 - report generation;
 - artifact naming.
 
-### 3.2 Bootstrap owns resolved configuration and run paths
+### 3.2 The projects module owns project resolution
 
-Bootstrap and project-configuration loading own:
+The `projects` module owns:
 
-- application defaults;
-- active project loading;
-- explicit override precedence;
-- path resolution;
-- configuration validation;
-- creation of `RunConfig`;
-- creation of `RunPaths`.
+- loading `project/project.toml`;
+- resolving the one active project;
+- validating project identity;
+- resolving project-relative paths;
+- validating entrypoints, checkpoints and scenario registrations;
+- producing the project portion of the resolved run request.
 
-### 3.3 Audit core owns orchestration
+Application state and entrypoint state cannot override project identity.
 
-The audit core owns:
+### 3.3 The runs module owns orchestration and lifecycle
 
-- stage ordering;
-- stage inclusion by mode;
-- partial-result preservation;
-- aggregation;
-- report finalization;
-- final run status.
+The `runs` module owns:
 
-### 3.4 Stages own their local work
+- creating the run identity;
+- resolving or creating run paths;
+- building the execution plan;
+- coordinating validation stages;
+- preserving partial results;
+- applying run budgets and cancellation;
+- aggregating results;
+- coordinating report publication;
+- finalizing the run lifecycle.
 
-Each stage owns one bounded responsibility:
+The runs module depends on application ports, not concrete GUI, CLI, filesystem or process implementations.
 
-| Stage | Responsibility |
+### 3.4 Functional modules own bounded work
+
+| Module or stage | Responsibility |
 |---|---|
-| Project loader | Read and validate `project/project.toml` |
-| File selector | Determine included and excluded GF source files |
-| Scanner | Produce heuristic source findings |
-| Fingerprint provider | Produce source identity |
-| Compiler | Invoke GF for file compilation |
-| Classifier | Determine direct, downstream, ambiguous, noise, skipped |
-| Scenario runner | Execute project-owned `.gfs` scenarios |
-| Gold comparator | Compare normalized scenario output with reviewed gold |
-| PGF build stage | Build and verify the release PGF |
-| Diff stage | Compare with a prior structured run |
-| Result builder | Construct coherent result models and totals |
-| Report writers | Serialize existing evidence |
-| Manifest writer | Inventory finalized run artifacts |
+| Projects | Resolve and validate the active project |
+| Runs | Plan, orchestrate and finalize one run |
+| Validation — file selector | Determine included and excluded GF source files |
+| Validation — scanner | Produce heuristic source findings |
+| Validation — fingerprint provider | Produce source identity |
+| Validation — compiler | Request GF file compilation |
+| Diagnostics — classifier | Determine direct, downstream, ambiguous, noise or skipped |
+| Validation — scenario runner | Execute project-owned `.gfs` scenarios through the GF port |
+| Validation — gold comparator | Compare normalized scenario output with reviewed gold |
+| Validation — PGF stage | Build and verify the release PGF |
+| Runs — diff stage | Compare with a prior structured run |
+| Reporting | Serialize existing structured evidence |
+| Reporting — manifest writer | Inventory finalized run artifacts |
 
-No stage may silently assume ownership of another stage's behavior.
+No module may silently assume ownership of another module's behavior.
+
+### 3.5 Ports and adapters own external boundaries
+
+Application ports define requests and results for:
+
+- project storage;
+- filesystem access;
+- clocks and identifiers;
+- GF and diagnostic tool execution;
+- cancellation;
+- artifact publication.
+
+Adapters implement those ports. Domain and application code do not construct shell command strings, read GUI widgets or depend on operating-system process APIs directly.
 
 ---
 
@@ -144,42 +193,36 @@ No stage may silently assume ownership of another stage's behavior.
 User / automation
         |
         v
-CLI or GUI
+CLI / GUI / API adapter
         |
         v
-Load application defaults
+Build RunRequest
         |
         v
-Load active project configuration
+Projects module resolves active project
         |
         v
-Apply explicit overrides
+Runs application use case
         |
-        v
-Validate and resolve RunConfig
+        +--> validate resolved request
         |
-        v
-run_audit(...)
+        +--> create run identity and paths
         |
-        +--> Build or accept RunPaths
+        +--> external-tool preflight
         |
-        +--> Initialize run context and master evidence
+        +--> resolve execution plan
         |
-        +--> External-tool preflight
+        +--> select source files
         |
-        +--> Resolve mode-specific execution plan
-        |
-        +--> Select source files
-        |
-        +--> Execute per-file pipeline
+        +--> execute per-file validation
         |       scan
         |       fingerprint
         |       compile or skip
         |       build FileResult
         |
-        +--> Classify file results
+        +--> classify file results
         |
-        +--> Execute selected scenarios
+        +--> execute selected scenarios
         |       run GF
         |       preserve raw output
         |       verify markers
@@ -187,24 +230,26 @@ run_audit(...)
         |       compare gold
         |       build ScenarioResult
         |
-        +--> Build PGF when required
+        +--> build PGF when required
         |
-        +--> Build aggregate RunResult
+        +--> aggregate RunResult
         |
-        +--> Compare with previous structured run
+        +--> compare with previous structured run
         |
-        +--> Write reports and aggregate logs
+        +--> publish reports and aggregate logs
         |
-        +--> Write and verify manifest
+        +--> write and verify manifest
         |
-        +--> Finalize overall status
+        +--> finalize run lifecycle
         |
         v
 Return RunResult
         |
-        +--> CLI prints summary and returns exit code
+        +--> CLI renders summary and exit code
         |
-        +--> GUI renders result and persists convenience state
+        +--> GUI renders result and stores convenience state
+        |
+        +--> API adapter returns the documented representation
 ```
 
 ---
@@ -242,7 +287,7 @@ Canonical logical flow:
 parse arguments
     -> convert values to plain Python types
     -> call shared configuration builder
-    -> call run_audit
+    -> invoke the run application use case
     -> print returned result summary
     -> map result to process exit code
 ```
@@ -260,7 +305,7 @@ read form and persisted convenience state
     -> validate obvious UI errors
     -> convert widget values to plain Python types
     -> call shared configuration builder
-    -> call run_audit in the supported execution context
+    -> invoke the run application use case in the supported execution context
     -> render returned result
     -> save convenience state
 ```
@@ -277,7 +322,7 @@ GUI validation may fail earlier than bootstrap, but it must not replace bootstra
 
 ## 6.3 Automation path
 
-Automation must use the same public configuration and audit entry points.
+Automation uses the same public request builder and run application use case.
 
 It may:
 
@@ -389,10 +434,12 @@ A configuration failure after run-path creation must be represented in the parti
 The output of configuration resolution is one immutable logical request:
 
 ```text
-RunConfig
+RunRequest
 ```
 
-Once execution begins, stages must read the resolved configuration.
+The runs module derives the immutable execution configuration used by stages.
+
+Once execution begins, stages read only the resolved execution request and run context.
 
 They must not independently consult:
 
@@ -669,7 +716,7 @@ Expected behavior:
 
 Source selection belongs to the file selector.
 
-The audit core supplies configuration and consumes the selection.
+The runs application service supplies configuration and consumes the selection.
 
 It must not duplicate filtering rules.
 
@@ -737,7 +784,7 @@ For every selected source file:
 9. mark file completion
 ```
 
-Current baseline order is intentionally preserved:
+The canonical order is:
 
 ```text
 scan
@@ -789,7 +836,7 @@ Scan findings remain separate from GF compile status.
 
 The fingerprint stage produces source identity.
 
-Canonical target algorithm:
+Canonical algorithm:
 
 ```text
 SHA-256
@@ -1369,6 +1416,8 @@ It records:
 
 The manifest does not hash itself.
 
+Finalized public artifacts may be consumed read-only by `gf-portfolio`; publication does not create a reverse runtime dependency.
+
 ## 18.8 Manifest failure
 
 A manifest failure after otherwise successful validation changes the final run to `ERROR` when manifest integrity is required.
@@ -1387,7 +1436,7 @@ A run is finalized only after:
 - final status is stable;
 - no owned process can continue writing into the run directory.
 
-A future explicit completion marker may be added, but it must be schema-controlled.
+An explicit completion marker, when used, is schema-controlled.
 
 ---
 
@@ -1541,7 +1590,7 @@ They must be isolated from exact gold comparison or normalized where documented.
 
 The canonical architecture does not require parallel stage execution.
 
-A future parallel implementation is compatible only when it preserves:
+Parallel execution is compatible only when it preserves:
 
 - deterministic result order;
 - per-file and per-scenario log isolation;
@@ -1629,13 +1678,13 @@ It may not silently rewrite it unless it is the declared owner and the artifact 
 
 ---
 
-# 24. Final result flow to callers
+# 24. Run result flow to callers
 
 ## 24.1 Return value
 
-`run_audit` returns `RunResult`.
+`execute_run` returns `RunResult`.
 
-Callers inspect structured fields.
+Callers inspect structured fields. No caller receives or mutates private module state.
 
 ## 24.2 CLI exit codes
 
@@ -1675,90 +1724,95 @@ It must not store the full `RunResult` as application state.
 # 25. Canonical orchestration pseudocode
 
 ```python
-def run_audit(run_config, run_paths=None):
-    validate_resolved_run_config(run_config)
+def execute_run(request: RunRequest) -> RunResult:
+    resolved = projects.resolve_active_project(request)
+    validate_resolved_request(resolved)
 
-    started_at = utc_now()
-    started_clock = monotonic_now()
-
-    paths = run_paths or build_run_paths(run_config)
-    context = initialize_run_context(run_config, paths, started_at)
+    started_at = clock.utc_now()
+    started_clock = clock.monotonic_now()
+    run = runs.initialize(resolved, started_at)
 
     try:
-        preflight = run_external_preflight(run_config, paths)
+        preflight = validation.preflight_external_tools(
+            project=resolved.project,
+            policy=resolved.tool_policy,
+            run_paths=run.paths,
+        )
 
-        plan = resolve_execution_plan(
-            run_config=run_config,
-            project_config=context.project_config,
+        plan = runs.resolve_execution_plan(
+            request=resolved,
             preflight=preflight,
         )
 
-        selection = select_files(plan.file_selection)
+        selection = validation.select_files(plan.file_selection)
 
-        file_results = []
-        for file_path in selection.included_files:
-            file_results.append(
-                run_file_pipeline(
-                    file_path=file_path,
-                    run_config=run_config,
-                    run_paths=paths,
-                    plan=plan,
-                )
+        file_results = [
+            validation.run_file_pipeline(
+                file_path=file_path,
+                project=resolved.project,
+                run_paths=run.paths,
+                plan=plan,
             )
+            for file_path in selection.included_files
+        ]
 
-        file_results = classify_file_results(file_results)
+        file_results = diagnostics.classify_file_results(file_results)
 
-        scenario_results = run_selected_scenarios(
+        scenario_results = validation.run_selected_scenarios(
             plan=plan,
-            run_config=run_config,
-            run_paths=paths,
+            project=resolved.project,
+            run_paths=run.paths,
+            file_results=file_results,
         )
 
-        pgf_result = run_pgf_stage_if_required(
-            plan=plan,
-            run_config=run_config,
-            run_paths=paths,
+        scenario_results = diagnostics.classify_scenario_results(
+            scenario_results=scenario_results,
+            file_results=file_results,
         )
 
-        run_result = build_run_result(
-            configuration=run_config,
-            paths=paths,
+        pgf_result = validation.run_pgf_stage_if_required(
+            plan=plan,
+            project=resolved.project,
+            run_paths=run.paths,
+        )
+
+        result = runs.aggregate(
+            request=resolved,
+            run=run,
             preflight=preflight,
             selection=selection,
             file_results=file_results,
             scenario_results=scenario_results,
             pgf_result=pgf_result,
-            timing=finish_timing(started_at, started_clock),
+            timing=runs.finish_timing(started_at, started_clock),
         )
 
-        run_result = apply_release_gates(run_result, plan)
-        run_result = add_top_errors(run_result)
+        result = runs.apply_release_gates(result, plan)
+        result = diagnostics.add_top_errors(result)
 
         if plan.compare_previous:
-            run_result.diff_entries = build_previous_run_diff(run_result)
+            result.diff_entries = runs.compare_previous_result(result)
 
-        write_reports_best_effort(run_result)
-        write_and_validate_manifest(run_result)
-        finalize_run_status(run_result)
+        reporting.publish_reports_best_effort(result)
+        reporting.write_and_validate_manifest(result)
+        runs.finalize(result)
 
-        return run_result
+        return result
 
     except CancellationRequested as exc:
-        run_result = build_partial_cancelled_result(context, exc)
-        write_reports_best_effort(run_result)
-        write_manifest_if_safe(run_result)
-        return run_result
+        result = runs.build_cancelled_result(run, exc)
+        reporting.publish_partial_result_if_safe(result)
+        runs.finalize_partial(result)
+        return result
 
     except Exception as exc:
-        run_result = build_partial_error_result(context, exc)
-        write_reports_best_effort(run_result)
-        write_manifest_if_safe(run_result)
-        return_or_raise_according_to_boundary(run_result, exc)
+        result = runs.build_error_result(run, exc)
+        reporting.publish_partial_result_if_safe(result)
+        runs.finalize_partial(result)
+        return_or_raise_at_entrypoint_boundary(result, exc)
 ```
 
-This pseudocode defines ordering and responsibility.
-
-It does not prescribe private helper names.
+This pseudocode defines ordering, ownership and dependency direction. It does not prescribe private helper names or concrete adapter classes.
 
 ---
 
@@ -1887,7 +1941,7 @@ Non-zero external-tool exit still produces:
 - Raw evidence is preserved before normalization.
 - Reports do not contain secrets or full environment dumps.
 - Gold files are read-only during normal validation.
-- Cleanup is not part of normal audit execution.
+- Cleanup is not part of normal run execution.
 - A run does not become finalized while an owned process may still write to it.
 
 The full policy is defined in `SECURITY.md`.
@@ -1910,8 +1964,8 @@ scanner -> compiler
 compiler -> report
 classifier -> GF process
 process runner -> diagnostic classification
-normal audit -> gold update
-normal audit -> source mutation
+normal validation run -> gold update
+normal validation run -> source mutation
 diff -> Markdown parsing
 manifest writer -> artifact mutation
 ```
@@ -1959,7 +2013,7 @@ tests/execution/
 Verify:
 
 - CLI and GUI produce equivalent `RunConfig` for equivalent values;
-- both call `run_audit`;
+- both invoke the run application use case;
 - neither calls stages directly;
 - CLI exit code derives from `RunResult`.
 
@@ -2066,7 +2120,7 @@ Tests:
 Required checklist:
 
 ```text
-[ ] audit orchestration updated
+[ ] run orchestration updated
 [ ] all affected stages reviewed
 [ ] RunConfig reviewed
 [ ] RunPaths reviewed
@@ -2086,45 +2140,14 @@ A local reordering that changes observable evidence is an architectural change.
 
 ---
 
-# 32. Implementation completion checklist
-
-The final implementation satisfies this execution flow when:
+# 32. Related documents
 
 ```text
-[ ] CLI and GUI share configuration resolution
-[ ] run_audit is the authoritative entry point
-[ ] project.toml owns active-language rules
-[ ] run paths are explicit and unique
-[ ] preflight records the actual GF executable
-[ ] canonical modes are implemented
-[ ] file selection is deterministic
-[ ] scan and compile remain separate
-[ ] fingerprints are stable
-[ ] file classification runs after file collection
-[ ] scenario runner executes native GF
-[ ] raw scenario evidence precedes normalization
-[ ] required markers are verified
-[ ] gold comparison is read-only in normal runs
-[ ] PGF build is a separate release stage
-[ ] release gates are explicit
-[ ] RunResult counts are coherent
-[ ] previous-run diff uses structured summaries
-[ ] reports do not rerun stages
-[ ] manifest hashes finalized artifacts
-[ ] partial failures preserve evidence
-[ ] timeouts and cancellation are structured
-[ ] deterministic order is tested
-[ ] security-sensitive paths are contained
-[ ] contract locks match implementation
-```
-
----
-
-# 33. Related documents
-
-```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/architecture/PRODUCT_BOUNDARIES.md
 docs/architecture/ARCHITECTURE_OVERVIEW.md
 docs/architecture/COMPONENT_MAP.md
+docs/architecture/DEPENDENCY_RULES.md
 docs/architecture/DATA_MODEL.md
 docs/architecture/ARTIFACT_MODEL.md
 docs/architecture/PROCESS_EXECUTION_MODEL.md
@@ -2132,6 +2155,11 @@ docs/architecture/ERROR_HANDLING_MODEL.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
+docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
+docs/decisions/ADR-0002-GF-AS-EXECUTION-ENGINE.md
+docs/decisions/ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 docs/validation/VALIDATION_PIPELINE.md
 docs/validation/VALIDATION_MODES.md
 docs/scenarios/SCENARIO_FORMAT.md
@@ -2142,7 +2170,7 @@ SECURITY.md
 
 ---
 
-# 34. Final rule
+# 33. Governing rule
 
 GF Wordbench is an orchestrator.
 

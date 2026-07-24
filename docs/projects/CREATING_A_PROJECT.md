@@ -3,12 +3,14 @@
 **Document ID:** `GF-WB-PROJECTS-CREATING-A-PROJECT`  
 **Status:** Operational specification  
 **Applies to:** Creating one active GF language project from `templates/project/`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
 **Project owner after initialization:** active-language project maintainers  
 **Authoritative project identity:** `project/project.toml`  
 **Template source:** `templates/project/`  
 **Related project model:** `docs/projects/PROJECT_MODEL.md`  
-**Completion authority:** `docs/projects/PROJECT_COMPLETION_CHECKLIST.md`
+**Completion authority:** `docs/projects/PROJECT_COMPLETION_CHECKLIST.md`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -36,7 +38,7 @@ contract locks
 
 The core rule is:
 
-> One GF Wordbench repository copy represents one active language project, and `project/project.toml` is the authoritative source of that project identity.
+> One GF Wordbench workspace contains exactly one active language project, and `project/project.toml` is the authoritative source of that project identity.
 
 Project creation must remove template placeholders and old-language assumptions before the project can be treated as active.
 
@@ -92,9 +94,12 @@ This procedure does not cover:
 - writing every scenario command in detail;
 - installing GF itself;
 - releasing GF Wordbench;
-- releasing the language project.
+- releasing the language project;
+- registering several Wordbench workspaces or producing cross-project views.
 
-For those tasks, use the dedicated migration, GF, scenario and release documentation.
+Multi-workspace discovery, aggregation and comparison belong to the independent `gf-portfolio` product. Project creation must not register the project in Portfolio as an implicit side effect.
+
+For the other tasks, use the dedicated migration, GF, scenario and release documentation.
 
 ---
 
@@ -111,7 +116,7 @@ Before creating a project, confirm:
 [ ] Active language has a stable code
 [ ] Source tree location is known
 [ ] Intended module suffix is known
-[ ] Intended top-level grammar entrypoint is known or planned
+[ ] Intended top-level grammar entrypoint is identified
 [ ] Project owner is identified
 [ ] Existing project/ content has been backed up if it contains work
 ```
@@ -145,9 +150,9 @@ Use this procedure when:
 - module architecture is still being established;
 - placeholders and incomplete contracts will exist temporarily.
 
-The project may begin with empty scenario arrays and provisional documents during bootstrap.
+The project may be initialized before all release scenarios and gold files exist.
 
-It is not release-complete until every required contract and criterion is resolved.
+Its configuration and documentation must remain internally valid, and release validation must reject every missing required contract or criterion.
 
 ---
 
@@ -182,7 +187,6 @@ project/
 │   ├── SYNTAX_AND_CONSTRUCTOR_RULES.md
 │   ├── VALIDATION_SPEC.md
 │   ├── TEST_COVERAGE_MATRIX.md
-│   ├── STATUS_LEDGER.md
 │   ├── DECISION_LOG.md
 │   ├── KNOWN_ISSUES.md
 │   ├── RELEASE_CRITERIA.md
@@ -257,34 +261,29 @@ Project content values will differ; required relative filenames should initially
 
 ---
 
-## 9. Optional initialization command
+## 9. Initialization command
 
-A final GF Wordbench implementation may expose an initialization command such as:
+The canonical initialization operation is:
 
 ```text
 gf-wordbench project init
 ```
 
-or:
+The exact options, overwrite protections and exit codes are defined by `docs/usage/CLI_REFERENCE.md`.
 
-```text
-gf-wordbench project init --template templates/project --destination project
-```
-
-The canonical command surface is defined by `docs/usage/CLI_REFERENCE.md`.
-
-An initializer must:
+The initializer must:
 
 - refuse unsafe overwrite by default;
-- copy the full template;
+- copy the complete template;
 - write only through explicit initialization;
 - preserve the reusable template;
 - validate the resulting structure;
 - report unresolved placeholders;
 - avoid inventing language-specific module facts;
-- avoid using GUI state as project identity.
+- avoid using GUI state as project identity;
+- avoid registering the project in `gf-portfolio`.
 
-Manual creation remains valid when it produces the same canonical structure.
+Manual creation remains valid when it produces the same canonical structure and satisfies the same checks.
 
 ---
 
@@ -328,7 +327,7 @@ The project ID should be:
 - lowercase;
 - filesystem-safe;
 - meaningful;
-- independent of a temporary branch or developer name.
+- independent of a branch or developer name.
 
 Recommended syntax:
 
@@ -350,7 +349,6 @@ Avoid:
 ```text
 test
 new
-language-final
 john-copy
 project-2
 ```
@@ -454,7 +452,7 @@ may describe GF sources under:
 ../gf-rgl/lib/src/language/
 ```
 
-depending on the final configuration model.
+according to the project configuration contract.
 
 Project-owned paths should remain project-relative where the schema permits.
 
@@ -539,7 +537,7 @@ directory = "<project-relative-or-configured-source-directory>"
 glob = "**/*.gf"
 ```
 
-The exact field names are defined by the final project schema.
+The exact field names are defined by the project schema.
 
 Rules:
 
@@ -573,18 +571,17 @@ A missing source root is configuration `ERROR`, not a successful empty project.
 
 ## 20. Module inventory
 
-Create a temporary inventory table:
+Create a reviewed inventory table:
 
-| Module file | GF module name | Kind | Direct imports | Intended role | Status |
+| Module file | GF module name | Kind | Direct imports | Intended role | Notes |
 |---|---|---|---|---|---|
-| `<file>` | `<module>` | abstract/concrete/resource/etc. | `<imports>` | `<role>` | active/incomplete/deprecated |
+| `<file>` | `<module>` | abstract/concrete/resource/etc. | `<imports>` | `<role>` | `<verified facts>` |
 
 Use this inventory to populate:
 
 ```text
 project/docs/LANGUAGE_ARCHITECTURE.md
 project/docs/MODULE_DEPENDENCY_MAP.md
-project/docs/STATUS_LEDGER.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
@@ -666,7 +663,7 @@ release entrypoint
 
 Do not select a lower-level module merely because it compiles.
 
-A successful morphology module does not prove the final grammar loads.
+A successful morphology module does not prove the release grammar loads.
 
 ---
 
@@ -703,7 +700,7 @@ verb syntax
 sentence syntax
 extensions
 structural vocabulary
-final grammar
+release grammar
 ```
 
 Conceptual configuration:
@@ -741,7 +738,7 @@ File compilation and checkpoint validation are distinct concepts.
 
 ## 27. Checkpoint order
 
-Order checkpoints from lower-level providers toward final entrypoints.
+Order checkpoints from lower-level providers toward release entrypoints.
 
 Conceptual order:
 
@@ -820,12 +817,11 @@ After the source and identity inventory, complete project documents in this orde
 8. docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
 9. docs/VALIDATION_SPEC.md
 10. docs/TEST_COVERAGE_MATRIX.md
-11. docs/STATUS_LEDGER.md
-12. docs/DECISION_LOG.md
-13. docs/KNOWN_ISSUES.md
-14. docs/RELEASE_CRITERIA.md
-15. docs/RESEARCH_EVIDENCE.md
-16. docs/INTERFILE_CONTRACT_LOCK.md
+11. docs/DECISION_LOG.md
+12. docs/KNOWN_ISSUES.md
+13. docs/RELEASE_CRITERIA.md
+14. docs/RESEARCH_EVIDENCE.md
+15. docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 The exact drafting order may vary.
@@ -842,10 +838,9 @@ The project README should state:
 - project purpose;
 - source-tree location;
 - principal entrypoints;
-- current development status;
 - validation entry point;
 - links to project documents;
-- release status.
+- release entrypoint and release criteria.
 
 It must not redefine framework architecture.
 
@@ -867,7 +862,6 @@ CATEGORY_AND_LINCAT_CONTRACT
 MORPHOLOGY_SPEC
 SYNTAX_AND_CONSTRUCTOR_RULES
 VALIDATION_SPEC
-STATUS_LEDGER
 RELEASE_CRITERIA
 INTERFILE_CONTRACT_LOCK
 ```
@@ -906,9 +900,9 @@ Do not use this file to duplicate detailed morphology or syntax contracts.
 - extension strategy;
 - API surface where relevant;
 - intended dependency direction;
-- final release assembly.
+- release assembly.
 
-Every named current module should exist or be explicitly planned in the status ledger.
+Every named module must exist in the source tree or be removed from the architecture document.
 
 ---
 
@@ -969,7 +963,7 @@ It becomes contractual when another module depends on it.
 - fallback policy;
 - known incomplete paradigms.
 
-Every temporary fallback should appear in `STATUS_LEDGER.md`.
+Every unresolved fallback that affects correctness or release must appear in `KNOWN_ISSUES.md`.
 
 ---
 
@@ -1037,39 +1031,23 @@ A scenario without a requirement may be redundant or insufficiently documented.
 
 ---
 
-## 41. Status ledger
+## 41. Project issue handling
 
-`STATUS_LEDGER.md` records temporary and incomplete states.
+`KNOWN_ISSUES.md` records unresolved defects, accepted limitations, missing evidence and release blockers that affect the active project.
 
-Examples:
-
-```text
-placeholder implementation
-fallback morphology
-missing linearization
-incomplete module
-blocked scenario
-known downstream failure
-experimental constructor
-temporary alias
-deferred cleanup
-```
-
-Every entry should include:
+Each issue should identify:
 
 ```text
 ID
-status
 owner
 affected files
-reason
+problem
 risk
 validation impact
-exit condition
-target milestone
+resolution criteria
 ```
 
-Do not hide temporary code in comments only.
+This document is not used to track routine implementation progress. It records only facts that materially affect correctness, validation, compatibility or release.
 
 ---
 
@@ -1114,7 +1092,7 @@ A known issue is not automatically acceptable for release.
 
 ## 44. Release criteria
 
-`RELEASE_CRITERIA.md` should define the project-specific final gate.
+`RELEASE_CRITERIA.md` should define the project-specific release gate.
 
 Typical criteria:
 
@@ -1123,7 +1101,7 @@ all configured checkpoints pass
 all required scenarios pass
 no unresolved release-blocking ledger items
 no disallowed missing functions
-final entrypoint loads
+release entrypoint loads
 PGF is produced when required
 PGF belongs to current source state
 required golds match
@@ -1147,7 +1125,7 @@ Release criteria must not depend only on a console statement that was not preser
 - published references;
 - upstream RGL conventions;
 - issue discussions;
-- experimental evidence.
+- evaluation evidence.
 
 It should distinguish source evidence from project interpretation.
 
@@ -1200,9 +1178,9 @@ Search the active project for placeholders such as:
 <YYYY-MM-DD>
 ```
 
-No unresolved placeholder may remain in a document claiming active or final status.
+No unresolved placeholder may remain in an active normative document.
 
-Placeholders may remain only when explicitly describing a template or future example.
+Placeholders may remain only when explicitly describing a template or generic example.
 
 ---
 
@@ -1236,21 +1214,17 @@ Do not delete a contract ID and reuse it for unrelated behavior.
 
 ---
 
-## 49. Contract status
+## 49. Contract completeness
 
-Project contract statuses should use the vocabulary defined by the active lock.
+Every required project contract must be:
 
-Typical values:
+- populated with concrete project facts;
+- marked not applicable with a rationale when the contract does not apply;
+- linked to its provider, consumers and validation evidence;
+- free of unresolved template placeholders;
+- consistent with current source, scenarios, configuration and release criteria.
 
-```text
-active
-experimental
-deprecated
-blocked
-retired
-```
-
-A release-significant required contract should not remain unresolved or ambiguously planned in a final project.
+A required release contract cannot remain ambiguous. Contract identifiers must not be deleted and reused for unrelated behavior.
 
 ---
 
@@ -1377,7 +1351,7 @@ For each scenario, record:
 
 A scenario must load the documented intended entrypoint.
 
-Loading a lower-level substitute is not equivalent to validating the final grammar.
+Loading a lower-level substitute is not equivalent to validating the release grammar.
 
 ---
 
@@ -1447,7 +1421,7 @@ source evidence
 
 Inputs used for release should be version-controlled.
 
-Temporary generated input must not silently replace canonical release input.
+Generated input must not silently replace canonical release input.
 
 ---
 
@@ -1485,7 +1459,7 @@ Recommended workflow:
 10. create or update the gold explicitly;
 11. commit scenario and gold together.
 
-A gold file must not be accepted merely because the current implementation produced it.
+A gold file must not be accepted merely because the current run produced it.
 
 ---
 
@@ -1610,7 +1584,7 @@ Recommended conceptual command:
 gf-wordbench project check-structure
 ```
 
-The final command surface belongs to the CLI reference.
+The canonical command surface belongs to the CLI reference.
 
 ---
 
@@ -1699,7 +1673,7 @@ Confirm:
 - configured checkpoint scenarios execute;
 - direct/downstream relationships are interpretable;
 - evidence paths exist;
-- incomplete checkpoints are reflected in the status ledger.
+- unresolved checkpoint defects are recorded in `KNOWN_ISSUES.md`.
 
 ---
 
@@ -1788,12 +1762,12 @@ Release validation requires:
 [ ] Required scenarios pass
 [ ] Required golds match
 [ ] Missing functions satisfy policy
-[ ] Final entrypoint validates
+[ ] Release entrypoint validates
 [ ] PGF produced when required
 [ ] PGF belongs to current source state
 [ ] Manifest verifies
 [ ] Release criteria pass
-[ ] No unresolved release-blocking status item
+[ ] No unresolved release-blocking known issue
 ```
 
 ---
@@ -1806,36 +1780,27 @@ A copied template becomes the active project only after:
 - active source root is configured;
 - placeholders are removed from authoritative files;
 - required path references resolve;
-- at least one entrypoint is configured or explicitly marked bootstrap-incomplete;
+- at least one intended entrypoint is configured;
 - project structure validation passes;
 - no old-language identity remains active.
 
-A template copy with placeholders is not an active final project.
+A template copy with unresolved required placeholders is not an active project.
 
 ---
 
-## 76. Bootstrap-incomplete state
+## 76. Projects without release assets
 
-A new implementation may temporarily have:
+A newly initialized project may exist before it has gold files, a PGF or complete release coverage.
 
-```text
-no final entrypoint
-empty required scenario list
-incomplete contract entries
-no gold files
-no PGF
-```
+In that condition:
 
-This is allowed only as an explicit bootstrap state.
+- the project structure and `project.toml` must still be valid;
+- at least one intended entrypoint must be configured;
+- missing release assets must be recorded in `KNOWN_ISSUES.md` when they block validation or release;
+- project documents must describe only modules and contracts that exist;
+- release validation must fail when a required asset or criterion is absent.
 
-Required actions:
-
-- record incompleteness in `STATUS_LEDGER.md`;
-- avoid claiming release readiness;
-- keep schema valid;
-- identify exit conditions;
-- update project documents as modules become real;
-- promote contracts deliberately from planned/blocked to active.
+The project becomes release-ready only by satisfying `RELEASE_CRITERIA.md`; no lifecycle label changes the underlying evidence.
 
 ---
 
@@ -2066,7 +2031,7 @@ Problem:
 
 - configuration becomes noisy;
 - release intent is unclear;
-- lower-level modules are mistaken for final grammar proofs.
+- lower-level modules are mistaken for release-grammar proofs.
 
 Fix:
 
@@ -2078,9 +2043,9 @@ Use source selection for files, checkpoints for layers and entrypoints for top-l
 
 Problem:
 
-- failures appear only at the final grammar;
+- failures appear only at the release grammar;
 - dependency cascades are harder to classify;
-- development progress is hard to measure.
+- failure localization becomes unnecessarily difficult.
 
 Fix:
 
@@ -2131,7 +2096,7 @@ templates/project/ contains current language names and module paths
 
 Why invalid:
 
-- future projects inherit false assumptions;
+- subsequent projects inherit false assumptions;
 - template ceases to be reusable.
 
 Fix:
@@ -2242,21 +2207,21 @@ remain in an active normative file.
 
 Fix:
 
-Replace with real facts, mark not applicable explicitly or keep project in bootstrap-incomplete status.
+Replace with real facts or mark the contract not applicable with an explicit rationale.
 
 ---
 
-## 98. Common failure: documentation describes planned modules as current
+## 98. Common failure: documentation references nonexistent modules
 
 Problem:
 
-- architecture says a module exists;
-- source tree does not contain it;
-- scenario references it.
+- architecture names a module that is absent from the source tree;
+- configuration or scenarios reference that module;
+- validation cannot resolve the documented dependency.
 
 Fix:
 
-Use `STATUS_LEDGER.md` for planned or blocked work and label future design clearly.
+Remove the invalid reference or add the required module and its contracts before integration. Project documentation must describe the actual source architecture.
 
 ---
 
@@ -2386,7 +2351,6 @@ A project is validation-complete when:
 [ ] Coverage matrix maps requirements to evidence
 [ ] Checkpoint validation works
 [ ] Diagnostic run works
-[ ] Status ledger reflects incomplete behavior
 [ ] Raw evidence and reports are preserved
 ```
 
@@ -2430,7 +2394,7 @@ gf-wordbench audit --mode release
 
 Strict variants should be used before release.
 
-The actual implemented commands remain authoritative in `CLI_REFERENCE.md`.
+The canonical commands are defined in `CLI_REFERENCE.md`.
 
 ---
 
@@ -2449,7 +2413,6 @@ language overview
 architecture
 dependency map
 validation specification
-status ledger
 active project lock
 validation directory structure
 ```
@@ -2463,7 +2426,7 @@ A project may begin without gold files only when no required gold-backed scenari
 A release-capable project needs, in addition:
 
 ```text
-configured final entrypoint
+configured release entrypoint
 configured checkpoints
 required scenarios
 scenario inputs
@@ -2504,7 +2467,6 @@ no unresolved release blocker
 [ ] Complete syntax/constructor rules
 [ ] Complete validation specification
 [ ] Complete coverage matrix
-[ ] Complete status ledger
 [ ] Complete decision log
 [ ] Complete known issues
 [ ] Complete release criteria
@@ -2547,13 +2509,13 @@ gold files
 release policy
 ```
 
-Do not merge a project configuration that references nonexistent required assets unless the project is explicitly marked bootstrap-incomplete.
+Do not merge a project configuration that references nonexistent required assets.
 
 ---
 
 ## 112. Automation expectations
 
-A future project initializer/checker should be able to verify mechanically:
+The project initializer and checker verify mechanically:
 
 1. template inventory exists;
 2. project inventory exists;
@@ -2649,9 +2611,11 @@ Project documents may contain real module names.
 
 They must not redefine framework Python architecture.
 
+`gf-portfolio` remains outside both boundaries. It may consume public versioned Wordbench artifacts, but project creation must not write Portfolio state or create a Wordbench dependency on Portfolio.
+
 ---
 
-## 116. Final review questions
+## 116. Project review questions
 
 Before declaring the project active, answer:
 
@@ -2669,7 +2633,7 @@ Which golds are required?
 Which missing functions are acceptable?
 Which artifact proves release?
 Which known issues block release?
-Which project contracts remain incomplete?
+Which required project contracts are satisfied by current evidence?
 Can another developer reproduce the project without GUI state?
 ```
 
@@ -2714,16 +2678,15 @@ Every answer must point to an authoritative file.
 
 - `project/README.md`
 - `project/project.toml`
-- `project/docs/00_PROJECT_START_HERE.md`
+- `project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md`
 - `project/docs/INTERFILE_CONTRACT_LOCK.md`
-- `project/docs/VALIDATION_SPEC.md`
-- `project/docs/TEST_COVERAGE_MATRIX.md`
-- `project/docs/STATUS_LEDGER.md`
-- `project/docs/RELEASE_CRITERIA.md`
+- `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`
+- `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`
+- `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`
 
 ---
 
-## 118. Final enforcement rule
+## 118. Enforcement rule
 
 Creating a GF Wordbench project is the act of making one language identity, one source architecture and one validation policy reproducible.
 
@@ -2731,4 +2694,4 @@ Therefore:
 
 > A project is not complete while its identity, entrypoints, checkpoints, scenarios, golds, contracts or release criteria exist only as assumptions.
 
-Every active fact must have one authoritative owner, every required behavior must have evidence, and every template placeholder must be resolved or explicitly classified before release.
+Every active fact must have one authoritative owner, every required behavior must have evidence, and every required template placeholder must be resolved before release.

@@ -2,6 +2,7 @@
 
 **Document ID:** `GF-WB-PROJECT-VALIDATION-SPEC`  
 **Status:** Normative project template  
+**Canonical path:** `templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md`  
 **Applies to:** One active GF language project created from `templates/project/`  
 **Template owner:** GF Wordbench maintainers  
 **Project owner after initialization:** `<PROJECT_OWNER>`  
@@ -13,9 +14,10 @@
 **Source root:** `<SOURCE_ROOT>`  
 **Configuration authority:** `project/project.toml`  
 **Project contract authority:** `project/docs/INTERFILE_CONTRACT_LOCK.md`  
-**Coverage authority:** `project/docs/TEST_COVERAGE_MATRIX.md`  
-**Release authority:** `project/docs/RELEASE_CRITERIA.md`  
-**Status authority:** `project/docs/STATUS_LEDGER.md` and `project/docs/KNOWN_ISSUES.md`  
+**Coverage authority:** `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`  
+**Release authority:** `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`  
+**Known-issue authority:** `project/docs/KNOWN_ISSUES.md`  
+**Documentation alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Template version:** `1.0.0`  
 **Last reviewed:** `<YYYY-MM-DD>`
 
@@ -37,13 +39,13 @@ It specifies:
 - which normalized outputs are compared with reviewed gold files;
 - which `.gfo` and `.pgf` artifacts are required;
 - how process, diagnostic and artifact failures map to project results;
-- how known issues and incomplete states affect release eligibility;
+- how known issues, accepted limitations and release blockers affect release eligibility;
 - which evidence must be persisted;
 - which conditions constitute project release readiness.
 
 The core rule is:
 
-> Every project release criterion must map to current executable evidence or to an explicitly documented manual review when automation is not technically possible.
+> Every project release criterion must map to executable evidence or to an explicitly documented manual review when automation is not technically possible.
 
 This template contains intentional placeholders.
 
@@ -56,7 +58,7 @@ It becomes an active project specification only after every required placeholder
 This file under:
 
 ```text
-templates/project/docs/VALIDATION_SPEC.md
+templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
 ```
 
 remains generic.
@@ -64,7 +66,7 @@ remains generic.
 When initializing a project, copy it to:
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 Then:
@@ -76,9 +78,9 @@ Then:
 5. align entrypoints and checkpoints with `project/project.toml`;
 6. create every required scenario file;
 7. create or approve every required gold file;
-8. map every requirement into `TEST_COVERAGE_MATRIX.md`;
-9. record temporary or blocked coverage in `STATUS_LEDGER.md`;
-10. run initial validation and record the baseline evidence.
+8. map every requirement into `TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md`;
+9. document confirmed limitations or blockers in `KNOWN_ISSUES.md` when applicable;
+10. run validation and retain the resulting evidence.
 
 The active project copy MUST NOT retain unresolved required placeholders while claiming release readiness.
 
@@ -131,21 +133,18 @@ Rules:
 When project validation sources disagree, use this order:
 
 1. `project/project.toml`;
-2. `project/docs/INTERFILE_CONTRACT_LOCK.md`;
-3. current GF source modules;
-4. `project/docs/LANGUAGE_ARCHITECTURE.md`;
-5. `project/docs/MODULE_DEPENDENCY_MAP.md`;
+2. `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`;
+3. `project/docs/INTERFILE_CONTRACT_LOCK.md`;
+4. relevant accepted ADRs and framework contract locks;
+5. the project document that owns the disputed rule;
 6. this active validation specification;
-7. `project/docs/TEST_COVERAGE_MATRIX.md`;
-8. `project/docs/STATUS_LEDGER.md`;
-9. `project/docs/KNOWN_ISSUES.md`;
-10. historical run artifacts.
+7. `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`;
+8. `project/docs/KNOWN_ISSUES.md`;
+9. GF source and retained run evidence for observed behavior.
 
-This hierarchy does not allow configuration to override a broken source contract silently.
+This hierarchy identifies normative ownership. Source and run evidence reveal conformance or drift; they do not silently redefine retained decisions or contracts.
 
-It identifies where the current intended facts are owned.
-
-When the sources disagree, the project is in drift and must be repaired through a coordinated change.
+When authorities and evidence disagree, mark the contradiction `BLOCKED` or `REVIEW_REQUIRED` in the owning record and resolve it through a coordinated change.
 
 ---
 
@@ -200,7 +199,6 @@ This specification governs project validation for:
 - artifact freshness;
 - diagnostic classification;
 - known issues;
-- status-ledger states;
 - release gates;
 - evidence persistence.
 
@@ -220,7 +218,15 @@ This specification does not:
 - infer entrypoints from naming conventions;
 - update gold files during normal validation;
 - accept incomplete behavior merely because it compiles;
-- define language-specific facts in the reusable template.
+- define language-specific facts in the reusable template;
+- aggregate several Wordbench workspaces or depend on `gf-portfolio`.
+
+### 7.1 Workspace and Portfolio boundary
+
+One GF Wordbench workspace contains exactly one active GF language project.
+One validation run resolves one project and one normative language target.
+
+Cross-workspace aggregation belongs to the independent `gf-portfolio` product, which may consume only public, versioned Wordbench artifacts. GF Wordbench does not read Portfolio runtime state or configuration.
 
 ---
 
@@ -278,9 +284,9 @@ GF source files
 
 Stale `.gfo`, `.pgf`, normalized output or previous reports cannot satisfy current validation.
 
-### 8.8 Incomplete states remain visible
+### 8.8 Limitations and exceptions remain explicit
 
-Fallback, scaffolding, blocked, disabled and warning states remain recorded and participate in release policy.
+Fallbacks, scaffolding, disabled behavior, accepted limitations and release exceptions remain documented in their owning specification, decision or known-issue record and participate in release policy.
 
 ### 8.9 Reports do not rerun validation
 
@@ -442,18 +448,18 @@ Purpose:
 
 - validate configured dependency layers;
 - run checkpoint-associated scenarios;
-- detect direct and downstream failures before final assembly.
+- detect direct and downstream failures before release assembly.
 
 ### 13.3 `release`
 
 Purpose:
 
 - execute every required project gate;
-- validate final entrypoints;
+- validate release entrypoints;
 - run every required scenario;
 - compare required golds;
 - produce and verify required release artifacts;
-- enforce issue and status-ledger policy.
+- enforce known-issue and release policy.
 
 ### 13.4 `diagnostic`
 
@@ -479,7 +485,7 @@ Replace this matrix during project initialization.
 | Static scan | targeted | configured | required if policy says so | broad |
 | Direct file compilation | selected | configured | required set | broad |
 | Checkpoint compilation | optional | required | required | required/broad |
-| Final entrypoint compile | optional | configured | required | required |
+| Release entrypoint compile | optional | configured | required | required |
 | Entry load scenario | optional | configured | required | required |
 | Missing-function scenario | optional | configured | required per policy | required |
 | Parse scenarios | optional | configured | required set | broad |
@@ -514,7 +520,7 @@ resolve project identity
     → compare required golds
     → verify generated artifacts
     → classify diagnostics
-    → apply issue/status/release policy
+    → apply known-issue and release policy
     → build structured results
     → write reports
     → finalize manifest
@@ -572,7 +578,7 @@ Identifiers:
 - are not reused;
 - appear in the coverage matrix;
 - link to scenarios or evidence;
-- remain listed after retirement with a retired status where history matters.
+- are not reused; removed requirements remain traceable through decision or migration records when compatibility requires it.
 
 ---
 
@@ -583,7 +589,7 @@ Use this template for every project requirement.
 ```markdown
 ## VAL-<DOMAIN>-<NUMBER> — <Requirement title>
 
-**Status:** required | optional | conditional | experimental | retired  
+**Requirement class:** required | optional | conditional  
 **Applies in modes:** quick | checkpoint | release | diagnostic  
 **Owner:** <document/module/maintainer>  
 **Project contract:** <PIFC-ID>  
@@ -635,7 +641,7 @@ Use this template for every project requirement.
 
 ### VAL-CONFIG-001 — Project schema identity
 
-**Template status:** required
+**Requirement class:** required
 
 The active configuration must declare the canonical project schema identity and supported version.
 
@@ -668,7 +674,7 @@ error_kind = CONFIG
 
 ### VAL-CONFIG-002 — Single active project identity
 
-**Template status:** required
+**Requirement class:** required
 
 Validate:
 
@@ -694,7 +700,7 @@ Success criteria:
 
 ### VAL-CONFIG-003 — Portable project paths
 
-**Template status:** required
+**Requirement class:** required
 
 Validate that project-owned paths:
 
@@ -713,7 +719,7 @@ Tool-local paths such as GF executable and RGL installation follow local configu
 
 ### VAL-CONFIG-004 — Entrypoint, checkpoint and scenario registries
 
-**Template status:** required
+**Requirement class:** required
 
 Validate:
 
@@ -732,13 +738,13 @@ Validate:
 
 ### VAL-CONFIG-005 — GF executable and compatibility
 
-**Template status:** required
+**Requirement class:** required
 
 Validate:
 
 - executable resolves;
 - version probe completes;
-- version is supported, conditionally supported or explicitly experimental;
+- version is accepted or rejected by the documented compatibility policy;
 - required commands/capabilities are available;
 - working directory and GF path are explicit.
 
@@ -752,7 +758,7 @@ Strict release mode should reject unknown compatibility unless an explicit relea
 
 ### VAL-CONFIG-006 — GF path components
 
-**Template status:** required
+**Requirement class:** required
 
 Validate the ordered GF path components required by the active project.
 
@@ -768,7 +774,7 @@ A scenario must not invent a conflicting GF path.
 
 ### VAL-SOURCE-001 — Source root exists
 
-**Template status:** required
+**Requirement class:** required
 
 Success criteria:
 
@@ -779,7 +785,7 @@ Success criteria:
 
 ### VAL-SOURCE-002 — Source selection is non-empty
 
-**Template status:** required after bootstrap
+**Requirement class:** required after initialization
 
 Success criteria:
 
@@ -788,7 +794,7 @@ Success criteria:
 - temporary backup files are excluded under policy;
 - selection order is deterministic.
 
-A bootstrap project may temporarily allow an empty source selection only when explicitly recorded in `STATUS_LEDGER.md` and blocked from release.
+An initialized project may allow an empty source selection only when the initialization contract permits it; such a project cannot satisfy release criteria.
 
 ---
 
@@ -813,7 +819,7 @@ For every selected `.gf` file:
 Validate:
 
 - every major direct import is documented;
-- lower-level modules do not import final entrypoints;
+- lower-level modules do not import release entrypoints;
 - prohibited cycles are absent;
 - provider ownership remains unique;
 - moved/renamed modules are reflected in consumers;
@@ -833,9 +839,8 @@ The active project must define which scan rules are:
 
 ```text
 required
-warning-only
-experimental
-disabled
+advisory
+not applicable
 ```
 
 Recommended scan domains:
@@ -947,7 +952,7 @@ Replace this table with active checkpoint facts.
 | 2 | `<CHECKPOINT_MODULE>` | `<categories/lincats>` | checkpoint, release | `<SCENARIO_ID or none>` | yes |
 | 3 | `<CHECKPOINT_MODULE>` | `<syntax/structural>` | checkpoint, release | `<SCENARIO_ID or none>` | yes |
 | 4 | `<CHECKPOINT_MODULE>` | `<extensions>` | `<modes>` | `<SCENARIO_ID or none>` | `<yes/no>` |
-| 5 | `<RELEASE_ENTRYPOINT>` | `<final assembly>` | release | `<SCENARIO_ID>` | yes |
+| 5 | `<RELEASE_ENTRYPOINT>` | `<release assembly>` | release | `<SCENARIO_ID>` | yes |
 
 The active project must remove unused rows and supply exact module names.
 
@@ -962,7 +967,7 @@ The active project must remove unused rows and supply exact module names.
 - A dependent skip remains visible.
 - A downstream failure is not presented as an independent root failure when evidence identifies the provider.
 - Skipping a release checkpoint requires an explicit release exception.
-- Successful final entrypoint compilation does not erase a required checkpoint failure.
+- Successful release entrypoint compilation does not erase a required checkpoint failure.
 
 ---
 
@@ -1020,15 +1025,15 @@ Stale artifact existence cannot satisfy a failed build.
 
 ## 36. Abstract/concrete completeness
 
-The project must define the completeness policy for concrete implementations.
+The project must define the completeness policy for concrete syntaxes and declared entrypoints.
 
 Possible release policies:
 
 ```text
 zero missing functions
 zero missing functions in release entrypoints
-explicit allowlist for experimental modules
-separate stable and experimental entrypoints
+explicit allowlist for modules excluded from the release surface
+separate release and research entrypoints
 ```
 
 Replace this template text with one selected policy.
@@ -1168,7 +1173,7 @@ Rules:
 
 | Input ID | Path | Format | Encoding | Consumer scenarios | Ordering semantic | Stability |
 |---|---|---|---|---|---:|---|
-| `<INPUT_ID>` | `validation/inputs/<INPUT_FILE>` | `<format>` | UTF-8 | `<SCENARIO_ID>` | yes/no | stable/experimental |
+| `<INPUT_ID>` | `validation/inputs/<INPUT_FILE>` | `<format>` | UTF-8 | `<SCENARIO_ID>` | yes/no | release-controlled/advisory |
 
 Remove the example row in the active project.
 
@@ -1350,7 +1355,7 @@ Every extension family required for release must have:
 - consumer list;
 - checkpoint or entrypoint compile evidence;
 - scenario evidence;
-- status-ledger alignment.
+- known-issue and release-policy alignment.
 
 ---
 
@@ -1524,7 +1529,7 @@ Preserve:
 - duplicate lines;
 - empty sections;
 - meaningful whitespace;
-- final newline policy.
+- terminating-newline policy.
 
 The comparator must not apply hidden semantic cleanup.
 
@@ -1979,7 +1984,7 @@ Every known issue records:
 
 ```text
 issue ID
-status
+disposition
 affected requirements
 affected files/modules
 evidence
@@ -1995,22 +2000,7 @@ An undocumented warning cannot be silently accepted for release.
 
 ---
 
-## 83. Status-ledger integration
-
-Every temporary, fallback, blocked, warning, disabled, scaffolded or experimental implementation state must be represented in `STATUS_LEDGER.md`.
-
-The validation specification must state:
-
-- which requirement detects it;
-- whether scenarios cover it;
-- whether it blocks release;
-- what evidence proves removal or promotion.
-
-A compiling fallback is not automatically stable.
-
----
-
-## 84. Manual review
+## 83. Manual review
 
 Manual review is permitted only when automation is not technically practical.
 
@@ -2032,12 +2022,12 @@ Manual review cannot substitute for native GF compilation where compilation is t
 
 ---
 
-## 85. Coverage matrix relationship
+## 84. Coverage matrix relationship
 
 Every required validation requirement must appear in:
 
 ```text
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 ```
 
 Minimum mapping:
@@ -2052,16 +2042,16 @@ input
 gold/assertion
 evidence artifact
 release criterion
-current status
+evidence obligation
 ```
 
-A required release criterion without a coverage row is incomplete.
+A required release criterion without a coverage row violates the project validation contract.
 
 A scenario without a mapped requirement should be reviewed for purpose or redundancy.
 
 ---
 
-## 86. Documentation consistency
+## 85. Documentation consistency
 
 Validation should check that:
 
@@ -2072,14 +2062,13 @@ Validation should check that:
 - scenario IDs match registry/files;
 - gold IDs match scenarios;
 - known issues reference valid requirements;
-- status-ledger entries reference real modules;
 - release criteria reference executable evidence;
 - no stale language identifier remains;
 - no required placeholder remains in active normative documents.
 
 ---
 
-## 87. Release gate model
+## 86. Release gate model
 
 Release readiness is the conjunction of configured required gates.
 
@@ -2096,7 +2085,6 @@ AND missing-function policy passes
 AND required PGF verifies
 AND required artifacts verify
 AND no release-blocking known issue remains
-AND no release-blocking status-ledger item remains
 AND required documentation/coverage is complete
 ```
 
@@ -2104,7 +2092,7 @@ No single successful artifact overrides another failed required gate.
 
 ---
 
-## 88. Release criteria registry template
+## 87. Release criteria registry template
 
 | Gate ID | Requirement | Evidence | Blocking | Exception allowed | Owner |
 |---|---|---|---:|---:|---|
@@ -2114,13 +2102,13 @@ No single successful artifact overrides another failed required gate.
 | `REL-004` | Required golds match | comparison results | yes | no | project reviewers |
 | `REL-005` | Missing-function policy passes | missing scenario | yes | `<policy>` | architecture maintainers |
 | `REL-006` | Required PGF verifies | artifact + manifest | `<yes/no>` | no | release maintainers |
-| `REL-007` | No blocking issues | issue/ledger review | yes | explicit only | project owner |
+| `REL-007` | No blocking issues | known-issue review | yes | explicit only | project owner |
 
 Replace or extend this table in the active project.
 
 ---
 
-## 89. Release exception policy
+## 88. Release exception policy
 
 A release exception must state:
 
@@ -2147,7 +2135,7 @@ Rules:
 
 ---
 
-## 90. Baseline run
+## 89. Baseline run
 
 A project may designate a compatible baseline run for previous-run regression comparison.
 
@@ -2169,7 +2157,7 @@ A failed or partial release run must not become the accepted baseline without ex
 
 ---
 
-## 91. Gold comparison versus run regression
+## 90. Gold comparison versus run regression
 
 Gold comparison asks:
 
@@ -2191,7 +2179,7 @@ A result may change from the baseline and become correct according to gold.
 
 ---
 
-## 92. Compatibility and versions
+## 91. Compatibility and versions
 
 The active project must record as applicable:
 
@@ -2211,7 +2199,7 @@ Application version does not replace schema/profile/project versions.
 
 ---
 
-## 93. GF version changes
+## 92. GF version changes
 
 Before accepting a new GF version:
 
@@ -2232,7 +2220,7 @@ A semantic output change requires project review.
 
 ---
 
-## 94. Project contract changes
+## 93. Project contract changes
 
 A contract change is complete only when updated together:
 
@@ -2245,7 +2233,6 @@ scenarios
 inputs
 golds
 dependency map
-status ledger
 decision log
 validation specification
 coverage matrix
@@ -2257,7 +2244,7 @@ An isolated file edit is insufficient.
 
 ---
 
-## 95. Validation change classification
+## 94. Validation change classification
 
 ### Internal compatible change
 
@@ -2309,7 +2296,7 @@ Expected action:
 
 ---
 
-## 96. Required project-specific validation sections
+## 95. Required project-specific validation sections
 
 Before the active specification is complete, add explicit requirements for:
 
@@ -2339,7 +2326,7 @@ Do not leave the absence ambiguous.
 
 ---
 
-## 97. Project validation inventory
+## 96. Project validation inventory
 
 Replace this high-level registry.
 
@@ -2351,7 +2338,7 @@ Replace this high-level registry.
 | Syntax | `<VAL-LIN/PARSE-*>` | syntax rules | scenarios/golds | `<yes/no>` |
 | Lincats | `<VAL-COMPILE-*>` | category contract | checkpoints | yes |
 | Structural vocabulary | `<REQUIREMENT_IDS>` | syntax/architecture | scenario/gold | `<yes/no>` |
-| Extensions | `<REQUIREMENT_IDS>` | architecture/status ledger | compile/scenario | `<yes/no>` |
+| Extensions | `<REQUIREMENT_IDS>` | architecture/ | compile/scenario | `<yes/no>` |
 | Entrypoints | `VAL-ENTRY-*` | architecture/config | load/compile | yes |
 | Missing functions | `VAL-MISSING-*` | validation/release policy | scenario/assertion | yes |
 | PGF | `VAL-PGF-*` | release criteria | build/manifest | `<yes/no>` |
@@ -2359,7 +2346,7 @@ Replace this high-level registry.
 
 ---
 
-## 98. Initial validation sequence
+## 97. Initial validation sequence
 
 For a newly initialized project:
 
@@ -2407,7 +2394,7 @@ For a newly initialized project:
 
 ### Phase 8 — Release artifact
 
-- final entrypoint selected;
+- release entrypoint selected;
 - PGF built if required;
 - artifact freshness/integrity verified.
 
@@ -2419,35 +2406,24 @@ For a newly initialized project:
 
 ---
 
-## 99. Bootstrap-incomplete policy
+## 98. Initialization constraints
 
-A project may temporarily be structurally valid while incomplete.
+Initialization may create a structurally valid project before all release requirements are defined.
 
-Examples:
+The active project cannot satisfy release criteria while any required entrypoint, scenario, gold, linguistic contract, toolchain rule or evidence mapping is absent.
 
-```text
-no final entrypoint
-no required scenario yet
-no gold yet
-incomplete morphology
-scaffolding module
-unknown GF compatibility
-```
+A confirmed limitation or blocker belongs in `KNOWN_ISSUES.md` or a retained decision, with:
 
-Every bootstrap gap must:
-
-- appear in `STATUS_LEDGER.md`;
-- state an owner;
-- state validation impact;
-- state release impact;
-- state an exit condition;
-- remain visible in reports where applicable.
-
-Bootstrap-incomplete projects must not claim release readiness.
+- affected requirements;
+- owner;
+- validation impact;
+- release disposition;
+- resolution condition;
+- available evidence.
 
 ---
 
-## 100. Validation evidence review
+## 99. Validation evidence review
 
 For every release-significant failure, reviewers should be able to locate:
 
@@ -2470,7 +2446,7 @@ If evidence cannot establish what ran and why it passed or failed, the validatio
 
 ---
 
-## 101. Required automated checks
+## 100. Required automated checks
 
 A complete project checker should validate:
 
@@ -2486,40 +2462,31 @@ A complete project checker should validate:
 10. gold mapping/schema/profile;
 11. required gold existence;
 12. expected `.gfo`/`.pgf` names;
-13. status-ledger references;
+13. known-issue references;
 14. known-issue release impact;
 15. validation-spec requirement IDs;
-16. coverage-matrix completeness;
-17. unresolved active placeholders;
-18. stale language identifiers;
-19. required document existence;
-20. release-gate traceability.
+15. coverage-matrix completeness;
+16. unresolved active placeholders;
+17. stale language identifiers;
+18. required document existence;
+19. release-gate traceability.
 
 ---
 
-## 102. Conceptual commands
+## 101. CLI boundary
 
-The following commands are conceptual until confirmed by `docs/usage/CLI_REFERENCE.md`:
+Exact commands, flags, aliases, target syntax and exit semantics are owned by:
 
 ```text
-gf-wordbench project check
-gf-wordbench project contracts check
-gf-wordbench scenarios check
-gf-wordbench normalization check
-gf-wordbench gold check
-gf-wordbench audit --mode quick
-gf-wordbench audit --mode checkpoint
-gf-wordbench audit --mode diagnostic
-gf-wordbench audit --mode release
+docs/usage/CLI_REFERENCE.md
 ```
 
-This template must not claim a conceptual command is implemented.
+This project template refers only to canonical validation modes, typed project objects and required behavior.
 
-When the final CLI differs, the active project documentation must use the implemented command surface.
-
+It must not define an independent command surface or claim that an undocumented command exists.
 ---
 
-## 103. Test requirements for the specification itself
+## 102. Test requirements for the specification itself
 
 Framework/project checks should test:
 
@@ -2538,7 +2505,7 @@ The active project should test representative project rules through native GF in
 
 ---
 
-## 104. Validation-spec drift indicators
+## 103. Validation-spec drift indicators
 
 Drift exists when:
 
@@ -2566,7 +2533,7 @@ Every drift condition requires restoration or a coordinated project decision.
 
 ---
 
-## 105. Active-project completion checklist
+## 104. Active-project completion checklist
 
 Use after copying this template.
 
@@ -2595,11 +2562,11 @@ Use after copying this template.
 [ ] Define artifact freshness checks
 [ ] Define timeout/output bounds
 [ ] Define known-issue policy
-[ ] Define status-ledger release impact
+[ ] Define known-issue release impact
 [ ] Define manual review criteria
-[ ] Map every requirement into TEST_COVERAGE_MATRIX.md
+[ ] Map every requirement into TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md
 [ ] Align INTERFILE_CONTRACT_LOCK.md
-[ ] Align RELEASE_CRITERIA.md
+[ ] Align RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md
 [ ] Remove non-applicable example rows
 [ ] Remove unresolved active placeholders
 [ ] Execute initial quick validation
@@ -2613,7 +2580,7 @@ Use after copying this template.
 
 ---
 
-## 106. Template preservation checklist
+## 105. Template preservation checklist
 
 For the reusable template copy:
 
@@ -2633,11 +2600,11 @@ For the reusable template copy:
 
 ---
 
-## 107. Related project-template documents
+## 106. Related project-template documents
 
 - `templates/project/README.md`
 - `templates/project/project.toml`
-- `templates/project/docs/00_PROJECT_START_HERE.md`
+- `templates/project/docs/00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md`
 - `templates/project/docs/INTERFILE_CONTRACT_LOCK.md`
 - `templates/project/docs/LANGUAGE_OVERVIEW.md`
 - `templates/project/docs/LANGUAGE_ARCHITECTURE.md`
@@ -2645,11 +2612,10 @@ For the reusable template copy:
 - `templates/project/docs/CATEGORY_AND_LINCAT_CONTRACT.md`
 - `templates/project/docs/MORPHOLOGY_SPEC.md`
 - `templates/project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md`
-- `templates/project/docs/TEST_COVERAGE_MATRIX.md`
-- `templates/project/docs/STATUS_LEDGER.md`
+- `templates/project/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md`
 - `templates/project/docs/DECISION_LOG.md`
 - `templates/project/docs/KNOWN_ISSUES.md`
-- `templates/project/docs/RELEASE_CRITERIA.md`
+- `templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md`
 - `templates/project/docs/RESEARCH_EVIDENCE.md`
 - `templates/project/validation/README.md`
 - `templates/project/validation/scenarios/README.md`
@@ -2658,7 +2624,7 @@ For the reusable template copy:
 
 ---
 
-## 108. Related framework documents
+## 107. Related framework documents
 
 - `docs/projects/PROJECT_MODEL.md`
 - `docs/projects/CREATING_A_PROJECT.md`
@@ -2673,20 +2639,17 @@ For the reusable template copy:
 - `docs/validation/SCENARIO_VALIDATION.md`
 - `docs/validation/REGRESSION_COMPARISON.md`
 - `docs/validation/RELEASE_GATES.md`
-- `docs/scenarios/SCENARIO_FORMAT.md`
-- `docs/scenarios/WRITING_GFS_SCENARIOS.md`
-- `docs/scenarios/GOLDEN_TESTS.md`
-- `docs/scenarios/UPDATING_GOLD_FILES.md`
-- `docs/gf/GF_OUTPUT_NORMALIZATION.md`
 - `docs/diagnostics/ERROR_CLASSIFICATION.md`
 - `docs/diagnostics/TIMEOUTS_AND_PROCESS_FAILURES.md`
 - `docs/architecture/ARTIFACT_MODEL.md`
 - `docs/PERSISTED_SCHEMA_LOCK.md`
 - `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`
+- `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
+- `docs/usage/CLI_REFERENCE.md`
 
 ---
 
-## 109. Final enforcement rule
+## 108. Enforcement rule
 
 This template defines how one active language project turns source contracts and linguistic requirements into reproducible GF evidence.
 

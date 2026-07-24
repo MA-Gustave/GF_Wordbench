@@ -4,8 +4,9 @@
 **Status:** Normative development guide  
 **Applies to:** Framework extensions, validation stages, reports, schemas, commands, GUI features, external tools, project templates, and active-project capabilities  
 **Primary owners:** GF Wordbench maintainers  
-**Target architecture:** Final GF Wordbench architecture  
-**Last structural review:** 2026-07-22
+**Architecture:** Hexagonal modular monolith  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Last reviewed:** 2026-07-24
 
 ---
 
@@ -15,8 +16,8 @@ This document defines how to extend GF Wordbench without creating duplicate owne
 
 It covers additions to:
 
-- Python framework components;
-- audit and validation stages;
+- module domain, application, port, adapter, entrypoint, and bootstrap components;
+- validation stages and run orchestration;
 - shared result models;
 - diagnostics and classification;
 - reports and artifacts;
@@ -30,7 +31,7 @@ It covers additions to:
 - persisted schemas;
 - compatibility and migration support.
 
-The objective is not to make every behavior pluggable.
+The objective is not to make every behavior dynamically pluggable.
 
 The objective is to provide enough extension structure to keep the system maintainable while preserving a small, explicit architecture.
 
@@ -51,7 +52,7 @@ A new component is justified when at least one of the following is true:
 5. it requires its own compatibility policy;
 6. it forms a security or trust boundary;
 7. it requires isolated integration tests;
-8. keeping it inside the current owner would create conflicting responsibilities.
+8. keeping it inside the existing owner would create conflicting responsibilities.
 
 Otherwise, keep the behavior as an internal helper of the existing owner.
 
@@ -63,6 +64,7 @@ Extensions must remain consistent with:
 
 ```text
 CONTRIBUTING.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -74,6 +76,12 @@ docs/development/CODING_STANDARDS.md
 docs/development/TESTING_GF_WORDBENCH.md
 docs/development/BACKWARD_COMPATIBILITY.md
 docs/release/VERSIONING_POLICY.md
+docs/decisions/ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md
+docs/decisions/ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-run closure.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
+docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
@@ -93,7 +101,49 @@ No extension may bypass the relevant lock because it appears small.
 
 ---
 
-## 4. Extension philosophy
+## 4. Product and architectural boundary
+
+GF Wordbench is a hexagonal modular monolith for one active GF project and one normative target per workspace and run.
+
+Functional ownership is divided among:
+
+```text
+projects
+runs
+validation
+diagnostics
+reporting
+```
+
+Each module uses the applicable architectural rings:
+
+```text
+domain
+application
+ports
+adapters
+entrypoints
+bootstrap
+```
+
+Extensions preserve inward dependency direction. Domain and application code do not depend on adapters, CLI, GUI, report renderers, or concrete external executables.
+
+GF interactions cross the dedicated GF anti-corruption boundary. New GF-backed behavior uses `GfToolPort` and its adapters rather than constructing commands or parsing tool output inside domain code.
+
+Multi-workspace discovery, multilingual aggregation, portfolio navigation, and portfolio-level readiness belong exclusively to the independent `gf-portfolio` product.
+
+The permitted dependency direction is:
+
+```text
+gf-portfolio
+    → public, versioned GF Wordbench summaries, manifests, and artifacts
+```
+
+GF Wordbench must not import, call, configure, store private state for, or require `gf-portfolio`.
+
+---
+
+## 5. Extension philosophy
 
 GF Wordbench favors:
 
@@ -124,13 +174,13 @@ unversioned extension data
 language-specific framework plugins
 ```
 
-A simple explicit import is preferable to a plugin loader when the set of components is maintained in the same repository.
+Explicit bootstrap registration is preferable to runtime plugin discovery when components are maintained in the same repository.
 
 ---
 
-# 5. Extension categories
+## 6. Extension categories
 
-Every extension must be classified before implementation.
+Every extension is classified before coding.
 
 Canonical categories:
 
@@ -157,7 +207,7 @@ The classification determines which contracts and tests apply.
 
 ---
 
-## 5.1 Internal helper
+### 6.1 Internal helper
 
 Use when:
 
@@ -173,7 +223,7 @@ Examples:
 private marker parser inside scenario_runner.py
 private compile-artifact verification helper
 private Markdown table renderer
-private scanner rule implementation
+private scanner rule
 ```
 
 Requirements:
@@ -185,7 +235,7 @@ Requirements:
 
 ---
 
-## 5.2 Compatible behavior extension
+### 6.2 Compatible behavior extension
 
 Use when existing public contracts remain true.
 
@@ -196,7 +246,7 @@ better internal algorithm
 faster deterministic sorting
 clearer non-contractual log wording
 additional internal validation
-optional in-memory metadata not serialized
+optional runtime-only metadata
 ```
 
 Requirements:
@@ -208,7 +258,7 @@ Requirements:
 
 ---
 
-## 5.3 Validation-rule extension
+### 6.3 Validation-rule extension
 
 Use when adding a rule to an existing validation stage.
 
@@ -227,7 +277,7 @@ A validation rule does not justify a new stage unless it requires a distinct req
 
 ---
 
-## 5.4 Validation-stage extension
+### 6.4 Validation-stage extension
 
 Use when the operation:
 
@@ -250,7 +300,7 @@ Adding a validation stage is an architectural change.
 
 ---
 
-## 5.5 Result-model extension
+### 6.5 Result-model extension
 
 Use when structured data must cross a component boundary.
 
@@ -275,7 +325,7 @@ Each level has different compatibility requirements.
 
 ---
 
-## 5.6 Report extension
+### 6.6 Report extension
 
 Use when adding a new derived representation of completed results.
 
@@ -295,7 +345,7 @@ It must not:
 
 ---
 
-## 5.7 External-tool extension
+### 6.7 External-tool extension
 
 Use when GF Wordbench invokes a new executable, service, runtime, or operating-system capability.
 
@@ -309,7 +359,7 @@ Every tool needs an external contract before it becomes required.
 
 ---
 
-## 5.8 Persisted-schema extension
+### 6.8 Persisted-schema extension
 
 Use when a new field, enum, file, marker, report identity, directory, or path survives beyond one in-memory operation.
 
@@ -329,7 +379,7 @@ lock update
 
 ---
 
-# 6. Extension decision tree
+## 7. Extension decision tree
 
 Use this sequence.
 
@@ -364,21 +414,21 @@ When uncertain, prefer the smaller boundary until evidence shows that separation
 
 ---
 
-# 7. Standard extension workflow
+## 8. Standard extension workflow
 
 Every non-trivial extension follows:
 
 ```text
 1. define user or maintenance need
 2. classify extension category
-3. identify current owner
+3. identify existing owner
 4. identify providers and consumers
 5. define request and response
 6. define failure behavior
 7. define artifacts and persistence
 8. decide compatibility
-9. update locks before or with implementation
-10. implement the smallest viable boundary
+9. update locks with the contract change
+10. code the smallest viable boundary
 11. add unit tests
 12. add contract tests
 13. add integration tests where required
@@ -388,11 +438,11 @@ Every non-trivial extension follows:
 17. review drift indicators
 ```
 
-An implementation is incomplete when documentation and consumers still describe the old boundary.
+A change is not accepted while documentation or consumers still describe the previous boundary.
 
 ---
 
-# 8. Extension proposal template
+## 9. Extension proposal template
 
 For significant extensions, document:
 
@@ -401,7 +451,7 @@ Name:
 Category:
 Problem:
 Why existing behavior is insufficient:
-Current owner:
+Existing owner:
 Proposed owner:
 Callers:
 Consumers:
@@ -428,7 +478,7 @@ Use an ADR when ownership, dependency direction, execution strategy, or schema s
 
 ---
 
-# 9. Adding an internal helper
+## 10. Adding an internal helper
 
 A helper remains internal when it has one owner.
 
@@ -458,15 +508,15 @@ Do not create a generic utility module as a dumping ground.
 
 ---
 
-# 10. Adding shared infrastructure
+## 11. Adding shared infrastructure
 
 Shared infrastructure belongs under a focused owner such as:
 
 ```text
-app/utils/process_utils.py
-app/utils/io_utils.py
-app/utils/path_utils.py
-app/utils/logging_utils.py
+<module>/adapters/process.py
+<module>/adapters/filesystem.py
+<module>/domain/paths.py
+bootstrap/logging.py
 ```
 
 A shared primitive must be:
@@ -500,12 +550,12 @@ Those belong to domain components.
 
 ---
 
-# 11. Adding a static scan rule
+## 12. Adding a static scan rule
 
 Static scan rules belong to:
 
 ```text
-app/audit/scanner.py
+validation module
 ```
 
 or a scanner-owned private rule module.
@@ -537,7 +587,7 @@ A new rule does not require a new scanner component.
 
 ---
 
-# 12. Adding a validation stage
+## 13. Adding a validation stage
 
 A new stage needs a stable owner.
 
@@ -566,7 +616,7 @@ def run_stage(request: StageRequest) -> StageResult:
 
 Exact models should be domain-specific and locked before public use.
 
-## 12.1 Required stage definition
+### 13.1 Required stage definition
 
 Document:
 
@@ -587,19 +637,19 @@ reporting
 tests
 ```
 
-## 12.2 Stage placement
+### 13.2 Stage placement
 
 A stage should normally live under:
 
 ```text
-app/audit/
+the owning module's architectural ring
 ```
 
 unless it is purely infrastructure or project lifecycle.
 
-## 12.3 Orchestrator integration
+### 13.3 Orchestrator integration
 
-Only `audit_core.py` owns stage planning.
+The validation application service owns stage planning for a run.
 
 The stage must not:
 
@@ -617,7 +667,7 @@ The orchestrator must:
 - apply continuation;
 - aggregate the outcome.
 
-## 12.4 Stage gating
+### 13.4 Stage gating
 
 Declare whether the stage is:
 
@@ -632,25 +682,26 @@ Optional results remain visible.
 
 ---
 
-# 13. Adding a GF-backed stage
+## 14. Adding a GF-backed stage
 
 A GF-backed stage must reuse:
 
 ```text
-resolved RunConfig
+resolved run request
 shared GF path resolution
-process_utils
-diagnostics
+`GfToolPort`
+GF and process adapters
+diagnostic normalization
 run-owned evidence directories
 ```
 
 It must not create:
 
 ```text
-a second process runner
+a second process adapter
 a second GF executable resolver
 a second GF path builder
-a second diagnostic parser
+a second GF diagnostic interpreter
 ```
 
 Required evidence:
@@ -675,12 +726,12 @@ A new GF command requires external-tool contract review.
 
 ---
 
-# 14. Adding a scenario capability
+## 15. Adding a scenario capability
 
 Scenario capabilities belong to:
 
 ```text
-app/audit/scenario_runner.py
+the owning module's architectural ringscenario_runner.py
 project/validation/scenarios/
 ```
 
@@ -709,7 +760,7 @@ Generic scenario parsing and execution belongs in the framework.
 
 ---
 
-# 15. Adding an assertion type
+## 16. Adding an assertion type
 
 An assertion type is justified when exact gold is inappropriate.
 
@@ -748,12 +799,12 @@ If assertions are persisted, update the schema lock.
 
 ---
 
-# 16. Adding a report
+## 17. Adding a report
 
 New report writers belong under:
 
 ```text
-app/reports/
+reporting module
 ```
 
 Recommended API:
@@ -793,7 +844,7 @@ A report that introduces a stable filename or machine-consumed format requires p
 
 ---
 
-# 17. Adding an artifact
+## 18. Adding an artifact
 
 An artifact extension must define:
 
@@ -817,15 +868,15 @@ Rules:
 - observers do not rewrite it;
 - run artifacts remain inside the run root;
 - project source artifacts remain inside the project root;
-- required artifacts affect finalization;
-- final bytes are hashed before manifest publication;
+- required artifacts affect run closure;
+- completed bytes are hashed before manifest publication;
 - directories are not manifest file entries.
 
 Do not create a new artifact when an existing structured result is sufficient.
 
 ---
 
-# 18. Adding a result field
+## 19. Adding a result field
 
 Before adding a field, decide:
 
@@ -839,7 +890,7 @@ Who reads it?
 What does absence mean?
 ```
 
-## 18.1 In-memory optional field
+### 19.1 In-memory optional field
 
 Usually compatible when:
 
@@ -847,7 +898,7 @@ Usually compatible when:
 - existing consumers remain valid;
 - serialization does not change.
 
-## 18.2 Public Python field
+### 19.2 Public Python field
 
 Requires:
 
@@ -857,7 +908,7 @@ Requires:
 - contract tests;
 - compatibility review.
 
-## 18.3 Persisted field
+### 19.3 Persisted field
 
 Requires:
 
@@ -871,11 +922,11 @@ Requires:
 - schema tests;
 - schema-lock update.
 
-Do not expose internal implementation state through persisted fields merely for convenience.
+Do not expose private runtime state through persisted fields merely for convenience.
 
 ---
 
-# 19. Adding or changing an enum
+## 20. Adding or changing an enum
 
 Enums include:
 
@@ -913,7 +964,7 @@ Prefer an optional detail field over a new top-level enum when the distinction d
 
 ---
 
-# 20. Adding an error code
+## 21. Adding an error code
 
 Stable error codes use:
 
@@ -942,12 +993,12 @@ If codes are persisted or consumed externally, they become schema or API contrac
 
 ---
 
-# 21. Adding a CLI command
+## 22. Adding a CLI command
 
 CLI commands belong to:
 
 ```text
-app/main_cli.py
+CLI entrypoint
 ```
 
 Business logic belongs to a shared service, not the parser.
@@ -990,12 +1041,12 @@ Rules:
 
 ---
 
-# 22. Adding a GUI feature
+## 23. Adding a GUI feature
 
 GUI features belong under:
 
 ```text
-app/gui/
+GUI entrypoint
 ```
 
 The GUI must call the same application service as the CLI.
@@ -1018,11 +1069,11 @@ It must not:
 - write gold directly;
 - mutate persisted schemas directly.
 
-Persist only disposable UI preferences through `app/state.py`.
+Persist only disposable UI preferences through the application-state adapter.
 
 ---
 
-# 23. Adding project configuration
+## 24. Adding project configuration
 
 Project configuration lives in:
 
@@ -1082,7 +1133,7 @@ when the structure changes.
 
 ---
 
-# 24. Extending the project template
+## 25. Extending the project template
 
 The project template is language-neutral.
 
@@ -1115,7 +1166,7 @@ Use placeholders only where the maintainer must supply a project-specific fact.
 
 ---
 
-# 25. Adding a project document
+## 26. Adding a project document
 
 A new project document is justified when it owns a stable responsibility not already covered.
 
@@ -1139,9 +1190,9 @@ If a project document becomes required:
 
 ---
 
-# 26. Adding an external tool
+## 27. Adding an external tool
 
-A new external tool requires an `EXT-OPTIONAL-*` contract before adoption.
+A new external tool requires a versioned external-tool contract and a static allowlist entry before use.
 
 The proposal must define:
 
@@ -1171,14 +1222,17 @@ tests
 
 Rules:
 
-- optional by default;
+- optional unless an accepted contract makes it required;
 - no hidden auto-installation;
+- no arbitrary executable or shell command outside the static allowlist;
 - no shell command string from untrusted input;
 - exact executable is recorded;
 - stdout and stderr are captured separately;
 - timeout is finite;
 - missing optional tool does not become a language failure;
 - required adoption requires release and installation policy updates.
+
+AI-assisted tools, when present, are optional, visible, non-normative, and cannot determine validation or release truth.
 
 Examples that may justify an optional tool:
 
@@ -1193,9 +1247,9 @@ Convenience alone is insufficient.
 
 ---
 
-# 27. Adding a dynamic plugin system
+## 28. Adding a dynamic plugin system
 
-GF Wordbench does not require a general dynamic plugin system for the final core architecture.
+GF Wordbench does not require a general dynamic plugin system for the core architecture.
 
 Do not introduce one unless there is demonstrated need for:
 
@@ -1229,11 +1283,11 @@ tests
 
 Until those needs exist, use explicit repository-owned registration.
 
-This avoids a large compatibility surface with little current value.
+This avoids a large compatibility surface with little demonstrated value.
 
 ---
 
-# 28. Explicit registries
+## 29. Explicit registries
 
 Small explicit registries are acceptable when they improve deterministic ownership.
 
@@ -1258,40 +1312,42 @@ Registry requirements:
 - no filesystem scanning for Python modules;
 - no entrypoint discovery from arbitrary installed packages.
 
-A registry is not automatically a plugin system.
+A registry is not a plugin system. Executable diagnostic registries are static allowlists with explicit contracts, limits, mutability, and evidence roles.
 
 ---
 
-# 29. Dependency-direction review
+## 30. Dependency-direction review
 
 Every extension must preserve expected flow:
 
 ```text
 CLI / GUI
     → application services
-    → bootstrap / audit core
+    → bootstrap / validation application service
     → stages and result services
     → infrastructure
 
 reports
     → completed models
 
-compiler / scenario runner
-    → process runner
+validation application services
+    → GF/process ports
+    → adapters
 
 project loader
     → project.toml
 
-active project
-    → GF
+active project assets
+    → validation application services
+    → GF port
 ```
 
 Prohibited examples:
 
 ```text
 report → compiler
-GUI widget → process runner
-process runner → diagnostic classifier
+GUI entrypoint → process adapter
+process adapter → causal classifier
 models → GUI
 scanner → reports
 project config → GUI state
@@ -1302,7 +1358,7 @@ An extension creating a reverse dependency must be redesigned or justified by an
 
 ---
 
-# 30. Configuration precedence
+## 31. Configuration precedence
 
 New settings must declare precedence.
 
@@ -1320,71 +1376,26 @@ A setting must not have different precedence in CLI and GUI.
 
 ---
 
-# 31. Extension status lifecycle
+## 32. Compatibility and deprecation rules
 
-Recommended lifecycle:
+Extensions do not carry a documentation progress status.
 
-```text
-experimental
-active
-deprecated
-retired
-```
+A capability is documented through its normative contract, compatibility behavior, and deprecation rules.
 
-Project-specific incomplete behavior may additionally use:
+A deprecation requires:
 
-```text
-temporary
-fallback
-warning
-blocked
-disabled
-```
+- a named replacement or explicit removal rationale;
+- a compatibility window;
+- a migration path when persisted or public contracts are affected;
+- warnings at the owning boundary;
+- tests for supported legacy input;
+- coordinated removal from providers, consumers, schemas, templates, and documentation.
 
-## 31.1 Experimental
-
-Allowed when:
-
-- API may still change;
-- not required for release;
-- clearly marked;
-- tests exist;
-- persisted compatibility is avoided or explicitly versioned.
-
-## 31.2 Active
-
-Requires:
-
-- locked contract;
-- stable behavior;
-- tests;
-- documentation;
-- ownership;
-- supported migration policy.
-
-## 31.3 Deprecated
-
-Requires:
-
-- replacement;
-- warning;
-- deprecation version;
-- removal target;
-- compatibility tests;
-- documentation.
-
-## 31.4 Retired
-
-Requires:
-
-- no active caller;
-- retained historical contract ID when applicable;
-- migration completed;
-- dead compatibility code removed according to policy.
+Optional capabilities remain optional unless an accepted contract explicitly makes them required. A private experiment with no public or persisted contract remains outside normative documentation.
 
 ---
 
-# 32. Compatibility classification
+## 33. Compatibility classification
 
 Every extension is one of:
 
@@ -1392,14 +1403,13 @@ Every extension is one of:
 internal compatible
 compatible public extension
 breaking public change
-experimental
 ```
 
-## 32.1 Internal compatible
+### 33.1 Internal compatible
 
 No public or persisted contract changes.
 
-## 32.2 Compatible public extension
+### 33.2 Compatible public extension
 
 Examples:
 
@@ -1414,7 +1424,7 @@ new non-gating stage
 
 Requires consumer review.
 
-## 32.3 Breaking public change
+### 33.3 Breaking public change
 
 Examples:
 
@@ -1434,7 +1444,7 @@ Requires migration and versioning.
 
 ---
 
-# 33. Persisted-schema procedure
+## 34. Persisted-schema procedure
 
 For any persisted change:
 
@@ -1459,7 +1469,7 @@ Readers must not rewrite sources during ordinary loading.
 
 ---
 
-# 34. External-contract procedure
+## 35. External-contract procedure
 
 For any command or tool change:
 
@@ -1485,7 +1495,7 @@ Do not change one caller's command independently.
 
 ---
 
-# 35. Project-contract procedure
+## 36. Project-contract procedure
 
 When an extension changes active-language files:
 
@@ -1498,7 +1508,7 @@ provider
 → gold
 → project configuration
 → dependency map
-→ status ledger
+→ known issues and decision records
 → project contract lock
 → release evidence
 ```
@@ -1507,7 +1517,7 @@ Language-specific extension code and configuration belong under `project/`, not 
 
 ---
 
-# 36. Security review
+## 37. Security review
 
 Security review is required when an extension:
 
@@ -1541,7 +1551,7 @@ A dynamic plugin system requires a separate trust model and must not be added ca
 
 ---
 
-# 37. Performance review
+## 38. Performance review
 
 Performance optimization must not weaken correctness.
 
@@ -1572,7 +1582,7 @@ Release mode should prefer clean reproducible evidence.
 
 ---
 
-# 38. Concurrency extension
+## 39. Concurrency extension
 
 Parallel execution is allowed only when:
 
@@ -1591,7 +1601,7 @@ Start with serial execution unless measured need justifies concurrency.
 
 ---
 
-# 39. Cancellation extension
+## 40. Cancellation extension
 
 A cancellable operation must define:
 
@@ -1614,7 +1624,7 @@ The shared service must own semantics.
 
 ---
 
-# 40. Observability extension
+## 41. Observability extension
 
 New logs or metrics must have a purpose.
 
@@ -1638,7 +1648,7 @@ Rules:
 
 ---
 
-# 41. Documentation updates
+## 42. Documentation updates
 
 An extension may require updates to:
 
@@ -1669,11 +1679,11 @@ Link to the owning lock or reference.
 
 ---
 
-# 42. Test strategy
+## 43. Test strategy
 
 Every extension should use the smallest appropriate test layers.
 
-## 42.1 Unit tests
+### 43.1 Unit tests
 
 Use for:
 
@@ -1687,7 +1697,7 @@ serialization
 formatting
 ```
 
-## 42.2 Contract tests
+### 43.2 Contract tests
 
 Use for:
 
@@ -1702,7 +1712,7 @@ CLI/GUI shared service
 read-only gold behavior
 ```
 
-## 42.3 Integration tests
+### 43.3 Integration tests
 
 Use for:
 
@@ -1712,10 +1722,10 @@ filesystem behavior
 atomic replacement
 process timeout
 project initialization
-report finalization
+report publication
 ```
 
-## 42.4 Platform tests
+### 43.4 Platform tests
 
 At minimum review:
 
@@ -1731,7 +1741,7 @@ timeout
 
 ---
 
-# 43. Test fixture policy
+## 44. Test fixture policy
 
 Fixtures must be:
 
@@ -1747,7 +1757,7 @@ Use the active language project only for project validation, not as the sole fra
 
 ---
 
-# 44. Adding a fixture grammar
+## 45. Adding a fixture grammar
 
 A fixture grammar should contain only what is needed to test:
 
@@ -1769,7 +1779,7 @@ Document any expected GF-version differences.
 
 ---
 
-# 45. Release-gate integration
+## 46. Release-gate integration
 
 An extension affecting release must define:
 
@@ -1785,11 +1795,11 @@ migration for existing projects
 
 A new required release stage is a breaking operational change unless existing projects receive a migration path and defaults.
 
-Do not make an experimental stage release-required.
+An optional stage becomes release-required only through an accepted contract and migration.
 
 ---
 
-# 46. Adding a mode
+## 47. Adding a mode
 
 Adding a validation mode is strongly discouraged.
 
@@ -1828,7 +1838,7 @@ Prefer extending existing modes.
 
 ---
 
-# 47. Adding a status
+## 48. Adding a status
 
 Adding a validation status is strongly discouraged.
 
@@ -1857,9 +1867,9 @@ Use it only when existing dimensions cannot represent the semantics.
 
 ---
 
-# 48. Extension examples
+## 49. Extension examples
 
-## 48.1 Example — New scanner rule
+### 49.1 Example — New scanner rule
 
 Need:
 
@@ -1884,7 +1894,7 @@ create a new validation component and report
 
 ---
 
-## 48.2 Example — Dependency diagram
+### 49.2 Example — Dependency diagram
 
 Need:
 
@@ -1905,7 +1915,7 @@ Do not make Graphviz required for validation.
 
 ---
 
-## 48.3 Example — PGF runtime smoke check
+### 49.3 Example — PGF runtime smoke check
 
 Need:
 
@@ -1924,7 +1934,7 @@ It should not be folded into the generic process runner or Markdown report.
 
 ---
 
-## 48.4 Example — New report field
+### 49.4 Example — New report field
 
 Need:
 
@@ -1944,7 +1954,7 @@ If automation consumes it from `summary.json`:
 
 ---
 
-## 48.5 Example — Language-specific morphology validation
+### 49.5 Example — Language-specific morphology validation
 
 Need:
 
@@ -1964,17 +1974,17 @@ project validation docs
 Incorrect design:
 
 ```text
-hardcode the language paradigm in app/audit/
+hardcode the language paradigm in the owning module's architectural ring
 ```
 
 ---
 
-# 49. Common overengineering traps
+## 50. Common overengineering traps
 
 Avoid:
 
 ```text
-abstract base class with one implementation
+abstract base class with one concrete class
 dependency-injection container for simple construction
 runtime plugin scanning
 event bus for direct calls
@@ -1990,12 +2000,12 @@ Introduce abstraction after repeated concrete need, not before.
 
 ---
 
-# 50. Common underengineering traps
+## 51. Common underengineering traps
 
 Also avoid:
 
 ```text
-one large audit_core.py implementing every stage
+one large validation application service implementing every stage
 duplicate command building
 duplicate GF path resolution
 untyped dictionaries crossing boundaries
@@ -2011,7 +2021,7 @@ Balanced architecture means clear ownership without fragmentation.
 
 ---
 
-# 51. Drift indicators
+## 52. Drift indicators
 
 Extension drift likely exists when:
 
@@ -2026,7 +2036,7 @@ Extension drift likely exists when:
 - a validation stage changes status vocabulary;
 - a new artifact is absent from the manifest;
 - a template differs structurally from the active project requirements;
-- an experimental feature becomes required silently;
+- an optional capability becomes required without a contract change;
 - a private helper is imported by another component;
 - completion order changes persisted order;
 - an optional tool becomes an undeclared dependency;
@@ -2036,7 +2046,7 @@ Any indicator requires ownership and contract review.
 
 ---
 
-# 52. Extension review checklist
+## 53. Extension review checklist
 
 ```text
 [ ] Problem is concrete
@@ -2069,9 +2079,9 @@ Any indicator requires ownership and contract review.
 
 ---
 
-# 53. Definition of extension complete
+## 54. Extension acceptance
 
-An extension is complete when:
+An extension is accepted when:
 
 1. its need is documented;
 2. its owner is unambiguous;
@@ -2086,12 +2096,12 @@ An extension is complete when:
 11. tests cover normal and failure paths;
 12. compatibility and migration are documented;
 13. required locks are updated;
-14. documentation matches implementation;
+14. documentation matches the contract and observable behavior;
 15. release behavior remains explicit.
 
 ---
 
-# 54. Final invariants
+## 55. normative invariants
 
 Extensions must preserve:
 
@@ -2108,7 +2118,7 @@ Extensions must preserve:
 11. CLI and GUI use shared application services.
 12. Deterministic ordering is preserved.
 13. Optional extensions remain visible but non-gating unless declared.
-14. Experimental behavior does not become stable silently.
+14. Compatibility and deprecation changes are explicit and versioned.
 15. New abstractions require a real boundary.
 16. New statuses and modes are exceptional.
 17. Active-project changes update project contracts.
@@ -2118,7 +2128,7 @@ Extensions must preserve:
 
 ---
 
-# 55. Final rule
+## 56. normative rule
 
 > Extend GF Wordbench by adding the smallest explicit contract that solves the real problem.
 

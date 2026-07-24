@@ -2,11 +2,14 @@
 
 **Document ID:** `GF-WB-USAGE-INSTALLATION`  
 **Status:** Normative installation guide  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\usage\INSTALLATION.md`  
-**Applies to:** GF Wordbench framework installation, Python environment setup, GF core and RGL prerequisites, verification, upgrades, and removal  
+**Applies to:** GF Wordbench installation, Python environment setup, GF core and RGL prerequisites, verification, upgrades and removal  
 **Owner:** GF Wordbench maintainers  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Package authority:** `pyproject.toml`  
+**Compatibility authority:** `docs/gf/GF_VERSION_COMPATIBILITY.md`  
+**Environment authority:** `docs/configuration/ENVIRONMENT_AND_PATHS.md`  
 **Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -18,7 +21,7 @@ It covers:
 
 - Python installation;
 - virtual-environment creation;
-- GF Wordbench installation from source or a release wheel;
+- installation from source or a release wheel;
 - development dependencies;
 - Grammatical Framework core installation;
 - Resource Grammar Library installation;
@@ -30,99 +33,97 @@ It covers:
 
 This document does not define:
 
-- active-language project creation;
-- `project.toml` contents;
-- validation-mode behavior;
-- CLI option details;
+- active-project creation;
+- `project.toml` fields;
+- validation-mode semantics;
+- complete CLI syntax;
 - GUI workflow;
-- GF command semantics;
-- release packaging procedures.
+- GF command syntax;
+- release packaging.
 
-Those topics are covered by the referenced documents at the end.
+Those topics are owned by the referenced documents.
 
-The central rule is:
+The governing rule is:
 
-> Install Python, GF core, the RGL, and GF Wordbench as separate components, then verify each boundary independently.
+> Install Python, GF Wordbench, GF core and the RGL as separate components, then verify each boundary independently.
 
 ---
 
-## 2. Supported installation model
+## 2. Product boundary
 
-GF Wordbench is a Python application that invokes the external GF executable.
+One GF Wordbench workspace contains one active GF language project.
 
-The installation has four distinct parts:
+Installing GF Wordbench does not create:
+
+- a registry of several language projects;
+- a multilingual workspace;
+- a portfolio database;
+- a dependency on `gf-portfolio`.
+
+`gf-portfolio` is a separate product. It may consume public, finalized Wordbench artifacts, but Wordbench installation, startup and validation do not require Portfolio to be installed or available.
+
+---
+
+## 3. Supported installation model
+
+GF Wordbench is a Python application that invokes an external GF executable.
+
+The installation contains four separable parts:
 
 ```text
 Python runtime
     +
-GF Wordbench Python package
+GF Wordbench Python distribution
     +
 GF core executable
     +
 RGL or other required GF libraries
 ```
 
-These parts MUST remain separable.
-
 Installing GF Wordbench does not install GF core automatically.
 
-Installing GF core does not necessarily install the RGL.
+Installing GF core does not guarantee that the RGL is installed.
 
 Installing the RGL does not install the Python application.
 
+Each component has its own version, installation path and verification procedure.
+
 ---
 
-## 3. Canonical component names
+## 4. Canonical names
 
-Final package and command names:
+Canonical public names:
 
 ```text
 Python distribution: gf-wordbench
 CLI command:         gf-wordbench
 GUI command:         gf-wordbench-gui
-Python package:      app
 ```
 
-Canonical source entrypoints:
+The Python import-package name and internal module entrypoints are defined by `pyproject.toml` and the repository structure. This guide does not duplicate them.
+
+Legacy GF Audit commands or environment-variable names may be accepted only through documented compatibility behavior. New installation instructions use GF Wordbench names exclusively.
+
+Windows launcher variables, when supported, are defined by:
 
 ```text
-app.main_cli
-app.main_gui
-```
-
-Legacy migration names may still appear temporarily:
-
-```text
-gf-audit
-gf-audit-cli
-gf-audit-gui
-GF_AUDIT_PYTHON
-GF_AUDIT_DEBUG_CONSOLE
-```
-
-New documentation and final release packaging MUST use the GF Wordbench names.
-
-Recommended final launcher environment variables:
-
-```text
-GF_WORDBENCH_PYTHON
-GF_WORDBENCH_DEBUG_CONSOLE
+docs/operations/WINDOWS_LAUNCHERS.md
 ```
 
 ---
 
-## 4. Installation profiles
+## 5. Installation profiles
 
-Choose one installation profile.
+Choose one profile.
 
-## 4.1 Standard local installation
+### 5.1 Standard local installation
 
 Use for ordinary local operation from a checked-out source tree.
 
 ```text
 virtual environment
 non-editable package installation
-runtime dependencies only
+runtime dependencies
 ```
 
 Command:
@@ -131,7 +132,7 @@ Command:
 python -m pip install .
 ```
 
-## 4.2 Development installation
+### 5.2 Development installation
 
 Use when editing GF Wordbench code or documentation.
 
@@ -147,27 +148,25 @@ Command:
 python -m pip install -e ".[dev]"
 ```
 
-## 4.3 Release-wheel installation
+### 5.3 Release-wheel installation
 
-Use when a project release provides a built wheel.
-
-```text
-python -m pip install <path-to-wheel>
-```
-
-Example shape:
+Use a wheel published through the official GF Wordbench release process.
 
 ```text
-python -m pip install dist/gf_wordbench-<version>-py3-none-any.whl
+python -m pip install "<path-to-wheel>"
 ```
 
-Do not assume a public package index exists unless the release documentation explicitly states it.
+Example filename shape:
 
-## 4.4 `uv` installation
+```text
+gf_wordbench-<version>-py3-none-any.whl
+```
 
-`uv` MAY be used as an optional environment and package manager.
+Do not assume that a public package index exists unless release documentation explicitly identifies one.
 
-It is not required by GF Wordbench.
+### 5.4 `uv`
+
+`uv` may be used as an optional environment and package manager.
 
 Example development workflow:
 
@@ -176,39 +175,21 @@ uv venv
 uv pip install -e ".[dev]"
 ```
 
-Launcher support for `uv` is convenience behavior only.
-
-The canonical installation contract remains standard Python packaging through `pyproject.toml`.
+Standard Python packaging through `pyproject.toml` remains authoritative.
 
 ---
 
-# 5. Requirements
+## 6. Requirements
 
-## 5.1 Python
+### 6.1 Python
 
-Minimum version:
-
-```text
-Python 3.11
-```
-
-Recommended:
+The authoritative Python requirement is:
 
 ```text
-latest supported 64-bit Python 3.11 or newer
+pyproject.toml -> requires-python
 ```
 
-The authoritative requirement is the `requires-python` field in:
-
-```text
-pyproject.toml
-```
-
-The final project metadata is expected to declare:
-
-```toml
-requires-python = ">=3.11"
-```
+Install a supported 64-bit Python version satisfying that constraint.
 
 Verify:
 
@@ -216,25 +197,17 @@ Verify:
 python --version
 ```
 
-Windows alternative:
+Windows launcher alternative:
 
 ```text
-py -3 --version
+py --version
 ```
 
-A Python version below the declared minimum is unsupported.
+Examples in this guide may use Python 3.11. They do not override `requires-python`.
 
----
+### 6.2 `pip`
 
-## 5.2 Python package installer
-
-Required:
-
-```text
-pip
-```
-
-Verify:
+Verify the installer associated with the selected interpreter:
 
 ```text
 python -m pip --version
@@ -248,67 +221,40 @@ python -m pip
 
 rather than an unqualified `pip` command when interpreter identity matters.
 
-This ensures that packages are installed into the Python environment being used.
+### 6.3 GF core
 
----
+GF core is required for compilation, native `.gfs` scenario execution and release validation.
 
-## 5.3 Grammatical Framework core
-
-Required for compile, scenario, and release validation:
+Executable names:
 
 ```text
 gf
-```
-
-or on Windows:
-
-```text
 gf.exe
 ```
 
-Verify:
+Verify the selected executable:
 
 ```text
-gf --version
+<gf-executable> --version
 ```
 
-or with an explicit Windows path:
-
-```text
-"C:\path\to\gf.exe" --version
-```
-
-The exact supported-version policy belongs to:
+The exact supported version range is defined by:
 
 ```text
 docs/gf/GF_VERSION_COMPATIBILITY.md
 ```
 
-At this document's review date, the current official binary release is GF 3.12.
+This guide does not freeze a current GF release number.
 
-Do not encode that observation as an eternal framework requirement.
+### 6.4 Resource Grammar Library
 
----
+The RGL is required when the active project imports RGL modules.
 
-## 5.4 Resource Grammar Library
+GF Wordbench requires a resolvable RGL root and compatible GF search path. It does not require one particular RGL installation method.
 
-Required when the active language project imports RGL modules.
+### 6.5 Git
 
-Canonical component:
-
-```text
-gf-rgl
-```
-
-GF core and the RGL are distributed separately in current GF releases.
-
-GF Wordbench requires a resolvable RGL root, not one particular installation method.
-
----
-
-## 5.5 Git
-
-Git is recommended when installing from a repository clone.
+Git is useful for source checkouts and development.
 
 Verify:
 
@@ -316,134 +262,101 @@ Verify:
 git --version
 ```
 
-Git is not required when installing from:
+Git is not required when installing from a wheel, source archive or existing checkout.
 
-- a source archive;
-- a release wheel;
-- a pre-existing checkout.
+### 6.6 Operating system
 
----
+The supported platform matrix is defined by release and compatibility documentation.
 
-## 5.6 Operating system
+Installation depends on:
 
-Primary supported environment:
-
-```text
-Windows
-```
-
-The architecture is intended to remain portable to:
-
-```text
-Linux
-macOS
-```
-
-Actual platform support depends on:
-
-- Python support;
-- PySide6 availability;
+- Python availability;
+- GUI dependency availability when the GUI is installed;
 - GF binary availability;
-- process and path integration tests.
+- path and process integration support.
 
-The CLI is easier to support across platforms than the GUI.
-
-The authoritative platform matrix belongs in release and compatibility documentation.
+CLI and GUI support may differ by platform. This guide does not imply support beyond the published compatibility matrix.
 
 ---
 
-# 6. Python dependencies
+## 7. Python dependencies
 
-The final Python package is expected to use:
-
-```toml
-dependencies = [
-  "PySide6>=6.8,<7.0",
-]
-```
-
-Development dependencies are expected to include:
-
-```toml
-[project.optional-dependencies]
-dev = [
-  "pytest>=8.3,<9.0",
-  "pytest-cov>=6.0,<7.0",
-  "ruff>=0.11,<0.12",
-  "mypy>=1.15,<2.0",
-]
-```
-
-`pyproject.toml` is authoritative.
-
-This document MUST be updated when dependency policy changes.
-
----
-
-# 7. Recommended directory layout
-
-Example Windows layout:
+`pyproject.toml` is authoritative for:
 
 ```text
-C:\mycode\Grammatical_Framework\
-├── GF_Wordbench\
-│   └── GF_Wordbench\
-├── gf-3.12-windows\
-│   └── gf.exe
-├── gf-rgl\
-│   └── src\
-└── gf-wordbench-runs\
+runtime dependencies
+development extras
+build backend
+Python requirement
+console entrypoints
+package contents
+```
+
+Do not copy dependency versions from this guide into packaging metadata.
+
+To inspect resolved package metadata after installation:
+
+```text
+python -m pip show gf-wordbench
+```
+
+To inspect all installed packages:
+
+```text
+python -m pip list
+```
+
+---
+
+## 8. Directory layout
+
+A clear local layout keeps source, tools, libraries and generated runs separate.
+
+Example:
+
+```text
+workspace-parent/
+├── GF_Wordbench/
+├── gf-core-installation/
+├── gf-rgl/
+└── gf-wordbench-runs/
 ```
 
 The components do not need to be siblings.
 
-The layout is useful because it keeps:
+The installation must not depend on a particular absolute path, drive letter, username or parent-directory name.
 
-- framework source;
-- GF executable;
-- RGL source;
-- generated runs;
-
-separate and easy to configure.
-
-The installation MUST NOT depend on this exact path.
-
-Paths containing spaces MUST work.
+Paths containing spaces and Unicode must work according to the platform contracts.
 
 ---
 
-# 8. Obtain GF Wordbench
+## 9. Obtain GF Wordbench
 
-## 8.1 Clone with Git
+### 9.1 Git checkout
 
-From the directory that will contain the checkout:
-
-```text
-git clone <GF-WORDBENCH-REPOSITORY-URL> GF_Wordbench
-cd GF_Wordbench
-```
-
-If the repository contains an additional project-root directory:
+Clone from the official repository URL supplied by the release or project-maintenance documentation:
 
 ```text
-cd GF_Wordbench
+git clone <GF-WORDBENCH-REPOSITORY-URL>
+cd <GF-WORDBENCH-CHECKOUT>
 ```
 
-Confirm that the current directory contains:
+The installation root is the directory containing:
 
 ```text
 pyproject.toml
-app/
 docs/
 project/
 templates/
 ```
 
-The repository URL remains a release or project-management concern and MUST NOT be invented in this guide before publication.
+The application package directory is determined by `pyproject.toml` and the repository layout.
 
-## 8.2 Source archive
+Do not install from a nested documentation or package subdirectory.
 
-Extract the source archive.
+### 9.2 Source archive
+
+Extract the official source archive.
 
 Open a terminal in the directory containing:
 
@@ -451,37 +364,29 @@ Open a terminal in the directory containing:
 pyproject.toml
 ```
 
-Do not install from a nested `app/` or `docs/` directory.
+Verify the archive according to the release security policy.
 
-## 8.3 Release wheel
+### 9.3 Release wheel
 
 Obtain the wheel from the official GF Wordbench release channel.
 
-Verify the release according to the project's security policy before installation.
+Verify the release artifact before installation.
 
 ---
 
-# 9. Create a virtual environment
+## 10. Create a virtual environment
 
-A repository-local virtual environment is recommended:
+A repository-local environment named `.venv` is recommended.
 
-```text
-.venv
-```
+Virtual environments are disposable. Recreate them after moving a checkout or changing the base interpreter.
 
-Virtual environments are disposable and should be recreated rather than copied between locations.
-
----
-
-## 9.1 Windows PowerShell
-
-From the repository root:
+### 10.1 Windows PowerShell
 
 ```powershell
 py -3.11 -m venv .venv
 ```
 
-When a specific launcher is unavailable:
+When another supported interpreter command is used:
 
 ```powershell
 python -m venv .venv
@@ -500,19 +405,10 @@ python --version
 python -m pip --version
 ```
 
----
-
-## 9.2 Windows Command Prompt
-
-Create:
+### 10.2 Windows Command Prompt
 
 ```bat
 py -3.11 -m venv .venv
-```
-
-Activate:
-
-```bat
 .venv\Scripts\activate.bat
 ```
 
@@ -523,25 +419,10 @@ python --version
 python -m pip --version
 ```
 
----
-
-## 9.3 Linux and macOS
-
-Create:
-
-```bash
-python3.11 -m venv .venv
-```
-
-When `python3.11` is not the installed command:
+### 10.3 Linux and macOS
 
 ```bash
 python3 -m venv .venv
-```
-
-Activate:
-
-```bash
 source .venv/bin/activate
 ```
 
@@ -552,41 +433,27 @@ python --version
 python -m pip --version
 ```
 
----
+### 10.4 Activation is optional
 
-## 9.4 Activation is optional
-
-A virtual environment does not have to be activated.
-
-Windows example:
+Windows:
 
 ```text
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-POSIX example:
+POSIX:
 
 ```text
 .venv/bin/python -m pip install -e ".[dev]"
 ```
 
-Explicit interpreter paths are often preferable in launchers and automation.
+Explicit interpreter paths are preferable in automation.
 
----
-
-## 9.5 PowerShell execution policy
+### 10.5 PowerShell execution policy
 
 PowerShell may block `Activate.ps1`.
 
-A user-level policy may be set with:
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-Only change execution policy when permitted by local security policy.
-
-Activation can also be avoided by invoking:
+Follow local security policy. Activation can be avoided by invoking:
 
 ```powershell
 .\.venv\Scripts\python.exe
@@ -594,33 +461,27 @@ Activation can also be avoided by invoking:
 
 directly.
 
+Changing PowerShell execution policy is an operating-system administration decision, not a GF Wordbench requirement.
+
 ---
 
-# 10. Prepare packaging tools
+## 11. Prepare packaging tools
 
-Upgrade `pip` inside the virtual environment:
+Inside the selected environment:
 
 ```text
 python -m pip install --upgrade pip
 ```
 
-The build backend declared in `pyproject.toml` is installed automatically when pip builds the project in an isolated environment.
+The build backend declared in `pyproject.toml` is installed by the packaging frontend when isolated builds are used.
 
-The project currently uses or targets:
-
-```toml
-[build-system]
-requires = ["hatchling>=1.27.0"]
-build-backend = "hatchling.build"
-```
-
-A normal installation does not require a global Hatch installation.
+A global installation of the build backend is not required for normal installation.
 
 ---
 
-# 11. Install GF Wordbench
+## 12. Install GF Wordbench
 
-## 11.1 Standard installation from source
+### 12.1 Standard source installation
 
 ```text
 python -m pip install .
@@ -628,193 +489,150 @@ python -m pip install .
 
 This installs:
 
-- GF Wordbench;
+- the GF Wordbench distribution;
 - runtime dependencies;
-- CLI entrypoint;
-- GUI entrypoint.
+- declared CLI entrypoint;
+- declared GUI entrypoint.
 
-It does not make source edits immediately visible.
+Source edits require reinstallation.
 
-Reinstall after source changes.
-
----
-
-## 11.2 Development installation
+### 12.2 Development installation
 
 ```text
 python -m pip install -e ".[dev]"
 ```
 
-This installs:
+This installs the package in editable mode together with the declared development extra.
 
-- GF Wordbench in editable mode;
-- PySide6;
-- pytest;
-- pytest-cov;
-- Ruff;
-- mypy;
-- console entrypoints.
+Source edits are visible without reinstalling. Packaging metadata changes may require reinstalling.
 
-Python source edits become visible without reinstalling.
-
-Changes to packaging metadata may still require reinstalling.
-
----
-
-## 11.3 Runtime-only editable installation
-
-For source development without developer tools:
+### 12.3 Runtime-only editable installation
 
 ```text
 python -m pip install -e .
 ```
 
----
-
-## 11.4 Wheel installation
+### 12.4 Wheel installation
 
 ```text
 python -m pip install "<path-to-wheel>"
 ```
 
-Windows example:
+The actual wheel name and version come from the release.
 
-```powershell
-python -m pip install ".\dist\gf_wordbench-0.1.0-py3-none-any.whl"
-```
+### 12.5 Reinstallation
 
-The actual version and filename come from the release.
-
----
-
-## 11.5 Reinstall
-
-Force reinstall from the current source:
+Standard reinstall:
 
 ```text
 python -m pip install --force-reinstall .
 ```
 
-Editable reinstall:
+Editable reinstall after packaging changes:
 
 ```text
 python -m pip install -e ".[dev]"
 ```
 
-after packaging metadata changes.
-
 ---
 
-# 12. Verify the Python installation
+## 13. Verify the Python installation
 
-## 12.1 Package import
-
-```text
-python -c "import app; print(app.__version__)"
-```
-
-Expected:
+### 13.1 Distribution metadata
 
 ```text
-a version string
+python -c "from importlib.metadata import version; print(version('gf-wordbench'))"
 ```
 
-## 12.2 PySide6 import
+Expected result:
 
 ```text
-python -c "import PySide6; print(PySide6.__version__)"
+installed GF Wordbench version
 ```
 
-This verifies the GUI runtime dependency.
+This verification does not depend on a duplicated internal import-package name.
 
-## 12.3 CLI entrypoint
+### 13.2 Package metadata
+
+```text
+python -m pip show gf-wordbench
+```
+
+Confirm:
+
+- the intended interpreter environment;
+- installation location;
+- version;
+- dependencies.
+
+### 13.3 CLI entrypoint
 
 ```text
 gf-wordbench --help
 ```
 
-Version check:
+Use the version command defined by `docs/usage/CLI_REFERENCE.md`.
 
-```text
-gf-wordbench --version
-```
-
-## 12.4 GUI entrypoint
+### 13.4 GUI entrypoint
 
 ```text
 gf-wordbench-gui
 ```
 
-The GUI should open without importing from a different checkout.
+The GUI should start from the installed distribution rather than importing an unrelated checkout.
 
-## 12.5 Module fallback
+### 13.5 Module diagnostics
 
-From a source checkout:
+Internal module execution is not a public installation contract unless explicitly documented in `CLI_REFERENCE.md`, `GUI_REFERENCE.md` or `pyproject.toml`.
 
-```text
-python -m app.main_cli --help
-python -m app.main_gui
-```
-
-Module execution is a supported diagnostic fallback.
-
-Installed commands remain the preferred user interface.
+Use installed console entrypoints for normal verification.
 
 ---
 
-# 13. Install GF core
+## 14. Install GF core
 
-Use a GF version supported by:
+Install a GF version supported by:
 
 ```text
 docs/gf/GF_VERSION_COMPATIBILITY.md
 ```
 
-The official GF download page provides binary packages for Windows, macOS, and Debian/Ubuntu.
+GF may be installed through:
 
-GF may also be installed from Hackage or source.
+- an official platform binary package;
+- an approved operating-system package;
+- Hackage with a compatible Haskell toolchain;
+- a reviewed source build.
 
-Binary installation is recommended unless compiler development requires a source build.
+Binary installation is preferred for ordinary Wordbench use.
 
----
+### 14.1 Windows binary installation
 
-## 13.1 Windows binary installation
+1. Obtain a supported GF binary package from the official GF release source.
+2. Extract it to a stable machine-local directory.
+3. Locate `gf.exe`.
+4. record the full path;
+5. verify it explicitly.
 
-1. Download the supported Windows GF binary package from the official GF release source.
-2. Extract it to a stable directory.
-3. Locate:
-
-```text
-gf.exe
-```
-
-4. Record the full path.
-
-Example:
-
-```text
-C:\mycode\Grammatical_Framework\gf-3.12-windows\gf.exe
-```
-
-5. Verify:
+PowerShell example:
 
 ```powershell
-& "C:\mycode\Grammatical_Framework\gf-3.12-windows\gf.exe" --version
+& "C:\path\to\gf.exe" --version
 ```
 
-Adding the GF directory to `PATH` is optional for GF Wordbench when the executable is configured explicitly.
+Adding the directory to `PATH` is optional when Wordbench is configured with the explicit executable.
 
-Explicit configuration is preferred because it prevents silent substitution of another GF installation.
+### 14.2 Debian or Ubuntu package
 
----
+Install the package matching the supported GF release and operating-system version.
 
-## 13.2 Debian or Ubuntu binary installation
-
-For the package matching the supported GF release and distribution:
+Example shape:
 
 ```bash
-sudo apt install ./gf-<version>-ubuntu-<release>.deb
+sudo apt install ./gf-<version>-<platform>.deb
 ```
+
+Use the filename supplied by the official release.
 
 Verify:
 
@@ -822,22 +640,11 @@ Verify:
 gf --version
 ```
 
-Do not copy an example package filename blindly.
+### 14.3 macOS binary package
 
-Use the filename provided by the official GF release.
+Install the package matching the machine architecture and supported GF version.
 
----
-
-## 13.3 macOS binary installation
-
-Install the package matching the Mac architecture:
-
-```text
-Intel
-Apple Silicon
-```
-
-When macOS blocks the package because it is not notarized, follow the official GF installation instructions and local security policy.
+Follow official GF instructions and local security policy for package approval.
 
 Verify:
 
@@ -845,53 +652,35 @@ Verify:
 gf --version
 ```
 
----
+### 14.4 Hackage installation
 
-## 13.4 Hackage installation
-
-For supported macOS, Linux, or WSL environments with a compatible Haskell toolchain:
+With a compatible Haskell toolchain:
 
 ```bash
 cabal update
 cabal install gf-<supported-version>
 ```
 
-The executable is commonly installed into a user-local Cabal binary directory.
+Record the resulting executable path.
 
-That directory may need to be added to `PATH`.
+### 14.5 Source installation
 
-A source-toolchain installation is more complex than a binary installation and is not required for ordinary GF Wordbench use.
+Obtain `gf-core` from its official source repository and select a reviewed release tag or commit.
 
----
+Build according to the official GF source instructions.
 
-## 13.5 GF source installation
+For reproducible validation, record:
 
-Clone:
+- source revision;
+- build toolchain;
+- resulting executable path;
+- GF version output.
 
-```bash
-git clone https://github.com/GrammaticalFramework/gf-core.git
-cd gf-core
-```
-
-Install according to the official GF source instructions, commonly through:
-
-```bash
-cabal install
-```
-
-or:
-
-```bash
-stack install
-```
-
-Use a release tag or reviewed commit when reproducibility matters.
-
-Do not use an arbitrary moving branch for release validation without recording the exact revision.
+Do not use an unrecorded moving branch for release validation.
 
 ---
 
-# 14. Install the RGL
+## 15. Install the RGL
 
 GF core and the RGL are separate components.
 
@@ -905,278 +694,160 @@ api
 language-specific RGL modules
 ```
 
-GF Wordbench needs an RGL root that allows the configured GF path to resolve these modules.
+### 15.1 Binary RGL release
 
----
+1. Obtain a compatible RGL package.
+2. Extract it to a stable location.
+3. identify the root required by the configured GF search path;
+4. record the resolved path.
 
-## 14.1 RGL binary release
+### 15.2 Source checkout
 
-1. Download a compatible RGL binary release.
-2. Extract it to a stable directory.
-3. Record the directory that contains or anchors the RGL libraries.
+Obtain `gf-rgl` from its official source repository.
 
-The official GF instructions commonly use:
-
-```text
-GF_LIB_PATH
-```
-
-GF Wordbench SHOULD instead receive an explicit RGL root through its environment or application configuration.
-
-It may set a child-process environment explicitly.
-
-It MUST NOT depend silently on a developer's global `GF_LIB_PATH`.
-
----
-
-## 14.2 RGL source checkout
-
-Clone:
-
-```bash
-git clone https://github.com/GrammaticalFramework/gf-rgl.git
-```
-
-Typical checkout:
+A common source root is:
 
 ```text
-C:\mycode\Grammatical_Framework\gf-rgl
+<rgl-checkout>/src
 ```
 
-Common RGL source root:
+Use the actual checkout structure. Do not infer the root from the directory name alone.
 
-```text
-C:\mycode\Grammatical_Framework\gf-rgl\src
-```
+### 15.3 Source build
 
-Use the actual checkout structure.
+When the selected RGL requires compilation, follow its release or repository build instructions.
 
-Do not assume the root from directory name alone.
+GF Wordbench does not build the RGL automatically during ordinary application installation.
 
----
+### 15.4 Compatibility
 
-## 14.3 Compile the RGL from source
+GF and RGL must be selected as a compatible pair.
 
-GF must already be installed and resolvable.
-
-From the RGL checkout:
-
-```bash
-make
-```
-
-On Windows, follow the build instructions provided by the RGL release or repository.
-
-GF Wordbench itself does not build the RGL automatically during ordinary installation.
-
----
-
-## 14.4 RGL compatibility
-
-GF core and RGL versions should be selected as a compatible pair.
-
-For reproducible validation, record:
+Record:
 
 - GF version;
 - RGL release or commit;
+- resolved RGL root;
 - effective GF search path.
-
-A newer RGL checkout combined with an older GF executable may not be valid.
 
 Compatibility is governed by project and GF compatibility documentation.
 
 ---
 
-# 15. Verify GF and RGL together
+## 16. Verify GF and the RGL
 
-## 15.1 GF version
+### 16.1 GF version probe
 
 ```text
 <gf-executable> --version
 ```
 
-Windows example:
+### 16.2 Basic startup
 
-```powershell
-& "C:\path\to\gf.exe" --version
-```
+Start the selected executable and exit after confirming that it launches.
 
-## 15.2 Basic GF startup
+### 16.3 Wordbench verification
 
-```text
-<gf-executable>
-```
+Configure:
 
-Exit the shell after confirming startup.
-
-## 15.3 Path verification
-
-Use a small project entrypoint or project check after configuring:
-
+- active project root;
 - GF executable;
 - RGL root;
-- project root.
+- output root.
 
-Preferred GF Wordbench check:
-
-```text
-gf-wordbench project check
-```
-
-Then run a quick or checkpoint validation according to the project state.
-
-## 15.4 Direct compile verification
-
-A direct compile may be used for installation diagnosis:
-
-```text
-<gf> -batch -s <path-options> <known-valid-source.gf>
-```
-
-Do not use an ad hoc command as permanent project configuration.
-
-GF Wordbench should construct and record the effective command.
-
----
-
-# 16. Configure GF Wordbench environment
-
-Machine-specific settings do not belong in `project.toml`.
-
-Required environment facts commonly include:
-
-```text
-GF executable
-RGL root
-output root
-```
-
-They may be supplied through:
-
-- CLI arguments;
-- GUI selections;
-- application state;
-- documented environment configuration.
-
-The exact precedence is defined by:
-
-```text
-docs/configuration/ENVIRONMENT_AND_PATHS.md
-```
-
-The resolved values MUST be visible in run metadata.
-
----
-
-## 16.1 Example Windows paths
-
-```text
-GF executable:
-C:\mycode\Grammatical_Framework\gf-3.12-windows\gf.exe
-
-RGL root:
-C:\mycode\Grammatical_Framework\gf-rgl\src
-
-Output root:
-C:\mycode\Grammatical_Framework\gf-wordbench-runs
-```
-
-Paths may contain spaces.
-
-Do not add manual quote characters to values stored in configuration fields.
-
-Quoting is applied by the shell only when typing a command.
-
----
-
-## 16.2 Environment-variable policy
-
-The final application may support documented variables such as:
-
-```text
-GF_WORDBENCH_PYTHON
-GF_WORDBENCH_DEBUG_CONSOLE
-```
-
-GF-related environment variables may include:
-
-```text
-PATH
-GF_LIB_PATH
-```
-
-Explicit GF Wordbench configuration takes precedence for correctness-critical paths.
-
-Full environment dumps MUST NOT be written into reports.
-
----
-
-# 17. Validate the active project
-
-After installation, confirm:
-
-```text
-project/project.toml
-```
-
-exists and contains:
-
-```text
-schema_id = "gf-wordbench.project"
-schema_version = "1.0"
-```
-
-Run:
-
-```text
-gf-wordbench project check
-```
-
-Strict validation:
-
-```text
-gf-wordbench project check --strict
-```
-
-A successful package installation does not prove that the active language project is configured correctly.
-
----
-
-# 18. First CLI verification
-
-Start with help:
-
-```text
-gf-wordbench --help
-```
-
-Then verify project configuration:
-
-```text
-gf-wordbench project check
-```
-
-Then run the smallest applicable validation.
-
-Conceptual quick command:
-
-```text
-gf-wordbench run --mode quick --target-file <project-relative-file>
-```
-
-The exact final option names are defined in:
+Then use the project and validation commands defined by:
 
 ```text
 docs/usage/CLI_REFERENCE.md
 ```
 
-Do not preserve an example that disagrees with the final CLI parser.
+### 16.4 Direct GF diagnosis
+
+A direct GF invocation may be used to diagnose an installation boundary.
+
+It is not a substitute for Wordbench command construction, evidence capture or project configuration.
+
+Permanent validation commands are built through the Wordbench GF command contract.
 
 ---
 
-# 19. First GUI verification
+## 17. Configure machine-local paths
 
-Run:
+Machine-local settings do not belong in `project.toml`.
+
+Typical machine-local values:
+
+```text
+active project root
+GF executable
+RGL root
+output root
+application-state path
+```
+
+They may be supplied through:
+
+- explicit CLI values;
+- GUI values;
+- documented environment variables;
+- disposable application state;
+- documented defaults or discovery.
+
+The authoritative precedence and variable names are defined by:
+
+```text
+docs/configuration/ENVIRONMENT_AND_PATHS.md
+```
+
+Resolved values must be visible in run metadata and diagnostic configuration views.
+
+Do not store quote characters inside path values.
+
+---
+
+## 18. Validate the active project
+
+The active project contains:
+
+```text
+project/project.toml
+```
+
+or an explicitly selected project root containing `project.toml`, according to the environment-and-path contract.
+
+The project file declares its schema identity and version.
+
+Use the project-check operation defined by `docs/usage/CLI_REFERENCE.md`.
+
+A successful package installation does not prove that the active GF project is valid.
+
+---
+
+## 19. First CLI verification
+
+Verification order:
+
+```text
+1. display CLI help
+2. display installed version
+3. inspect resolved configuration
+4. validate the active project
+5. run the smallest applicable validation mode
+```
+
+Exact command spelling and options are defined by:
+
+```text
+docs/usage/CLI_REFERENCE.md
+```
+
+This installation guide must not preserve examples that disagree with the canonical CLI parser.
+
+---
+
+## 20. First GUI verification
+
+Start:
 
 ```text
 gf-wordbench-gui
@@ -1185,22 +856,20 @@ gf-wordbench-gui
 Confirm that the GUI can:
 
 - load application defaults;
-- locate the active project;
-- display or accept GF executable path;
-- display or accept RGL root;
-- display or accept output root;
+- resolve the one active project;
+- display GF executable configuration;
+- display RGL-root configuration;
+- display output-root configuration;
 - validate configuration;
 - close without an unhandled exception.
 
-Do not begin with release mode.
-
-Use project check or quick mode first.
+Begin with project inspection or the smallest applicable validation operation, not release validation.
 
 ---
 
-# 20. Windows launchers
+## 21. Windows launchers
 
-Expected convenience launchers:
+Repository convenience launchers may include:
 
 ```text
 launch_cli.bat
@@ -1209,165 +878,108 @@ launch_gui.bat
 
 They are optional.
 
-The Python package and installed entrypoints remain canonical.
+The Python distribution and installed console entrypoints remain canonical.
 
----
+### 21.1 Responsibilities
 
-## 20.1 Launcher responsibilities
-
-A launcher MAY:
+A launcher may:
 
 - resolve the repository root;
-- prefer `.venv`;
-- use an explicit Python override;
+- prefer a repository-local virtual environment;
+- use a documented explicit Python override;
 - optionally use `uv`;
-- enforce UTF-8 mode;
-- start the installed or module entrypoint;
+- enforce documented UTF-8 behavior;
+- start the canonical CLI or GUI entrypoint;
 - propagate meaningful exit codes;
-- keep a console open after a visible failure.
+- keep a console visible after a launch failure.
 
-A launcher MUST NOT:
+A launcher must not:
 
 - define validation semantics;
-- change source selection silently;
-- override the active project identity;
-- construct a different GF path;
+- change source selection;
+- override project identity;
+- construct a different GF search path;
 - hide the selected interpreter;
-- be the only supported execution method.
+- become the only supported execution method;
+- discover or launch `gf-portfolio`.
 
----
+### 21.2 Runtime resolution
 
-## 20.2 Runtime resolution order
-
-Recommended final Windows launcher order:
-
-```text
-1. GF_WORDBENCH_PYTHON
-2. repository-local .venv
-3. uv, when installed
-4. Python launcher
-5. python or pythonw on PATH
-6. clear failure
-```
-
-The launcher should report which runtime could not be resolved.
-
----
-
-## 20.3 Legacy launcher variables
-
-During migration, the launchers may accept:
+The runtime resolution order and supported launcher variables are defined by:
 
 ```text
-GF_AUDIT_PYTHON
-GF_AUDIT_DEBUG_CONSOLE
+docs/operations/WINDOWS_LAUNCHERS.md
 ```
 
-These are legacy aliases.
+### 21.3 Legacy aliases
 
-Final documentation and examples use:
+Legacy GF Audit launcher variables may be accepted only through explicit compatibility behavior.
 
-```text
-GF_WORDBENCH_PYTHON
-GF_WORDBENCH_DEBUG_CONSOLE
-```
+New examples use GF Wordbench variable names.
 
----
-
-## 20.4 Launcher use
-
-CLI:
+### 21.4 Invocation
 
 ```bat
 launch_cli.bat --help
-```
-
-GUI:
-
-```bat
 launch_gui.bat
 ```
 
-A launcher should work from any current directory because it resolves its own repository root.
+Launchers resolve their repository root rather than depending on the caller's current directory.
 
 ---
 
-# 21. Development verification
+## 22. Development verification
 
-From a development installation:
-
-```text
-python -m pytest
-```
-
-Expected:
-
-```text
-all required tests pass
-```
-
-Lint:
-
-```text
-python -m ruff check .
-```
-
-Type check:
-
-```text
-python -m mypy app
-```
-
-Coverage:
-
-```text
-python -m pytest --cov=app --cov-report=term-missing
-```
-
-The exact quality gates belong to:
+Use the quality commands defined by:
 
 ```text
 docs/development/TESTING_GF_WORDBENCH.md
 ```
 
-Real-GF integration tests should be marked separately from unit tests that use fake process results.
+Typical operations include:
+
+```text
+python -m pytest
+python -m ruff check .
+python -m mypy <declared-package-root>
+python -m pytest --cov=<declared-package-root> --cov-report=term-missing
+```
+
+The package root and exact quality gates are owned by `pyproject.toml` and the testing guide.
+
+Real-GF integration tests are separated from unit tests that use fake process results.
 
 ---
 
-# 22. Installation verification checklist
+## 23. Installation verification checklist
 
 ```text
 [ ] supported Python installed
-[ ] correct Python interpreter selected
+[ ] intended Python interpreter selected
 [ ] virtual environment created
-[ ] GF Wordbench package installed
-[ ] app import succeeds
-[ ] PySide6 import succeeds
-[ ] CLI command resolves
-[ ] GUI command resolves
+[ ] GF Wordbench distribution installed
+[ ] distribution metadata query succeeds
+[ ] CLI entrypoint resolves
+[ ] GUI entrypoint resolves when GUI support is installed
 [ ] GF executable exists
 [ ] GF version probe succeeds
-[ ] RGL root exists
-[ ] active project.toml exists
-[ ] project check succeeds
+[ ] RGL root exists when required
+[ ] active project configuration exists
+[ ] project validation succeeds
 [ ] output root is writable
-[ ] quick validation can start
-[ ] test suite passes for development installs
+[ ] smallest applicable validation can start
+[ ] development test suite passes for development installations
 ```
 
-Installation is not complete until every required item is verified.
+Installation is complete when every applicable required item is verified.
 
 ---
 
-# 23. Upgrade GF Wordbench
+## 24. Upgrade GF Wordbench
 
-## 23.1 Editable source checkout
+### 24.1 Editable source checkout
 
-Update source:
-
-```text
-git pull
-```
+Update source through the repository's approved workflow.
 
 Refresh dependencies and entrypoints:
 
@@ -1375,21 +987,18 @@ Refresh dependencies and entrypoints:
 python -m pip install -e ".[dev]"
 ```
 
-Run:
+Then:
 
 ```text
 python -m pytest
-gf-wordbench --version
-gf-wordbench project check
+gf-wordbench --help
 ```
 
-Review migration documentation before opening or rewriting persisted state.
+Run the documented version, project and schema checks.
 
----
+### 24.2 Standard source installation
 
-## 23.2 Standard source installation
-
-Update source, then reinstall:
+After updating source:
 
 ```text
 python -m pip install --upgrade .
@@ -1401,82 +1010,80 @@ When dependency state is uncertain:
 python -m pip install --force-reinstall .
 ```
 
----
-
-## 23.3 Wheel installation
+### 24.3 Wheel installation
 
 ```text
-python -m pip install --upgrade <new-wheel>
+python -m pip install --upgrade "<new-wheel>"
 ```
 
-Run project and schema checks afterward.
+Run configuration, project and schema checks afterward.
 
----
+### 24.4 Migration
 
-## 23.4 Schema migration
+An application upgrade may require:
 
-An application upgrade may introduce:
-
-- state migration;
-- project schema migration;
+- application-state migration;
+- project-schema migration;
 - summary-reader migration;
-- gold normalization review.
+- normalization or gold review.
 
-Migration MUST be explicit.
+Migration is explicit and follows:
 
-Do not delete or overwrite old state before the canonical replacement validates successfully.
+```text
+docs/release/MIGRATION_AND_DEPRECATION.md
+```
+
+Do not delete or overwrite old data before the replacement validates successfully.
 
 ---
 
-# 24. Upgrade GF core
+## 25. Upgrade GF core
 
 Before replacing GF:
 
-1. read the GF compatibility policy;
+1. review the compatibility policy;
 2. record the current GF version;
-3. install the new GF version in a separate directory when possible;
-4. configure GF Wordbench explicitly to use it;
-5. run version probe;
+3. install the new version in a separate location when possible;
+4. configure Wordbench explicitly to use it;
+5. run the version probe;
 6. run integration checks;
-7. rebuild current-run artifacts;
+7. create new run artifacts;
 8. do not reuse old `.gfo` or `.pgf` as proof;
-9. review normalization and gold output;
-10. remove the old version only after validation.
+9. review normalized and gold output;
+10. remove the previous installation only after validation.
 
-Different GF releases may use incompatible object or PGF formats.
-
-Isolated installation directories reduce risk.
+GF releases may use incompatible object or PGF formats.
 
 ---
 
-# 25. Upgrade the RGL
+## 26. Upgrade the RGL
 
 Before changing RGL revision:
 
 1. record the current release or commit;
-2. obtain the new RGL in a separate checkout or reviewed update;
-3. rebuild if using source;
-4. update explicit RGL root if needed;
+2. obtain the replacement in a separate checkout or reviewed update;
+3. build it when required;
+4. update the explicit RGL root;
 5. run checkpoint validation;
 6. run required scenarios;
-7. review changed normalized output;
+7. review normalized output changes;
 8. update gold only through the explicit gold workflow;
-9. preserve prior release evidence.
+9. preserve prior run evidence.
 
-An RGL update is a project dependency change, not a routine invisible package refresh.
+An RGL update is a project dependency change.
 
 ---
 
-# 26. Recreate the virtual environment
+## 27. Recreate the virtual environment
 
 Recreate `.venv` when:
 
-- the repository moves;
+- the checkout moves;
 - the base Python installation moves;
-- the Python minor version changes materially;
-- installed scripts point to old paths;
+- the Python version changes;
+- generated scripts point to stale paths;
 - dependency state is corrupted;
-- PySide6 import fails after upgrades;
+- GUI dependencies fail after upgrades;
 - packaging metadata changes significantly.
 
 Windows PowerShell:
@@ -1495,19 +1102,17 @@ POSIX:
 ```bash
 deactivate
 rm -rf .venv
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-Virtual environments are not portable artifacts.
-
 Do not commit `.venv` to version control.
 
 ---
 
-# 27. Uninstall GF Wordbench
+## 28. Uninstall GF Wordbench
 
 Inside the environment where it is installed:
 
@@ -1515,73 +1120,53 @@ Inside the environment where it is installed:
 python -m pip uninstall gf-wordbench
 ```
 
-Confirm removal when prompted.
+Removing a repository-local `.venv` also removes that isolated package installation.
 
-For a repository-local virtual environment, removing `.venv` removes the isolated Python installation.
-
-Uninstallation MUST NOT automatically delete:
+Uninstallation must not automatically delete:
 
 - active project source;
 - project documentation;
 - scenarios;
 - gold files;
-- output runs;
+- run directories;
 - GF installation;
-- RGL checkout.
+- RGL checkout;
+- Portfolio data owned by another product.
 
-Delete those only through explicit project or cleanup procedures.
-
----
-
-# 28. Remove GF core
-
-GF removal depends on installation method.
-
-Examples:
-
-- delete an extracted Windows binary directory;
-- uninstall a platform package;
-- remove a Cabal-installed executable according to Haskell tooling policy;
-- remove a source checkout separately.
-
-Before removal, confirm no active GF Wordbench configuration references the executable.
+Delete those only through their explicit maintenance procedures.
 
 ---
 
-# 29. Remove the RGL
+## 29. Remove GF core or the RGL
 
-Remove the RGL directory only when:
+Before removing GF core, confirm that no active Wordbench environment references its executable.
+
+Before removing the RGL, confirm that:
 
 - no active project depends on it;
-- its revision is recorded where required;
-- no release evidence relies on the directory remaining locally available;
-- configuration is updated.
+- the revision is recorded where required;
+- configuration is updated;
+- required historical evidence remains available or self-describing.
 
-Generated run evidence should remain self-describing even if the local RGL checkout is later removed.
+Run evidence should remain interpretable after local tool installations are removed.
 
 ---
 
-# 30. Offline installation
+## 30. Offline installation
 
-An offline installation requires obtaining all dependencies in advance.
-
-Possible package set:
+Prepare all required packages in advance:
 
 ```text
-GF Wordbench wheel
-PySide6 wheels and dependencies
+GF Wordbench wheel or source archive
+runtime dependency wheels
 development wheels when required
 GF binary package
 RGL binary or source archive
 ```
 
-On an online machine:
+On an online machine, prepare a wheelhouse using the source or wheel release inputs.
 
-```text
-python -m pip download --dest wheelhouse .
-```
-
-For development extras:
+Example:
 
 ```text
 python -m pip download --dest wheelhouse ".[dev]"
@@ -1599,37 +1184,19 @@ Exact wheel compatibility depends on:
 - operating system;
 - CPU architecture.
 
-Offline release procedures SHOULD include hashes or signatures when available.
+Offline release procedures include hashes or signatures when supplied by the release channel.
 
 ---
 
-# 31. Multiple Python installations
+## 31. Multiple Python installations
 
-Windows may have several Python runtimes.
-
-Inspect:
+Windows:
 
 ```text
 py -0p
-```
-
-Create the environment with a specific interpreter:
-
-```text
 py -3.11 -m venv .venv
-```
-
-After activation:
-
-```text
 where python
 python -c "import sys; print(sys.executable)"
-```
-
-The expected executable should be inside:
-
-```text
-<repository>\.venv\Scripts\python.exe
 ```
 
 POSIX:
@@ -1639,19 +1206,15 @@ which python
 python -c "import sys; print(sys.executable)"
 ```
 
-A successful `pip install` into another interpreter does not install GF Wordbench into the current one.
+The selected interpreter should resolve inside the intended virtual environment.
+
+Installing with another interpreter's `pip` does not install Wordbench into the current environment.
 
 ---
 
-# 32. Common failures
+## 32. Common failures
 
-## 32.1 Python version is too old
-
-Symptom:
-
-```text
-Package requires a different Python
-```
+### 32.1 Unsupported Python version
 
 Check:
 
@@ -1659,15 +1222,9 @@ Check:
 python --version
 ```
 
-Fix:
+Install a version satisfying `pyproject.toml`, recreate `.venv` and reinstall.
 
-- install a supported Python;
-- recreate `.venv`;
-- reinstall GF Wordbench.
-
----
-
-## 32.2 `pip` installs into the wrong Python
+### 32.2 Package installed into the wrong interpreter
 
 Check:
 
@@ -1676,97 +1233,34 @@ python -m pip --version
 python -c "import sys; print(sys.executable)"
 ```
 
-Fix:
+Reinstall with the intended interpreter.
 
-```text
-python -m pip install -e ".[dev]"
-```
+### 32.3 GUI dependency missing
 
-using the intended interpreter.
+Check the runtime dependencies declared by `pyproject.toml`.
 
----
+Reinstall the distribution or development extra in the intended environment.
 
-## 32.3 `No module named PySide6`
+Do not diagnose a Python GUI import failure as a GF grammar failure.
 
-Cause:
-
-- runtime dependencies were not installed;
-- wrong interpreter;
-- broken environment.
-
-Fix:
-
-```text
-python -m pip install .
-```
-
-or:
-
-```text
-python -m pip install -e ".[dev]"
-```
-
-Then verify:
-
-```text
-python -c "import PySide6; print(PySide6.__version__)"
-```
-
----
-
-## 32.4 CLI command is not found
-
-Check package:
-
-```text
-python -m pip show gf-wordbench
-```
-
-Check script directory:
-
-```text
-python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
-```
-
-Try module fallback:
-
-```text
-python -m app.main_cli --help
-```
-
-Fix:
-
-- activate the correct virtual environment;
-- reinstall the package;
-- confirm final entrypoint names in `pyproject.toml`.
-
----
-
-## 32.5 GUI does not start
-
-Run with a console:
-
-```text
-python -m app.main_gui
-```
-
-or set the debug-console launcher variable.
+### 32.4 CLI command not found
 
 Check:
 
 ```text
-python -c "import PySide6"
+python -m pip show gf-wordbench
+python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
 ```
 
-Inspect the displayed traceback.
+Activate the intended environment or call its interpreter explicitly, then reinstall.
 
-Do not diagnose a GUI import failure as a GF grammar failure.
+### 32.5 GUI does not start
 
----
+Start the installed GUI entrypoint from a visible terminal when supported by the platform.
 
-## 32.6 GF executable is not found
+Inspect the Python exception and dependency state.
 
-Check configured path.
+### 32.6 GF executable not found
 
 Windows:
 
@@ -1782,160 +1276,106 @@ command -v gf
 gf --version
 ```
 
-Fix the explicit GF executable configuration.
+Fix explicit GF executable configuration. Do not silently substitute another installation.
 
-Do not rely on an unrelated GF executable found later on `PATH`.
-
----
-
-## 32.7 RGL modules cannot be found
+### 32.7 RGL modules not found
 
 Check:
 
-- configured RGL root;
-- actual RGL directory structure;
-- `gf.path_parts`;
-- effective GF search path;
-- GF/RGL version compatibility.
+- RGL root;
+- actual directory structure;
+- project GF path parts;
+- resolved GF search path;
+- GF/RGL compatibility.
 
-Do not copy missing RGL modules into the project source tree as a workaround.
+Do not copy missing RGL modules into project source as an installation workaround.
 
----
+### 32.8 Ambient GF path changes behavior
 
-## 32.8 `GF_LIB_PATH` changes behavior unexpectedly
+Inspect relevant GF environment variables.
 
-Inspect:
+Use explicit Wordbench path configuration. Ambient variables must not override the recorded execution contract silently.
 
-```text
-GF_LIB_PATH
-```
+### 32.9 Paths contain spaces
 
-Use explicit GF Wordbench RGL and path configuration.
+Pass executable paths as separate arguments.
 
-A global environment variable should not silently override recorded run configuration.
-
----
-
-## 32.9 Path contains spaces
-
-Paths with spaces are supported.
-
-Correct PowerShell invocation:
+PowerShell example:
 
 ```powershell
 & "C:\Program Files\GF\gf.exe" --version
 ```
 
-Configuration values should store the raw path without embedded quote characters.
+Stored path values do not include shell quote characters.
 
----
+### 32.10 PowerShell activation blocked
 
-## 32.10 PowerShell activation is blocked
-
-Use:
+Invoke the environment interpreter directly:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-without activation, or apply an approved user-level execution policy.
-
----
-
-## 32.11 Repository moved after installation
+### 32.11 Checkout moved
 
 Virtual-environment scripts contain absolute paths.
 
-Delete and recreate `.venv`.
+Recreate `.venv`.
 
-Do not attempt to repair every generated script manually.
-
----
-
-## 32.12 Stale command still uses `gf-audit`
+### 32.12 Legacy GF Audit command remains
 
 Cause:
 
-- legacy editable install;
-- old virtual environment;
-- old script directory on `PATH`.
+- old editable installation;
+- old environment;
+- stale scripts on `PATH`.
 
-Check:
+Remove the legacy distribution or environment and reinstall `gf-wordbench`.
 
-```text
-where gf-audit-cli
-where gf-wordbench
-```
+Legacy commands are compatibility inputs, not canonical installation names.
 
-or POSIX:
+### 32.13 Stale `.gfo` or `.pgf`
 
-```text
-command -v gf-audit-cli
-command -v gf-wordbench
-```
+Create a new run with the selected GF executable.
 
-Fix:
+Do not use artifacts produced by another GF version as proof of current validation.
 
-- uninstall legacy distribution;
-- recreate the virtual environment;
-- install final `gf-wordbench` metadata.
+### 32.14 Tests cannot find GF
+
+Unit tests do not require a developer-global GF installation.
+
+Real-GF tests use explicit documented configuration and markers.
 
 ---
 
-## 32.13 GF version mismatch in `.gfo` or `.pgf`
+## 33. Security requirements
 
-Cause:
-
-- artifacts produced by another GF version.
-
-Fix:
-
-- do not reuse stale compiled artifacts;
-- create a fresh run;
-- rebuild `.gfo` and `.pgf` using the configured GF executable.
-
----
-
-## 32.14 Tests cannot find real GF
-
-Unit tests should not require a developer-global GF installation.
-
-Real-GF tests must be explicitly configured and marked.
-
-Provide the test GF executable and RGL path through documented test configuration.
-
----
-
-# 33. Security requirements
-
-Installation SHOULD follow these rules:
+Installation follows these rules:
 
 - obtain Python from an approved source;
-- obtain GF from the official GF release source;
-- obtain RGL from the official GF RGL source;
-- verify release hashes or signatures when provided;
-- use a virtual environment;
-- do not run installation as administrator unless platform packaging requires it;
+- obtain GF and RGL from their official or approved release sources;
+- verify hashes or signatures when supplied;
+- use an isolated Python environment;
+- avoid administrator privileges unless platform packaging requires them;
 - do not store secrets in `project.toml`;
-- do not trust arbitrary `.gfs` scenarios;
-- review source before installing editable code from an untrusted repository;
+- treat `.gfs` scenarios as executable GF-shell input;
+- review editable source before installation;
 - do not add unreviewed directories to system `PATH`;
-- do not expose full environment variables in support logs.
-
-A `.gfs` file is executable input to the GF shell and must be treated accordingly.
+- do not include complete environment dumps in support records;
+- do not install `gf-portfolio` as an undeclared Wordbench dependency.
 
 ---
 
-# 34. Reproducible installation record
+## 34. Reproducible installation record
 
-A release or controlled development environment SHOULD record:
+A controlled environment records:
 
 ```text
 GF Wordbench version
 Python version
 operating system
 CPU architecture
-PySide6 version
+resolved Python dependencies
 GF executable path
 GF version
 RGL release or commit
@@ -1948,29 +1388,29 @@ Useful commands:
 ```text
 python --version
 python -m pip freeze
-gf-wordbench --version
+python -c "from importlib.metadata import version; print(version('gf-wordbench'))"
 <gf-executable> --version
 git -C <rgl-checkout> rev-parse HEAD
 ```
 
-Do not copy secrets or complete environment dumps into the record.
+Do not record secrets or a complete environment dump.
 
 ---
 
-# 35. CI installation
+## 35. CI installation
 
-Recommended CI order:
+Canonical CI stages:
 
 ```text
 1. checkout repository
 2. install supported Python
-3. create or use isolated environment
-4. install `.[dev]`
+3. create or select an isolated environment
+4. install the declared development extra
 5. run unit tests without GF
-6. install or expose GF for integration job
-7. expose compatible RGL
-8. run marked integration tests
-9. validate project configuration
+6. install or expose GF for integration jobs
+7. expose a compatible RGL
+8. run marked real-GF integration tests
+9. validate the active project
 10. preserve test artifacts
 ```
 
@@ -1982,95 +1422,94 @@ real-GF integration job
 release-validation job
 ```
 
-This avoids making every test dependent on external GF installation.
+This keeps unit tests independent of external GF installation.
 
 ---
 
-# 36. Installation acceptance criteria
-
-The installation procedure is valid when:
+## 36. Installation acceptance criteria
 
 ```text
 [ ] Python requirement matches pyproject.toml
 [ ] runtime dependencies install through standard packaging
-[ ] development extras install through `.[dev]`
+[ ] development extras install through the declared extra
 [ ] CLI entrypoint resolves
-[ ] GUI entrypoint resolves
-[ ] module fallback resolves
-[ ] GF executable is external and explicit
-[ ] GF version probe works
-[ ] RGL root is explicit
-[ ] project configuration validates
+[ ] GUI entrypoint resolves when supported
+[ ] distribution metadata query succeeds
+[ ] GF executable remains external and explicit
+[ ] GF version probe succeeds
+[ ] RGL root is explicit when required
+[ ] active-project configuration validates
 [ ] paths with spaces work
-[ ] launchers are optional
-[ ] launchers prefer the repository virtual environment
+[ ] launchers remain optional
 [ ] installation does not rewrite project source
 [ ] installation does not create false run results
+[ ] Wordbench installation does not depend on gf-portfolio
 [ ] uninstallation preserves project and run data
-[ ] upgrade path includes schema and compatibility review
-[ ] official installation references are current
+[ ] upgrades include schema and compatibility review
 ```
 
 ---
 
-# 37. Anti-drift indicators
+## 37. Anti-drift indicators
 
 Installation drift exists when:
 
-- `pyproject.toml` requires another Python version than this guide;
-- package name differs between metadata and commands;
-- CLI or GUI script names differ from this guide;
-- launchers use another runtime-resolution order without documentation;
-- a launcher defines hidden GF paths;
+- `pyproject.toml` and this guide disagree on Python support;
+- distribution or console-command names differ;
+- launcher behavior conflicts with `WINDOWS_LAUNCHERS.md`;
+- a launcher introduces hidden GF paths;
 - GF core becomes an undeclared bundled dependency;
-- RGL is assumed to be bundled with GF;
-- the GUI imports a package not declared as a runtime dependency;
-- tests require tools absent from `.[dev]`;
-- installation instructions write machine paths into `project.toml`;
-- global `GF_LIB_PATH` becomes mandatory without being recorded;
-- a wheel-install command assumes a nonexistent public package;
-- a virtual environment is described as movable;
-- uninstallation deletes project or run data automatically;
-- Windows-only launcher behavior is presented as framework semantics.
+- the RGL is assumed to be bundled with GF;
+- a GUI dependency is absent from package metadata;
+- development tests require tools absent from the declared development extra;
+- machine-local paths are written into `project.toml`;
+- ambient GF environment variables become mandatory without being recorded;
+- a wheel command assumes an unpublished package source;
+- a virtual environment is described as portable;
+- uninstallation deletes project or run data;
+- Windows launcher behavior is presented as framework semantics;
+- internal Python package names are duplicated here and drift from `pyproject.toml`;
+- Wordbench installation requires Portfolio code, configuration or storage.
 
-Any such change requires coordinated review of:
+Coordinated review includes:
 
 ```text
 pyproject.toml
 launch_cli.bat
 launch_gui.bat
-app entrypoints
-configuration loader
+application composition root
+configuration and path resolution
 external-tool lock
-environment documentation
 development setup
-CI documentation
+testing and CI documentation
+CLI and GUI references
 this file
 ```
 
 ---
 
-# 38. Official references
+## 38. Official references
 
-Primary GF installation documentation:
+Primary GF sources:
 
 - [Grammatical Framework — Download and Installation](https://www.grammaticalframework.org/download/)
 - [GF core repository](https://github.com/GrammaticalFramework/gf-core)
 - [GF Resource Grammar Library repository](https://github.com/GrammaticalFramework/gf-rgl)
 
-Primary Python environment documentation:
+Primary Python sources:
 
 - [Python `venv` documentation](https://docs.python.org/3/library/venv.html)
-- [Python packaging installation guide](https://docs.python.org/3/installing/index.html)
+- [Installing Python modules](https://docs.python.org/3/installing/index.html)
 
-GF Wordbench compatibility and package metadata remain authoritative for the exact versions supported by a particular GF Wordbench release.
+GF Wordbench package metadata and compatibility documents remain authoritative for versions supported by a particular release.
 
 ---
 
-# 39. Cross-references
+## 39. Cross-references
 
 | Topic | Document |
 |---|---|
+| Product boundary | `docs/architecture/PRODUCT_BOUNDARIES.md` |
 | Quick start | `docs/usage/QUICK_START.md` |
 | CLI commands | `docs/usage/CLI_REFERENCE.md` |
 | GUI operation | `docs/usage/GUI_REFERENCE.md` |
@@ -2078,6 +1517,7 @@ GF Wordbench compatibility and package metadata remain authoritative for the exa
 | Application state | `docs/configuration/APPLICATION_STATE_REFERENCE.md` |
 | Environment and paths | `docs/configuration/ENVIRONMENT_AND_PATHS.md` |
 | GF integration | `docs/gf/GF_TOOLCHAIN_INTEGRATION.md` |
+| GF command construction | `docs/gf/GF_COMMAND_CONSTRUCTION.md` |
 | GF paths | `docs/gf/GF_PATH_RESOLUTION.md` |
 | GF compatibility | `docs/gf/GF_VERSION_COMPATIBILITY.md` |
 | Windows launchers | `docs/operations/WINDOWS_LAUNCHERS.md` |
@@ -2088,8 +1528,8 @@ GF Wordbench compatibility and package metadata remain authoritative for the exa
 
 ---
 
-# 40. Final rule
+## 40. Governing rule
 
-> A successful installation proves that the software components can be found and started; it does not prove that the active language project passes validation.
+> A successful installation proves that the software components can be found and started; it does not prove that the active GF language project passes validation.
 
-Verify Python, GF Wordbench, GF core, the RGL, and the active project separately before running release validation.
+Verify Python, GF Wordbench, GF core, the RGL and the active project independently before release validation.

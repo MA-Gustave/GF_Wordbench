@@ -2,11 +2,12 @@
 
 **Document ID:** `GF-WB-REPOSITORY-STRUCTURE`  
 **Status:** Normative  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\REPOSITORY_STRUCTURE.md`  
+**Path:** `docs/REPOSITORY_STRUCTURE.md`  
 **Applies to:** GF Wordbench framework repository, active language project, reusable project template, tests, documentation and generated outputs  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Structure version:** `1.0.0`  
-**Last structural review:** `2026-07-21`
+**Structure version:** `1.1.0`  
+**Last structural review:** `2026-07-24`
 
 ---
 
@@ -26,7 +27,7 @@ It establishes:
 - how a new language project is initialized;
 - how structural drift is detected and prevented.
 
-This document governs repository-level placement and ownership.
+This document governs repository-level placement and ownership. Cross-document interpretation is governed by `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`.
 
 Detailed behavioral contracts are defined in:
 
@@ -259,6 +260,7 @@ GF_Wordbench/
 │   ├── GLOSSARY.md
 │   ├── REPOSITORY_STRUCTURE.md
 │   ├── DOCUMENTATION_MAP.md
+│   ├── DOCUMENTATION_ALIGNMENT_LOCK.md
 │   ├── INTERFILE_CONTRACT_LOCK.md
 │   ├── EXTERNAL_TOOL_CONTRACT_LOCK.md
 │   ├── PERSISTED_SCHEMA_LOCK.md
@@ -309,9 +311,7 @@ GF_Wordbench/
     └── run_<run-id>/
 ```
 
-This is the final target structure.
-
-A component may initially contain fewer files while being implemented. Missing planned files do not authorize moving their responsibilities elsewhere.
+This structure is normative. Every listed responsibility MUST remain in its designated boundary, and missing required paths are structural nonconformities.
 
 ---
 
@@ -326,8 +326,7 @@ It owns:
 - concise product identity;
 - installation summary;
 - quick-start commands;
-- links to authoritative documentation;
-- current maturity status.
+- links to authoritative documentation.
 
 It MUST NOT duplicate full technical references.
 
@@ -472,7 +471,7 @@ Package metadata MUST have one source of truth.
 
 Owns application-wide defaults and stable filename constants.
 
-It MUST NOT own active-language values after `project.toml` is implemented.
+It MUST NOT own active-language values. Active-language configuration belongs exclusively in `project/project.toml`.
 
 Examples of framework-owned defaults:
 
@@ -940,6 +939,7 @@ SCOPE_AND_NON_GOALS.md
 GLOSSARY.md
 REPOSITORY_STRUCTURE.md
 DOCUMENTATION_MAP.md
+DOCUMENTATION_ALIGNMENT_LOCK.md
 INTERFILE_CONTRACT_LOCK.md
 EXTERNAL_TOOL_CONTRACT_LOCK.md
 PERSISTED_SCHEMA_LOCK.md
@@ -976,6 +976,7 @@ Examples:
 
 ```text
 repository placement       → REPOSITORY_STRUCTURE.md
+cross-document alignment   → DOCUMENTATION_ALIGNMENT_LOCK.md
 Python interfile behavior  → INTERFILE_CONTRACT_LOCK.md
 external command boundary  → EXTERNAL_TOOL_CONTRACT_LOCK.md
 persisted data shape       → PERSISTED_SCHEMA_LOCK.md
@@ -1023,7 +1024,6 @@ project/
 │   ├── SYNTAX_AND_CONSTRUCTOR_RULES.md
 │   ├── VALIDATION_SPEC.md
 │   ├── TEST_COVERAGE_MATRIX.md
-│   ├── STATUS_LEDGER.md
 │   ├── DECISION_LOG.md
 │   ├── KNOWN_ISSUES.md
 │   ├── RELEASE_CRITERIA.md
@@ -1042,7 +1042,6 @@ Project entry point.
 It identifies:
 
 - active language;
-- project status;
 - source root;
 - entrypoints;
 - standard validation commands;
@@ -1728,7 +1727,7 @@ Strict mode MAY additionally detect:
 
 ## 28. Required structural tests
 
-Recommended tests:
+Required tests:
 
 ```text
 tests/contracts/test_repository_structure.py
@@ -1738,7 +1737,7 @@ tests/contracts/test_artifact_ownership.py
 tests/contracts/test_no_language_drift.py
 ```
 
-These tests SHOULD verify:
+These tests MUST verify:
 
 - all required paths exist;
 - template and active project share required relative paths;
@@ -1769,6 +1768,9 @@ COMPONENT_MAP.md
 DEPENDENCY_RULES.md
     detailed permitted and forbidden imports
 
+DOCUMENTATION_ALIGNMENT_LOCK.md
+    cross-document interpretation and anti-drift rules
+
 INTERFILE_CONTRACT_LOCK.md
     behavior at Python file boundaries
 
@@ -1789,9 +1791,9 @@ These documents MUST link to this file rather than redefine the full canonical t
 
 ---
 
-## 30. Final structural invariants
+## 30. Structural invariants
 
-The final repository MUST satisfy all of the following:
+The repository MUST satisfy all of the following:
 
 ```text
 [ ] framework code is language-neutral
@@ -1814,7 +1816,7 @@ The final repository MUST satisfy all of the following:
 
 ---
 
-## 31. Final enforcement rule
+## 31. Enforcement rule
 
 Repository structure is part of the system contract.
 

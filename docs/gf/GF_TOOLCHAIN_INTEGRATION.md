@@ -4,8 +4,10 @@
 **Status:** Normative architecture and integration specification  
 **Applies to:** GF Wordbench framework and one active GF language project  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\gf\GF_TOOLCHAIN_INTEGRATION.md`  
-**Document version:** `1.0.0`
+**Canonical path:** `docs/gf/GF_TOOLCHAIN_INTEGRATION.md`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Document version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -29,6 +31,12 @@ It explains:
 - how the integration is tested without duplicating GF internals.
 
 This document is the architectural guide for the integration.
+
+Cross-document product identity and authority order are locked in:
+
+```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+```
 
 The normative external-process boundary is locked in:
 
@@ -54,7 +62,13 @@ Language-specific GF module relationships are locked in:
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
-When this document and a lock appear to overlap, the lock governs the contract and this document explains the design.
+Executable diagnostic-tool registration is governed by:
+
+```text
+docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
+```
+
+When this document and a lock or accepted ADR overlap, the lock or ADR governs the contract and this document explains the integration design.
 
 ---
 
@@ -170,6 +184,23 @@ Maintainers are authoritative for:
 - deciding whether a warning blocks release;
 - approving additional external tools.
 
+### 3.5 Workspace and Portfolio boundary
+
+One GF Wordbench workspace contains exactly one active GF language project.
+Every GF operation belongs to one resolved project and one run.
+
+GF Wordbench does not:
+
+- discover or orchestrate several Wordbench workspaces;
+- execute GF on behalf of a portfolio registry;
+- aggregate multilingual readiness across projects;
+- expose its private process runner as a required external API;
+- require `gf-portfolio` code, storage, configuration, or services.
+
+The independent `gf-portfolio` product may consume public, versioned, completed
+Wordbench artifacts. That read-only consumer relationship does not change GF
+execution ownership and creates no reverse dependency from Wordbench to Portfolio.
+
 ---
 
 ## 4. GF toolchain components used
@@ -202,7 +233,7 @@ Not every mode uses every capability.
 
 ## 5. Integration layers
 
-The final architecture separates six layers.
+The architecture separates six layers.
 
 ```text
 configuration
@@ -304,30 +335,27 @@ Reports do not execute GF.
 
 ---
 
-## 6. Planned implementation ownership
+## 6. Integration ownership
 
-The final implementation should use the following ownership.
+The integration uses the following ownership.
 
-| Responsibility | Expected owner |
+| Responsibility | Owner |
 |---|---|
-| project configuration loading | `app/project_config.py` or equivalent |
-| run configuration building | `app/bootstrap.py` |
-| generic process execution | `app/utils/process_utils.py` |
-| GF executable/version adapter | `app/gf/toolchain.py` or equivalent |
-| GF path construction | `app/gf/path_resolver.py` or equivalent |
-| source module compilation | `app/audit/compiler.py` |
-| PGF release build | `app/audit/pgf_builder.py` |
-| `.gfs` execution | `app/audit/scenario_runner.py` |
-| GF diagnostic parsing | `app/audit/diagnostics.py` |
-| output normalization | `app/audit/normalization.py` |
-| gold comparison | `app/audit/gold.py` |
-| orchestration | `app/audit/audit_core.py` |
-| result assembly | `app/audit/result_model.py` |
-| reports | `app/reports/` |
+| active-project configuration loading | projects module through an application port |
+| run configuration and lifecycle | runs module and bootstrap composition |
+| generic process execution | external-process port and platform process adapter |
+| GF executable and version integration | GF anti-corruption adapter |
+| GF path construction | GF path resolver inside the validation boundary |
+| source-module compilation | validation module |
+| PGF release construction | validation module |
+| native `.gfs` execution | validation module |
+| GF diagnostic parsing and classification | diagnostics module |
+| output normalization and gold comparison | validation module |
+| run orchestration | application use case coordinating projects, runs, validation, diagnostics, and reporting |
+| result assembly and artifact publication | runs and reporting modules |
+| human, machine, and AI-ready reports | reporting module |
 
-Exact filenames may change through a coordinated architectural update.
-
-The ownership rules must not change implicitly.
+Concrete filenames may change through a coordinated architectural update, but ownership and dependency direction remain stable.
 
 ---
 
@@ -346,7 +374,7 @@ gf.exe
 
 ### 7.2 Resolution order
 
-Recommended final resolution order:
+Canonical resolution order:
 
 1. explicit CLI value;
 2. explicit GUI value;
@@ -361,7 +389,7 @@ The active project should not normally store a developer-specific absolute execu
 
 The resolved executable must:
 
-- be explicit in the final run configuration;
+- be explicit in the resolved run configuration;
 - exist or be resolvable before required validation;
 - be recorded in `summary.json`;
 - appear in structured process evidence;
@@ -1020,23 +1048,21 @@ The compiler must not:
 - infer project entrypoints;
 - rerun itself from a report writer.
 
-### 17.9 Migration note
+### 17.9 Compilation and PGF separation
 
-The earlier audit implementation may combine batch and make-oriented flags.
-
-The final GF Wordbench architecture separates:
+GF Wordbench keeps these operations distinct:
 
 ```text
 module compilation
 ```
 
-from:
+and:
 
 ```text
 PGF release construction
 ```
 
-A compatibility command may exist during migration, but it must not become the final normative model.
+A compatibility adapter may translate an inherited combined command into the two canonical operations, but it must delegate to the same request builders, process boundary, evidence model, and artifact contracts. It must not define a second normative execution path.
 
 ---
 
@@ -1231,7 +1257,7 @@ The runner must verify:
 - end follows begin;
 - section identifiers are unique;
 - forbidden failure markers do not appear;
-- the final scenario marker is reached.
+- the scenario completion marker is reached.
 
 ### 20.3 Missing marker
 
@@ -1680,7 +1706,7 @@ A normalization change that alters existing comparisons requires:
 1. normalization-rule update;
 2. tests;
 3. deliberate gold review;
-4. migration note;
+4. compatibility note;
 5. schema review when persisted output changes.
 
 ### 28.5 Raw-versus-normalized rule
@@ -1969,29 +1995,46 @@ Cross-platform behavior should produce equivalent structured results even when r
 
 ## 35. Optional external tools
 
-A new external tool is added only when GF, Python standard library, and existing GF Wordbench components cannot sufficiently provide the capability.
+A new external tool is added only when GF, the Python standard library, and
+existing GF Wordbench components cannot sufficiently provide the capability.
 
-Before integration, document:
+Every executable optional tool must have a static allowlist entry governed by
+`ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md`.
+
+Each entry defines:
 
 ```text
-tool
+tool_id
 purpose
-version policy
-license
-installation
+executable resolution policy
+version and license policy
 platform support
-request contract
-inputs
-outputs
-timeout
-artifacts
+allowed argument templates
+working-directory policy
+input policy
+output and artifact contracts
+timeout and output-size limits
+mutability
+network policy
+evidence role
+normalization and parser
 failure semantics
-security impact
 fallback
 tests
 ```
 
-Examples of possible optional tools:
+Registry rules:
+
+- arbitrary user-supplied commands are prohibited;
+- dynamically loaded executable plugins are prohibited;
+- optional tools use the same controlled process boundary as GF;
+- mutating tools require explicit user intent and cannot run during ordinary read-only validation;
+- AI-assisted tools are optional, visible, bounded, and non-normative;
+- AI output may annotate preserved evidence but cannot replace GF evidence or release criteria;
+- tool absence cannot invalidate core GF evidence unless the active project explicitly declares the tool as a required release dependency;
+- optional tools operate only for the active Wordbench project and are not Portfolio orchestration mechanisms.
+
+Examples include:
 
 - Graphviz for dependency visualization;
 - archive utilities;
@@ -2025,7 +2068,10 @@ The following are prohibited:
 - implementing GF parsing or typing inside GF Wordbench;
 - inferring successful scenario completion without required markers;
 - overwriting previous release artifacts without policy;
-- changing command options without compatibility review.
+- changing command options without compatibility review;
+- executing an optional command that is absent from the static registry;
+- allowing project text to select an executable or interpreter;
+- using the Wordbench process boundary to orchestrate `gf-portfolio` workspaces.
 
 ---
 
@@ -2070,7 +2116,7 @@ partial output
 missing artifact
 artifact generated
 ignored script command
-missing final marker
+missing completion marker
 child process
 ```
 
@@ -2122,7 +2168,7 @@ They must not depend on the active language project.
 
 ## 38. Observability
 
-Every GF operation should be traceable from the final run summary to raw evidence.
+Every GF operation must be traceable from the run summary to raw evidence.
 
 Trace chain:
 
@@ -2296,7 +2342,7 @@ A toolchain change is complete only when all applicable items are updated:
 [ ] Real-GF tests updated
 [ ] Compatibility policy updated
 [ ] Documentation updated
-[ ] Migration note added
+[ ] Compatibility and deprecation effects documented
 ```
 
 Examples of contract-changing edits:
@@ -2316,7 +2362,7 @@ No such edit may be made in only one caller.
 
 ---
 
-## 43. Final integration matrix
+## 43. Integration matrix
 
 | Operation | Input | Raw evidence | Required success evidence | Owner |
 |---|---|---|---|---|
@@ -2338,6 +2384,8 @@ No such edit may be made in only one caller.
 Read with:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
@@ -2354,7 +2402,7 @@ docs/validation/SCENARIO_VALIDATION.md
 docs/validation/RELEASE_GATES.md
 project/project.toml
 project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 ---
@@ -2375,7 +2423,7 @@ GF Wordbench adds orchestration and evidence requirements around those native ca
 
 ---
 
-## 46. Final rule
+## 46. Core rule
 
 The GF toolchain boundary must remain explicit and reproducible.
 

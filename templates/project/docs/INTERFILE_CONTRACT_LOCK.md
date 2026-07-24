@@ -64,7 +64,7 @@ project/
   project.toml
   README.md
   docs/
-    00_PROJECT_START_HERE.md
+    00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md
     LANGUAGE_OVERVIEW.md
     LANGUAGE_ARCHITECTURE.md
     MODULE_DEPENDENCY_MAP.md
@@ -72,12 +72,12 @@ project/
     SYNTAX_AND_CONSTRUCTOR_RULES.md
     MORPHOLOGY_SPEC.md
     INTERFILE_CONTRACT_LOCK.md
-    VALIDATION_SPEC.md
-    TEST_COVERAGE_MATRIX.md
+    VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
+    TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md
     RESEARCH_EVIDENCE.md
     KNOWN_ISSUES.md
-    STATUS_LEDGER.md
-    RELEASE_CRITERIA.md
+    STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
+    RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md
     DECISION_LOG.md
   validation/
     README.md
@@ -162,8 +162,8 @@ After initialization:
 - language facts come from current GF sources and project owner documents;
 - compile and scenario status comes from reproducible GF evidence;
 - placeholders, sample counts and sample claims are removed or marked unresolved;
-- `STATUS_LEDGER.md` records incomplete or blocked initialization work;
-- `RELEASE_CRITERIA.md` cannot pass on template claims alone.
+- `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` records incomplete or blocked initialization work;
+- `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` cannot pass on template claims alone.
 
 ## 9. Portfolio boundary
 

@@ -3,13 +3,19 @@
 **Document ID:** `GF-WB-DIAG-TIMEOUTS-PROCESS-FAILURES`  
 **Status:** Normative diagnostic and execution specification  
 **Applies to:** Every external process launched by GF Wordbench  
-**Primary target:** Grammatical Framework (`gf` / `gf.exe`)  
+**Primary target:** Grammatical Framework (`gf` / `gf.exe`) and statically registered diagnostic tools  
 **Owner:** GF Wordbench maintainers  
-**Primary implementation owner:** `app/utils/process_utils.py` or its final designated equivalent  
-**Primary consumers:** compiler, PGF builder, scenario runner, version probe, audit orchestration and result builders  
+**Primary architectural owner:** external-process port and platform process adapter  
+**Primary adapter:** `app/utils/process_utils.py`  
+**Primary consumers:** validation, diagnostics, runs, version probing and registered optional-tool adapters  
+**Canonical path:** `docs/diagnostics/TIMEOUTS_AND_PROCESS_FAILURES.md`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Related external contract:** `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`  
+**Related diagnostic-tool decision:** `docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md`  
 **Related process architecture:** `docs/architecture/PROCESS_EXECUTION_MODEL.md`  
-**Related error model:** `docs/diagnostics/ERROR_CLASSIFICATION.md`
+**Related error model:** `docs/diagnostics/ERROR_CLASSIFICATION.md`  
+**Specification version:** `1.1`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -68,7 +74,7 @@ This specification governs processes used for:
 - GF version probing;
 - individual source-file compilation;
 - checkpoint compilation;
-- final entrypoint validation;
+- entrypoint validation;
 - PGF construction;
 - `.gfs` scenario execution;
 - parsing;
@@ -77,7 +83,7 @@ This specification governs processes used for:
 - generation;
 - missing-function inspection;
 - grammar introspection;
-- approved future external tools.
+- optional diagnostic tools present in the static registry defined by ADR-0013.
 
 It governs:
 
@@ -113,7 +119,9 @@ It does not govern:
 - project-specific linguistic acceptance criteria;
 - detailed report formatting;
 - persisted JSON field-by-field schemas;
-- operating-system implementation internals beyond the required behavioral contract.
+- operating-system adapter internals beyond the required behavioral contract;
+- discovery, orchestration or aggregation of several Wordbench workspaces;
+- `gf-portfolio` storage, indexing, readiness computation or process execution.
 
 ---
 
@@ -195,8 +203,8 @@ It does not determine timeout or launch failure from message text alone.
 
 ## 4.4 Result builder owns
 
-- final validation status;
-- final error kind;
+- validation status;
+- error kind;
 - primary message;
 - combination of process, diagnostic and artifact evidence.
 
@@ -212,6 +220,22 @@ skipped
 ```
 
 The process runner MUST NOT assign causal file ownership.
+
+## 4.6 Workspace and Portfolio boundary
+
+Every process request belongs to exactly one active Wordbench project and one run.
+
+GF Wordbench MUST NOT:
+
+- discover executable work from a Portfolio workspace registry;
+- launch GF or diagnostic tools for several active projects in one request;
+- expose its private process runner as a required `gf-portfolio` API;
+- require Portfolio code, state, storage, configuration or services;
+- write Portfolio aggregation fields into process results.
+
+The independent `gf-portfolio` product may consume completed public Wordbench
+artifacts. That read-only relationship does not change process ownership and
+creates no reverse runtime dependency.
 
 ---
 
@@ -361,9 +385,9 @@ launch_error
 termination_error
 ```
 
-Not every field must be persisted in the first schema version.
+Persisted fields are defined by `docs/PERSISTED_SCHEMA_LOCK.md` and the owning schema references.
 
-The internal model should preserve enough detail for reliable reporting and testing.
+The internal model preserves enough detail for reliable reporting, testing, containment and artifact-trust decisions.
 
 ---
 
@@ -516,7 +540,7 @@ Rules:
 - input delivery is bounded;
 - an input write failure is recorded;
 - broken pipe does not erase output already captured;
-- interactive input is prohibited unless a future explicit contract enables it;
+- interactive input is prohibited unless a separate accepted contract enables it;
 - the runner must not wait indefinitely for an unhandled prompt.
 
 ---
@@ -551,7 +575,7 @@ GF may emit diagnostics on either stream.
 
 Stdout and stderr must be drained without creating a pipe deadlock.
 
-The implementation must ensure that:
+The process adapter ensures that:
 
 - one full pipe cannot permanently block the child while the other stream is being read;
 - both streams remain attributable;
@@ -559,7 +583,7 @@ The implementation must ensure that:
 - output limits do not cause the runner to stop draining silently;
 - stream reader failure is reported.
 
-Permitted implementation strategies include:
+Permitted adapter strategies include:
 
 - dedicated reader threads;
 - asynchronous subprocess streams;
@@ -579,7 +603,7 @@ Preparation includes:
 - validating containment inside the run root;
 - creating parent directories;
 - opening files or confirming writable destinations;
-- recording final paths.
+- recording the resolved capture paths.
 
 If capture setup fails before the child starts:
 
@@ -707,10 +731,14 @@ pgf_build
 scenario
 generation
 diagnostic_introspection
-optional_external_tool
+registered_optional_tool
 ```
 
 No normal validation operation uses an infinite timeout.
+
+A registered optional tool uses the timeout, mutability, network, output-limit
+and evidence policies declared in its ADR-0013 registry entry. Arbitrary
+commands and dynamically loaded executable plugins are prohibited.
 
 A diagnostic mode may use a larger timeout.
 
@@ -746,7 +774,7 @@ Timeout values must be:
 - finite;
 - positive;
 - represented in one documented unit;
-- within safe implementation bounds;
+- within safe platform and runtime bounds;
 - serializable when persisted;
 - validated before process launch.
 
@@ -1052,7 +1080,7 @@ After termination is requested, the runner should continue reading stdout and st
 - the bounded drain deadline expires;
 - a capture failure occurs.
 
-This preserves final diagnostics.
+This preserves terminal diagnostics.
 
 The drain deadline is finite.
 
@@ -1172,7 +1200,7 @@ process_creation_failure
 resource_exhaustion
 ```
 
-The final public error kind uses the canonical vocabulary:
+The public error kind uses the canonical vocabulary:
 
 ```text
 TOOL
@@ -1918,6 +1946,8 @@ The runner MUST:
 - avoid complete environment dumps;
 - redact secrets from rendered commands;
 - treat `.gfs` scripts as executable input;
+- permit only statically registered optional executables and argument templates;
+- enforce each registered tool's mutability and network policy;
 - prevent unauthorized shell escape;
 - preserve evidence of security-related termination.
 
@@ -1997,7 +2027,7 @@ Windows support must handle:
 - forced termination;
 - stream draining.
 
-The implementation may use a dedicated Windows process adapter.
+A dedicated Windows process adapter owns these platform mechanics.
 
 Platform details must not change public result semantics.
 
@@ -2042,7 +2072,7 @@ The GUI:
 - invokes audit orchestration;
 - sends cancellation through the shared token;
 - does not launch GF directly;
-- displays final structured state;
+- displays terminal structured state;
 - does not invent a separate timeout policy.
 
 Closing the GUI while a process is active must follow application-shutdown cancellation policy.
@@ -2056,7 +2086,7 @@ The CLI:
 - uses the same timeout configuration;
 - maps interrupt handling to cancellation;
 - waits for bounded process cleanup;
-- returns an exit code consistent with final validation status;
+- returns an exit code consistent with terminal validation status;
 - prints raw evidence paths for failures when available;
 - does not bypass process-tree cleanup.
 
@@ -2183,7 +2213,7 @@ A longer timeout may increase resource exposure.
 
 Multiple failures can occur.
 
-Recommended precedence for final execution/result interpretation:
+Canonical precedence for terminal execution and result interpretation:
 
 1. launch failure;
 2. cancellation or timeout terminal state;
@@ -2753,7 +2783,10 @@ Process-contract drift exists when:
 - run finalization hashes open files;
 - platform behavior changes public status meaning;
 - cleanup deletes partial evidence;
-- a termination failure is hidden.
+- a termination failure is hidden;
+- an executable absent from the ADR-0013 registry is launched;
+- project text selects an executable or interpreter;
+- a process result contains Portfolio registry or aggregation state.
 
 Every drift indicator requires restoration or a coordinated contract change.
 
@@ -2810,7 +2843,7 @@ Artifacts:
 Status mapping:
 Platforms:
 Compatibility:
-Migration:
+Compatibility effects:
 Tests:
 ```
 
@@ -2840,6 +2873,9 @@ claim process-tree cleanup without confirmation
 allow GUI and CLI to use different timeout semantics
 use wall-clock time for deadline enforcement
 permit unbounded post-termination waiting
+launch an executable optional tool absent from the static registry
+let project content choose an executable or interpreter
+orchestrate several Wordbench workspaces through the private process runner
 ```
 
 ---
@@ -2848,6 +2884,8 @@ permit unbounded post-termination waiting
 
 ### Architecture and contracts
 
+- `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
+- `docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md`
 - `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`
 - `docs/INTERFILE_CONTRACT_LOCK.md`
 - `docs/architecture/PROCESS_EXECUTION_MODEL.md`
@@ -2880,10 +2918,11 @@ permit unbounded post-termination waiting
 - `docs/operations/AUTOMATION_AND_CI.md`
 - `docs/reference/STATUS_VALUES.md`
 - `docs/reference/DIAGNOSTIC_KINDS.md`
+- `docs/DOCUMENTATION_CORRECTION_LEDGER.md`
 
 ---
 
-## 130. Final enforcement rule
+## 130. Core enforcement rule
 
 External-process control is part of the validation result.
 
@@ -2891,6 +2930,6 @@ A command that did not launch, did not finish, was cancelled, exceeded its deadl
 
 Therefore:
 
-> No timeout, cancellation, termination, capture or process-tree behavior may change through an isolated implementation edit.
+> No timeout, cancellation, termination, capture or process-tree behavior may change through an isolated code or documentation edit.
 
 Every process-control change must update the request model, process runner, operation owners, result mapping, artifact trust, platform adapters, tests, contract locks and documentation as one coordinated change.

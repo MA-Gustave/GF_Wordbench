@@ -5,8 +5,9 @@
 **Applies to:** GF Wordbench file results, scenario results, process results, diagnostic parsing, causal classification, reports, summaries, regression comparison, and release gates  
 **Owner:** GF Wordbench maintainers  
 **Vocabulary version:** `1.0.0`  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\reference\DIAGNOSTIC_KINDS.md`  
-**Last structural review:** 2026-07-22
+**Canonical path:** `docs/reference/DIAGNOSTIC_KINDS.md`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Last reviewed:** 2026-07-24
 
 ---
 
@@ -120,9 +121,28 @@ docs/PERSISTED_SCHEMA_LOCK.md
 
 ---
 
-## 4. Related normative documents
+## 4. Product and interoperability boundary
+
+This vocabulary describes diagnostics produced by GF Wordbench for one active project and one run.
+
+It must not encode:
+
+- a registry of other Wordbench workspaces;
+- cross-project or multilingual aggregation state;
+- portfolio readiness or portfolio navigation;
+- private `gf-portfolio` identifiers, storage, or configuration;
+- consumer-specific diagnostic values.
+
+The independent `gf-portfolio` product may consume public, versioned Wordbench summaries and manifests in read-only mode. It uses the diagnostic values defined here without redefining them and keeps portfolio aggregation in its own schemas.
+
+GF Wordbench does not import, call, configure, or persist `gf-portfolio` state.
+
+---
+
+## 5. Related normative documents
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -139,6 +159,10 @@ docs/reports/SUMMARY_JSON_REFERENCE.md
 docs/reports/AI_READY_REFERENCE.md
 docs/scenarios/SCENARIO_MARKERS_AND_ASSERTIONS.md
 docs/validation/VALIDATION_OVERVIEW.md
+docs/decisions/ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
+docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
 ```
 
 When this reference overlaps a serialized field definition, `PERSISTED_SCHEMA_LOCK.md` owns the field shape and version.
@@ -147,7 +171,7 @@ This reference owns the semantic interpretation of the diagnostic vocabulary.
 
 ---
 
-## 5. Normative terms
+## 6. Normative terms
 
 - **MUST**: mandatory.
 - **MUST NOT**: prohibited.
@@ -175,7 +199,7 @@ This reference owns the semantic interpretation of the diagnostic vocabulary.
 
 ---
 
-# 6. Diagnostic model
+## 7. Diagnostic model
 
 Every result should be interpretable through the following conceptual record:
 
@@ -192,7 +216,7 @@ blocked_by
 raw_evidence_paths
 ```
 
-Not every current persisted result contains every field directly.
+Schema `1.0` does not persist every conceptual field directly.
 
 Fields not present in the active schema must not be invented in canonical output.
 
@@ -200,7 +224,7 @@ They may be represented through existing structured fields until a schema revisi
 
 ---
 
-## 6.1 The five diagnostic axes
+### 7.1 The five diagnostic axes
 
 | Axis | Question answered | Canonical example |
 |---|---|---|
@@ -234,7 +258,7 @@ These values are not interchangeable.
 
 ---
 
-# 7. Canonical validation status
+## 8. Canonical validation status
 
 Canonical validation statuses are:
 
@@ -249,7 +273,7 @@ Status values are uppercase ASCII.
 
 ---
 
-## 7.1 `OK`
+### 8.1 `OK`
 
 Meaning:
 
@@ -275,7 +299,7 @@ Examples:
 
 ---
 
-## 7.2 `FAIL`
+### 8.2 `FAIL`
 
 Meaning:
 
@@ -296,7 +320,7 @@ Examples:
 
 ---
 
-## 7.3 `ERROR`
+### 8.3 `ERROR`
 
 Meaning:
 
@@ -312,7 +336,7 @@ Examples:
 - normalized output could not be produced;
 - required result file could not be written;
 - internal result invariant failed;
-- manifest could not be finalized.
+- manifest could not be completed.
 
 `ERROR` is not a more severe spelling of `FAIL`.
 
@@ -320,7 +344,7 @@ It describes a different failure boundary.
 
 ---
 
-## 7.4 `SKIPPED`
+### 8.4 `SKIPPED`
 
 Meaning:
 
@@ -341,11 +365,11 @@ A required operation that is skipped without approved policy must make the run `
 - missing configuration;
 - launch failure;
 - timeout;
-- unimplemented required functionality.
+- missing required functionality.
 
 ---
 
-# 8. Canonical execution state
+## 9. Canonical execution state
 
 Canonical persisted execution states are:
 
@@ -362,7 +386,7 @@ A component may use an internal pre-execution state such as `not_started`, but i
 
 ---
 
-## 8.1 `completed`
+### 9.1 `completed`
 
 Meaning:
 
@@ -381,7 +405,7 @@ completed + ERROR
 
 ---
 
-## 8.2 `timed_out`
+### 9.2 `timed_out`
 
 Meaning:
 
@@ -408,14 +432,14 @@ normal GF compile failure
 
 ---
 
-## 8.3 `cancelled`
+### 9.3 `cancelled`
 
 Meaning:
 
 - the user or controlling system requested termination;
 - execution did not complete normally.
 
-Recommended implications:
+Canonical implications:
 
 ```text
 status = ERROR
@@ -439,7 +463,7 @@ when the schema supports detailed codes.
 
 ---
 
-## 8.4 `launch_failed`
+### 9.4 `launch_failed`
 
 Meaning:
 
@@ -463,7 +487,7 @@ A launch failure must not be classified as a GF language error.
 
 ---
 
-# 9. Canonical error kinds
+## 10. Canonical error kinds
 
 Canonical error kinds are:
 
@@ -488,7 +512,7 @@ Detailed failure identity belongs to an optional diagnostic code and preserved e
 
 ---
 
-## 9.1 Error-kind summary
+### 10.1 Error-kind summary
 
 | Error kind | Broad meaning | Default status | Typical execution state |
 |---|---|---|---|
@@ -496,7 +520,7 @@ Detailed failure identity belongs to an optional diagnostic code and preserved e
 | `OTHER` | Recognized failure outside defined families | `FAIL` or `ERROR` | any |
 | `TYPE` | GF type or unification failure | `FAIL` | `completed` |
 | `SYNTAX` | GF source or command-language syntax failure | `FAIL` | `completed` |
-| `INTERNAL` | Internal invariant or implementation failure | `FAIL` or `ERROR` | `completed` |
+| `INTERNAL` | Internal invariant or framework-internal failure | `FAIL` or `ERROR` | `completed` |
 | `TIMEOUT` | Deadline exceeded | `ERROR` by default | `timed_out` |
 | `SCRIPT` | Scenario, marker, assertion, or script contract failure | `FAIL` or `ERROR` | `completed` |
 | `CONFIG` | Invalid or missing configuration | `ERROR` | no process or `launch_failed` |
@@ -505,13 +529,13 @@ Detailed failure identity belongs to an optional diagnostic code and preserved e
 
 ---
 
-# 10. `OK`
+## 11. `OK`
 
-## 10.1 Meaning
+### 11.1 Meaning
 
 `OK` means no technical error applies to the represented operation.
 
-## 10.2 Valid combinations
+### 11.2 Valid combinations
 
 ```text
 status = OK
@@ -529,7 +553,7 @@ diagnostic_class = skipped
 
 when no failure caused the skip.
 
-## 10.3 Invalid combinations
+### 11.3 Invalid combinations
 
 The following are invalid:
 
@@ -538,15 +562,15 @@ status = FAIL
 error_kind = OK
 ```
 
-unless the failing criterion is represented entirely outside the current error-kind field and the schema has not yet been expanded.
+unless schema `1.0` represents the failing criterion through another documented field.
 
-Canonical final writers should assign the closest valid non-`OK` error kind.
+Canonical writers assign the closest valid non-`OK` error kind.
 
 ---
 
-# 11. `OTHER`
+## 12. `OTHER`
 
-## 11.1 Meaning
+### 12.1 Meaning
 
 `OTHER` is the fallback technical family when:
 
@@ -554,7 +578,7 @@ Canonical final writers should assign the closest valid non-`OK` error kind.
 - available evidence is sufficient to establish failure;
 - no more specific canonical error kind is justified.
 
-## 11.2 Appropriate uses
+### 12.2 Appropriate uses
 
 Examples:
 
@@ -563,9 +587,9 @@ Examples:
 - legacy diagnostic whose precise family cannot be recovered;
 - cancellation detail when no dedicated canonical kind applies and status remains explicit.
 
-## 11.3 Inappropriate uses
+### 12.3 Inappropriate uses
 
-Do not use `OTHER` merely because parsing work has not been implemented.
+Do not use `OTHER` when available evidence supports a more specific canonical kind.
 
 Known conditions should use their specific kind.
 
@@ -577,15 +601,15 @@ Do not use `OTHER` to conceal:
 - I/O failure;
 - malformed scenario protocol.
 
-## 11.4 Evidence requirement
+### 12.4 Evidence requirement
 
 `OTHER` must preserve a meaningful primary message and raw evidence reference.
 
 ---
 
-# 12. `TYPE`
+## 13. `TYPE`
 
-## 12.1 Meaning
+### 13.1 Meaning
 
 `TYPE` represents a GF semantic typing or unification failure.
 
@@ -601,7 +625,7 @@ constructor result incompatible with declared lincat
 invalid parameter-domain use
 ```
 
-## 12.2 Authority
+### 13.2 Authority
 
 GF is authoritative for type checking.
 
@@ -609,7 +633,7 @@ GF Wordbench recognizes and normalizes GF diagnostics.
 
 It does not implement a competing type checker.
 
-## 12.3 Default mapping
+### 13.3 Default mapping
 
 ```text
 status = FAIL
@@ -618,7 +642,7 @@ error_kind = TYPE
 diagnostic_class = direct | downstream | ambiguous
 ```
 
-## 12.4 Causal caution
+### 13.4 Causal caution
 
 A `TYPE` diagnostic is not automatically direct.
 
@@ -628,7 +652,7 @@ Examples:
 - diagnostic points to a failed imported provider: may be `downstream`;
 - source attribution is unclear: `ambiguous`.
 
-## 12.5 Required evidence
+### 13.5 Required evidence
 
 Preserve when available:
 
@@ -646,9 +670,9 @@ stderr path
 
 ---
 
-# 13. `SYNTAX`
+## 14. `SYNTAX`
 
-## 13.1 Meaning
+### 14.1 Meaning
 
 `SYNTAX` represents invalid syntax in:
 
@@ -666,7 +690,7 @@ malformed module header
 invalid GF command syntax
 ```
 
-## 13.2 Distinction from `SCRIPT`
+### 14.2 Distinction from `SCRIPT`
 
 Use:
 
@@ -691,7 +715,7 @@ malformed GF command → SYNTAX
 missing required completion marker → SCRIPT
 ```
 
-## 13.3 Default mapping
+### 14.3 Default mapping
 
 ```text
 status = FAIL
@@ -700,7 +724,7 @@ error_kind = SYNTAX
 diagnostic_class = direct | downstream | ambiguous
 ```
 
-## 13.4 Causal caution
+### 14.4 Causal caution
 
 Imported-file syntax failure may cause downstream failures in consumers.
 
@@ -708,11 +732,11 @@ The classifier, not the parser, determines causal class.
 
 ---
 
-# 14. `INTERNAL`
+## 15. `INTERNAL`
 
-## 14.1 Meaning
+### 15.1 Meaning
 
-`INTERNAL` represents an internal invariant or implementation failure reported by:
+`INTERNAL` represents an internal invariant or framework-internal failure reported by:
 
 - GF;
 - a GF runtime component;
@@ -729,7 +753,7 @@ impossible internal model state
 unexpected invariant violation
 ```
 
-## 14.2 Origin field
+### 15.2 Origin field
 
 `INTERNAL` alone does not identify the failing component.
 
@@ -743,11 +767,11 @@ report-writer
 manifest-writer
 ```
 
-A future persisted `origin` field requires a schema update.
+Persisting an `origin` field requires a schema update.
 
 Until then, origin belongs in structured detail or the primary message.
 
-## 14.3 Status mapping
+### 15.3 Status mapping
 
 If GF launched and reported an internal error while validating project material:
 
@@ -764,11 +788,11 @@ status = ERROR
 error_kind = INTERNAL
 ```
 
-## 14.4 Causal class
+### 15.4 Causal class
 
 An internal error is not automatically a direct project failure.
 
-Canonical final behavior:
+Canonical behavior:
 
 - use `direct` only when evidence links the failure to the evaluated provider;
 - use `downstream` only when a confirmed blocker exists;
@@ -777,17 +801,17 @@ Canonical final behavior:
 
 The predecessor classifier treated `INTERNAL` as obviously direct.
 
-That behavior is transitional and must be refined for framework-origin internal errors.
+Legacy directness is migrated using origin and causal evidence.
 
 ---
 
-# 15. `TIMEOUT`
+## 16. `TIMEOUT`
 
-## 15.1 Meaning
+### 16.1 Meaning
 
 `TIMEOUT` means a finite configured deadline expired.
 
-## 15.2 Required execution state
+### 16.2 Required execution state
 
 Canonical combination:
 
@@ -796,7 +820,7 @@ execution_state = timed_out
 error_kind = TIMEOUT
 ```
 
-## 15.3 Default status
+### 16.3 Default status
 
 ```text
 status = ERROR
@@ -806,11 +830,11 @@ because the required contract did not complete.
 
 A documented stage may use `FAIL` only when timeout is itself an evaluated criterion.
 
-## 15.4 Causal class
+### 16.4 Causal class
 
 Timeout does not establish a project root cause.
 
-Recommended mapping:
+Canonical mapping:
 
 - `direct` only when the operation is inherently local to the target and no external blocker exists;
 - `downstream` when waiting on a confirmed failed dependency is established;
@@ -819,9 +843,9 @@ Recommended mapping:
 
 The predecessor classifier treated `TIMEOUT` as automatically direct.
 
-Canonical final classification must use operation context and evidence.
+Canonical classification uses operation context and evidence.
 
-## 15.5 Detailed codes
+### 16.5 Detailed codes
 
 Examples:
 
@@ -835,7 +859,7 @@ diagnostic_timeout
 termination_timeout
 ```
 
-## 15.6 Evidence
+### 16.6 Evidence
 
 Preserve:
 
@@ -851,9 +875,9 @@ owned child-process information when available
 
 ---
 
-# 16. `SCRIPT`
+## 17. `SCRIPT`
 
-## 16.1 Meaning
+### 17.1 Meaning
 
 `SCRIPT` represents a failure in a native `.gfs` scenario or GF Wordbench’s scenario-control contract.
 
@@ -873,7 +897,7 @@ required assertion failed
 scenario completion protocol failed
 ```
 
-## 16.2 `FAIL` versus `ERROR`
+### 17.2 `FAIL` versus `ERROR`
 
 Use `FAIL` when the scenario contract was interpretable and a required criterion evaluated false.
 
@@ -897,7 +921,7 @@ invalid assertion configuration
 output truncation prevents evaluation
 ```
 
-## 16.3 Distinction from `SYNTAX`
+### 17.3 Distinction from `SYNTAX`
 
 GF-reported syntax invalidity:
 
@@ -911,7 +935,7 @@ GF Wordbench scenario-protocol invalidity:
 SCRIPT
 ```
 
-## 16.4 Causal class
+### 17.4 Causal class
 
 A scenario script failure is not automatically a source-module direct failure.
 
@@ -922,7 +946,7 @@ Possible mappings:
 - `ambiguous`: evidence does not isolate script versus grammar behavior;
 - `skipped`: scenario not executed under policy.
 
-## 16.5 Detailed codes
+### 17.5 Detailed codes
 
 Examples:
 
@@ -944,9 +968,9 @@ assertion_failed
 
 ---
 
-# 17. `CONFIG`
+## 18. `CONFIG`
 
-## 17.1 Meaning
+### 18.1 Meaning
 
 `CONFIG` represents missing, malformed, unsupported, contradictory, or unsafe configuration.
 
@@ -965,7 +989,7 @@ multiple active projects detected
 required GF path part absent
 ```
 
-## 17.2 Default mapping
+### 18.2 Default mapping
 
 ```text
 status = ERROR
@@ -985,7 +1009,7 @@ If partial work ran and project-level causality is unclear:
 diagnostic_class = ambiguous
 ```
 
-## 17.3 Execution state
+### 18.3 Execution state
 
 Configuration failure may occur before an external process exists.
 
@@ -999,7 +1023,7 @@ completed
 
 for a process that was never attempted unless `completed` refers explicitly to internal preflight completion.
 
-## 17.4 Detailed codes
+### 18.4 Detailed codes
 
 Examples:
 
@@ -1020,9 +1044,9 @@ invalid_timeout
 
 ---
 
-# 18. `IO`
+## 19. `IO`
 
-## 18.1 Meaning
+### 19.1 Meaning
 
 `IO` represents filesystem, path access, encoding, read, write, or stream-capture failure.
 
@@ -1043,7 +1067,7 @@ invalid encoding
 path disappeared during run
 ```
 
-## 18.2 Default mapping
+### 19.2 Default mapping
 
 ```text
 status = ERROR
@@ -1058,7 +1082,7 @@ during process → completed, timed_out, or cancelled may still apply
 after process → completed process with report/artifact ERROR
 ```
 
-## 18.3 Causal class
+### 19.3 Causal class
 
 I/O failures are not automatically project-root failures.
 
@@ -1068,7 +1092,7 @@ Use:
 - `ambiguous` when partial validation cannot be trusted;
 - `direct` only when the project-owned file itself is the confirmed invalid or unreadable target and the classification contract defines that relation.
 
-## 18.4 Detailed codes
+### 19.4 Detailed codes
 
 Examples:
 
@@ -1088,9 +1112,9 @@ evidence_missing
 
 ---
 
-# 19. `TOOL`
+## 20. `TOOL`
 
-## 19.1 Meaning
+### 20.1 Meaning
 
 `TOOL` represents failure of an external executable or its integration contract when no more specific canonical kind applies.
 
@@ -1107,7 +1131,7 @@ tool-produced artifact structurally invalid
 optional external tool unavailable when required
 ```
 
-## 19.2 Distinction from other kinds
+### 20.2 Distinction from other kinds
 
 Use:
 
@@ -1118,7 +1142,7 @@ Use:
 - `INTERNAL` for explicit internal-error evidence;
 - `TOOL` for external capability, launch, compatibility, or contract failure.
 
-## 19.3 Default mapping
+### 20.3 Default mapping
 
 ```text
 status = ERROR
@@ -1126,7 +1150,7 @@ error_kind = TOOL
 diagnostic_class = skipped or ambiguous
 ```
 
-## 19.4 Detailed codes
+### 20.4 Detailed codes
 
 Examples:
 
@@ -1143,7 +1167,7 @@ unexpected_exit
 invalid_tool_output
 ```
 
-## 19.5 Artifact failure
+### 20.5 Artifact failure
 
 A required artifact missing after an apparently successful tool process is typically:
 
@@ -1158,9 +1182,9 @@ It must not be represented as `OK`.
 
 ---
 
-# 20. Detailed diagnostic codes
+## 21. Detailed diagnostic codes
 
-## 20.1 Purpose
+### 21.1 Purpose
 
 Error kinds are deliberately broad.
 
@@ -1181,9 +1205,9 @@ assertion_failed
 path_traversal
 ```
 
-## 20.2 Current schema rule
+### 21.2 Schema `1.0` rule
 
-A canonical writer must not emit a new persisted `diagnostic_code` field until `PERSISTED_SCHEMA_LOCK.md` defines it.
+A canonical writer emits a persisted `diagnostic_code` field only when `PERSISTED_SCHEMA_LOCK.md` defines it.
 
 Until then, a detailed code may appear in:
 
@@ -1193,9 +1217,9 @@ Until then, a detailed code may appear in:
 - a detail artifact;
 - report text derived from a stable internal value.
 
-## 20.3 Identifier syntax
+### 21.3 Identifier syntax
 
-Recommended syntax:
+Canonical syntax:
 
 ```text
 [a-z][a-z0-9]*(?:_[a-z0-9]+)*
@@ -1210,13 +1234,13 @@ missing_required_artifact
 gold_mismatch
 ```
 
-## 20.4 Stability
+### 21.4 Stability
 
 Once persisted or publicly documented, a diagnostic code is a versioned contract.
 
 It must not be reused with a different meaning.
 
-## 20.5 Unknown code
+### 21.5 Unknown code
 
 Readers must preserve an unknown detailed code as unknown.
 
@@ -1224,11 +1248,11 @@ They must not reinterpret it as another known code.
 
 ---
 
-# 21. Recommended diagnostic-code families
+## 22. Recommended diagnostic-code families
 
-These families are reference categories, not a currently mandatory persisted enum.
+These families are reference categories, not a mandatory persisted enum.
 
-## 21.1 Process
+### 22.1 Process
 
 ```text
 launch_failure
@@ -1240,7 +1264,7 @@ controller_cancelled
 stream_capture_failure
 ```
 
-## 21.2 Toolchain
+### 22.2 Toolchain
 
 ```text
 unknown_version
@@ -1250,7 +1274,7 @@ version_probe_failure
 tool_contract_failure
 ```
 
-## 21.3 GF compilation
+### 22.3 GF compilation
 
 ```text
 gf_parse_error
@@ -1261,7 +1285,7 @@ module_not_found
 dependency_load_failure
 ```
 
-## 21.4 Scenario
+### 22.4 Scenario
 
 ```text
 script_syntax_error
@@ -1281,7 +1305,7 @@ invalid_assertion
 assertion_failed
 ```
 
-## 21.5 Normalization and gold
+### 22.5 Normalization and gold
 
 ```text
 normalization_failure
@@ -1293,7 +1317,7 @@ gold_mismatch
 gold_write_prohibited
 ```
 
-## 21.6 Artifact
+### 22.6 Artifact
 
 ```text
 artifact_missing
@@ -1304,7 +1328,7 @@ artifact_path_escape
 manifest_missing_entry
 ```
 
-## 21.7 Configuration and schema
+### 22.7 Configuration and schema
 
 ```text
 config_missing
@@ -1317,7 +1341,7 @@ unknown_required_key
 multiple_active_projects
 ```
 
-## 21.8 Filesystem and encoding
+### 22.8 Filesystem and encoding
 
 ```text
 file_not_found
@@ -1332,7 +1356,7 @@ disk_full
 
 ---
 
-# 22. Canonical diagnostic classes
+## 23. Canonical diagnostic classes
 
 Canonical causal diagnostic classes are:
 
@@ -1353,7 +1377,7 @@ They do not describe process mechanics.
 
 ---
 
-## 22.1 Diagnostic-class summary
+### 23.1 Diagnostic-class summary
 
 | Class | Meaning | Typical status |
 |---|---|---|
@@ -1366,9 +1390,9 @@ They do not describe process mechanics.
 
 ---
 
-# 23. `ok`
+## 24. `ok`
 
-## 23.1 Meaning
+### 24.1 Meaning
 
 The result passed and has no causal failure.
 
@@ -1383,7 +1407,7 @@ blocked_by = []
 
 Static scan findings may coexist with `ok` when they do not define compile or scenario failure.
 
-## 23.2 Invalid use
+### 24.2 Invalid use
 
 Do not use `ok` when:
 
@@ -1395,9 +1419,9 @@ Do not use `ok` when:
 
 ---
 
-# 24. `direct`
+## 25. `direct`
 
-## 24.1 Meaning
+### 25.1 Meaning
 
 The strongest supported evidence attributes the failure to the evaluated target or provider.
 
@@ -1409,7 +1433,7 @@ Evidence may include:
 - artifact owned by the evaluated stage is invalid for a target-local reason;
 - explicit project dependency model identifies the target as the failing provider.
 
-## 24.2 Required invariants
+### 25.2 Required invariants
 
 ```text
 diagnostic_class = direct
@@ -1418,7 +1442,7 @@ is_direct = true
 
 `blocked_by` should be empty unless the schema uses it for additional context that does not contradict directness.
 
-## 24.3 Not automatic
+### 25.3 Not automatic
 
 The following do not prove directness by themselves:
 
@@ -1432,7 +1456,7 @@ The following do not prove directness by themselves:
 - script failure alone;
 - filename mentioned in a prompt or echoed command.
 
-## 24.4 Root-like, not metaphysical certainty
+### 25.4 Root-like, not metaphysical certainty
 
 `direct` means strongest supported local attribution under available evidence.
 
@@ -1440,9 +1464,9 @@ It does not guarantee there is no deeper design defect elsewhere.
 
 ---
 
-# 25. `downstream`
+## 26. `downstream`
 
-## 25.1 Meaning
+### 26.1 Meaning
 
 The evaluated result failed because one or more dependencies already failed.
 
@@ -1453,7 +1477,7 @@ Examples:
 - scenario cannot load an entrypoint blocked by a failed checkpoint;
 - PGF build fails because a required entrypoint failed earlier.
 
-## 25.2 Required evidence
+### 26.2 Required evidence
 
 A downstream result should identify confirmed blockers.
 
@@ -1467,7 +1491,7 @@ blocked_by = [<one or more blocker identities>]
 
 When the blocker is known, `blocked_by` must not be empty.
 
-## 25.3 Blocker normalization
+### 26.3 Blocker normalization
 
 Blockers should be normalized to stable project-relative file or module identities.
 
@@ -1485,7 +1509,7 @@ the classifier may collapse C’s blocker list to root-like A when the contract 
 
 It must preserve enough evidence to reconstruct the relationship.
 
-## 25.4 Status
+### 26.4 Status
 
 A downstream result remains `FAIL`.
 
@@ -1493,9 +1517,9 @@ It is not converted to `SKIPPED` merely because another file caused the failure,
 
 ---
 
-# 26. `ambiguous`
+## 27. `ambiguous`
 
-## 26.1 Meaning
+### 27.1 Meaning
 
 A failure exists, but available evidence cannot assign a confident causal origin.
 
@@ -1508,7 +1532,7 @@ Examples:
 - framework error prevents reliable project attribution;
 - candidate blockers exist but none is confirmed.
 
-## 26.2 Invariants
+### 27.2 Invariants
 
 ```text
 diagnostic_class = ambiguous
@@ -1519,21 +1543,21 @@ is_direct = false
 
 It must not imply confirmed downstream causality.
 
-## 26.3 Prefer ambiguity over false certainty
+### 27.3 Prefer ambiguity over false certainty
 
 When evidence does not justify `direct` or `downstream`, use `ambiguous`.
 
 Reports must preserve uncertainty.
 
-## 26.4 Primary message
+### 27.4 Primary message
 
 The primary message should state what is known, not invent a root cause.
 
 ---
 
-# 27. `noise`
+## 28. `noise`
 
-## 27.1 Meaning
+### 28.1 Meaning
 
 `noise` marks diagnostic evidence that should not influence root-cause ranking.
 
@@ -1545,7 +1569,7 @@ Examples:
 - a recognized harmless line excluded by a version-specific rule;
 - a redundant cascade message already represented structurally.
 
-## 27.2 Evidence preservation
+### 28.2 Evidence preservation
 
 Noise is not deleted from raw evidence.
 
@@ -1556,7 +1580,7 @@ It may be excluded from:
 - root-cause ranking;
 - concise report excerpts.
 
-## 27.3 Result-level caution
+### 28.3 Result-level caution
 
 A required failing result must not be converted to `OK` or hidden because its recognized lines were classified as noise.
 
@@ -1569,7 +1593,7 @@ diagnostic_class = ambiguous
 
 until failure can be explained.
 
-## 27.4 Status
+### 28.4 Status
 
 `noise` is primarily a diagnostic-record classification.
 
@@ -1577,9 +1601,9 @@ When used on a result, status must remain consistent with the underlying operati
 
 ---
 
-# 28. `skipped`
+## 29. `skipped`
 
-## 28.1 Meaning
+### 29.1 Meaning
 
 The operation or semantic validation did not run under explicit policy or because a prerequisite prevented it.
 
@@ -1600,25 +1624,25 @@ diagnostic_class = skipped
 
 for downstream items never attempted.
 
-## 28.2 Blocker representation
+### 29.2 Blocker representation
 
 If a required item was skipped because another result blocked execution, reports should identify the blocker.
 
 The item remains distinct from a process that launched and failed downstream.
 
-## 28.3 Invalid use
+### 29.3 Invalid use
 
 Do not use `skipped` to conceal:
 
 - timeout after launch;
 - cancellation after work began;
-- unimplemented required capability;
+- missing required capability;
 - missing required configuration;
 - unknown result.
 
 ---
 
-# 29. Compatibility value `framework_error`
+## 30. Compatibility value `framework_error`
 
 A draft persisted schema admitted:
 
@@ -1654,13 +1678,13 @@ error_kind = CONFIG | IO | TOOL | INTERNAL | TIMEOUT | SCRIPT | OTHER
 execution_state = <appropriate state>
 ```
 
-## 29.1 Reader compatibility
+### 30.1 Reader compatibility
 
 Until `PERSISTED_SCHEMA_LOCK.md` is harmonized, readers may accept `framework_error` from draft or legacy data.
 
 A migrator must not map it blindly.
 
-Recommended evidence-based conversion:
+Evidence-based conversion:
 
 | Legacy condition | Canonical class |
 |---|---|
@@ -1678,15 +1702,15 @@ Migration must:
 - state the chosen canonical mapping;
 - report uncertainty or loss.
 
-## 29.2 Release requirement
+### 30.2 Release requirement
 
-Before final stable release, the persisted schema, models, reports, tests, and this reference must agree on the canonical diagnostic-class enum.
+The persisted schema, models, reports, tests, and this reference must always agree on the canonical diagnostic-class enum.
 
 ---
 
-# 30. `is_direct`
+## 31. `is_direct`
 
-## 30.1 Purpose
+### 31.1 Purpose
 
 `is_direct` is a compatibility convenience field.
 
@@ -1698,7 +1722,7 @@ Canonical invariant:
 is_direct == (diagnostic_class == "direct")
 ```
 
-## 30.2 Invalid combinations
+### 31.2 Invalid combinations
 
 Invalid:
 
@@ -1714,19 +1738,19 @@ diagnostic_class = downstream
 is_direct = true
 ```
 
-## 30.3 Future removal
+### 31.3 versioned removal
 
 Removing `is_direct` from a persisted schema requires a schema major increment unless a migration and compatibility policy define otherwise.
 
 ---
 
-# 31. `blocked_by`
+## 32. `blocked_by`
 
-## 31.1 Meaning
+### 32.1 Meaning
 
 `blocked_by` identifies confirmed causal blockers for downstream results.
 
-## 31.2 Canonical identity
+### 32.2 Canonical identity
 
 Use stable identities:
 
@@ -1740,7 +1764,7 @@ artifact role
 
 The field’s exact allowed type is owned by the persisted schema.
 
-## 31.3 Determinism
+### 32.3 Determinism
 
 Blockers must be:
 
@@ -1749,25 +1773,25 @@ Blockers must be:
 - deterministically ordered;
 - project-contained when they are paths.
 
-## 31.4 Ambiguous candidates
+### 32.4 Ambiguous candidates
 
 Do not treat candidate blockers as confirmed blockers without explicit labeling.
 
-A future `candidate_blockers` field requires a schema revision.
+Persisting `candidate_blockers` requires a schema revision.
 
 ---
 
-# 32. Primary diagnostic
+## 33. Primary diagnostic
 
-## 32.1 Purpose
+### 33.1 Purpose
 
 A result may have many diagnostic lines.
 
 The primary diagnostic provides one deterministic summary.
 
-## 32.2 Selection priority
+### 33.2 Selection priority
 
-Recommended selection order:
+Canonical selection order:
 
 ```text
 1. launch, timeout, cancellation, or required contract failure
@@ -1783,15 +1807,15 @@ Recommended selection order:
 
 Stage-specific rules may refine this order.
 
-## 32.3 Stability
+### 33.3 Stability
 
 For equivalent evidence, primary selection should be deterministic.
 
-## 32.4 No evidence loss
+### 33.4 No evidence loss
 
 Selecting a primary diagnostic must not discard secondary diagnostics or raw logs.
 
-## 32.5 First line is not always primary
+### 33.5 First line is not always primary
 
 The first output line may be:
 
@@ -1805,13 +1829,13 @@ Primary selection uses parsed meaning and contract priority, not raw line order 
 
 ---
 
-# 33. Primary message
+## 34. Primary message
 
-## 33.1 Purpose
+### 34.1 Purpose
 
-`primary_message` or its current model equivalent presents the concise human-readable diagnostic.
+`primary_message` or its schema-defined equivalent presents the concise human-readable diagnostic.
 
-## 33.2 Requirements
+### 34.2 Requirements
 
 A primary message should:
 
@@ -1823,7 +1847,7 @@ A primary message should:
 - avoid complete unbounded logs;
 - preserve Unicode.
 
-## 33.3 Examples
+### 34.3 Examples
 
 ```text
 GrammarX.gf:42:7: cannot unify expected and actual record types
@@ -1833,7 +1857,7 @@ Required artifact `release_pgf` is missing
 Normalized output differs from gold in section `noun-phrase`
 ```
 
-## 33.4 No report prose as source
+### 34.4 No report prose as source
 
 The structured message is rendered into reports.
 
@@ -1841,7 +1865,7 @@ Reports must not be reparsed to recover it.
 
 ---
 
-# 34. Error detail
+## 35. Error detail
 
 `error_detail` may provide bounded supplementary context.
 
@@ -1868,9 +1892,9 @@ When stable structure is required, add typed fields through schema evolution.
 
 ---
 
-# 35. Source location
+## 36. Source location
 
-## 35.1 Fields
+### 36.1 Fields
 
 A normalized diagnostic may identify:
 
@@ -1883,15 +1907,15 @@ end_column
 module_name
 ```
 
-The current persisted schema may store only part of this information.
+Schema `1.0` may store only part of this information.
 
-## 35.2 Path rules
+### 36.2 Path rules
 
 Project source locations use project-relative canonical paths.
 
 Environment and tool paths follow their own path policy.
 
-## 35.3 Unknown location
+### 36.3 Unknown location
 
 Unknown location uses `null` or absence according to schema.
 
@@ -1904,13 +1928,13 @@ column = 0
 
 to imply an actual source location.
 
-## 35.4 Prompt and command echoes
+### 36.4 Prompt and command echoes
 
 A filename in an echoed command is not automatically a diagnostic source location.
 
 ---
 
-# 36. Parser responsibilities
+## 37. Parser responsibilities
 
 The diagnostic parser may:
 
@@ -1935,9 +1959,9 @@ The parser must not:
 
 ---
 
-# 37. Parser rule ordering
+## 38. Parser rule ordering
 
-Recommended ordering:
+Canonical ordering:
 
 ```text
 1. process and launch conditions
@@ -1959,7 +1983,7 @@ Version-specific patterns should identify their supported GF range.
 
 ---
 
-# 38. Causal classifier responsibilities
+## 39. Causal classifier responsibilities
 
 The causal classifier may:
 
@@ -1983,7 +2007,7 @@ The classifier must not:
 
 ---
 
-# 39. Error kind versus causal class
+## 40. Error kind versus causal class
 
 The same error kind may have several causal classes.
 
@@ -2001,13 +2025,13 @@ Causal class must never be inferred solely from error kind.
 
 ---
 
-# 40. Status versus error kind
+## 41. Status versus error kind
 
-Recommended default matrix:
+Canonical matrix:
 
 | Error kind | `OK` | `FAIL` | `ERROR` | `SKIPPED` |
 |---|---:|---:|---:|---:|
-| `OK` | Yes | No | Rare transitional case | Yes |
+| `OK` | Yes | No | Rare compatibility case | Yes |
 | `OTHER` | No | Yes | Yes | No |
 | `TYPE` | No | Yes | Rare parser/infrastructure case | No |
 | `SYNTAX` | No | Yes | Rare parser/infrastructure case | No |
@@ -2022,7 +2046,7 @@ Recommended default matrix:
 
 ---
 
-# 41. Execution state versus status
+## 42. Execution state versus status
 
 | Execution state | Typical status | Notes |
 |---|---|---|
@@ -2031,15 +2055,15 @@ Recommended default matrix:
 | `cancelled` | `ERROR` | Partial evidence may remain |
 | `launch_failed` | `ERROR` | No GF semantic conclusion |
 
-An intentionally skipped operation may have no external execution state in a future model.
+A schema may omit external execution state for an intentional skip only through a versioned contract.
 
 Until then, the persisted schema’s documented representation must be used consistently.
 
 ---
 
-# 42. File-result mapping
+## 43. File-result mapping
 
-## 42.1 Successful file
+### 43.1 Successful file
 
 ```text
 status = OK
@@ -2049,7 +2073,7 @@ is_direct = false
 blocked_by = []
 ```
 
-## 42.2 Direct GF type failure
+### 43.2 Direct GF type failure
 
 ```text
 status = FAIL
@@ -2060,7 +2084,7 @@ is_direct = true
 blocked_by = []
 ```
 
-## 42.3 Downstream import failure
+### 43.3 Downstream import failure
 
 ```text
 status = FAIL
@@ -2071,7 +2095,7 @@ is_direct = false
 blocked_by = ["project/relative/provider.gf"]
 ```
 
-## 42.4 Ambiguous compile failure
+### 43.4 Ambiguous compile failure
 
 ```text
 status = FAIL
@@ -2082,7 +2106,7 @@ is_direct = false
 blocked_by = []
 ```
 
-## 42.5 Compile timeout
+### 43.5 Compile timeout
 
 ```text
 status = ERROR
@@ -2092,7 +2116,7 @@ diagnostic_class = ambiguous
 is_direct = false
 ```
 
-## 42.6 Compile launch failure
+### 43.6 Compile launch failure
 
 ```text
 status = ERROR
@@ -2104,9 +2128,9 @@ is_direct = false
 
 ---
 
-# 43. Scenario-result mapping
+## 44. Scenario-result mapping
 
-## 43.1 Successful scenario
+### 44.1 Successful scenario
 
 ```text
 status = OK
@@ -2115,7 +2139,7 @@ error_kind = OK
 diagnostic_class = ok
 ```
 
-## 43.2 Required assertion failure
+### 44.2 Required assertion failure
 
 ```text
 status = FAIL
@@ -2129,7 +2153,7 @@ Use `direct` when the failing criterion belongs clearly to the scenario’s own 
 
 Use `ambiguous` when grammar behavior versus scenario construction cannot be isolated.
 
-## 43.3 Gold mismatch
+### 44.3 Gold mismatch
 
 Until a dedicated persisted kind exists:
 
@@ -2141,9 +2165,9 @@ diagnostic_code = gold_mismatch
 diagnostic_class = direct or ambiguous
 ```
 
-A future schema may add a dedicated broad kind only through versioned change.
+A dedicated broad kind is added only through a versioned schema change.
 
-## 43.4 Malformed marker protocol
+### 44.4 Malformed marker protocol
 
 ```text
 status = ERROR
@@ -2155,7 +2179,7 @@ diagnostic_class = direct
 
 when the scenario asset is confirmed invalid.
 
-## 43.5 Scenario blocked by failed entrypoint
+### 44.5 Scenario blocked by failed entrypoint
 
 If the scenario process ran and failed because of the entrypoint:
 
@@ -2172,7 +2196,7 @@ status = SKIPPED or ERROR according to requiredness
 diagnostic_class = skipped
 ```
 
-## 43.6 Scenario timeout
+### 44.6 Scenario timeout
 
 ```text
 status = ERROR
@@ -2183,13 +2207,13 @@ diagnostic_class = ambiguous
 
 ---
 
-# 44. PGF and artifact mapping
+## 45. PGF and artifact mapping
 
-## 44.1 PGF build GF type/syntax failure
+### 45.1 PGF build GF type/syntax failure
 
 Use parsed GF kind and causal class.
 
-## 44.2 PGF process succeeds but artifact missing
+### 45.2 PGF process succeeds but artifact missing
 
 ```text
 status = FAIL or ERROR according to PGF contract
@@ -2199,7 +2223,7 @@ diagnostic_code = artifact_missing
 diagnostic_class = direct or ambiguous
 ```
 
-## 44.3 Manifest hash mismatch
+### 45.3 Manifest hash mismatch
 
 ```text
 status = ERROR
@@ -2208,7 +2232,7 @@ diagnostic_code = artifact_hash_mismatch
 diagnostic_class = ambiguous
 ```
 
-## 44.4 Artifact path escapes run root
+### 45.4 Artifact path escapes run root
 
 ```text
 status = ERROR
@@ -2219,7 +2243,7 @@ diagnostic_class = skipped or ambiguous
 
 ---
 
-# 45. Static scan findings
+## 46. Static scan findings
 
 Static scan findings are not GF diagnostic error kinds.
 
@@ -2258,9 +2282,9 @@ unless GF execution independently supports that conclusion.
 
 ---
 
-# 46. Warnings
+## 47. Warnings
 
-The canonical final error-kind enum does not contain `WARNING`.
+The canonical error-kind enum does not contain `WARNING`.
 
 Warnings are separate non-fatal diagnostic records.
 
@@ -2290,11 +2314,11 @@ Do not discard warnings from raw evidence.
 
 ---
 
-# 47. Severity
+## 48. Severity
 
 Severity is separate from status and error kind.
 
-A future diagnostic-record model may use:
+A schema-defined diagnostic record may use:
 
 ```text
 info
@@ -2315,9 +2339,9 @@ Severity does not determine causal class.
 
 ---
 
-# 48. Diagnostic origin
+## 49. Diagnostic origin
 
-A future structured diagnostic may identify origin:
+A structured diagnostic may identify origin:
 
 ```text
 framework
@@ -2344,7 +2368,7 @@ Origin must not be inferred from report prose.
 
 ---
 
-# 49. Raw evidence
+## 50. Raw evidence
 
 For every external execution, preserve when applicable:
 
@@ -2370,37 +2394,37 @@ A parser defect must remain recoverable from raw output.
 
 ---
 
-# 50. Stream handling
+## 51. Stream handling
 
-## 50.1 Separate capture
+### 51.1 Separate capture
 
 stdout and stderr must be captured separately.
 
-## 50.2 Joint interpretation
+### 51.2 Joint interpretation
 
 Diagnostic parsing must consider both streams.
 
-## 50.3 No stdout-only success
+### 51.3 No stdout-only success
 
 Success must not be inferred from stdout alone.
 
-## 50.4 Cross-stream order
+### 51.4 Cross-stream order
 
 When exact stdout/stderr interleaving is unavailable, the parser must not invent a total order.
 
-## 50.5 Source attribution
+### 51.5 Source attribution
 
 Every selected excerpt identifies its source stream.
 
 ---
 
-# 51. Diagnostic deduplication
+## 52. Diagnostic deduplication
 
-## 51.1 Purpose
+### 52.1 Purpose
 
 GF or wrappers may repeat equivalent messages.
 
-## 51.2 Deduplication key
+### 52.2 Deduplication key
 
 A deduplication strategy may use:
 
@@ -2414,11 +2438,11 @@ column
 origin
 ```
 
-## 51.3 Raw preservation
+### 52.3 Raw preservation
 
 Deduplication affects structured presentation, not raw logs.
 
-## 51.4 No semantic merging
+### 52.4 No semantic merging
 
 Do not merge diagnostics that differ in:
 
@@ -2431,18 +2455,18 @@ Do not merge diagnostics that differ in:
 
 ---
 
-# 52. Top-error aggregation
+## 53. Top-error aggregation
 
 Top errors aggregate repeated normalized diagnostics.
 
-Recommended key:
+Canonical key:
 
 ```text
 error_kind
 normalized primary message
 ```
 
-Optional future key dimensions:
+Optional key dimensions:
 
 ```text
 diagnostic_code
@@ -2466,7 +2490,7 @@ then normalized message
 
 ---
 
-# 53. Regression comparison
+## 54. Regression comparison
 
 Regression comparison uses stable result identity and status.
 
@@ -2505,11 +2529,11 @@ Reports may describe it as improved diagnostic precision.
 
 ---
 
-# 54. Overall run status
+## 55. Overall run status
 
 Per-result diagnostic values contribute to overall run status through stage and mode policy.
 
-Recommended precedence:
+Canonical precedence:
 
 ```text
 ERROR > FAIL > OK
@@ -2528,7 +2552,7 @@ Examples:
 
 ---
 
-# 55. Exit codes
+## 56. Exit codes
 
 Process exit code is evidence.
 
@@ -2560,9 +2584,9 @@ docs/reference/EXIT_CODES.md
 
 ---
 
-# 56. Unknown diagnostics
+## 57. Unknown diagnostics
 
-## 56.1 Required behavior
+### 57.1 Required behavior
 
 When a diagnostic is not recognized:
 
@@ -2572,7 +2596,7 @@ error_kind = OTHER
 
 unless process/configuration evidence supports another canonical kind.
 
-## 56.2 Preserve evidence
+### 57.2 Preserve evidence
 
 Retain:
 
@@ -2584,11 +2608,11 @@ Retain:
 - command;
 - context.
 
-## 56.3 No false success
+### 57.3 No false success
 
 Unknown text plus failed process cannot become `OK`.
 
-## 56.4 Pattern update
+### 57.4 Pattern update
 
 A new diagnostic parser rule requires:
 
@@ -2602,7 +2626,7 @@ A new diagnostic parser rule requires:
 
 ---
 
-# 57. Conflicting diagnostics
+## 58. Conflicting diagnostics
 
 If evidence conflicts:
 
@@ -2624,7 +2648,7 @@ Result cannot be `OK`.
 
 ---
 
-# 58. Diagnostic confidence
+## 59. Diagnostic confidence
 
 A report may display confidence:
 
@@ -2638,7 +2662,7 @@ Confidence is derived presentation.
 
 It is not a canonical diagnostic class.
 
-Recommended meaning:
+Canonical meaning:
 
 | Confidence | Meaning |
 |---|---|
@@ -2646,21 +2670,21 @@ Recommended meaning:
 | `supported` | Multiple evidence items support it but alternatives remain |
 | `uncertain` | Evidence is incomplete or conflicting |
 
-A future persisted confidence field requires schema review.
+Persisting a confidence field requires schema review.
 
 ---
 
-# 59. Diagnostic rendering
+## 60. Diagnostic rendering
 
-## 59.1 JSON
+### 60.1 JSON
 
 `summary.json` uses exact canonical enum values.
 
-## 59.2 Markdown
+### 60.2 Markdown
 
 Markdown reports render enum values in inline code.
 
-## 59.3 AI-ready packet
+### 60.3 AI-ready packet
 
 The AI-ready report must distinguish:
 
@@ -2673,13 +2697,13 @@ Detailed condition
 Evidence
 ```
 
-## 59.4 Console
+### 60.4 Console
 
 Console output may abbreviate for humans.
 
 It must not introduce new canonical values.
 
-## 59.5 GUI
+### 60.5 GUI
 
 GUI labels may be localized.
 
@@ -2687,9 +2711,9 @@ The underlying model stores canonical values.
 
 ---
 
-# 60. Migration from the predecessor implementation
+## 61. Migration from the legacy vocabulary
 
-The predecessor implementation used:
+The legacy vocabulary used:
 
 ```text
 Status:
@@ -2715,7 +2739,7 @@ ErrorKind:
   SCRIPT
 ```
 
-The final vocabulary adds:
+The canonical vocabulary adds:
 
 ```text
 status:
@@ -2733,13 +2757,13 @@ execution_state:
   launch_failed
 ```
 
-## 60.1 Legacy status migration
+### 61.1 Legacy status migration
 
 Legacy failures caused by framework inability must migrate to `ERROR` when evidence supports it.
 
 Do not preserve `FAIL` merely because the old model lacked `ERROR`.
 
-## 60.2 Legacy timeout migration
+### 61.2 Legacy timeout migration
 
 Legacy:
 
@@ -2761,7 +2785,7 @@ error_kind = TIMEOUT
 diagnostic_class = ambiguous
 ```
 
-## 60.3 Legacy script migration
+### 61.3 Legacy script migration
 
 Legacy `SCRIPT` may represent:
 
@@ -2782,9 +2806,9 @@ OTHER
 
 appropriately.
 
-## 60.4 Legacy directness
+### 61.4 Legacy directness
 
-The predecessor classifier considered:
+The legacy classifier considered:
 
 ```text
 INTERNAL
@@ -2794,15 +2818,15 @@ SCRIPT
 
 obviously direct.
 
-Canonical final logic must distinguish technical origin from project causality.
+Canonical migration distinguishes technical origin from project causality.
 
-## 60.5 Legacy unknown values
+### 61.5 Legacy unknown values
 
 Unknown legacy values are preserved as migration warnings and mapped only when evidence supports a canonical value.
 
 ---
 
-# 61. Schema-version rules
+## 62. Schema-version rules
 
 Adding an error kind or diagnostic class can break strict readers.
 
@@ -2820,7 +2844,7 @@ This reference’s vocabulary version is not a substitute for the persisted sche
 
 ---
 
-# 62. Extension procedure
+## 63. Extension procedure
 
 A new broad error kind is justified only when:
 
@@ -2850,9 +2874,9 @@ A new detailed diagnostic code has a lower threshold but still requires stable s
 
 ---
 
-# 63. Test requirements
+## 64. Test requirements
 
-Recommended tests:
+Required tests:
 
 ```text
 tests/diagnostics/test_error_kinds.py
@@ -2865,7 +2889,7 @@ tests/contracts/test_diagnostic_vocabulary.py
 tests/schemas/test_diagnostic_enums.py
 ```
 
-## 63.1 Enum tests
+### 64.1 Enum tests
 
 Verify exact canonical values:
 
@@ -2899,7 +2923,7 @@ noise
 skipped
 ```
 
-## 63.2 Combination tests
+### 64.2 Combination tests
 
 Required cases:
 
@@ -2914,7 +2938,7 @@ ERROR + completed + IO + ambiguous
 SKIPPED + OK + skipped
 ```
 
-## 63.3 Invalid-combination tests
+### 64.3 Invalid-combination tests
 
 Reject or flag:
 
@@ -2929,7 +2953,7 @@ launch_failed + status OK
 unknown canonical enum value
 ```
 
-## 63.4 Parser tests
+### 64.4 Parser tests
 
 Cover:
 
@@ -2948,7 +2972,7 @@ missing source location
 duplicate lines
 ```
 
-## 63.5 Classifier tests
+### 64.5 Classifier tests
 
 Cover:
 
@@ -2965,7 +2989,7 @@ script failure with failed entrypoint
 noise does not suppress failure
 ```
 
-## 63.6 Migration tests
+### 64.6 Migration tests
 
 Cover:
 
@@ -2982,7 +3006,7 @@ idempotent migration
 
 ---
 
-# 64. Contract invariants
+## 65. Contract invariants
 
 ```text
 INV-DIAG-001 Status, execution state, error kind, and causal class are distinct.
@@ -3005,7 +3029,7 @@ INV-DIAG-016 Reports consume structured diagnostics and never reclassify indepen
 
 ---
 
-# 65. Anti-drift indicators
+## 66. Anti-drift indicators
 
 Probable diagnostic drift exists when:
 
@@ -3043,7 +3067,7 @@ Every indicator requires contract review.
 
 ---
 
-# 66. Review checklist
+## 67. Review checklist
 
 ```text
 [ ] Validation status is correct
@@ -3077,9 +3101,9 @@ Every indicator requires contract review.
 
 ---
 
-# 67. Quick reference
+## 68. Quick reference
 
-## 67.1 Status
+### 68.1 Status
 
 ```text
 OK       criterion passed
@@ -3088,7 +3112,7 @@ ERROR    contract could not be executed or interpreted reliably
 SKIPPED  intentionally not executed
 ```
 
-## 67.2 Execution state
+### 68.2 Execution state
 
 ```text
 completed     operation reached a normal terminal point
@@ -3097,14 +3121,14 @@ cancelled     controller requested termination
 launch_failed process could not start
 ```
 
-## 67.3 Error kind
+### 68.3 Error kind
 
 ```text
 OK        no technical error
 OTHER     real failure not fitting a specific family
 TYPE      GF type or unification failure
 SYNTAX    GF source or command syntax failure
-INTERNAL  internal invariant or implementation failure
+INTERNAL  internal invariant or framework-internal failure
 TIMEOUT   configured deadline exceeded
 SCRIPT    scenario, marker, assertion, or script contract failure
 CONFIG    invalid or missing configuration
@@ -3112,7 +3136,7 @@ IO        filesystem, encoding, read, or write failure
 TOOL      external-tool availability, compatibility, or contract failure
 ```
 
-## 67.4 Diagnostic class
+### 68.4 Diagnostic class
 
 ```text
 ok          no causal failure
@@ -3125,9 +3149,9 @@ skipped     semantic validation was intentionally not executed or not reached
 
 ---
 
-# 68. Example records
+## 69. Example records
 
-## 68.1 Direct type error
+### 69.1 Direct type error
 
 ```json
 {
@@ -3140,7 +3164,7 @@ skipped     semantic validation was intentionally not executed or not reached
 }
 ```
 
-## 68.2 Downstream failure
+### 69.2 Downstream failure
 
 ```json
 {
@@ -3155,7 +3179,7 @@ skipped     semantic validation was intentionally not executed or not reached
 }
 ```
 
-## 68.3 Timeout
+### 69.3 Timeout
 
 ```json
 {
@@ -3168,7 +3192,7 @@ skipped     semantic validation was intentionally not executed or not reached
 }
 ```
 
-## 68.4 Configuration error
+### 69.4 Configuration error
 
 ```json
 {
@@ -3181,7 +3205,7 @@ skipped     semantic validation was intentionally not executed or not reached
 }
 ```
 
-## 68.5 Scenario assertion failure
+### 69.5 Scenario assertion failure
 
 ```json
 {
@@ -3200,7 +3224,7 @@ The active persisted schema determines which fields may be emitted.
 
 ---
 
-# 69. Documentation ownership
+## 70. Documentation ownership
 
 This document owns:
 
@@ -3216,7 +3240,7 @@ Other documents own:
 |---|---|
 | Status-only reference | `docs/reference/STATUS_VALUES.md` |
 | Exact parser patterns | `docs/diagnostics/KNOWN_DIAGNOSTIC_PATTERNS.md` |
-| GF parser implementation rules | `docs/diagnostics/GF_DIAGNOSTIC_PARSING.md` |
+| GF parser contract rules | `docs/diagnostics/GF_DIAGNOSTIC_PARSING.md` |
 | Direct/downstream algorithm | `docs/diagnostics/DIRECT_AND_DOWNSTREAM_FAILURES.md` |
 | Process failure behavior | `docs/diagnostics/TIMEOUTS_AND_PROCESS_FAILURES.md` |
 | Persistent enum fields | `docs/PERSISTED_SCHEMA_LOCK.md` |
@@ -3228,7 +3252,7 @@ Downstream documents should link here instead of redefining error-kind meanings.
 
 ---
 
-# 70. Final enforcement rule
+## 71. Governing rule
 
 A diagnostic is trustworthy only when it states separately:
 

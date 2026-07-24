@@ -3,17 +3,16 @@
 **Document ID:** `GF-WB-ARCH-PROCESS-EXECUTION`  
 **Status:** Normative architectural specification  
 **Applies to:** Every external process launched by GF Wordbench  
-**Primary implementation owner:** `app/utils/process_utils.py`  
-**Primary consumers:** compiler, PGF builder, scenario runner, version probe, and explicitly contracted optional-tool adapters  
-**Model version:** `1.0`  
-**Target product state:** Final architecture  
-**Last reviewed:** 2026-07-22  
+**Primary owner:** `app/utils/process_utils.py`  
+**Primary consumers:** compiler, PGF builder, scenario runner, version probe, and statically registered optional-tool adapters  
+**Model version:** `1.1`  
+**Last reviewed:** 2026-07-24  
 
 ---
 
 ## 1. Purpose
 
-This document defines the final process-execution model for GF Wordbench.
+This document defines the process-execution model for GF Wordbench.
 
 It specifies:
 
@@ -26,7 +25,7 @@ It specifies:
 - how callers evaluate tool-specific success;
 - how platform differences are contained;
 - how process execution is tested;
-- how the current GF Audit process utility migrates to the final model.
+- how inherited GF Audit callers remain compatible with the canonical process boundary.
 
 This document does not define the semantics of individual GF commands. Those belong to the GF integration and external-tool contracts.
 
@@ -37,6 +36,7 @@ This document does not define the semantics of individual GF commands. Those bel
 The following documents remain authoritative for their own domains:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/architecture/ARCHITECTURE_OVERVIEW.md
 docs/architecture/ERROR_HANDLING_MODEL.md
 docs/architecture/ARTIFACT_MODEL.md
@@ -49,11 +49,12 @@ docs/gf/GF_TOOLCHAIN_INTEGRATION.md
 
 Priority when documents overlap:
 
-1. persisted schema lock for serialized fields;
-2. external-tool contract lock for the observable tool boundary;
-3. interfile contract lock for Python provider-consumer relationships;
-4. this document for process-runner architecture and lifecycle;
-5. operation-specific documents for GF command semantics.
+1. accepted ADRs and the documentation alignment lock;
+2. persisted schema lock for serialized fields;
+3. external-tool contract lock for the observable tool boundary;
+4. interfile contract lock for provider-consumer relationships;
+5. this document for process-runner architecture and lifecycle;
+6. operation-specific documents for GF command semantics.
 
 A change to this model that affects another locked boundary must update all affected documents and tests together.
 
@@ -70,7 +71,7 @@ This model applies to:
 - parsing and linearization scenarios;
 - bounded generation;
 - morphology and grammar introspection;
-- explicitly approved optional tools;
+- optional tools registered in the static diagnostic-tool allowlist defined by `ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md`;
 - operating-system utilities used by a documented platform adapter.
 
 It governs:
@@ -110,9 +111,11 @@ This model does not govern:
 - asynchronous job queues;
 - remote execution;
 - container orchestration;
-- distributed workers.
+- distributed workers;
+- discovery or execution of several Wordbench workspaces;
+- `gf-portfolio` orchestration, storage, indexing, or aggregation.
 
-The core process runner executes local child processes only.
+The core process runner executes local child processes only. `gf-portfolio` may consume completed public Wordbench artifacts but does not call the private process runner, and GF Wordbench does not launch processes on behalf of Portfolio.
 
 ---
 
@@ -209,21 +212,21 @@ The orchestrator:
 - invokes the stage;
 - collects the stage result;
 - determines whether later stages may safely continue;
-- aggregates final run status.
+- aggregates terminal run status.
 
 It does not reconstruct or reinterpret the process request.
 
 ---
 
-## 7. Final implementation ownership
+## 7. Process-boundary ownership
 
-The final public process facade is:
+The public process facade is:
 
 ```text
 app/utils/process_utils.py
 ```
 
-The final public API should expose:
+The public API exposes:
 
 ```text
 ProcessRequest
@@ -243,7 +246,7 @@ Internal platform-specific helpers may be placed in:
 app/utils/process_platform.py
 ```
 
-or an equivalent private module when implementation size justifies separation.
+or an equivalent private module when separation keeps the public facade small and coherent.
 
 Platform helpers are internal. Callers depend on the public process facade, not on platform modules.
 
@@ -427,6 +430,11 @@ Operation kind controls:
 
 Operation kind does not define complete command semantics.
 
+Requests with `operation_kind = optional_tool` must reference a statically registered tool contract.
+The contract defines the executable, allowed arguments, working-directory policy, timeout,
+output limit, mutability, network policy, evidence role, normalization, and parser.
+Arbitrary user-supplied commands and dynamically loaded executable plugins are prohibited.
+
 ---
 
 # 12. Process request requirements
@@ -485,7 +493,7 @@ It is not a GF failure and no process is launched.
 
 # 14. Executable resolution
 
-Executable discovery occurs before the final `ProcessRequest` is built.
+Executable discovery occurs before the canonical `ProcessRequest` is built.
 
 The resolved request must contain the exact executable used.
 
@@ -892,7 +900,7 @@ record decode issue
 produce a non-lossless diagnostic view with explicit replacement
 ```
 
-The final implementation may use a reversible strategy such as surrogate escaping internally.
+The decoder may use a reversible strategy such as surrogate escaping internally.
 
 Requirements:
 
@@ -1380,14 +1388,14 @@ Accepted strategies:
 2. use dedicated bounded reader threads that write to separate files;
 3. use a platform-safe asynchronous pump hidden behind the runner.
 
-The final implementation should choose the simplest strategy that also supports:
+The runner uses the simplest strategy that also supports:
 
 - cancellation;
 - output-limit monitoring;
 - complete byte capture;
 - no unbounded in-memory buffering.
 
-For output-limit enforcement, bounded reader pumps are the preferred final strategy.
+For output-limit enforcement, bounded reader pumps are the preferred strategy.
 
 ---
 
@@ -1942,7 +1950,7 @@ TOOL
 
 belong to stage or diagnostic models.
 
-The final centralized status reference must define the authoritative enums.
+The centralized status reference defines the authoritative enums.
 
 ---
 
@@ -1969,7 +1977,7 @@ This separation prevents one layer from swallowing another layer’s responsibil
 
 # 69. Public API
 
-Recommended final API:
+Canonical API:
 
 ```python
 def run_process(
@@ -1998,7 +2006,7 @@ def render_command_for_display(
     ...
 ```
 
-The main public API should remain small.
+The public API remains small.
 
 Platform-specific functions remain private.
 
@@ -2113,124 +2121,81 @@ This pseudocode describes responsibility, not required private function names.
 
 ---
 
-# 72. Current GF Audit baseline
+# 72. GF Audit compatibility surface
 
-The inherited process utility currently provides:
+GF Wordbench preserves the externally useful process semantics inherited from GF Audit through the canonical process boundary.
+
+The compatibility surface includes:
+
+```text
+argument-list execution
+per-process environment overrides
+separate stdout and stderr capture
+finite timeouts
+real duration measurement
+immutable returned process facts
+```
+
+Legacy names such as:
 
 ```text
 ProcessRunResult
 run_process_with_timeout
 ```
 
-Its current result contains:
+may be supported only through adapters that delegate to the canonical runner.
 
-```text
-exit_code
-timed_out
-stdout_path
-stderr_path
-duration_ms
-```
-
-Its current execution behavior:
-
-- builds an argument list;
-- copies the current environment and applies overrides;
-- writes stdout and stderr to separate UTF-8 files;
-- uses `Popen`;
-- waits with a timeout;
-- kills the direct process on timeout;
-- uses a synthetic timeout exit code;
-- returns a small immutable result.
-
-This is a valid minimal baseline, not the final execution model.
+The compatibility surface does not authorize a second process implementation.
 
 ---
 
-# 73. Baseline limitations
+# 73. Canonical capability contract
 
-The inherited implementation does not yet fully model:
+The process boundary provides:
 
 - structured request identity;
 - explicit operation kind;
-- standard input;
-- user cancellation;
-- application-shutdown cancellation;
-- output limits;
-- process-tree containment;
-- launch failure as a structured result;
+- explicit standard input;
+- user and application cancellation;
+- finite output limits;
+- owned process-group containment;
+- structured launch-failure results;
 - raw-byte preservation;
-- decoding errors;
+- explicit decoding failures;
 - platform adapters;
-- termination escalation;
+- controlled termination escalation;
 - expected-artifact observations;
-- environment policy identity;
+- named environment policies;
 - command redaction;
-- output collisions;
+- active-output collision prevention;
 - lifecycle events;
-- capture completeness;
-- real versus synthetic exit-code separation.
+- capture-completeness reporting;
+- separation between real exit codes and framework terminal states.
 
-These limitations are migration work, not defects in the historical scope.
-
----
-
-# 74. Migration plan
-
-## Phase 1 — Introduce models
-
-Add:
-
-```text
-ProcessRequest
-ProcessInput
-ArtifactExpectation
-ArtifactObservation
-ProcessResult
-CancellationToken
-```
-
-Keep `run_process_with_timeout` as a compatibility wrapper.
-
-## Phase 2 — Introduce `run_process`
-
-Implement the structured API using existing capture behavior.
-
-Callers migrate one at a time.
-
-## Phase 3 — Remove synthetic timeout semantics
-
-Represent timeout through `execution_state`.
-
-Keep legacy adapter translation only where required.
-
-## Phase 4 — Add direct scenario stdin
-
-Support `.gfs` execution without shell redirection.
-
-## Phase 5 — Add cancellation and process-group containment
-
-Implement platform adapters and termination escalation.
-
-## Phase 6 — Add bounded stream capture
-
-Enforce output limits without unbounded memory.
-
-## Phase 7 — Add expected-artifact observation
-
-Allow compiler and PGF stages to declare artifacts.
-
-## Phase 8 — Retire compatibility wrapper
-
-Remove or deprecate `run_process_with_timeout` after all consumers and tests use `run_process`.
-
-The public owner remains `app/utils/process_utils.py`.
+These capabilities are part of the process contract and are not tracked as documentation milestones.
 
 ---
 
-# 75. Compatibility wrapper
+# 74. Compatibility conversion rules
 
-During migration:
+Compatibility adapters must apply these rules:
+
+1. construct a canonical `ProcessRequest`;
+2. call the sole `run_process` implementation;
+3. preserve ordered arguments, working directory, environment overrides, timeout, and capture paths;
+4. translate canonical terminal state into legacy fields only where a legacy consumer requires it;
+5. never present a synthetic timeout value as a tool-emitted exit code;
+6. preserve raw evidence and the canonical result for diagnostics and reporting;
+7. keep direct `.gfs` standard input free of shell redirection;
+8. preserve one-way adaptation from canonical models to compatibility models;
+9. prohibit new process-launch logic inside compatibility adapters;
+10. cover all translations with contract tests.
+
+---
+
+# 75. Compatibility wrapper contract
+
+A compatibility wrapper may expose:
 
 ```python
 def run_process_with_timeout(
@@ -2245,16 +2210,16 @@ def run_process_with_timeout(
     ...
 ```
 
-may construct a canonical `ProcessRequest` and adapt the `ProcessResult`.
+The wrapper:
 
-Restrictions:
-
-- one-way adaptation only;
-- no second process implementation;
-- wrapper behavior tested;
-- timeout sentinel documented as legacy;
-- new callers prohibited after migration cutoff;
-- removal recorded in changelog.
+- validates and converts its inputs into a canonical `ProcessRequest`;
+- delegates to `run_process`;
+- adapts `ProcessResult` without mutating it;
+- preserves separate stdout and stderr files;
+- keeps timeout and launch failure distinguishable;
+- has no independent subprocess, shell, timeout, or termination logic;
+- is tested against the same process-contract fixtures;
+- is documented as a compatibility API rather than the architectural owner.
 
 ---
 
@@ -2315,7 +2280,7 @@ Fixtures must not require network access.
 
 # 78. Required unit cases
 
-The final runner must test:
+The runner test suite must cover:
 
 ```text
 valid request
@@ -2448,7 +2413,7 @@ Performance requirements:
 
 # 84. Observability requirements
 
-For every process-backed stage, final evidence should allow a reviewer to determine:
+For every process-backed stage, recorded evidence must allow a reviewer to determine:
 
 ```text
 what executable ran
@@ -2610,7 +2575,7 @@ A process implementation is compliant when:
 [ ] child environment is built without mutating os.environ
 [ ] timeout is finite
 [ ] cancellation is supported
-[ ] process-group containment is implemented
+[ ] process-group containment is enforced
 [ ] stdout and stderr are captured separately
 [ ] raw bytes are preserved
 [ ] decoding errors are explicit
@@ -2628,12 +2593,12 @@ A process implementation is compliant when:
 [ ] child-process termination is tested
 [ ] secrets are redacted
 [ ] path containment is tested
-[ ] compatibility wrapper has one implementation underneath
+[ ] compatibility wrapper delegates to the sole public runner
 ```
 
 ---
 
-# 89. Final invariants
+# 89. Normative invariants
 
 1. Every external process passes through one process boundary.
 2. The process runner receives a complete structured request.
@@ -2662,7 +2627,7 @@ A process implementation is compliant when:
 
 ---
 
-# 90. Final rule
+# 90. Core rule
 
 The process runner is infrastructure, not a GF interpreter.
 

@@ -3,11 +3,13 @@
 **Document ID:** `GF-WB-VALIDATION-SCENARIO`  
 **Status:** Normative validation specification  
 **Applies to:** Native GF `.gfs` scenarios executed by GF Wordbench  
-**Primary implementation owner:** `app/audit/scenario_runner.py`  
+**Primary owner:** validation module  
+**Primary adapter:** `app/audit/scenario_runner.py`  
 **Project asset owners:** Active language project maintainers  
-**Specification version:** `1.0`  
-**Target product state:** Final architecture  
-**Last reviewed:** 2026-07-22  
+**Canonical path:** `docs/validation/SCENARIO_VALIDATION.md`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Specification version:** `1.1`  
+**Last reviewed:** `2026-07-24`  
 
 ---
 
@@ -55,6 +57,7 @@ The scenario runner must not:
 The following documents remain authoritative for their domains:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/architecture/ARCHITECTURE_OVERVIEW.md
 docs/architecture/PROCESS_EXECUTION_MODEL.md
 docs/architecture/ERROR_HANDLING_MODEL.md
@@ -68,18 +71,20 @@ docs/scenarios/SCENARIO_MARKERS_AND_ASSERTIONS.md
 docs/scenarios/OUTPUT_NORMALIZATION.md
 docs/scenarios/GOLDEN_TESTS.md
 docs/scenarios/UPDATING_GOLD_FILES.md
+docs/DOCUMENTATION_CORRECTION_LEDGER.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 Priority when rules overlap:
 
-1. persisted-schema lock for serialized data and canonical paths;
-2. external-tool lock for GF invocation;
-3. interfile locks for provider-consumer relationships;
-4. scenario-format documents for scenario syntax conventions;
-5. this document for scenario-validation lifecycle and success evaluation;
-6. active-project validation specification for language-specific expectations.
+1. accepted ADRs and the documentation alignment lock;
+2. persisted-schema lock for serialized data and canonical paths;
+3. external-tool lock for GF invocation;
+4. interfile locks for provider-consumer relationships;
+5. scenario-format documents for scenario syntax conventions;
+6. this document for scenario-validation lifecycle and success evaluation;
+7. active-project validation specification for language-specific expectations.
 
 ---
 
@@ -122,16 +127,21 @@ This specification does not define:
 - report prose;
 - GUI layout;
 - a general testing language;
-- remote or distributed scenario execution.
+- remote or distributed scenario execution;
+- cross-workspace scenario orchestration;
+- multilingual portfolio aggregation;
+- `gf-portfolio` storage, indexing, or readiness computation.
 
 Language-specific expectations belong to:
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/validation/scenarios/
 project/validation/inputs/
 project/validation/gold/
 ```
+
+One Wordbench run resolves scenarios for exactly one active project and one normative language target. The independent `gf-portfolio` product may consume completed public Wordbench artifacts, but it does not select, execute, mutate, or aggregate scenarios through Wordbench's private runtime.
 
 ---
 
@@ -173,9 +183,9 @@ Source compilation and scenario execution provide different evidence.
 
 ## 7. Ownership
 
-### 7.1 Framework owner
+### 7.1 Validation owner
 
-Canonical framework owner:
+The validation module owns scenario coordination. Its primary adapter is:
 
 ```text
 app/audit/scenario_runner.py
@@ -201,7 +211,7 @@ project/project.toml
 project/validation/scenarios/*.gfs
 project/validation/inputs/
 project/validation/gold/*.gold
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
@@ -257,7 +267,7 @@ project/
 
 A project may organize additional subdirectories when declared by project configuration and documented by the project contract lock.
 
-The final resolved scenario paths must remain inside the project root.
+Resolved scenario paths must remain inside the project root.
 
 ---
 
@@ -319,7 +329,7 @@ required scenarios
 optional scenarios
 ```
 
-The final resolved registry produces ordered `ScenarioSpec` values.
+The resolved registry produces ordered `ScenarioSpec` values.
 
 The registry order is significant and deterministic.
 
@@ -419,7 +429,7 @@ That distinction belongs to project configuration.
 
 ## 14. Recommended scenario families
 
-A final project may define the following families.
+A project may define the following families.
 
 ### 14.1 Load
 
@@ -763,7 +773,7 @@ The actual working directory is recorded in `ScenarioResult`.
 
 A scenario should terminate GF explicitly when required by the selected execution method.
 
-Recommended final command:
+Canonical termination command:
 
 ```text
 q
@@ -870,7 +880,7 @@ The scenario status is `ERROR`.
 
 The controller terminated the scenario.
 
-The scenario status is `ERROR`, unless run-level cancellation is modeled separately by the final application API.
+The scenario status is `ERROR`, unless run-level cancellation is represented separately by the application API.
 
 ### 27.4 Launch failed
 
@@ -1385,7 +1395,7 @@ A normalization change that alters comparison meaning requires:
 - version update;
 - unit-test update;
 - deliberate gold review;
-- migration note;
+- compatibility note;
 - changelog entry when externally visible.
 
 ---
@@ -1428,7 +1438,7 @@ The normalized file uses:
 
 - UTF-8 without BOM;
 - LF newlines;
-- final newline;
+- terminating newline;
 - deterministic section order.
 
 ---
@@ -1463,7 +1473,7 @@ none
 exact
 ```
 
-The final core should begin with these two policies.
+The core comparison contract uses these two policies.
 
 ### 53.1 `none`
 
@@ -1490,7 +1500,7 @@ Exact comparison verifies:
 - section identities;
 - section order;
 - normalized text;
-- final-newline convention.
+- terminating-newline convention.
 
 A mismatch produces a structured diff.
 
@@ -1744,7 +1754,7 @@ This isolates:
 - timeout;
 - memory use.
 
-Sharing one long-lived GF shell across unrelated scenarios is prohibited in the core final architecture unless a separate explicit session contract is introduced.
+Sharing one long-lived GF shell across unrelated scenarios is prohibited unless a separate explicit session contract is introduced.
 
 ---
 
@@ -1777,7 +1787,7 @@ The overhead is acceptable relative to correctness.
 
 Default execution is sequential.
 
-Scenario concurrency is not required for the final core.
+Scenario execution is sequential by default.
 
 It may be considered later only when:
 
@@ -2072,7 +2082,7 @@ The run manifest should include:
 
 Project source `.gfs` and `.gold` files are normally referenced by source metadata, not copied into the run unless export policy requires it.
 
-Hashes should be computed after final writes.
+Hashes are computed after writes complete.
 
 ---
 
@@ -2122,7 +2132,7 @@ The CLI must not:
 - bypass required release scenarios;
 - update gold during ordinary validation.
 
-Exit codes derive from the final run result.
+Exit codes derive from the terminal run result.
 
 ---
 
@@ -2180,7 +2190,7 @@ Script errors produce scenario `ERROR`.
 
 GF-reported syntax errors after launch may be reported as `FAIL` or `ERROR` according to whether the scenario contract was valid but the project scenario itself failed.
 
-The centralized error model defines the final distinction.
+The centralized error model defines the authoritative distinction.
 
 ---
 
@@ -2323,7 +2333,7 @@ The known issue must also appear in:
 
 ```text
 project/docs/KNOWN_ISSUES.md
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 Expected-failure scenarios should not conceal newly different errors.
@@ -2376,7 +2386,7 @@ Normalization changes require review of:
 - scenario output schema;
 - all affected gold files;
 - unit tests;
-- migration documentation;
+- compatibility documentation;
 - external-tool lock;
 - persisted-schema lock;
 - changelog.
@@ -2544,39 +2554,49 @@ Performance rules:
 
 ---
 
-## 102. Migration from GF Audit
+## 102. GF Audit compatibility contract
 
-The inherited GF Audit baseline does not yet include the final scenario runner.
+GF Wordbench preserves the useful GF Audit behavior through the canonical
+scenario-validation boundary.
 
-Migration requires:
+The compatibility surface includes:
 
-1. add `ScenarioSpec` and `ScenarioResult`;
-2. add `app/audit/scenario_runner.py`;
-3. add direct standard-input support to process execution;
-4. add scenario run paths;
-5. add scenario configuration loading;
-6. add marker parsing;
-7. add normalization service;
-8. add gold comparator;
-9. add scenario totals;
-10. add scenario serialization;
-11. add report sections;
-12. add release gates;
-13. add contract and integration tests;
-14. add project scenario and gold templates.
+```text
+deterministic file and scenario selection
+separate stdout and stderr evidence
+finite process timeouts
+direct and downstream diagnostic classification
+regression comparison
+structured summaries and reports
+```
 
-Existing file-compilation behavior remains separate.
+Compatibility does not create a second scenario engine. Native `.gfs` execution,
+marker validation, normalization, gold comparison, scenario totals, release gates,
+and report serialization use the contracts defined in this specification.
+
+Inherited callers may be adapted only when they:
+
+1. resolve one active project and one ordered scenario registry;
+2. construct canonical `ScenarioSpec` values;
+3. execute through the shared process boundary;
+4. preserve raw evidence before interpretation;
+5. translate results without changing their meaning;
+6. keep source compilation separate from scenario execution;
+7. avoid shell redirection and private command languages;
+8. preserve regression identities and historical evidence references;
+9. delegate to the same normalizer, comparator, serializer, and reporting owners;
+10. remain covered by contract and integration tests.
 
 ---
 
-## 103. Recommended implementation boundaries
+## 103. Module boundaries
 
 ```text
 app/audit/scenario_runner.py
     scenario coordination and result construction
 
 app/audit/scenario_registry.py
-    optional extraction when registry logic becomes substantial
+    registry resolution when separated from project configuration loading
 
 app/audit/scenario_markers.py
     marker event parsing and section validation
@@ -2594,17 +2614,15 @@ app/utils/process_utils.py
     process execution only
 ```
 
-These modules should be created only when responsibility size justifies separation.
-
-A compact initial implementation may keep private marker and assertion helpers in `scenario_runner.py`.
-
-Normalization and process execution should remain separate owners from the start.
+Private helpers may remain colocated when responsibilities stay coherent.
+Normalization, gold comparison, and process execution remain separate owners and
+must not acquire competing implementations.
 
 ---
 
 ## 104. Public API
 
-Recommended runner API:
+Canonical runner API:
 
 ```python
 def run_scenario(
@@ -2617,7 +2635,7 @@ def run_scenario(
     ...
 ```
 
-Recommended batch coordinator:
+Canonical batch coordinator:
 
 ```python
 def run_scenarios(
@@ -2688,10 +2706,10 @@ Every required scenario should map to:
 Recommended references:
 
 ```text
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 A required scenario with no documented objective indicates documentation drift.
@@ -2799,7 +2817,9 @@ The following are prohibited:
 - normalization removing meaningful linguistic evidence;
 - project state overriding required scenario status;
 - missing required gold treated as pass;
-- timeout reported as ordinary linguistic failure.
+- timeout reported as ordinary linguistic failure;
+- selecting scenarios from several active Wordbench projects in one run;
+- `gf-portfolio` invoking the private scenario runner or mutating project assets.
 
 ---
 
@@ -2825,7 +2845,8 @@ Scenario-validation drift exists when:
 - direct and downstream classes are assigned by the process runner;
 - scenario output paths are reconstructed outside `RunPaths`;
 - a missing end marker is accepted;
-- a zero exit code overrides a gold mismatch.
+- a zero exit code overrides a gold mismatch;
+- Wordbench scenario results contain Portfolio registry or aggregation state.
 
 Any drift indicator requires coordinated review.
 
@@ -2887,7 +2908,7 @@ Requires:
 
 ---
 
-## 114. Final invariants
+## 114. Normative invariants
 
 1. Scenarios remain native `.gfs` project assets.
 2. GF executes GF semantics.
@@ -2922,7 +2943,7 @@ Requires:
 
 ---
 
-## 115. Final rule
+## 115. Core rule
 
 Scenario validation must answer one clear question:
 

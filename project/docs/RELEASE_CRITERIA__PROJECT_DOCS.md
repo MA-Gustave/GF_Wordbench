@@ -5,12 +5,13 @@
 **Applies to:** The single active GF language project configured by `project/project.toml`  
 **Project identity source:** `project/project.toml`  
 **Contract source:** `project/docs/INTERFILE_CONTRACT_LOCK.md`  
-**Validation source:** `project/docs/VALIDATION_SPEC.md`  
-**Known-state sources:** `project/docs/STATUS_LEDGER.md` and `project/docs/KNOWN_ISSUES.md`  
+**Validation source:** `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`  
+**Known-issue source:** `project/docs/KNOWN_ISSUES.md`  
 **Decision source:** `project/docs/DECISION_LOG.md`  
 **Primary owners:** Active-project maintainers  
 **Review authority:** Project release approver  
-**Last structural review:** 2026-07-22
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Last reviewed:** 2026-07-24
 
 ---
 
@@ -33,7 +34,7 @@ A release is approved only when the project can demonstrate that:
 - required evidence and reports are complete;
 - no undocumented fallback or release blocker remains;
 - the result is reproducible under the declared GF toolchain;
-- the final run completed with `overall_status = OK`.
+- the release run completed with `overall_status = OK`.
 
 This document is project-specific in scope but resolves concrete module, entrypoint, scenario, and artifact names from the active project configuration and project contract registry.
 
@@ -41,7 +42,7 @@ It must not duplicate those names as independent sources of truth.
 
 ---
 
-## 2. Governing release rule
+## 2. Governing Governing rule
 
 > The active project may be released only when every required gate is satisfied by current, complete, reproducible evidence from the exact source revision being released.
 
@@ -81,7 +82,7 @@ The following terms are normative:
 - **OPTIONAL SCENARIO**: visible scenario whose result is not release-gating unless project policy says otherwise.
 - **GOLD**: reviewed normalized expected output for a scenario.
 - **CURRENT ARTIFACT**: artifact proven to have been produced from the release candidate during the release run.
-- **RELEASE RUN**: finalized GF Wordbench run used as release evidence.
+- **RELEASE RUN**: completed GF Wordbench release-mode run used as release evidence.
 - **RELEASE EVIDENCE**: machine-readable and human-readable records proving gate outcomes.
 - **ACCEPTED ISSUE**: known issue explicitly reviewed and marked non-blocking.
 - **RELEASE EXCEPTION**: approved departure from a normally required criterion where this document permits an exception.
@@ -103,13 +104,12 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
 project/docs/KNOWN_ISSUES.md
 project/docs/RESEARCH_EVIDENCE.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/validation/scenarios/
 project/validation/inputs/
 project/validation/gold/
@@ -118,6 +118,10 @@ project/validation/gold/
 Framework-level references include:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/INTERFILE_CONTRACT_LOCK.md
+docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
+docs/PERSISTED_SCHEMA_LOCK.md
 docs/validation/VALIDATION_MODES.md
 docs/validation/COMPILATION_VALIDATION.md
 docs/validation/SCENARIO_VALIDATION.md
@@ -130,6 +134,10 @@ docs/reports/ARTIFACT_MANIFEST.md
 docs/architecture/ERROR_HANDLING_MODEL.md
 docs/release/VERSIONING_POLICY.md
 docs/release/MIGRATION_AND_DEPRECATION.md
+docs/decisions/ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-run closure.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 ```
 
 When this document and `project/docs/INTERFILE_CONTRACT_LOCK.md` disagree about a project contract, the project lock is authoritative.
@@ -157,20 +165,39 @@ Release evaluation uses the following ownership model.
 | Lincat structures | `CATEGORY_AND_LINCAT_CONTRACT.md` |
 | Morphology promises | `MORPHOLOGY_SPEC.md` |
 | Constructor behavior | `SYNTAX_AND_CONSTRUCTOR_RULES.md` |
-| Validation meanings | `VALIDATION_SPEC.md` |
-| Coverage | `TEST_COVERAGE_MATRIX.md` |
-| Temporary and blocked work | `STATUS_LEDGER.md` |
+| Validation meanings | `VALIDATION_SPEC__PROJECT_DOCS.md` |
+| Coverage | `TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` |
+| Known defects, accepted limitations, and release blockers | `KNOWN_ISSUES.md` |
 | Known defects | `KNOWN_ISSUES.md` |
 | Significant accepted changes | `DECISION_LOG.md` |
-| Final run evidence | finalized release run |
-| Final machine status | `summary.json` |
+| Release evidence | completed release run |
+| Machine release status | `summary.json` |
 | Artifact integrity | `manifest.json` |
 
 No GUI state, old run, local shell alias, or developer-specific path is an authoritative project fact.
 
 ---
 
-# 6. Release decision outcomes
+## 6. Product boundary
+
+These criteria apply to one active GF Wordbench project and one release candidate.
+
+Multi-workspace discovery, multilingual aggregation, portfolio navigation, and portfolio-level readiness belong exclusively to the independent `gf-portfolio` product.
+
+`gf-portfolio` may consume public, versioned Wordbench summaries, manifests, and release artifacts in read-only mode. It does not supply Wordbench release evidence, alter gate outcomes, or become a runtime dependency of Wordbench.
+
+The permitted dependency direction is:
+
+```text
+gf-portfolio
+    → public, versioned GF Wordbench artifacts
+```
+
+GF Wordbench must not import, call, configure, store private state for, or require `gf-portfolio`.
+
+---
+
+## 7. Release decision outcomes
 
 The release decision has four outcomes:
 
@@ -181,19 +208,19 @@ DEFERRED
 CANCELLED
 ```
 
-## 6.1 `APPROVED`
+### 7.1 `APPROVED`
 
 Use only when:
 
 - every mandatory gate passes;
 - every required result is `OK`;
-- required final artifacts exist and verify;
+- required release artifacts exist and verify;
 - every accepted issue is explicitly non-blocking;
 - every approved waiver is valid;
-- the release run is finalized;
+- the release run is complete;
 - the approver records approval.
 
-## 6.2 `REJECTED`
+### 7.2 `REJECTED`
 
 Use when:
 
@@ -205,7 +232,7 @@ Use when:
 - source identity cannot be established;
 - required artifacts are missing or stale.
 
-## 6.3 `DEFERRED`
+### 7.3 `DEFERRED`
 
 Use when:
 
@@ -216,7 +243,7 @@ Use when:
 
 A deferred candidate is not releasable.
 
-## 6.4 `CANCELLED`
+### 7.4 `CANCELLED`
 
 Use when the candidate is withdrawn intentionally.
 
@@ -224,7 +251,7 @@ Cancellation must not be presented as project validation failure.
 
 ---
 
-# 7. Release gate summary
+## 8. Release gate summary
 
 The mandatory gate families are:
 
@@ -243,10 +270,10 @@ GATE 11 — required scenario execution
 GATE 12 — marker and assertion completion
 GATE 13 — gold integrity and comparison
 GATE 14 — linguistic and coverage review
-GATE 15 — known issues and status ledger
+GATE 15 — known issues and known-issue register
 GATE 16 — documentation consistency
 GATE 17 — artifact and manifest integrity
-GATE 18 — report and schema finalization
+GATE 18 — report and schema integrity
 GATE 19 — determinism and repeatability
 GATE 20 — security and data hygiene
 GATE 21 — release version and change record
@@ -259,7 +286,7 @@ It must not silently weaken these gates.
 
 ---
 
-# 8. Gate status vocabulary
+## 9. Gate status vocabulary
 
 Each gate uses:
 
@@ -294,7 +321,7 @@ Rules:
 
 ---
 
-# 9. Gate 01 — Release candidate identity
+## 10. Gate 01 — Release candidate identity
 
 The release candidate MUST have one unambiguous identity.
 
@@ -338,7 +365,7 @@ release run from a different source state
 
 ---
 
-# 10. Gate 02 — Repository and source integrity
+## 11. Gate 02 — Repository and source integrity
 
 The source tree MUST be complete, readable, and protected from generated-artifact confusion.
 
@@ -373,7 +400,7 @@ A required fingerprint failure is a release `ERROR`.
 
 ---
 
-# 11. Gate 03 — Project configuration
+## 12. Gate 03 — Project configuration
 
 `project/project.toml` MUST satisfy the current project schema and project contracts.
 
@@ -428,7 +455,7 @@ ambiguous expected artifact
 
 ---
 
-# 12. Gate 04 — GF toolchain compatibility
+## 13. Gate 04 — GF toolchain compatibility
 
 The release run MUST use a supported and recorded GF toolchain.
 
@@ -462,7 +489,7 @@ A launch failure, unsupported version, or unresolvable path is a release `ERROR`
 
 ---
 
-# 13. Gate 05 — Project contract integrity
+## 14. Gate 05 — Project contract integrity
 
 Every active project contract required for release MUST be valid.
 
@@ -480,10 +507,9 @@ Criteria:
 - scenario and gold ownership are registered;
 - expected PGF ownership is registered;
 - every active contract has validation evidence;
-- no required contract remains merely experimental;
 - no release-required contract is blocked;
-- deprecated contracts have valid replacement/migration status;
-- retired contracts are not used by active files.
+- compatibility and deprecation rules are satisfied where applicable;
+- removed contracts are not used by active files.
 
 Required check:
 
@@ -495,7 +521,7 @@ A contract mismatch is a release blocker even when isolated compilation happens 
 
 ---
 
-# 14. Gate 06 — Module dependency integrity
+## 15. Gate 06 — Module dependency integrity
 
 The actual GF dependency graph MUST agree with the documented project architecture.
 
@@ -503,7 +529,7 @@ Criteria:
 
 - dependency direction follows `LANGUAGE_ARCHITECTURE.md`;
 - no circular imports exist;
-- lower-level modules do not import final entrypoints;
+- lower-level modules do not import release entrypoints;
 - one provider owns each public helper role unless a documented exception exists;
 - interfaces and instances match;
 - provider changes have all consumers reviewed;
@@ -517,7 +543,7 @@ Default expected direction:
 
 ```text
 resources and morphology
-→ category implementations
+→ category codes
 → paradigms and lexicon
 → syntax, structural and extension layers
 → grammar or API entrypoints
@@ -528,9 +554,9 @@ Any documented exception requires a decision-log entry.
 
 ---
 
-# 15. Gate 07 — Source-quality and scan policy
+## 16. Gate 07 — Source-quality and scan policy
 
-Static scan policy MUST be evaluated according to `VALIDATION_SPEC.md`.
+Static scan policy MUST be evaluated according to `VALIDATION_SPEC__PROJECT_DOCS.md`.
 
 Criteria:
 
@@ -553,9 +579,9 @@ A required scanner execution error prevents release.
 
 ---
 
-# 16. Gate 08 — Checkpoint compilation
+## 17. Gate 08 — Checkpoint compilation
 
-Every configured required checkpoint MUST compile before final entrypoint validation.
+Every configured required checkpoint MUST compile before release-entrypoint validation.
 
 Criteria:
 
@@ -596,7 +622,7 @@ For normal releases, checkpoint waivers SHOULD NOT be used.
 
 ---
 
-# 17. Gate 09 — Release-entrypoint compilation
+## 18. Gate 09 — Release-entrypoint compilation
 
 Every configured release entrypoint MUST compile successfully from the release candidate.
 
@@ -623,9 +649,9 @@ An entrypoint that compiles only when a required lower checkpoint is omitted doe
 
 ---
 
-# 18. Gate 10 — PGF construction
+## 19. Gate 10 — PGF construction
 
-When `project.toml` declares that release requires a PGF, the final PGF MUST be built and verified.
+When `project.toml` declares that release requires a PGF, the release PGF MUST be built and verified.
 
 Required evidence:
 
@@ -661,7 +687,7 @@ Criteria:
 - filename agrees with project configuration;
 - required concrete language is represented according to project policy;
 - PGF is registered in `manifest.json`;
-- PGF hash is recorded after final bytes are stable;
+- PGF hash is recorded after completed bytes are stable;
 - required PGF smoke scenarios pass when configured.
 
 A pre-existing PGF is not release evidence.
@@ -672,7 +698,7 @@ When the project explicitly does not require a PGF, this gate may be `NOT_APPLIC
 
 ---
 
-# 19. Gate 11 — Required scenario execution
+## 20. Gate 11 — Required scenario execution
 
 Every required scenario registered in the active project MUST execute.
 
@@ -706,7 +732,7 @@ Optional scenarios may fail or warn only when:
 
 ---
 
-# 20. Gate 12 — Marker and assertion completion
+## 21. Gate 12 — Marker and assertion completion
 
 Scenario process success alone is insufficient.
 
@@ -728,7 +754,7 @@ A zero process exit code does not override missing markers.
 
 ---
 
-# 21. Gate 13 — Gold integrity and comparison
+## 22. Gate 13 — Gold integrity and comparison
 
 Every required gold-backed scenario MUST have one valid reviewed gold file and an exact current comparison.
 
@@ -766,7 +792,7 @@ Gold files MUST NOT be updated merely to make release validation pass.
 
 ---
 
-# 22. Gate 14 — Linguistic and coverage review
+## 23. Gate 14 — Linguistic and coverage review
 
 Automated success MUST be accompanied by coverage appropriate to the declared release scope.
 
@@ -792,7 +818,7 @@ linearization
 parsing
 bounded generation
 morphology tables
-final PGF behavior
+release PGF behavior
 ```
 
 Criteria:
@@ -811,27 +837,24 @@ A compile-only project is not automatically linguistically release-ready.
 
 ---
 
-# 23. Gate 15 — Known issues and status ledger
+## 24. Gate 15 — Known issues and release blockers
 
-Every known temporary, fallback, warning, blocked, disabled, deprecated, or incomplete state MUST be registered and reviewed.
+Every known defect, accepted limitation, and release blocker MUST be reviewed.
 
 Criteria:
 
-- `STATUS_LEDGER.md` is current;
-- `KNOWN_ISSUES.md` is current;
-- source comments do not contradict ledger entries;
-- every temporary implementation has an owner;
-- every temporary implementation has a next action or exit condition;
+- `KNOWN_ISSUES.md` agrees with the release candidate;
+- source comments do not contradict known-issue records;
+- every release-relevant issue identifies affected scope and release impact;
 - every issue states whether it blocks release;
-- resolved entries retain resolution records;
 - no undocumented warning is silently accepted;
-- no release-blocking entry remains open;
-- no required function is disabled;
+- no release-blocking issue remains open;
+- no required function is absent or disabled;
 - no required provider contract is blocked;
 - accepted non-blocking issues have explicit rationale;
 - accepted issues do not invalidate release claims.
 
-A release-blocking ledger entry prevents approval.
+A release-blocking issue prevents approval.
 
 A known issue may be accepted only when:
 
@@ -843,7 +866,7 @@ A known issue may be accepted only when:
 
 ---
 
-# 24. Gate 16 — Documentation consistency
+## 25. Gate 16 — Documentation consistency
 
 Project documentation MUST agree with the release candidate.
 
@@ -855,14 +878,14 @@ Criteria:
 - `LANGUAGE_ARCHITECTURE.md` matches module layers;
 - `MODULE_DEPENDENCY_MAP.md` matches actual dependencies;
 - `CATEGORY_AND_LINCAT_CONTRACT.md` matches public lincat shapes;
-- `MORPHOLOGY_SPEC.md` matches implemented paradigms and features;
+- `MORPHOLOGY_SPEC.md` matches available paradigms and features;
 - `SYNTAX_AND_CONSTRUCTOR_RULES.md` matches constructor behavior;
-- `VALIDATION_SPEC.md` matches configured modes and scenarios;
-- `TEST_COVERAGE_MATRIX.md` matches actual coverage;
-- `STATUS_LEDGER.md` matches incomplete code;
+- `VALIDATION_SPEC__PROJECT_DOCS.md` matches configured modes and scenarios;
+- `TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` matches actual coverage;
+- `KNOWN_ISSUES.md` matches accepted limitations and release blockers;
 - `DECISION_LOG.md` includes significant breaking decisions;
 - `KNOWN_ISSUES.md` matches accepted defects;
-- `RELEASE_CRITERIA.md` matches current gates;
+- `RELEASE_CRITERIA__PROJECT_DOCS.md` matches current gates;
 - `RESEARCH_EVIDENCE.md` is current where project claims depend on it;
 - project contract lock reflects current providers and consumers;
 - no old-language identifier remains active;
@@ -871,11 +894,11 @@ Criteria:
 
 Documentation drift is a release blocker when it affects public, architectural, validation, or release meaning.
 
-Minor prose errors may be corrected before final tagging without rerunning GF unless they alter a contract or criterion.
+Minor prose errors may be corrected before release tagging without rerunning GF unless they alter a contract or criterion.
 
 ---
 
-# 25. Gate 17 — Artifact and manifest integrity
+## 26. Gate 17 — Artifact and manifest integrity
 
 The release run MUST contain all required artifacts and a valid manifest.
 
@@ -912,13 +935,13 @@ Criteria:
 - manifest path is canonical;
 - manifest entries are deterministically ordered;
 - file size is correct;
-- SHA-256 matches final bytes;
+- SHA-256 matches completed bytes;
 - artifact role is valid;
 - requiredness is correct;
 - duplicate paths are absent;
 - unsafe symlink targets are absent;
 - manifest excludes itself when required by manifest contract;
-- no artifact changes after final hashing;
+- no artifact changes after hashing;
 - generated artifacts are associated with the release candidate.
 
 A required artifact missing from the manifest is a release error.
@@ -927,9 +950,9 @@ A manifest hash mismatch is a release error.
 
 ---
 
-# 26. Gate 18 — Report and schema finalization
+## 27. Gate 18 — Report and schema integrity
 
-The release run MUST be finalized successfully.
+The release run MUST close successfully with complete structured evidence.
 
 Criteria:
 
@@ -944,18 +967,18 @@ Criteria:
 - required artifact paths resolve;
 - `summary.md` exists when required;
 - required AI or human reports exist;
-- final report writers completed;
+- required report writers completed;
 - no report writer reran validation;
-- no critical finalization warning remains;
-- final run is discoverable as complete;
-- incomplete-run sentinel is absent or finalization state is complete;
+- no critical report or schema warning remains;
+- release run is discoverable as complete;
+- incomplete-run sentinel is absent and run-closure state is complete;
 - manifest and summary agree.
 
-A run that passed validation but failed required summary or manifest finalization is `ERROR` and cannot support release.
+A run that passed validation but failed required summary or manifest publication is `ERROR` and cannot support release.
 
 ---
 
-# 27. Gate 19 — Determinism and repeatability
+## 28. Gate 19 — Determinism and repeatability
 
 Release evidence SHOULD be reproducible from the same source, configuration, GF version, and inputs.
 
@@ -988,7 +1011,7 @@ A nondeterministic PGF byte hash may be accepted only if:
 
 ---
 
-# 28. Gate 20 — Security and data hygiene
+## 29. Gate 20 — Security and data hygiene
 
 The release candidate and evidence MUST satisfy security and privacy requirements.
 
@@ -1014,7 +1037,7 @@ A credential leak, unsafe path, source overwrite, or unapproved arbitrary comman
 
 ---
 
-# 29. Gate 21 — Release version and change record
+## 30. Gate 21 — Release version and change record
 
 The project release identity MUST be documented according to the project’s versioning policy.
 
@@ -1049,9 +1072,9 @@ When the project schema does not yet define a persisted project version field, t
 
 ---
 
-# 30. Gate 22 — Approval and rollback readiness
+## 31. Gate 22 — Approval and rollback readiness
 
-Final release approval MUST be explicit.
+Release approval MUST be explicit.
 
 Required approval record:
 
@@ -1082,7 +1105,7 @@ A release without rollback reference is not approved.
 
 ---
 
-# 31. Mandatory non-waivable gates
+## 32. Mandatory non-waivable gates
 
 The following are non-waivable for a normal release:
 
@@ -1099,7 +1122,7 @@ required gold integrity
 required PGF when configured
 required artifact existence
 manifest integrity
-summary finalization
+summary and manifest integrity
 overall_status = OK
 absence of security blockers
 explicit approval
@@ -1113,7 +1136,7 @@ It must not be presented as a validated normal release.
 
 ---
 
-# 32. Waivable criteria
+## 33. Waivable criteria
 
 A limited waiver MAY apply to:
 
@@ -1147,7 +1170,7 @@ It changes only the release decision under explicitly permitted criteria.
 
 ---
 
-# 33. Waiver record
+## 34. Waiver record
 
 Recommended format:
 
@@ -1181,7 +1204,7 @@ Waiver IDs must not be reused.
 
 ---
 
-# 34. Release exceptions and project contract changes
+## 35. Release exceptions and project contract changes
 
 A release exception MUST NOT be used to bypass a changed project contract.
 
@@ -1200,7 +1223,7 @@ A waiver is not a substitute for migration.
 
 ---
 
-# 35. Optional scenarios
+## 36. Optional scenarios
 
 Optional scenarios remain visible.
 
@@ -1213,11 +1236,11 @@ Release may proceed after an optional scenario `FAIL` or `ERROR` only when:
 - the release decision records it;
 - release notes include it when user-visible.
 
-An optional scenario that detects a general safety, data corruption, or final-PGF problem becomes release-blocking regardless of its configured optionality.
+An optional scenario that detects a general safety, data corruption, or release-PGF problem becomes release-blocking regardless of its configured optionality.
 
 ---
 
-# 36. Required scenario policy
+## 37. Required scenario policy
 
 A required scenario MUST be:
 
@@ -1238,7 +1261,7 @@ A required scenario cannot be marked optional solely for one failing release can
 
 ---
 
-# 37. Missing-linearization policy
+## 38. Missing-linearization policy
 
 The required missing-linearization scenario or equivalent MUST satisfy the project’s declared policy.
 
@@ -1251,7 +1274,7 @@ category-scoped accepted omissions
 no new missing functions relative to baseline
 ```
 
-The exact policy belongs to `VALIDATION_SPEC.md`.
+The exact policy belongs to `VALIDATION_SPEC__PROJECT_DOCS.md`.
 
 Release criteria:
 
@@ -1267,7 +1290,7 @@ An empty output is not automatically correct unless the scenario contract define
 
 ---
 
-# 38. Linearization policy
+## 39. Linearization policy
 
 Required linearization scenarios MUST cover representative project contracts.
 
@@ -1288,7 +1311,7 @@ A project release claiming support for a construction SHOULD include at least on
 
 ---
 
-# 39. Parse policy
+## 40. Parse policy
 
 Required parse scenarios MUST define:
 
@@ -1313,7 +1336,7 @@ Criteria:
 
 ---
 
-# 40. Generation policy
+## 41. Generation policy
 
 Generation is release-gating only when project policy marks it required.
 
@@ -1335,7 +1358,7 @@ Any generation run that exceeds limits is `ERROR`, not an accepted partial pass.
 
 ---
 
-# 41. Morphology policy
+## 42. Morphology policy
 
 Required morphology validation SHOULD cover the paradigms and feature distinctions claimed by the release.
 
@@ -1365,11 +1388,11 @@ Criteria:
 - paradigm consumers compile;
 - representative lexicon consumers compile;
 - scenario assertions or gold pass;
-- known gaps appear in the status ledger.
+- known gaps appear in the known-issue register.
 
 ---
 
-# 42. Entrypoint-to-scenario consistency
+## 43. Entrypoint-to-scenario consistency
 
 Every required scenario MUST load or use its documented release entrypoint.
 
@@ -1387,7 +1410,7 @@ A scenario that passes against a different entrypoint does not prove the release
 
 ---
 
-# 43. Scenario-to-gold consistency
+## 44. Scenario-to-gold consistency
 
 Every gold-backed scenario MUST satisfy:
 
@@ -1407,7 +1430,7 @@ An unregistered scenario is not release evidence unless explicitly added to the 
 
 ---
 
-# 44. Input integrity
+## 45. Input integrity
 
 Scenario input files MUST be version-controlled when they define release behavior.
 
@@ -1426,7 +1449,7 @@ A required input missing at release time is `ERROR`.
 
 ---
 
-# 45. Clean build requirement
+## 46. Clean build requirement
 
 Release validation MUST use clean or request-isolated generated artifact directories.
 
@@ -1455,7 +1478,7 @@ The default release policy SHOULD use a clean build.
 
 ---
 
-# 46. Previous-run diff policy
+## 47. Previous-run diff policy
 
 Previous-run comparison is supporting evidence.
 
@@ -1487,7 +1510,7 @@ A clean `diff_entries` array is not by itself proof of release readiness.
 
 ---
 
-# 47. Top-error policy
+## 48. Top-error policy
 
 For an approved release:
 
@@ -1501,7 +1524,7 @@ When `overall_status = OK`, any retained top-error entry requires schema/aggrega
 
 ---
 
-# 48. Count invariants
+## 49. Count invariants
 
 The release summary MUST satisfy:
 
@@ -1538,9 +1561,9 @@ Count mismatch is a summary invariant error.
 
 ---
 
-# 49. Required `summary.json` release facts
+## 50. Required `summary.json` release facts
 
-The final summary MUST allow a reader to establish:
+The release summary MUST allow a reader to establish:
 
 ```text
 schema identity and version
@@ -1572,7 +1595,7 @@ release
 
 ---
 
-# 50. Required manifest facts
+## 51. Required manifest facts
 
 The manifest MUST identify every required retained file with:
 
@@ -1594,19 +1617,19 @@ They must not reconstruct filenames from module names.
 
 ---
 
-# 51. Documentation review depth
+## 52. Documentation review depth
 
 Release documentation review has three levels.
 
-## 51.1 Existence
+### 52.1 Existence
 
 Required file exists.
 
-## 51.2 Structural validity
+### 52.2 Structural validity
 
 Required sections, IDs, tables, and references exist.
 
-## 51.3 Semantic agreement
+### 52.3 Semantic agreement
 
 Document agrees with source, configuration, scenarios, results, and release claims.
 
@@ -1614,7 +1637,7 @@ A file passing existence checks but containing stale module names does not satis
 
 ---
 
-# 52. Contract review depth
+## 53. Contract review depth
 
 Contract review includes:
 
@@ -1627,15 +1650,15 @@ failure behavior
 artifact ownership
 validation evidence
 documentation link
-status
-last review
+compatibility obligations
+review evidence
 ```
 
 A contract with no current validation evidence cannot support release unless manual inspection is the only possible method and is explicitly recorded.
 
 ---
 
-# 53. Decision-log requirements
+## 54. Decision-log requirements
 
 `DECISION_LOG.md` MUST include significant release-affecting decisions such as:
 
@@ -1656,9 +1679,9 @@ Routine compatible bug fixes may be recorded only in changelog/release notes unl
 
 ---
 
-# 54. Status-ledger release categories
+## 55. Known-issue release classification
 
-Each open ledger entry SHOULD include one release category:
+Each open known issue uses one release classification:
 
 ```text
 blocking
@@ -1666,32 +1689,25 @@ non-blocking
 informational
 ```
 
-Examples of normally blocking entries:
+Normally blocking issues include:
 
 ```text
-required provider blocked
-required function disabled
-temporary fallback replacing a required final implementation
+required provider unavailable
+required function absent or disabled
+unsafe fallback affecting a required contract
 required scenario unavailable
 unknown lincat contract
 release entrypoint incomplete
 PGF build unavailable
 ```
 
-Examples that may be non-blocking after review:
+An issue may be non-blocking only when it is outside the declared release scope or the validated behavior remains contract-compliant.
 
-```text
-optional construction incomplete
-performance limitation
-non-gating diagnostic warning
-future coverage expansion
-```
-
-No entry may be considered non-blocking solely because it has existed for a long time.
+No issue becomes non-blocking merely because it has existed for a long time.
 
 ---
 
-# 55. Known-issue acceptance
+## 56. Known-issue acceptance
 
 A known issue may be accepted when:
 
@@ -1710,7 +1726,7 @@ user impact
 release impact
 workaround
 owner
-planned action
+resolution or accepted limitation
 approval
 ```
 
@@ -1718,9 +1734,9 @@ Issues involving data corruption, false success, security, or source overwrite c
 
 ---
 
-# 56. Release candidate freeze
+## 57. Release candidate freeze
 
-Before the final release run, the candidate SHOULD enter a freeze.
+Before the release run, the candidate SHOULD enter a freeze.
 
 During freeze:
 
@@ -1741,7 +1757,7 @@ Any uncertainty requires rerunning release validation.
 
 ---
 
-# 57. Changes after release validation
+## 58. Changes after release validation
 
 The following changes invalidate the release run:
 
@@ -1770,15 +1786,15 @@ release gate
 
 When invalidated, create a new release run.
 
-Do not edit a finalized summary to match later changes.
+Do not edit a completed summary to match later changes.
 
 ---
 
-# 58. Release run selection
+## 59. Release run selection
 
 The release run used for approval MUST be:
 
-- finalized;
+- complete;
 - complete;
 - associated with the candidate;
 - performed after the last validating change;
@@ -1792,7 +1808,7 @@ A later verification run may be referenced additionally.
 
 ---
 
-# 59. Recommended release execution order
+## 60. Recommended release execution order
 
 ```text
 1. verify clean candidate identity
@@ -1813,7 +1829,7 @@ A later verification run may be referenced additionally.
 16. classify direct/downstream failures
 17. compare previous run
 18. write summary and reports
-19. write manifest after final bytes stabilize
+19. write manifest after completed bytes stabilize
 20. validate summary and manifest
 21. review ledgers, docs and coverage
 22. record release decision
@@ -1823,7 +1839,7 @@ The exact pipeline is owned by the framework release mode and project validation
 
 ---
 
-# 60. Recommended commands
+## 61. Recommended commands
 
 Target commands include:
 
@@ -1841,15 +1857,13 @@ gf-wordbench schemas check <run>/summary.json
 gf-wordbench schemas check <run>/manifest.json
 ```
 
-Only commands implemented by the current package may be used.
-
-When a named future command is unavailable, use the documented equivalent test or validation operation and record it.
+Release commands and aliases are defined by the CLI reference. Equivalent operations are permitted only when that reference defines them.
 
 ---
 
-# 61. Release evidence directory
+## 62. Release evidence directory
 
-The canonical release evidence remains the finalized run directory.
+The canonical release evidence remains the completed run directory.
 
 Do not copy selected result files into an undocumented second evidence format.
 
@@ -1870,7 +1884,7 @@ The run directory remains the detailed evidence source.
 
 ---
 
-# 62. Release package criteria
+## 63. Release package criteria
 
 When a distributable package is produced:
 
@@ -1892,7 +1906,7 @@ It must not replace source and run evidence.
 
 ---
 
-# 63. Release notes
+## 64. Release notes
 
 Release notes SHOULD include:
 
@@ -1919,7 +1933,7 @@ Release notes must not claim unsupported features.
 
 ---
 
-# 64. Version classification
+## 65. Version classification
 
 Project release changes use:
 
@@ -1943,7 +1957,7 @@ The underlying linguistic or contract change determines severity.
 
 ---
 
-# 65. Emergency release policy
+## 66. Emergency release policy
 
 An emergency release may use an accelerated process only for:
 
@@ -1962,7 +1976,7 @@ known candidate identity
 focused validation of the fix
 affected contract validation
 required artifact integrity
-summary/manifest finalization
+summary/manifest integrity
 security review
 explicit approval
 rollback
@@ -1976,7 +1990,7 @@ An emergency process MUST NOT silently call an incomplete run a normal validated
 
 ---
 
-# 66. Release rejection reasons
+## 67. Release rejection reasons
 
 The following always reject a normal release:
 
@@ -1992,7 +2006,7 @@ unsupported GF version
 missing required PGF
 stale required artifact
 manifest hash mismatch
-summary finalization error
+summary and manifest integrity error
 invalid project configuration
 release-blocking status entry
 undocumented known failure
@@ -2004,7 +2018,7 @@ unapproved post-run source change
 
 ---
 
-# 67. Release deferral reasons
+## 68. Release deferral reasons
 
 Common deferral reasons:
 
@@ -2023,7 +2037,7 @@ Deferral should identify the next action and owner.
 
 ---
 
-# 68. Release approval record
+## 69. Release approval record
 
 Recommended project release record:
 
@@ -2056,14 +2070,14 @@ This record may be stored in:
 release notes
 version-control tag annotation
 project decision log
-a future versioned release manifest
+a schema-defined versioned release manifest
 ```
 
 Do not introduce a machine-readable release record without registering its schema.
 
 ---
 
-# 69. Manual review evidence
+## 70. Manual review evidence
 
 Manual review is permitted only where automation cannot fully establish correctness.
 
@@ -2101,7 +2115,7 @@ schema validity
 
 ---
 
-# 70. Release review roles
+## 71. Release review roles
 
 Recommended roles:
 
@@ -2121,7 +2135,7 @@ No role may approve evidence they know to be stale or unrelated to the candidate
 
 ---
 
-# 71. Separation of author and approver
+## 72. Separation of author and approver
 
 For significant releases, the project SHOULD use an approver other than the primary author of the largest breaking change.
 
@@ -2136,7 +2150,7 @@ Security-sensitive or high-impact migrations SHOULD receive independent review.
 
 ---
 
-# 72. Repeatability run
+## 73. Repeatability run
 
 Recommended repeatability procedure:
 
@@ -2153,7 +2167,7 @@ Both must refer to the same candidate.
 
 ---
 
-# 73. Release artifact retention
+## 74. Release artifact retention
 
 Retain at least:
 
@@ -2175,7 +2189,7 @@ Do not retain secrets merely for reproducibility.
 
 ---
 
-# 74. Rollback criteria
+## 75. Rollback criteria
 
 Rollback SHOULD be initiated when a published release reveals:
 
@@ -2205,7 +2219,7 @@ Do not delete the failed release evidence needed for investigation.
 
 ---
 
-# 75. Post-release verification
+## 76. Post-release verification
 
 After publication, verify:
 
@@ -2223,7 +2237,7 @@ A post-release smoke failure triggers release incident review.
 
 ---
 
-# 76. Release incident record
+## 77. Release incident record
 
 Recommended fields:
 
@@ -2247,7 +2261,7 @@ Incident IDs require a stable project registry if used persistently.
 
 ---
 
-# 77. Template parity
+## 78. Template parity
 
 The active project release is not blocked merely because the generic template contains different project-specific values.
 
@@ -2265,7 +2279,7 @@ Template content must not overwrite active project content.
 
 ---
 
-# 78. Migration readiness
+## 79. Migration readiness
 
 When a release changes project schema or public contracts:
 
@@ -2283,7 +2297,7 @@ A release requiring migration without a migration path is rejected.
 
 ---
 
-# 79. Deprecation readiness
+## 80. Deprecation readiness
 
 A release introducing deprecation must record:
 
@@ -2300,7 +2314,7 @@ A release removing deprecated behavior must satisfy the support window and versi
 
 ---
 
-# 80. Old-identifier scan
+## 81. Old-identifier scan
 
 Before approval, scan active project assets for:
 
@@ -2339,7 +2353,7 @@ Any active stale identifier is a release blocker.
 
 ---
 
-# 81. Placeholder scan
+## 82. Placeholder scan
 
 Before release, required active project files MUST contain no unresolved placeholder tokens.
 
@@ -2366,7 +2380,7 @@ Every match in an active normative section must be reviewed.
 
 ---
 
-# 82. Source TODO review
+## 83. Source TODO review
 
 Not every source `TODO` blocks release.
 
@@ -2375,7 +2389,7 @@ The project must classify active TODOs.
 Blocking examples:
 
 ```text
-required function unimplemented
+required function absent or incomplete
 temporary unsafe fallback
 unknown lincat field
 disabled release path
@@ -2386,15 +2400,15 @@ Potentially non-blocking examples:
 
 ```text
 performance improvement
-future optional coverage
+optional coverage expansion
 documentation enhancement
 ```
 
-Every release-relevant TODO must appear in `STATUS_LEDGER.md` or `KNOWN_ISSUES.md`.
+Every release-relevant TODO must be resolved before approval or registered in `KNOWN_ISSUES.md` with explicit release impact.
 
 ---
 
-# 83. Uncommitted-change policy
+## 84. Uncommitted-change policy
 
 Preferred normal release state:
 
@@ -2416,7 +2430,7 @@ Uncommitted source, scenario, gold, or project configuration changes require exp
 
 ---
 
-# 84. Line-ending and encoding policy
+## 85. Line-ending and encoding policy
 
 Release validation MUST use canonical or supported encodings.
 
@@ -2435,7 +2449,7 @@ Encoding failure in a required asset is `ERROR`.
 
 ---
 
-# 85. File-naming compliance
+## 86. File-naming compliance
 
 Active assets MUST follow `FILE_NAMING_CONVENTIONS.md`.
 
@@ -2450,14 +2464,14 @@ canonical report names
 safe run paths
 no Windows reserved names
 no case-only collision
-no active _v2, new, old, final or latest suffixes
+no active `_v2`, `new`, `old`, or `latest` suffixes
 ```
 
 A noncanonical imported source filename may be accepted only when preserving upstream identity is intentional and the project contract documents it.
 
 ---
 
-# 86. Performance criteria
+## 87. Performance criteria
 
 Performance is release-gating only when project policy defines thresholds.
 
@@ -2482,7 +2496,7 @@ A timeout always remains an execution error, regardless of performance policy.
 
 ---
 
-# 87. Compatibility criteria
+## 88. Compatibility criteria
 
 Release compatibility review includes:
 
@@ -2501,7 +2515,7 @@ Do not claim compatibility that has not been tested or documented.
 
 ---
 
-# 88. Downstream-consumer review
+## 89. Downstream-consumer review
 
 When the project exposes modules or PGF behavior to external consumers, release review SHOULD include:
 
@@ -2519,7 +2533,7 @@ Consumer identities and guarantees belong in the project contract lock.
 
 ---
 
-# 89. Release gate matrix
+## 90. Release gate matrix
 
 The release owner SHOULD maintain a completed matrix for each candidate.
 
@@ -2539,10 +2553,10 @@ The release owner SHOULD maintain a completed matrix for each candidate.
 | Markers/assertions | section results | |
 | Gold | exact comparisons | |
 | Coverage | coverage matrix review | |
-| Known issues | ledger review | |
+| Known issues | known-issue review | |
 | Documentation | consistency review | |
 | Artifacts | manifest verification | |
-| Reports | summary/finalization check | |
+| Reports | summary and schema integrity check | |
 | Determinism | repeatability evidence | |
 | Security | security checklist | |
 | Version | release/change record | |
@@ -2552,7 +2566,7 @@ Blank results mean `PENDING`, not pass.
 
 ---
 
-# 90. Compact normal-release checklist
+## 91. Compact normal-release checklist
 
 ```text
 [ ] Candidate source revision recorded
@@ -2571,7 +2585,7 @@ Blank results mean `PENDING`, not pass.
 [ ] Required markers and assertions complete
 [ ] Every required gold matches
 [ ] Coverage supports release claims
-[ ] No release-blocking status entry
+[ ] No release-blocking known issue
 [ ] Known issues reviewed
 [ ] Documentation matches candidate
 [ ] Required artifacts exist
@@ -2586,7 +2600,7 @@ Blank results mean `PENDING`, not pass.
 
 ---
 
-# 91. Extended evidence checklist
+## 92. Extended evidence checklist
 
 ```text
 [ ] Run ID recorded
@@ -2614,7 +2628,7 @@ Blank results mean `PENDING`, not pass.
 
 ---
 
-# 92. Release reviewer questions
+## 93. Release reviewer questions
 
 Reviewers SHOULD ask:
 
@@ -2630,18 +2644,18 @@ Did every required section complete?
 Did every required gold match?
 Were gold changes intentional and reviewed?
 Does coverage support the release claims?
-Are temporary implementations visible?
+Are all release limitations and blockers explicit?
 Are known issues truly non-blocking?
 Do docs match source?
 Does the manifest verify every required artifact?
-Did summary finalization complete?
+Did summary and manifest integrity complete?
 Can another maintainer reproduce the result?
 Is rollback possible?
 ```
 
 ---
 
-# 93. Release decision template
+## 94. Release decision template
 
 ```text
 Release candidate:
@@ -2688,7 +2702,7 @@ Every blank item remains pending.
 
 ---
 
-# 94. Release-blocker template
+## 95. Release-blocker template
 
 ```text
 Blocker ID:
@@ -2710,7 +2724,7 @@ Blocker IDs must be stable within the project’s tracking system.
 
 ---
 
-# 95. Accepted-issue template
+## 96. Accepted-issue template
 
 ```text
 Issue ID:
@@ -2729,7 +2743,7 @@ Follow-up:
 
 ---
 
-# 96. Repeatability record template
+## 97. Repeatability record template
 
 ```text
 Candidate:
@@ -2751,7 +2765,7 @@ Reviewer:
 
 ---
 
-# 97. Release evidence preservation
+## 98. Release evidence preservation
 
 After approval:
 
@@ -2770,13 +2784,13 @@ Corrections require a new release candidate or a clearly versioned metadata adde
 
 ---
 
-# 98. Release criteria changes
+## 99. Release criteria changes
 
 Changing this document may itself change project release semantics.
 
 Classification:
 
-## 98.1 Clarification
+### 99.1 Clarification
 
 No criterion meaning changes.
 
@@ -2786,7 +2800,7 @@ Action:
 - review consistency;
 - no project release-version change necessarily required.
 
-## 98.2 Compatible tightening
+### 99.2 Compatible tightening
 
 Adds evidence or a compatible gate without invalidating previously valid project contracts unexpectedly.
 
@@ -2797,7 +2811,7 @@ Action:
 - update tests;
 - document effective release.
 
-## 98.3 Breaking release-policy change
+### 99.3 Breaking release-policy change
 
 Changes required scenarios, required artifacts, release entrypoints, PGF requirements, status semantics, or accepted output meaning.
 
@@ -2815,7 +2829,7 @@ Release criteria MUST NOT change silently between candidate run and approval.
 
 ---
 
-# 99. Drift indicators
+## 100. Drift indicators
 
 Probable release-policy drift exists when:
 
@@ -2843,7 +2857,7 @@ Every drift indicator must be resolved before approval.
 
 ---
 
-# 100. Automated release checks
+## 101. Automated release checks
 
 GF Wordbench SHOULD eventually automate:
 
@@ -2858,7 +2872,7 @@ scenario registry
 scenario-to-entrypoint mapping
 scenario-to-gold mapping
 gold schema validation
-status-ledger blocker detection
+known-issue blocker detection
 checkpoint compilation
 entrypoint compilation
 PGF verification
@@ -2872,7 +2886,7 @@ Automation does not remove the need for linguistic and approval review.
 
 ---
 
-# 101. Test requirements for this release policy
+## 102. Test requirements for this release policy
 
 Framework/project test suites SHOULD cover:
 
@@ -2889,9 +2903,9 @@ missing marker blocks release
 PGF absence blocks release
 stale artifact blocks release
 manifest mismatch blocks release
-summary finalization error blocks release
+summary and manifest integrity error blocks release
 overall_status ERROR blocks release
-ledger blocker blocks release
+known-issue blocker blocks release
 waiver cannot alter result status
 post-run source change invalidates candidate
 old identifier blocks release
@@ -2900,7 +2914,7 @@ unresolved placeholder blocks release
 
 ---
 
-# 102. Release-policy ownership
+## 103. Release-policy ownership
 
 | Area | Owner |
 |---|---|
@@ -2911,7 +2925,7 @@ unresolved placeholder blocks release
 | Gold acceptance | linguistic/project reviewer |
 | GF toolchain | toolchain owner |
 | PGF artifact | release artifact owner |
-| Status ledger | subsystem owners and release owner |
+| Known issues | subsystem owners and release owner |
 | Documentation | document owners |
 | Release decision | release approver |
 | Rollback | release owner |
@@ -2921,7 +2935,7 @@ No single automated status replaces owner review of linguistic and contract clai
 
 ---
 
-# 103. Definition of release-ready
+## 104. Definition of release-ready
 
 The active project is release-ready when:
 
@@ -2937,7 +2951,7 @@ The active project is release-ready when:
 10. every required marker and assertion completes;
 11. every required gold comparison is true;
 12. coverage supports the declared release scope;
-13. no release-blocking issue or ledger entry remains;
+13. no release-blocking issue remains;
 14. project documentation agrees with source and configuration;
 15. required artifacts and hashes verify;
 16. `summary.json` and `manifest.json` validate;
@@ -2948,7 +2962,7 @@ The active project is release-ready when:
 
 ---
 
-# 104. Definition of release-approved
+## 105. Definition of release-approved
 
 A release-ready candidate becomes release-approved only when:
 
@@ -2963,7 +2977,7 @@ A release-ready candidate becomes release-approved only when:
 
 ---
 
-# 105. Definition of release-published
+## 106. Definition of release-published
 
 A release-approved candidate becomes release-published when:
 
@@ -2978,7 +2992,7 @@ Publication does not retroactively repair missing approval evidence.
 
 ---
 
-# 106. Final invariants
+## 107. Release invariants
 
 The project release process MUST preserve:
 
@@ -2999,7 +3013,7 @@ The project release process MUST preserve:
 15. complete summary and manifest;
 16. `overall_status = OK`;
 17. visible optional failures;
-18. visible known issues and temporary states;
+18. visible known issues and accepted limitations;
 19. documentation-source agreement;
 20. explicit waivers only where permitted;
 21. explicit approval;
@@ -3009,7 +3023,7 @@ The project release process MUST preserve:
 
 ---
 
-# 107. Final rule
+## 108. Governing rule
 
 > Release the evidence-backed project, not the hoped-for project.
 

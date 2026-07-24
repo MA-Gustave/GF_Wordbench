@@ -2,11 +2,12 @@
 
 **Document ID:** `GF-WB-SCOPE-NON-GOALS`  
 **Status:** Normative  
-**Applies to:** GF Wordbench framework and its active language-project contract  
+**Applies to:** GF Wordbench framework, its one-active-project workspace contract, and its public artifact boundary  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\SCOPE_AND_NON_GOALS.md`  
-**Scope version:** `1.0.0`  
-**Last reviewed:** `2026-07-21`
+**Target path:** `docs/SCOPE_AND_NON_GOALS.md`  
+**Scope version:** `2.0.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -22,12 +23,12 @@ It states:
 - which responsibilities remain owned by Grammatical Framework;
 - which responsibilities belong to the active language project;
 - which features are intentionally excluded;
-- which future additions are acceptable;
+- which additions are compatible with the product boundary;
 - which additions would represent architectural drift.
 
 This document is normative.
 
-When another document, implementation detail, user-interface behavior, or proposed feature conflicts with this scope, this document takes precedence unless the scope is deliberately revised.
+When another document, implementation detail, user-interface behavior, or feature conflicts with this scope, this document takes precedence unless the scope is deliberately revised.
 
 The goal is not to minimize capability.
 
@@ -37,7 +38,7 @@ The goal is to keep every capability useful, owned, testable, and aligned with t
 
 ## 2. Product definition
 
-GF Wordbench is a local development and validation workbench for one active Grammatical Framework language project.
+GF Wordbench is a local development and validation workbench for exactly one active Grammatical Framework language project per workspace and per run.
 
 It coordinates:
 
@@ -46,7 +47,7 @@ project configuration
 → source selection
 → static source checks
 → GF compilation
-→ final PGF construction
+→ PGF construction
 → native GF scenario execution
 → assertion and gold comparison
 → diagnostic classification
@@ -88,6 +89,8 @@ GF Wordbench is authoritative for:
 - preserving run history;
 - producing reports;
 - enforcing documented project and schema contracts.
+
+GF Wordbench operates independently of `gf-portfolio`. The independent portfolio product may consume public, versioned Wordbench artifacts through a read-only interoperability boundary, but Wordbench must not require Portfolio code, runtime services, storage, or configuration.
 
 ---
 
@@ -142,7 +145,7 @@ Introductory examples may exist, but language and GF education are not the produ
 
 ### 5.1 One active language project
 
-One GF Wordbench copy represents one active language project.
+One GF Wordbench workspace contains exactly one active language project, and every run resolves exactly one active project identity and one normative language target.
 
 Language-specific information belongs in:
 
@@ -155,9 +158,9 @@ the active GF source tree
 
 Framework modules must remain language-neutral.
 
-A user may duplicate or reset GF Wordbench to work on another language.
+A user may create several isolated workspaces or reset project-owned content to work on another language.
 
-GF Wordbench does not need to manage several active languages simultaneously inside one runtime or one project configuration.
+GF Wordbench does not manage several active languages simultaneously inside one workspace, one project configuration, or one run. Cross-workspace orchestration, portfolio aggregation, and portfolio-wide comparison belong to the independent `gf-portfolio` product.
 
 ### 5.2 GF as execution authority
 
@@ -197,12 +200,15 @@ Report generators must not rerun GF.
 
 Behavior crossing a file, process, schema, scenario, module, or artifact boundary must be documented and testable.
 
-GF Wordbench uses dedicated contract locks for:
+GF Wordbench uses coordinated anti-drift documents and contract locks for:
 
+- cross-document product identity and authority order;
+- documentation-correction coordination;
 - Python and framework interfile contracts;
 - external-tool contracts;
 - persisted schemas;
-- active-project interfile contracts.
+- active-project interfile contracts;
+- the generic active-project lock template.
 
 Internal refactoring is permitted when externally visible promises remain compatible.
 
@@ -396,7 +402,7 @@ GF Wordbench includes construction and verification of final `.pgf` artifacts wh
 
 PGF validation may include:
 
-- final entrypoint selection;
+- release entrypoint selection;
 - deterministic command construction;
 - required artifact existence;
 - artifact size and hash recording;
@@ -667,7 +673,7 @@ CLI behavior includes:
 
 GF Wordbench may include a graphical interface.
 
-The GUI is a convenience layer over the same application and audit contracts used by the CLI.
+The GUI is a convenience layer over the same application and validation contracts used by the CLI.
 
 The GUI may provide:
 
@@ -687,7 +693,7 @@ A project must remain fully usable without the GUI.
 
 ## 6.21 Validation modes
 
-The final product may provide these principal modes:
+GF Wordbench provides these principal validation modes:
 
 ```text
 quick
@@ -759,7 +765,8 @@ These controls may cover:
 - validation specifications;
 - release criteria;
 - decision records;
-- status ledgers.
+- documentation-alignment rules;
+- documentation-correction coordination.
 
 Documentation is part of the project contract where implementation or validation depends on it.
 
@@ -813,9 +820,9 @@ The external CI system remains responsible for job scheduling, agents, secrets, 
 
 ## 7.1 Multiple active languages in parallel
 
-GF Wordbench is not a multi-project language dashboard.
+GF Wordbench is not a multi-project language dashboard or portfolio orchestrator.
 
-It does not need to:
+It does not:
 
 - load several active project configurations simultaneously;
 - switch languages dynamically inside one run;
@@ -826,11 +833,10 @@ It does not need to:
 
 A new language is handled by:
 
-- creating or duplicating a clean GF Wordbench project;
-- resetting project-specific content;
-- initializing the new active language.
+- creating an isolated GF Wordbench workspace from the project template; or
+- resetting project-owned content and initializing the new active language.
 
-Cross-language research files may exist outside the active project, but they are not simultaneous active-project state.
+Cross-language research files may exist outside the active project, but they are not simultaneous active-project state. Portfolio-wide views, comparisons, and orchestration belong to `gf-portfolio`, which may read public versioned Wordbench artifacts without becoming a Wordbench runtime dependency.
 
 ---
 
@@ -1172,7 +1178,7 @@ Automation must not depend on Markdown wording when structured data exists.
 
 ---
 
-## 7.22 Permanent compatibility with every historical prototype
+## 7.22 Permanent compatibility with every legacy prototype
 
 GF Wordbench must provide deliberate migration from known predecessor formats.
 
@@ -1186,7 +1192,7 @@ Compatibility support must be:
 - documented;
 - eventually deprecable.
 
-Raw historical evidence may remain readable by dedicated migration tools without constraining all future writers.
+Legacy evidence may remain readable by dedicated migration tools without constraining current schema writers.
 
 ---
 
@@ -1205,7 +1211,7 @@ The framework must not hardcode:
 
 These belong to the active project.
 
-Framework tests should use neutral fixtures unless explicitly testing migration from a historical project.
+Framework tests should use neutral fixtures unless explicitly testing migration from a legacy project.
 
 ---
 
@@ -1228,11 +1234,9 @@ Fallbacks may exist only when explicit, visible, documented, and compatible with
 
 ---
 
-# 8. Deferred capabilities
+# 8. Optional extension space
 
-The following are neither required core features nor permanently prohibited.
-
-They may be added when justified by real use:
+The following capabilities are compatible with the product boundary but are not required by the core contract:
 
 - safe local parallel compilation;
 - Graphviz dependency visualization;
@@ -1247,13 +1251,13 @@ They may be added when justified by real use:
 - performance gates for stable project cases;
 - platform support beyond the tested baseline.
 
-A deferred capability must satisfy the extension criteria below.
+Any optional extension must satisfy the acceptance criteria below.
 
 ---
 
 # 9. Extension acceptance criteria
 
-A proposed capability belongs in GF Wordbench only when all applicable questions can be answered positively.
+A new capability belongs in GF Wordbench only when all applicable questions can be answered positively.
 
 ## 9.1 Problem evidence
 
@@ -1297,7 +1301,7 @@ A proposed capability belongs in GF Wordbench only when all applicable questions
 - Are output and runtime limits defined?
 - Are untrusted inputs treated appropriately?
 
-A proposal failing these criteria should remain project-local, external, or deferred.
+A capability failing these criteria remains project-local, external, or outside the Wordbench product boundary.
 
 ---
 
@@ -1305,7 +1309,7 @@ A proposal failing these criteria should remain project-local, external, or defe
 
 GF Wordbench is local-first and Python-based.
 
-The final architecture should avoid unnecessary platform dependence.
+The architecture must avoid unnecessary platform dependence.
 
 Portable behavior includes:
 
@@ -1452,13 +1456,13 @@ It does not mean:
 - no linguistic error exists;
 - the grammar is optimal;
 - every external application will accept the PGF;
-- all future GF versions will behave identically.
+- all subsequent GF versions will behave identically.
 
 ---
 
-# 13. Final-product completion criteria
+# 13. Required product capability set
 
-GF Wordbench reaches its intended final product scope when the following capabilities are implemented and documented.
+GF Wordbench includes the following capabilities and contracts.
 
 ## 13.1 Framework foundation
 
@@ -1550,6 +1554,9 @@ Detailed contracts belong to the following documents.
 
 | Topic | Authoritative document |
 |---|---|
+| Cross-document alignment and correction rules | `DOCUMENTATION_ALIGNMENT_LOCK.md` |
+| Documentation correction coordination | `DOCUMENTATION_CORRECTION_LEDGER.md` |
+| Product and Portfolio boundary | `architecture/PRODUCT_BOUNDARIES.md`, `decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md`, `decisions/ADR-0011-SEPARATE-PORTFOLIO.md`, `decisions/ADR-0012-INDEPENDENT-PRODUCTS.md` |
 | Python and framework file boundaries | `INTERFILE_CONTRACT_LOCK.md` |
 | External executables and GF process behavior | `EXTERNAL_TOOL_CONTRACT_LOCK.md` |
 | Persisted JSON, TOML, gold, output, and artifact schemas | `PERSISTED_SCHEMA_LOCK.md` |
@@ -1579,7 +1586,7 @@ A scope change is architectural.
 
 It must not be introduced only through code.
 
-A proposed scope change requires:
+A scope change requires:
 
 ```text
 [ ] Problem statement
@@ -1611,7 +1618,7 @@ requires an explicit major architectural decision.
 
 # 16. Anti-drift decision rule
 
-When deciding where a proposed feature belongs, use this order:
+When deciding where a feature belongs, use this order:
 
 1. **Does GF already provide the semantic capability?**  
    Integrate GF; do not reimplement it.
@@ -1636,7 +1643,7 @@ When deciding where a proposed feature belongs, use this order:
 
 ---
 
-# 17. Final scope statement
+# 17. Scope statement
 
 GF Wordbench is:
 
@@ -1650,14 +1657,14 @@ GF-native execution
 + deterministic orchestration
 + regression evidence
 + anti-drift contracts
-+ final release gates
++ release gates
 ```
 
 It is deliberately not:
 
 ```text
 a replacement for GF
-a multi-language management platform
+a portfolio-management or cross-workspace orchestration platform
 a universal build system
 an autonomous grammar author
 a general IDE

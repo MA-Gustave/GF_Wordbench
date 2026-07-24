@@ -2,7 +2,7 @@
 
 **Document ID:** `GF-WB-CONFIG-APPLICATION-STATE`  
 **Status:** Normative  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\configuration\APPLICATION_STATE_REFERENCE.md`  
+**Canonical path:** `docs/configuration/APPLICATION_STATE_REFERENCE.md`  
 **Applies to:** Local application-state loading, validation, migration, use and persistence  
 **Owner:** GF Wordbench maintainers  
 **Lifecycle owner:** `app/state.py`  
@@ -11,7 +11,7 @@
 **Persisted schema:** `gf-wordbench.app-state/1.0`  
 **Canonical artifact:** `.gf_wordbench_state.json`  
 **Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -27,7 +27,9 @@ Application state remembers disposable convenience values between application se
 - pointers to the most recent run;
 - a short user-facing status message.
 
-Application state is not project configuration.
+Application state is not project configuration, a project selector or a portfolio registry.
+
+One GF Wordbench workspace contains exactly one active GF language project. Application state may remember local convenience values for that workspace, but it cannot select another active project, combine several projects or introduce `gf-portfolio` state.
 
 It does not define:
 
@@ -38,7 +40,10 @@ It does not define:
 - release criteria;
 - required scenarios;
 - gold expectations;
-- run results.
+- run results;
+- a list or registry of projects;
+- a runtime language-profile selector;
+- cross-workspace or portfolio aggregation state.
 
 The core rule is:
 
@@ -78,13 +83,15 @@ This reference does not govern:
 - operating-system credential stores;
 - cloud synchronization;
 - multi-user shared preferences;
-- arbitrary extension data.
+- arbitrary extension data;
+- `gf-portfolio` configuration, storage or workspace registries.
 
 ---
 
 ## 3. Related normative documents
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/REPOSITORY_STRUCTURE.md
@@ -138,6 +145,8 @@ release requirements
 ```
 
 Application state MUST NOT override those facts silently.
+
+It also MUST NOT persist a second active-project identity, a selectable project list, a language-profile selector or any `gf-portfolio` registry or aggregation state.
 
 ### 5.2 Application state is authoritative only for
 
@@ -269,9 +278,9 @@ C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\.gf_wordbench_state.js
 
 ### 8.1 Path ownership
 
-The canonical state path belongs to the current GF Wordbench repository copy.
+The canonical state path belongs to the current GF Wordbench workspace.
 
-One duplicated GF Wordbench copy therefore has one local state file.
+Each isolated GF Wordbench workspace therefore has one local state file.
 
 ### 8.2 Explicit alternate path
 
@@ -298,7 +307,7 @@ Run directories are evidence, not application preference stores.
 
 ### 8.4 Version-control policy
 
-The canonical state file SHOULD be ignored by version control.
+The canonical state file MUST be ignored by version control.
 
 It is local, disposable and machine-specific.
 
@@ -371,7 +380,7 @@ selection
 last_run
 ```
 
-Recommended:
+Canonical optional field:
 
 ```text
 producer
@@ -387,7 +396,7 @@ Arrays, strings, numbers, booleans and `null` are invalid roots.
 
 For supported schema major version `1`:
 
-- readers SHOULD ignore unknown optional fields;
+- readers MUST ignore unknown optional fields;
 - readers MUST NOT reinterpret them;
 - canonical writers MUST NOT copy them into newly written state unless a documented migration requires preservation.
 
@@ -481,7 +490,7 @@ null
 
 ### 14.2 Meaning
 
-Recently selected GF Wordbench or active-project root used by the UI to locate:
+Current GF Wordbench workspace root remembered by the UI or launcher to locate:
 
 ```text
 project/project.toml
@@ -501,9 +510,9 @@ Before execution, the configuration layer must verify:
 
 ### 14.4 Authority limitation
 
-The path locates a project.
+The path locates the current workspace and its canonical `project/` boundary.
 
-It does not define the project’s identity or language.
+It does not define the project’s identity or language, select among several projects, or authorize execution outside the current workspace.
 
 ---
 
@@ -1182,6 +1191,11 @@ gold mappings
 expected PGF filename
 release criteria
 source-module ownership
+project registry
+selectable project IDs
+language-profile selector
+portfolio workspace membership
+portfolio readiness or aggregation state
 ```
 
 These values belong to `project.toml` or project documentation.
@@ -1348,7 +1362,7 @@ The UI may state that the state version is unsupported.
 
 ## 39. Field-level recovery
 
-Because application state is disposable, readers should recover safely when possible.
+Because application state is disposable, readers recover safely when possible.
 
 Examples:
 
@@ -1371,13 +1385,13 @@ It MUST NOT recover a project rule from state.
 
 ### 39.2 Warning aggregation
 
-The reader SHOULD aggregate validation warnings rather than interrupt startup with one dialog per field.
+The reader aggregates validation warnings rather than interrupting startup with one dialog per field.
 
 ---
 
 ## 40. Writer contract
 
-The state writer SHOULD expose one stable operation equivalent to:
+The state writer exposes one stable operation equivalent to:
 
 ```python
 save_app_state(
@@ -1439,10 +1453,10 @@ one root object
 Unicode preserved
 stable indentation
 LF newlines
-final newline
+terminating newline
 ```
 
-Recommended logical equivalent:
+Canonical logical equivalent:
 
 ```python
 json.dumps(
@@ -1458,7 +1472,7 @@ followed by one LF.
 
 JSON key order is not semantically significant.
 
-Canonical writers SHOULD use the documented group and field order for reviewability.
+Canonical writers use the documented group and field order for reviewability.
 
 ### 41.2 No non-JSON values
 
@@ -1516,7 +1530,7 @@ The writer MUST NOT create a missing project root to hide a configuration error.
 
 ## 43. Save lifecycle
 
-State SHOULD be saved at controlled lifecycle points:
+State is saved only at controlled lifecycle points:
 
 ```text
 normal GUI shutdown
@@ -1525,7 +1539,7 @@ after a completed run updates last-run pointers
 after a successful legacy migration
 ```
 
-It SHOULD NOT be rewritten on every keystroke.
+It is not rewritten on every keystroke.
 
 ### 43.1 Before application shutdown
 
@@ -1535,7 +1549,7 @@ GUI objects are never passed into serialization.
 
 ### 43.2 Failed application shutdown
 
-A failed state save should be logged or shown as a non-fatal warning.
+A failed state save is logged or shown as a non-fatal warning.
 
 The application’s project and run evidence remain usable.
 
@@ -1545,7 +1559,7 @@ The CLI does not require application state.
 
 A CLI invocation MAY ignore state completely.
 
-A future explicit `--use-state` convenience option would require documentation and must preserve precedence rules.
+The CLI does not load application state implicitly. Any explicit state-loading command or option is part of the documented CLI contract and preserves these precedence rules.
 
 ---
 
@@ -1593,7 +1607,7 @@ State-loading failure is non-fatal.
 
 The framework remains usable with defaults.
 
-The state manager SHOULD make failure visible through:
+The state manager makes failure visible through:
 
 ```text
 application log
@@ -1615,7 +1629,7 @@ It MUST NOT:
 
 When a canonical state file is malformed, GF Wordbench MAY preserve it under a quarantine name before the next successful write.
 
-Recommended pattern:
+Canonical pattern:
 
 ```text
 .gf_wordbench_state.invalid-<UTC-ID>.json
@@ -1792,7 +1806,7 @@ delete `.gf_wordbench_state.json`
 or replace it with canonical defaults
 ```
 
-Recommended user-visible operation:
+Canonical user-visible operation:
 
 ```text
 gf-wordbench state reset
@@ -1836,7 +1850,7 @@ It SHOULD:
 - show schema ID and version;
 - show effective canonical fields;
 - mark stale paths;
-- redact future sensitive fields if ever introduced;
+- redact any sensitive fields permitted by a later schema version;
 - avoid dumping internal objects.
 
 This is optional and does not require a state-management subsystem beyond `app/state.py`.
@@ -1893,11 +1907,11 @@ user-entered credentials
 
 Local absolute paths are not treated as secrets by the schema, but they may reveal usernames or directory layout.
 
-State exports or support bundles SHOULD redact them when portability or privacy requires it.
+State exports or support bundles redact them when portability or privacy requires it.
 
 ### 56.2 File permissions
 
-GF Wordbench SHOULD rely on normal user-local filesystem permissions.
+GF Wordbench relies on normal user-local filesystem permissions.
 
 It MUST NOT deliberately make the state file globally writable.
 
@@ -1911,7 +1925,7 @@ The reader must validate all types and never evaluate strings.
 
 ## 57. Concurrency model
 
-Canonical v1 assumes one primary GUI writer per repository copy.
+Canonical v1 assumes one primary GUI writer per workspace.
 
 ### 57.1 Atomicity
 
@@ -1940,13 +1954,13 @@ conflict-resolution engine
 
 Application state is disposable convenience data.
 
-The GUI SHOULD warn or avoid concurrent writers where practical.
+The GUI warns about or prevents concurrent writers where practical.
 
 ---
 
 ## 58. In-memory model
 
-A final implementation SHOULD use one explicit validated model, conceptually:
+The in-memory state uses one explicit validated model:
 
 ```python
 AppState(
@@ -1959,7 +1973,7 @@ AppState(
 )
 ```
 
-This may be implemented with dataclasses or another typed model.
+The model may use dataclasses or another explicit typed representation.
 
 ### 58.1 Model rule
 
@@ -1979,7 +1993,7 @@ The canonical serializer must whitelist persisted fields and exclude runtime-onl
 
 Legacy flat keys may be handled by a migration function.
 
-They should not remain the main application-state model.
+They do not remain in the canonical application-state model.
 
 ---
 
@@ -2112,7 +2126,7 @@ explicit CLI arguments
 + application defaults
 ```
 
-State is not an implicit hidden input.
+State is not an implicit hidden input and cannot change the active project.
 
 This ensures reproducible automation.
 
@@ -2122,7 +2136,7 @@ A GUI action may reuse state because the GUI exposes the remembered values to th
 
 ## 64. Diagnostics
 
-State diagnostics SHOULD distinguish:
+State diagnostics distinguish:
 
 ```text
 state_missing
@@ -2144,7 +2158,7 @@ They are not audit validation statuses and do not enter `summary.json` unless a 
 
 ## 65. Logging
 
-State logs SHOULD include:
+State logs include:
 
 ```text
 state path
@@ -2223,14 +2237,14 @@ A new GF Wordbench release does not require a state schema change when the persi
 
 ## 67. Unknown future minor versions
 
-A reader supporting major `1` MAY read a newer `1.x` state when:
+A reader supporting major `1` may read a newer `1.x` state only when:
 
 - required known fields remain valid;
 - unknown optional fields are ignored;
 - enum values are not reinterpreted;
 - canonical rewrite does not claim to preserve unknown fields.
 
-Before rewriting such state, the implementation SHOULD avoid destructive downgrade.
+Before rewriting such state, the writer MUST avoid destructive downgrade.
 
 A conservative implementation may keep the file untouched and use known values in memory.
 
@@ -2274,7 +2288,7 @@ State files are not expected to be byte-identical across different producer vers
 
 ## 70. Required unit tests
 
-Recommended file:
+Canonical test file:
 
 ```text
 tests/unit/test_state.py
@@ -2345,7 +2359,7 @@ producer emitted
 UTF-8 without BOM
 Unicode preserved
 stable indentation
-final newline
+terminating newline
 temporary file used
 atomic replace
 old valid file survives failed write
@@ -2376,7 +2390,7 @@ malformed legacy does not crash
 
 ## 71. Contract tests
 
-Recommended file:
+Canonical test file:
 
 ```text
 tests/contracts/test_application_state_contract.py
@@ -2404,7 +2418,7 @@ Contract tests MUST verify:
 
 ## 72. Integration tests
 
-Recommended cases:
+Canonical cases:
 
 ```text
 GUI starts with no state file
@@ -2431,7 +2445,7 @@ They MUST NOT depend on the developer’s real home or repository state.
 
 ## 73. Property tests
 
-Useful bounded properties:
+Bounded properties:
 
 ```text
 canonical serialize → load preserves canonical values
@@ -2475,6 +2489,8 @@ Probable state-contract drift exists when:
 - `.gf_wordbench_state.json` is written by a GUI module;
 - two modules define the state filename;
 - application state contains language identity;
+- application state contains a selectable project list or second active-project identity;
+- application state contains `gf-portfolio` registry or aggregation fields;
 - application state contains scan directories or entrypoints;
 - state contains `RunResult`;
 - `is_running` is restored as true;
@@ -2525,6 +2541,7 @@ A state-contract change is complete only when all applicable items are checked:
 [ ] unit tests updated
 [ ] contract tests updated
 [ ] integration tests updated
+[ ] DOCUMENTATION_ALIGNMENT_LOCK.md reviewed
 [ ] PERSISTED_SCHEMA_LOCK.md updated
 [ ] INTERFILE_CONTRACT_LOCK.md updated when required
 [ ] this document updated
@@ -2532,9 +2549,9 @@ A state-contract change is complete only when all applicable items are checked:
 
 ---
 
-## 77. Implementation checklist
+## 77. Conformance checklist
 
-A conforming v1 implementation satisfies:
+A conforming v1 state subsystem satisfies:
 
 ```text
 [ ] canonical path is `.gf_wordbench_state.json`
@@ -2559,7 +2576,7 @@ A conforming v1 implementation satisfies:
 [ ] remembered paths are revalidated before use
 [ ] writer uses a field whitelist
 [ ] writer uses UTF-8 without BOM
-[ ] writer appends a final newline
+[ ] writer terminates the file with one LF
 [ ] writer uses atomic replacement
 [ ] failed write preserves old state
 [ ] canonical file wins over legacy
@@ -2571,7 +2588,7 @@ A conforming v1 implementation satisfies:
 
 ---
 
-## 78. Final enforcement rule
+## 78. Governing rule
 
 Application state is a convenience layer, not a second configuration system.
 

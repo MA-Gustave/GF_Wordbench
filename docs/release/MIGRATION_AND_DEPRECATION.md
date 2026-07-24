@@ -4,9 +4,9 @@
 **Status:** Normative release and compatibility policy  
 **Applies to:** Package behavior, public Python contracts, CLI and GUI surfaces, persisted schemas, project templates, active-language projects, GF module contracts, scenarios, gold files, reports, artifacts, external-tool integrations, and legacy `gf-audit` data  
 **Primary owners:** GF Wordbench maintainers and the owner of each migrated contract  
-**Target architecture:** Final GF Wordbench architecture  
+**Canonical path:** `docs/release/MIGRATION_AND_DEPRECATION.md`  
 **Policy version:** `1.0.0`  
-**Last structural review:** 2026-07-22
+**Last structural review:** 2026-07-24
 
 ---
 
@@ -45,11 +45,13 @@ This policy must remain consistent with:
 ```text
 CHANGELOG.md
 CONTRIBUTING.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/architecture/COMPONENT_MAP.md
 docs/architecture/ERROR_HANDLING_MODEL.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 docs/development/BACKWARD_COMPATIBILITY.md
 docs/projects/MIGRATING_AN_EXISTING_LANGUAGE.md
 docs/release/VERSIONING_POLICY.md
@@ -60,8 +62,9 @@ docs/reference/STATUS_VALUES.md
 project/project.toml
 project/docs/INTERFILE_CONTRACT_LOCK.md
 project/docs/DECISION_LOG.md
-project/docs/STATUS_LEDGER.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/KNOWN_ISSUES.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 templates/project/project.toml
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
@@ -83,11 +86,33 @@ When this document conflicts with a lock, the lock remains authoritative for its
 
 The conflict must be corrected through one coordinated change.
 
+## 2.1 Product boundary
+
+One GF Wordbench workspace contains exactly one active GF language project.
+
+Wordbench migrations may transform:
+
+- the active project contract;
+- Wordbench configuration and state;
+- Wordbench run artifacts and schemas;
+- public Wordbench APIs, commands, reports, and tool contracts.
+
+Multi-workspace discovery, multilingual aggregation, portfolio readiness, and cross-project migration belong to the independent `gf-portfolio` product.
+
+The dependency direction is one-way:
+
+```text
+gf-portfolio → public versioned GF Wordbench artifacts
+GF Wordbench -X→ gf-portfolio runtime, storage, code, or configuration
+```
+
+A Wordbench migration must not create a project registry, select among several active projects, import private Portfolio state, or make Wordbench startup depend on `gf-portfolio`.
+
 ---
 
 # 3. Core principles
 
-GF Wordbench migrations must preserve these principles:
+GF Wordbench migrations preserve these principles:
 
 1. **No implicit destructive migration.**
 2. **Read old, write current.**
@@ -104,12 +129,14 @@ GF Wordbench migrations must preserve these principles:
 13. **Warnings are visible but do not masquerade as validation failures.**
 14. **Migration failures preserve the last valid source and destination.**
 15. **Historical identifiers are never reused for unrelated meaning.**
+16. **A migration never introduces a multi-project runtime model into GF Wordbench.**
+17. **Publication, verification, and rollback retain enough protected budget to complete safely.**
 
 ---
 
 # 4. Normative terms
 
-- **CURRENT**: latest canonical supported form emitted by current writers.
+- **CURRENT**: canonical supported form emitted by canonical writers.
 - **LEGACY**: older supported or recognized form accepted only for compatibility.
 - **SOURCE**: original asset supplied to a migration.
 - **DESTINATION**: canonical asset produced by a migration.
@@ -118,7 +145,7 @@ GF Wordbench migrations must preserve these principles:
 - **ALIAS**: old name accepted and mapped to a canonical name.
 - **DEPRECATED**: supported temporarily but scheduled for removal.
 - **RETIRED**: no longer active; identity remains reserved.
-- **REMOVED**: implementation support no longer exists in the current release line.
+- **REMOVED**: the contract is no longer accepted or exposed by the supported release line.
 - **LOSS**: meaning or evidence that cannot be preserved exactly.
 - **WARNING**: recoverable migration concern not preventing a valid destination.
 - **BLOCKER**: condition preventing safe migration.
@@ -129,7 +156,7 @@ GF Wordbench migrations must preserve these principles:
 - **COMPATIBILITY WINDOW**: period during which old behavior remains readable or callable.
 - **DUAL-READ**: reader accepts old and new forms.
 - **DUAL-WRITE**: writer emits old and new forms.
-- **CANONICAL-ONLY WRITE**: writer emits only the current form.
+- **CANONICAL-ONLY WRITE**: writer emits only the canonical form.
 
 GF Wordbench normally permits dual-read but prohibits dual-write.
 
@@ -166,7 +193,7 @@ The category determines owners, warnings, support window, and required tests.
 
 ## 5.1 Read-only compatibility
 
-A reader accepts a legacy form and converts it into a current in-memory model.
+A reader accepts a legacy form and converts it into a canonical in-memory model.
 
 Example:
 
@@ -327,13 +354,13 @@ Removal release:
 Documentation:
 ```
 
-Significant architectural migrations should have an ADR.
+Significant architectural migrations require an ADR.
 
 ---
 
 # 8. Migration identifiers
 
-Recommended format:
+Canonical format:
 
 ```text
 MIG-<DOMAIN>-<NUMBER>
@@ -380,65 +407,57 @@ Rules:
 
 ---
 
-# 9. Migration registry
+# 9. Migration records
 
-GF Wordbench should maintain a migration registry in code or documentation.
+Every supported migration has one durable record in code or documentation.
 
 Minimum fields:
 
 | Field | Meaning |
 |---|---|
 | Migration ID | Stable identity |
-| Source | Old schema, contract, command, or project form |
+| Source | Legacy schema, contract, command, or project form |
 | Target | Canonical replacement |
-| Introduced | First package/project release supporting migration |
-| Deprecated | First release warning about old form |
-| Removal | Earliest release allowed to remove support |
+| Introduced | First package or project release supporting the migration |
+| Deprecated | First release warning about the legacy form, when applicable |
+| Removal | Earliest release allowed to remove compatibility, when applicable |
 | Migrator | Owning component |
-| Status | Planned, active, complete, retired |
-| Loss policy | None, warning, or blocker |
+| Loss policy | None, warning, confirmation, or blocker |
+| Rollback | Recovery path |
 | Tests | Fixture and contract evidence |
+| Documentation | User and maintainer guidance |
 
-The registry may initially live in this document and schema locks.
+Migration records are historical contract evidence, not development-progress trackers.
 
-A machine-readable registry requires its own schema before persistence.
+A machine-readable migration registry requires a registered schema before persistence. Completed migration records remain available after migrator or adapter code is retired.
 
 ---
 
-# 10. Compatibility states
+# 10. Compatibility lifecycle
 
-Supported states:
+Canonical contract lifecycle terms are:
 
 ```text
-experimental
 active
 deprecated
 retired
 removed
 ```
 
-Project contracts may additionally use:
-
-```text
-blocked
-```
-
 Meaning:
 
-| State | Meaning |
+| Term | Meaning |
 |---|---|
-| `experimental` | No stable compatibility guarantee |
-| `active` | Current supported contract |
-| `deprecated` | Supported temporarily; replacement available |
-| `blocked` | Intended project contract cannot currently be satisfied |
-| `retired` | No longer active; identity reserved |
-| `removed` | Implementation no longer accepts or exposes it |
+| `active` | Canonical supported contract |
+| `deprecated` | Temporarily supported legacy contract with a documented replacement or retirement reason |
+| `retired` | No longer active; identity and historical meaning remain reserved |
+| `removed` | No longer accepted or exposed by the supported release line |
 
-`retired` is a documentation/registry state.
+Experimental behavior is outside the stable compatibility guarantee but still obeys data-safety, naming, and migration rules.
 
-`removed` describes implementation availability.
+These lifecycle terms describe public compatibility boundaries. They are not used to track feature-development progress.
 
-A retired contract ID must not disappear from historical records.
+A retired contract ID remains present in historical records and is never reused.
 
 ---
 
@@ -457,7 +476,7 @@ the format prevents future compatibility
 the project contract has been redesigned deliberately
 ```
 
-A normal deprecation should have:
+A normal deprecation has:
 
 - replacement;
 - migration instructions;
@@ -542,7 +561,7 @@ Legacy reading remains supported through the migration window.
 Canonical writers emit only 'quick'.
 ```
 
-Warnings should be:
+Warnings are:
 
 - emitted once per relevant invocation when practical;
 - visible in CLI stderr;
@@ -576,7 +595,7 @@ Warnings must not exist only in ephemeral debug logs when user action is require
 
 # 15. Canonical writer policy
 
-Canonical writers emit only current forms.
+Canonical writers emit only canonical forms.
 
 They must not emit:
 
@@ -629,7 +648,7 @@ A transitional export is preferable to polluting the canonical writer.
 legacy bytes
 → legacy parser
 → migration adapter
-→ current in-memory model
+→ canonical in-memory model
 ```
 
 No source modification occurs.
@@ -648,7 +667,7 @@ project migration planning
 ```text
 legacy source
 → parse and validate
-→ current model
+→ canonical model
 → canonical serialization
 → temporary destination
 → validation
@@ -674,7 +693,7 @@ The application may propose migration and show a plan.
 
 # 18. Migration result model
 
-Recommended result:
+Canonical result:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -694,11 +713,10 @@ class MigrationResult:
     backup_path: str | None
 ```
 
-Recommended statuses:
+Canonical outcomes:
 
 ```text
 not_needed
-planned
 migrated
 migrated_with_warnings
 blocked
@@ -708,7 +726,7 @@ cancelled
 
 Persisting this model requires a registered schema.
 
-Until then, it remains an internal result and may be rendered as reviewed Markdown.
+Until then, it remains an internal result and may be rendered as reviewed Markdown evidence.
 
 ---
 
@@ -780,14 +798,14 @@ Write migration sequence:
 ```text
 read source
 → validate source
-→ build current model
-→ validate current model
+→ build canonical model
+→ validate canonical model
 → write sibling or owned temporary file
 → flush and close
 → read temporary file
 → validate destination
 → atomically publish destination
-→ verify final bytes
+→ verify published bytes
 → record hashes
 ```
 
@@ -799,6 +817,14 @@ On failure:
 - report failure;
 - do not claim migration success.
 
+When migration runs inside a Wordbench execution, publication follows `ADR-0010-RUN-BUDGET-AND-FINALIZATION.md`:
+
+- conversion work uses bounded stage budgets;
+- normal work cannot consume the protected publication and finalization reserve;
+- verification, atomic publication, rollback recording, and terminal evidence use the protected reserve;
+- budget exhaustion cannot produce a successful migration result;
+- repeated finalization is idempotent.
+
 ---
 
 # 22. Backup policy
@@ -807,7 +833,7 @@ Version control is the preferred backup for project sources.
 
 For non-versioned persisted assets, migration may create a backup.
 
-Recommended backup rules:
+Canonical backup rules:
 
 ```text
 backup only before explicit in-place replacement
@@ -829,7 +855,7 @@ This is preferred when practical.
 
 Every migration changing a canonical asset must define rollback.
 
-Rollback should restore:
+Rollback restores:
 
 ```text
 previous canonical file
@@ -929,7 +955,7 @@ Scenario execution is a separate explicit validation operation.
 
 # 27. Migration commands
 
-Recommended final command family:
+Canonical command family:
 
 ```text
 gf-wordbench migrate inspect <path>
@@ -946,7 +972,7 @@ gf-wordbench state migrate
 gf-wordbench runs migrate <run-dir>
 ```
 
-Command design must be finalized in `CLI_REFERENCE.md`.
+Exact command names, arguments, and exit codes are owned by `docs/usage/CLI_REFERENCE.md`.
 
 Required semantics:
 
@@ -962,7 +988,7 @@ Required semantics:
 
 # 28. Migration plan
 
-Before write migration, the tool should produce a plan containing:
+Before write migration, the tool produces a plan containing:
 
 ```text
 migration ID
@@ -1108,7 +1134,7 @@ Do not delete evidence needed to interpret historical runs.
 
 # 33. Public Python API migration
 
-Recommended pattern:
+Canonical pattern:
 
 ```python
 def old_api(*args, **kwargs):
@@ -1218,7 +1244,7 @@ GUI-state migration must:
 - never migrate project identity into state;
 - use current canonical state writer.
 
-A malformed disposable state file should fall back safely.
+A malformed disposable state file falls back safely.
 
 ---
 
@@ -1354,7 +1380,7 @@ Migration rules:
 - `+00:00` may canonicalize to `Z`;
 - naive timestamps produce warning or blocker according to importance;
 - migration must not invent a timezone without explicit evidence;
-- original raw value should be preserved in migration evidence when interpretation is uncertain.
+- the original raw value is preserved in migration evidence when interpretation is uncertain.
 
 ---
 
@@ -1495,7 +1521,7 @@ Rules:
 - use Markdown only for historical display or last-resort recovery;
 - never infer exact structured values from prose when ambiguity exists;
 - preserve old reports as historical artifacts;
-- current reports are regenerated only from a valid current model;
+- canonical reports are regenerated only from a valid canonical model;
 - regeneration must not rerun GF.
 
 Stable report heading changes follow soft-schema version policy.
@@ -1575,7 +1601,7 @@ Rules:
 
 A language project is a network of contracts.
 
-Migration must coordinate:
+Migration coordinates:
 
 ```text
 provider GF files
@@ -1588,13 +1614,17 @@ scenarios
 inputs
 golds
 dependency map
-status ledger
+test coverage matrix
 decision log
+known issues
 release criteria
 release evidence
+project interfile contract
 ```
 
-No project-level contract may be migrated through an isolated file edit.
+The migration operates on the single active `project/` boundary of the workspace.
+
+No project-level contract is migrated through an isolated file edit. No Wordbench project migration creates a multi-project registry or Portfolio workspace structure.
 
 ---
 
@@ -1613,21 +1643,21 @@ entrypoint rename
 
 Required process:
 
-1. identify contract ID;
-2. update provider;
+1. identify the contract ID;
+2. update the provider;
 3. update direct consumers;
-4. update interfaces/instances;
+4. update interfaces and instances;
 5. update downstream entrypoints;
 6. update scenarios;
 7. update golds deliberately;
-8. update dependency map;
-9. update status ledger;
-10. update project lock;
-11. run checkpoints and release validation.
+8. update the dependency map;
+9. update the test coverage matrix, decision log, known issues, and release criteria where affected;
+10. update the project interfile lock;
+11. run applicable checkpoints and release validation.
 
-Temporary adapters in GF may be used only when they preserve semantics and are documented.
+Temporary adapters in GF are allowed only when they preserve semantics, have one owner, and have a documented removal boundary.
 
-Do not flatten structured lincats as a migration shortcut.
+Structured lincats are not flattened as a migration shortcut.
 
 ---
 
@@ -1684,7 +1714,7 @@ automation
 contract lock
 ```
 
-Old active identifiers must be removed from current project paths and validation assets after cutover.
+Old active identifiers must be removed from canonical project paths and validation assets after cutover.
 
 Historical evidence may retain them.
 
@@ -1714,7 +1744,7 @@ Rules:
 - unsupported old commands cannot be silently ignored;
 - old and new scenario results may not be directly comparable when semantics differ;
 - coverage matrix and release criteria must be updated;
-- current writers/results use only current scenario IDs.
+- canonical writers/results use only current scenario IDs.
 
 ---
 
@@ -1906,31 +1936,38 @@ However:
 
 ---
 
-# 61. Migration of blocked project contracts
+# 61. Migration of unmet project requirements
 
-A blocked project contract represents intended behavior not currently satisfied.
-
-Migration options:
+A project requirement that cannot currently be satisfied is recorded in the authoritative project documents:
 
 ```text
-repair and activate
-replace with a new active contract
-retire as no longer required
-split into smaller contracts
+project/docs/KNOWN_ISSUES.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+project/docs/DECISION_LOG.md
+```
+
+Migration options are:
+
+```text
+repair the requirement
+replace it with a new canonical contract
+retire it because it is no longer required
+split it into smaller owned contracts
 ```
 
 Rules:
 
-- blocked is not stable;
-- release criteria determine whether it gates release;
-- migration must update status ledger;
-- no consumer may assume blocked behavior is available.
+- release criteria determine whether the unmet requirement blocks release;
+- no consumer may assume unavailable behavior exists;
+- the migration record states the chosen replacement, retirement, or repair;
+- no separate progress-tracking document is maintained.
 
 ---
 
 # 62. Compatibility adapters
 
-Adapters should be narrow.
+Adapters are narrow.
 
 Required properties:
 
@@ -2034,7 +2071,7 @@ Rules:
 - historical `gf-audit` runs remain historical;
 - they do not define the current active project;
 - legacy readers may load them;
-- current reports are not silently written into old run directories;
+- canonical reports are not silently written into old run directories;
 - old state is imported explicitly or safely at first use according to state policy;
 - canonical writers use GF Wordbench identities only.
 
@@ -2083,7 +2120,7 @@ changelog entry
 release matrix update
 ```
 
-A migration release must not claim success when only the current writer was implemented.
+A migration release must not claim success when only the canonical writer exists without the required readers, migrator, verification, rollback, and tests.
 
 ---
 
@@ -2130,7 +2167,7 @@ reader support
 
 # 70. Migration documentation requirements
 
-User-facing migration instructions should provide:
+User-facing migration instructions provide:
 
 ```text
 who needs migration
@@ -2153,7 +2190,7 @@ Do not require users to infer a migration from release notes alone.
 
 Migration tests must use real legacy fixtures.
 
-Recommended directories:
+Canonical directories:
 
 ```text
 tests/migrations/
@@ -2282,22 +2319,23 @@ A migration is accepted when:
 [ ] Owner identified
 [ ] Providers updated
 [ ] Consumers updated
-[ ] Reader/adapter implemented
-[ ] Canonical writer implemented
-[ ] Explicit migrator implemented where required
+[ ] Reader or adapter available when required
+[ ] Canonical writer emits only the target contract
+[ ] Explicit migrator available when persisted rewrite is required
 [ ] Source remains recoverable
 [ ] Warnings are visible
 [ ] Losses are classified
-[ ] Atomic write tested
+[ ] Atomic publication tested
 [ ] Idempotence tested
 [ ] Security reviewed
-[ ] Rollback documented
+[ ] Rollback documented and tested
 [ ] Legacy writers removed
 [ ] Tests use real legacy fixtures
-[ ] Contract/schema locks updated
+[ ] Contract and schema locks updated
 [ ] Changelog updated
 [ ] Support window documented
 [ ] Removal conditions documented
+[ ] Product boundary with gf-portfolio preserved
 ```
 
 ---
@@ -2313,11 +2351,10 @@ A deprecation is valid when:
 [ ] First deprecated version is known
 [ ] Earliest removal version is known or policy-bound
 [ ] Migration instructions exist
-[ ] Old path remains tested
-[ ] New path is tested
-[ ] Canonical writers use replacement only
-[ ] Contract status is Deprecated
-[ ] Changelog includes deprecation
+[ ] Legacy path remains covered by compatibility tests
+[ ] Canonical path is covered by contract tests
+[ ] Canonical writers use the replacement only
+[ ] Changelog includes the deprecation
 ```
 
 ---
@@ -2328,16 +2365,16 @@ A removal is valid when:
 
 ```text
 [ ] Support window elapsed or exception approved
-[ ] Replacement is Active
+[ ] Replacement is canonical when one exists
 [ ] Repository consumers migrated
-[ ] Canonical data contains no old form
+[ ] Canonical data contains no legacy form
 [ ] Migration path remains available when required
-[ ] Contract ID is Retired
+[ ] Contract ID is retired
 [ ] Identifier is reserved
 [ ] Rejection behavior is clear
-[ ] Tests updated
+[ ] Tests cover the supported boundary
 [ ] Changelog lists removal
-[ ] Package/project major policy is satisfied
+[ ] Package or project versioning policy permits the change
 ```
 
 ---
@@ -2408,9 +2445,9 @@ A public or persisted contract disappears in a patch release.
 
 # 80. Balanced migration policy
 
-GF Wordbench should not keep every old implementation forever.
+GF Wordbench does not keep every legacy implementation indefinitely.
 
-It should preserve enough compatibility to:
+It preserves enough compatibility to:
 
 - open supported historical runs;
 - migrate supported projects;
@@ -2418,7 +2455,7 @@ It should preserve enough compatibility to:
 - explain old aliases;
 - maintain current users through announced transitions.
 
-It should not preserve:
+It does not preserve:
 
 - duplicate business logic;
 - unsafe command behavior;
@@ -2479,7 +2516,6 @@ Rollback:
 Tests:
 Documentation:
 Release evidence:
-Status:
 ```
 
 ---
@@ -2498,7 +2534,6 @@ Migration:
 Compatibility adapter:
 Tests:
 Owner:
-Status:
 ```
 
 ---
@@ -2520,7 +2555,7 @@ Status:
 [ ] No legacy aliases emitted
 [ ] No secrets copied
 [ ] Destination written atomically
-[ ] Final hash verified
+[ ] Published destination hash verified
 [ ] Second run is idempotent
 [ ] Rollback path exists
 [ ] Post-migration validation passes
@@ -2530,29 +2565,22 @@ Status:
 
 # 85. Post-migration validation
 
-After migration, run the relevant checks.
+After migration, execute the applicable commands defined by `docs/usage/CLI_REFERENCE.md`.
 
-Framework/schema:
-
-```text
-gf-wordbench schemas check --strict
-gf-wordbench contracts check --strict
-gf-wordbench contracts check-external --strict
-```
-
-Project:
+The validation set covers:
 
 ```text
-gf-wordbench project contracts check
-gf-wordbench checkpoint
-gf-wordbench release
+schema conformance
+framework contract conformance
+external-tool contract conformance
+active-project contract conformance
+checkpoint validation
+release validation
 ```
 
-Use only commands implemented by the current release.
+The exact CLI spelling, options, and exit-code semantics come only from `CLI_REFERENCE.md`.
 
-When a command is not implemented, run the equivalent test suite and document it.
-
-A migration is not release-complete until relevant validation passes.
+A migration cannot enter a release until every applicable validation contract passes and the migration evidence is published.
 
 ---
 
@@ -2573,10 +2601,14 @@ Probable migration/deprecation drift exists when:
 - contract ID disappears instead of becoming retired;
 - support window differs across documents;
 - package patch removes a public surface;
-- legacy mode is emitted by current writer;
+- legacy mode is emitted by canonical writer;
 - migration cannot be run twice safely;
 - destination validates only because required evidence was fabricated;
-- release notes omit required user action.
+- release notes omit required user action;
+- Wordbench migration creates or depends on a multi-project registry;
+- Wordbench migration reads or writes private `gf-portfolio` state;
+- publication exhausts the protected finalization reserve;
+- a separate progress-tracking document is required to interpret the migrated contract.
 
 Any drift requires migration review.
 
@@ -2614,58 +2646,58 @@ It may not justify silent data loss.
 
 ---
 
-# 88. Definition of migration complete
+# 88. Migration completion contract
 
 A migration is complete when:
 
-1. the current provider and writer are active;
-2. all maintained consumers use the current contract;
+1. the canonical provider and writer are available;
+2. all maintained consumers use the canonical contract;
 3. supported legacy sources are readable or explicitly rejected;
 4. an explicit migrator exists where persisted rewrite is required;
 5. source preservation and rollback are defined;
 6. warnings and losses are visible;
-7. canonical writers emit no old form;
-8. tests cover source, target, failure, and idempotence;
-9. locks and references are updated;
+7. canonical writers emit no legacy form;
+8. tests cover source, target, failure, security, rollback, and idempotence;
+9. locks and references are aligned;
 10. post-migration validation passes;
-11. deprecation and removal states are recorded;
-12. release notes explain user action.
+11. compatibility and removal boundaries are recorded;
+12. release notes explain required user action.
 
-Migration completion does not necessarily mean legacy readers can be removed.
+Migration completion does not require immediate removal of historical readers.
 
 ---
 
-# 89. Definition of deprecation complete
+# 89. Deprecation completion contract
 
 A deprecation phase is complete when:
 
-1. the replacement is active;
-2. the old surface warns;
-3. users have instructions;
+1. the replacement is canonical or the retirement reason is explicit;
+2. the legacy surface warns;
+3. users have migration instructions;
 4. canonical writers use only the replacement;
-5. old and new paths are tested;
+5. compatibility and canonical paths are tested;
 6. the removal window is recorded;
-7. repository-owned consumers have migrated;
-8. changelog and contract status agree.
+7. repository-owned consumers use the canonical contract;
+8. changelog and migration records agree.
 
 ---
 
-# 90. Definition of retirement complete
+# 90. Retirement completion contract
 
 Retirement is complete when:
 
-1. the deprecated implementation is removed;
+1. the deprecated implementation or alias is removed;
 2. required historical readers or migrators remain;
-3. the contract ID is marked retired;
-4. the identifier is reserved;
-5. release notes list removal;
+3. the contract ID is retired;
+4. the identifier remains reserved;
+5. release notes list the removal;
 6. rejection behavior is clear;
-7. no active project or template depends on it;
-8. tests cover the final support boundary.
+7. no active project or template depends on the retired contract;
+8. tests cover the supported compatibility boundary.
 
 ---
 
-# 91. Final invariants
+# 91. Normative invariants
 
 Migration and deprecation must preserve:
 
@@ -2692,7 +2724,7 @@ Migration and deprecation must preserve:
 
 ---
 
-# 92. Final rule
+# 92. Governing rule
 
 > Migrate meaning, not only bytes and names.
 

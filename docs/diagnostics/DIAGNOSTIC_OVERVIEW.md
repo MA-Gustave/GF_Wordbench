@@ -4,8 +4,9 @@
 **Status:** Normative diagnostic architecture  
 **Applies to:** GF Wordbench framework, validation pipeline, reports, and one active GF language project  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\diagnostics\DIAGNOSTIC_OVERVIEW.md`  
-**Document version:** `1.0.0`
+**Canonical path:** `docs/diagnostics/DIAGNOSTIC_OVERVIEW.md`  
+**Document version:** `1.0.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -24,8 +25,9 @@ It explains:
 - how diagnostic evidence flows from raw output to reports;
 - how confidence and uncertainty are represented;
 - how failures are grouped without losing their original evidence;
-- how the current audit implementation migrates to the final GF Wordbench model;
-- which invariants tests and reports must preserve.
+- how canonical Wordbench diagnostics read documented legacy `gf-audit` evidence;
+- which invariants tests and reports must preserve;
+- how the diagnostic contract remains independent from `gf-portfolio`.
 
 This is the overview document.
 
@@ -45,6 +47,12 @@ Pipeline ordering is owned by:
 docs/validation/VALIDATION_PIPELINE.md
 ```
 
+Cross-document alignment is locked by:
+
+```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+```
+
 External process behavior is locked by:
 
 ```text
@@ -61,6 +69,7 @@ Python component boundaries are locked by:
 
 ```text
 docs/INTERFILE_CONTRACT_LOCK.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 ```
 
 ---
@@ -169,6 +178,19 @@ project/docs/
 ```
 
 They must not be hidden inside generic framework code.
+
+### 4.4 Portfolio boundary
+
+Multi-workspace diagnostic aggregation, cross-project comparison, portfolio readiness, and multilingual portfolio views belong to the independent `gf-portfolio` product.
+
+The dependency direction is one-way:
+
+```text
+gf-portfolio → public versioned GF Wordbench artifacts
+GF Wordbench -X→ gf-portfolio runtime, code, storage, or configuration
+```
+
+GF Wordbench diagnostic processing operates on one active project and one run. It does not read a Portfolio registry, assign cross-workspace causality, or persist Portfolio-specific diagnostic state.
 
 ---
 
@@ -299,6 +321,18 @@ execution_state = timed_out
 validation_status = ERROR
 error_kind = TIMEOUT
 ```
+
+Timeout handling also consumes the run-budget contract defined by ADR-0010:
+
+- each operation receives a finite stage budget derived from the remaining global run budget;
+- normal diagnostic work cannot consume the protected finalization reserve;
+- once usable execution time is exhausted, no new diagnostic operation starts;
+- partial stdout, stderr, timing, and termination evidence remain preserved;
+- interrupted required work becomes `ERROR`;
+- unstarted work is represented explicitly;
+- finalization proceeds with the protected reserve.
+
+A timeout cannot be converted into overall `OK`, even when some earlier evidence is valid.
 
 ### 7.3 `cancelled`
 
@@ -491,7 +525,7 @@ It does not mean absolute certainty.
 
 The item fails or cannot run because a known provider failed.
 
-A downstream result should identify at least one blocker when known:
+A downstream result identifies at least one blocker when known:
 
 ```text
 blocked_by[]
@@ -549,7 +583,7 @@ Use `skipped` when omission is policy-driven rather than causally blocked.
 
 GF Wordbench may use more detailed operational diagnostic labels in logs, internal models, or diagnostic records.
 
-Recommended values include:
+Canonical operational values include:
 
 ```text
 gf_compile_failure
@@ -588,7 +622,7 @@ A new persisted operational kind requires schema review.
 
 Not all evidence has equal authority.
 
-Recommended hierarchy:
+Canonical evidence hierarchy:
 
 1. raw external process evidence;
 2. verified process metadata;
@@ -758,7 +792,7 @@ Static scanning detects suspicious source patterns.
 
 Static findings are not GF errors.
 
-A static finding should contain:
+A static finding contains:
 
 ```text
 rule_id
@@ -814,7 +848,7 @@ raw/compile/<safe-file-key>.out.txt
 raw/compile/<safe-file-key>.err.txt
 ```
 
-The compile diagnostic interpreter should extract:
+The compile diagnostic interpreter extracts:
 
 ```text
 exit_code
@@ -849,7 +883,7 @@ execution_state = completed
 error_kind = TYPE, SYNTAX, OTHER, or INTERNAL
 ```
 
-`INTERNAL` should represent a real internal diagnostic, not every unknown message.
+`INTERNAL` represents a real internal diagnostic, not every unknown message.
 
 ### 15.3 Compile infrastructure error
 
@@ -1099,7 +1133,7 @@ A result may be classified `downstream` when:
 - scenario cannot load a known failed entrypoint;
 - PGF build is blocked by a failed concrete module.
 
-A downstream result should record:
+A downstream result records:
 
 ```text
 blocked_by = [stable subject IDs]
@@ -1124,7 +1158,7 @@ Use `ambiguous` when:
 - output is truncated before the causal message;
 - supported GF versions emit materially different structures.
 
-Recommended report wording:
+Canonical report wording:
 
 ```text
 The available evidence does not reliably distinguish a local failure from a dependency failure.
@@ -1155,9 +1189,9 @@ Normalization or grouping may hide noise from summary views, but raw logs remain
 
 ## 25. Confidence and certainty
 
-GF Wordbench should communicate certainty without inventing an additional required persisted enum.
+GF Wordbench communicates certainty without inventing an additional required persisted enum.
 
-Recommended human wording:
+Canonical human wording:
 
 ```text
 confirmed
@@ -1203,11 +1237,11 @@ It is not the full diagnosis.
 
 ### 26.1 Selection
 
-The parser should select the earliest actionable diagnostic according to documented ordering, not merely the first non-empty output line.
+The parser selects the earliest actionable diagnostic according to documented ordering, not merely the first non-empty output line.
 
 ### 26.2 Requirements
 
-`first_error` should:
+`first_error`:
 
 - be concise;
 - preserve meaningful GF wording;
@@ -1243,7 +1277,7 @@ Do not mark the operation successful.
 - normalization failure;
 - concise process error.
 
-It should not duplicate complete stdout or stderr.
+It does not duplicate complete stdout or stderr.
 
 Large evidence remains in raw files.
 
@@ -1251,7 +1285,7 @@ Large evidence remains in raw files.
 
 ## 28. Diagnostic locations
 
-A diagnostic location should preserve when available:
+A diagnostic location preserves, when available:
 
 ```text
 path
@@ -1264,7 +1298,7 @@ module_name
 
 ### 28.1 Path normalization
 
-Persisted source locations should use project-relative paths.
+Persisted source locations use project-relative paths.
 
 Raw GF text may retain native paths.
 
@@ -1288,7 +1322,7 @@ It must not replace item-level results.
 
 ### 29.1 Canonical grouping key
 
-Recommended logical grouping:
+Canonical logical grouping:
 
 ```text
 error_kind + normalized primary message
@@ -1313,7 +1347,7 @@ Do not group:
 
 ### 29.4 Root-cause view
 
-Reports should provide both:
+Reports provide both:
 
 ```text
 all failing subjects
@@ -1329,7 +1363,7 @@ likely direct/root failures
 
 ## 30. Diagnostic aggregation
 
-Run-level diagnosis should summarize:
+Run-level diagnosis summarizes:
 
 - direct failures;
 - downstream failures;
@@ -1424,7 +1458,7 @@ It must contain structured fields and evidence paths.
 
 Human overview.
 
-It should present:
+It presents:
 
 - overall outcome;
 - direct failures first;
@@ -1463,7 +1497,7 @@ Detail files may copy bounded evidence but must reference raw sources.
 
 ## 33. Diagnostic priority for humans
 
-Recommended investigation order:
+Canonical investigation order:
 
 1. framework/configuration errors;
 2. launch failures and timeouts;
@@ -1482,7 +1516,7 @@ This order prevents developers from fixing cascades before root causes.
 
 ## 34. Diagnostic priority for automation
 
-Automation should evaluate:
+Automation evaluates:
 
 1. overall status;
 2. required stage errors;
@@ -1501,7 +1535,7 @@ It must not parse prose headings or color labels.
 
 ## 35. Diagnostic priority for AI systems
 
-AI-ready diagnostics should provide:
+AI-ready diagnostics provide:
 
 ```text
 run identity
@@ -1518,7 +1552,7 @@ raw evidence paths
 bounded excerpts
 ```
 
-AI prompts should explicitly require:
+AI prompts explicitly require:
 
 - evidence-based reasoning;
 - no source edits without reviewing providers and consumers;
@@ -1570,7 +1604,7 @@ Given the same:
 - dependency map;
 - normalization version;
 
-GF Wordbench should produce equivalent structured diagnostic results.
+GF Wordbench produces equivalent structured diagnostic results.
 
 ### 37.1 Deterministic parser rules
 
@@ -1609,45 +1643,45 @@ A parser failure must not erase a known language failure.
 
 ---
 
-## 39. Current implementation foundation
+## 39. Legacy compatibility with `gf-audit`
 
-The existing audit implementation already provides:
+Canonical Wordbench diagnostics preserve the useful evidence and semantics inherited from `gf-audit`:
 
 - compile summaries;
 - `error_kind`;
 - `first_error`;
-- direct/downstream/ambiguous classification;
+- direct, downstream, and ambiguous classification;
 - `blocked_by`;
 - top-error grouping;
 - AI-ready diagnostic sections;
 - raw compile and scan evidence.
 
-Existing tests demonstrate intended distinctions between:
+Legacy summaries remain readable through the persisted-schema compatibility policy. Canonical writers emit only the diagnostic axes, values, paths, and artifact contracts defined by Wordbench documentation.
+
+Compatibility readers preserve the distinction between:
 
 - direct file failure;
 - downstream failure with a blocker;
 - ambiguous failure;
-- successful compile with scan findings;
-- clean successful compile.
+- successful compilation with non-blocking scan findings;
+- clean successful compilation.
 
-These are retained in GF Wordbench.
+Legacy compatibility does not restore deprecated authority, status, or classification models.
 
 ---
 
-## 40. Required migration corrections
-
-The final system must correct several legacy simplifications.
+## 40. Canonical compatibility mappings
 
 ### 40.1 Timeout status
 
-Legacy behavior may derive:
+A legacy record may encode:
 
 ```text
 timed_out = true
-→ validation_status = FAIL
+validation_status = FAIL
 ```
 
-Final behavior should normally be:
+Canonical interpretation is:
 
 ```text
 timed_out = true
@@ -1656,56 +1690,53 @@ validation_status = ERROR
 error_kind = TIMEOUT
 ```
 
+A timeout does not prove that the source file is a direct root cause.
+
 ### 40.2 Technical failure classification
 
-Legacy classifier behavior may treat:
+Legacy classifiers may treat `INTERNAL`, `TIMEOUT`, or `SCRIPT` as automatically direct file failures.
 
-```text
-INTERNAL
-TIMEOUT
-SCRIPT
-```
-
-as automatically direct file failures.
-
-Final behavior must separate:
+Canonical processing separates:
 
 - technical nature;
 - execution state;
 - causal position.
 
-A timeout does not prove the source file is a direct root cause.
+No technical error kind determines causal class by itself.
 
 ### 40.3 Deprecated diagnostic classes
 
-The final canonical set excludes:
+Legacy diagnostic classes such as:
 
 ```text
 script_error
 framework_error
 ```
 
-Use instead:
+are read only through compatibility adapters.
+
+Canonical processing represents them through:
 
 ```text
 validation_status
 execution_state
 error_kind
-operational diagnostic kind
+operational_kind
+diagnostic_class
 ```
 
 ### 40.4 Canonical modes
 
-Legacy mode names:
+Legacy modes:
 
 ```text
 file
 all
 ```
 
-remain migration aliases only.
+are migration aliases only.
 
-Canonical reports use:
+Canonical reports emit:
 
 ```text
 quick
@@ -1714,9 +1745,9 @@ release
 diagnostic
 ```
 
-### 40.5 Error versus failure counts
+### 40.5 Error and failure counts
 
-Final reports must count separately:
+Canonical reports count separately:
 
 ```text
 files_fail
@@ -1725,13 +1756,17 @@ scenarios_fail
 scenarios_error
 ```
 
-Infrastructure errors must not be hidden inside project failure counts.
+Infrastructure and framework errors are not hidden inside project failure counts.
+
+### 40.6 Write policy
+
+Canonical writers do not emit deprecated diagnostic classes, legacy mode names, timeout sentinels as sole truth, or ambiguous aggregate counts. Compatibility behavior is read-only and versioned.
 
 ---
 
-## 41. Recommended diagnostic record
+## 41. Canonical diagnostic record
 
-A complete internal diagnostic record may contain:
+A complete internal diagnostic record contains:
 
 ```json
 {
@@ -1760,11 +1795,7 @@ A complete internal diagnostic record may contain:
 }
 ```
 
-This is an architectural example.
-
-It does not create a new persisted schema by itself.
-
-Persisting this structure requires updating `PERSISTED_SCHEMA_LOCK.md`.
+This example illustrates the diagnostic contract. Its persisted representation is governed by `PERSISTED_SCHEMA_LOCK.md`.
 
 ---
 
@@ -1797,7 +1828,7 @@ The following are mandatory.
 
 ## 43. Required tests
 
-Recommended test structure:
+Canonical test structure:
 
 ```text
 tests/diagnostics/
@@ -1887,7 +1918,10 @@ Probable drift exists when:
 - raw stderr is discarded after extracting a message;
 - previous-run prose is parsed for regression logic;
 - unknown GF diagnostic is silently mapped to a specific type;
-- result fields disagree with aggregate counts.
+- result fields disagree with aggregate counts;
+- one run aggregates diagnostics from several active projects;
+- Wordbench diagnostics read or write private `gf-portfolio` state;
+- timeout handling consumes the protected finalization reserve.
 
 Any drift indicator requires contract and test review.
 
@@ -1905,6 +1939,7 @@ A diagnostic change is complete only when:
 [ ] Error-kind mapping reviewed
 [ ] Causal-classification impact reviewed
 [ ] Raw evidence preservation reviewed
+[ ] Documentation alignment lock reviewed
 [ ] Persisted schema reviewed
 [ ] Report impact reviewed
 [ ] Previous-run compatibility reviewed
@@ -1936,9 +1971,11 @@ Read with:
 
 ```text
 docs/00_START_HERE.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 docs/architecture/ERROR_HANDLING_MODEL.md
 docs/architecture/PROCESS_EXECUTION_MODEL.md
 docs/gf/GF_TOOLCHAIN_INTEGRATION.md
@@ -1956,12 +1993,12 @@ docs/reference/STATUS_VALUES.md
 docs/reference/DIAGNOSTIC_KINDS.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/KNOWN_ISSUES.md
-project/docs/STATUS_LEDGER.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 ---
 
-## 47. Final rule
+## 47. Governing rule
 
 A useful diagnosis is not merely an error message.
 

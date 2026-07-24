@@ -1,13 +1,12 @@
 # GF Wordbench — Product Overview
 
 **Document ID:** `GF-WB-PRODUCT-OVERVIEW`  
-**Status:** Final product definition  
 **Applies to:** GF Wordbench framework and its active GF language project  
 **Owner:** GF Wordbench maintainers  
 **Product name:** GF Wordbench  
 **Package name:** `gf-wordbench`  
 **Primary command:** `gf-wordbench`  
-**Document version:** `1.0.0`
+**Document version:** `1.1.0`
 
 ---
 
@@ -32,7 +31,7 @@ It coordinates the tools and evidence required to build a GF language implementa
 - human-readable, machine-readable, and AI-ready reporting;
 - contract and schema controls that prevent drift across files and releases.
 
-Each GF Wordbench copy manages one active language project. To start another language, the framework is cloned or reset and the active project is replaced.
+Each GF Wordbench workspace manages exactly one active language project. A separate workspace is used for another language, or the active project is deliberately replaced within the existing workspace. Cross-workspace inventory, comparison, and portfolio views belong to the independent `gf-portfolio` product, which consumes public versioned artifacts and is never required by GF Wordbench.
 
 ---
 
@@ -216,7 +215,7 @@ It owns:
 - gold files;
 - language architecture;
 - morphology and syntax specifications;
-- status and decision records;
+- known issues and decision records;
 - release criteria.
 
 ### 5.3 External tool layer
@@ -243,11 +242,11 @@ GF Wordbench owns how those operations are requested, captured, normalized, clas
 
 ## 6. Single active language principle
 
-One GF Wordbench copy represents one active language project.
+One GF Wordbench workspace represents exactly one active language project and every run resolves exactly one active project identity.
 
 This is a deliberate product constraint.
 
-The framework does not manage several language projects simultaneously through a profile selector. Instead, it provides a clean project boundary that can be:
+The framework does not manage several language projects simultaneously through a profile selector, registry, or cross-workspace orchestration layer. Instead, it provides a clean project boundary that can be:
 
 - initialized;
 - migrated;
@@ -266,6 +265,8 @@ Benefits:
 - easier AI handoff;
 - stronger anti-drift rules;
 - reproducible project archives.
+
+A single installed executable or package MAY serve several isolated workspaces. Portfolio aggregation belongs to `gf-portfolio`, which MAY read public, versioned Wordbench artifacts but MUST NOT become a Wordbench runtime, storage, configuration, or code dependency.
 
 The active language identity MUST come from:
 
@@ -535,11 +536,13 @@ file → quick
 all  → diagnostic
 ```
 
-Canonical output uses only the final mode names.
+Canonical output uses only the canonical mode names.
 
 ---
 
 ## 10. Status model
+
+This section defines validation-result semantics. It does not classify documentation or implementation progress.
 
 GF Wordbench keeps four concepts separate.
 
@@ -675,9 +678,25 @@ Normalization never replaces raw evidence.
 
 ## 12. Anti-drift system
 
-GF Wordbench uses four complementary locks.
+GF Wordbench uses seven coordinated anti-drift documents.
 
-### 12.1 Framework interfile lock
+### 12.1 Documentation alignment lock
+
+```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+```
+
+Locks cross-document product identity, authority order, ownership boundaries, canonical terminology, and correction rules.
+
+### 12.2 Documentation correction ledger
+
+```text
+docs/DOCUMENTATION_CORRECTION_LEDGER.md
+```
+
+Coordinates parallel documentation corrections by repository path. It records correction work but does not define product behavior.
+
+### 12.3 Framework interfile lock
 
 ```text
 docs/INTERFILE_CONTRACT_LOCK.md
@@ -685,7 +704,7 @@ docs/INTERFILE_CONTRACT_LOCK.md
 
 Locks Python-to-Python requests, responses, ownership, and dependency directions.
 
-### 12.2 External tool lock
+### 12.4 External tool lock
 
 ```text
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
@@ -693,7 +712,7 @@ docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 
 Locks commands, process behavior, GF integration, artifact expectations, and tool compatibility.
 
-### 12.3 Persisted schema lock
+### 12.5 Persisted schema lock
 
 ```text
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -701,7 +720,7 @@ docs/PERSISTED_SCHEMA_LOCK.md
 
 Locks machine-readable formats, stable artifact names, schema versions, compatibility, and migrations.
 
-### 12.4 Active project interfile lock
+### 12.6 Active project interfile lock
 
 ```text
 project/docs/INTERFILE_CONTRACT_LOCK.md
@@ -709,7 +728,15 @@ project/docs/INTERFILE_CONTRACT_LOCK.md
 
 Locks relationships among GF modules, entrypoints, scenarios, inputs, gold files, artifacts, and project documentation.
 
-The locks define boundaries. They do not freeze internal implementation that preserves the boundary.
+### 12.7 Project-template interfile lock
+
+```text
+templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+```
+
+Locks the reusable, language-neutral project structure without asserting facts about the active language.
+
+These documents define stable boundaries and correction authority. They do not require implementation-progress labels or freeze internal changes that preserve the documented contracts.
 
 ---
 
@@ -782,7 +809,7 @@ Validate completed module families against focused criteria.
 
 Resolve or explicitly document:
 
-- temporary implementations;
+- temporary workarounds;
 - fallbacks;
 - warnings;
 - blocked symbols;
@@ -795,7 +822,7 @@ Run the full release gate and preserve its manifest and reports.
 
 ### 14.7 Archive or replace
 
-Archive the completed active project or reset the framework for another language.
+Archive the active project, initialize a separate workspace for another language, or deliberately replace the active project in the current workspace.
 
 Old-language identity and state MUST NOT leak into the replacement project.
 
@@ -816,7 +843,7 @@ A final release requires every criterion declared by the active project, normall
 - required parse and linearization scenarios passing;
 - required gold comparisons passing;
 - required PGF artifacts present;
-- no unresolved release-blocking status entries;
+- no unresolved release blockers;
 - contract checks passing;
 - schema checks passing;
 - complete run evidence;
@@ -825,8 +852,8 @@ A final release requires every criterion declared by the active project, normall
 Project-specific criteria belong in:
 
 ```text
-project/docs/RELEASE_CRITERIA.md
-project/docs/VALIDATION_SPEC.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 ---
@@ -897,12 +924,15 @@ GF Wordbench is not:
 - a new GF parser or type checker;
 - a universal programming-language validator;
 - a simultaneous multi-language dashboard;
+- a cross-workspace orchestrator or portfolio aggregator;
 - a language-theory decision engine;
 - an automatic proof that linguistic behavior is correct;
 - an automatic gold-file approval system;
 - an AI system that edits source without review;
 - a package manager for GF;
 - a general CI platform.
+
+Cross-workspace inventory, comparison, trends, and portfolio readiness belong to the independent `gf-portfolio` product. GF Wordbench exposes only public, versioned artifacts for optional read-only consumption and has no reverse dependency on `gf-portfolio`.
 
 The detailed boundary is defined in:
 
@@ -929,7 +959,7 @@ The existing foundation already demonstrates:
 - CLI and GUI workflows;
 - AI-ready handoff.
 
-GF Wordbench retains those proven capabilities and adds the missing final-product layers:
+GF Wordbench retains those proven capabilities and combines them with the following product contracts:
 
 - language-neutral project configuration;
 - one replaceable active project;
@@ -941,7 +971,7 @@ GF Wordbench retains those proven capabilities and adds the missing final-produc
 - artifact manifests;
 - versioned persisted schemas;
 - contract checking;
-- final release gates.
+- release gates.
 
 Migration must preserve working behavior before replacing it.
 
@@ -955,6 +985,8 @@ Detailed authority is distributed as follows:
 
 | Topic | Authoritative document |
 |---|---|
+| Cross-document alignment | `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` |
+| Documentation correction coordination | `docs/DOCUMENTATION_CORRECTION_LEDGER.md` |
 | Product scope | `docs/SCOPE_AND_NON_GOALS.md` |
 | Architecture | `docs/architecture/ARCHITECTURE_OVERVIEW.md` |
 | Python boundaries | `docs/INTERFILE_CONTRACT_LOCK.md` |
@@ -963,22 +995,22 @@ Detailed authority is distributed as follows:
 | Validation flow | `docs/validation/VALIDATION_PIPELINE.md` |
 | Validation modes | `docs/validation/VALIDATION_MODES.md` |
 | Scenario format | `docs/scenarios/SCENARIO_FORMAT.md` |
-| Status semantics | `docs/reference/STATUS_VALUES.md` |
+| Validation-result status semantics | `docs/reference/STATUS_VALUES.md` |
 | Active project identity | `project/project.toml` |
 | GF module relationships | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
-| Project validation | `project/docs/VALIDATION_SPEC.md` |
-| Project release | `project/docs/RELEASE_CRITERIA.md` |
+| Project validation | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` |
+| Project release | `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` |
 
 When this overview conflicts with a normative lock or versioned schema, the normative lock or schema governs its specific domain.
 
 ---
 
-## 20. Product success criteria
+## 20. Product guarantees
 
-GF Wordbench reaches its intended final state when:
+GF Wordbench satisfies its product definition through the following guarantees:
 
 1. the active project can be replaced without modifying language-neutral framework logic;
-2. quick, checkpoint, diagnostic, and release modes are implemented;
+2. quick, checkpoint, diagnostic, and release modes use one documented orchestration model;
 3. GF commands are executed only through documented process contracts;
 4. file and scenario results are both represented explicitly;
 5. required `.gfs` scenarios and `.gold` comparisons are supported;
@@ -988,17 +1020,17 @@ GF Wordbench reaches its intended final state when:
 9. contract and schema validation can be executed automatically;
 10. CLI and GUI use the same orchestration path;
 11. every run preserves raw evidence and structured results;
-12. final release criteria can be evaluated without manual reconstruction of the run;
+12. release criteria can be evaluated without manual reconstruction of the run;
 13. project documentation and source contracts can be checked for drift;
 14. the framework test suite, integration suite, schema suite, and contract suite pass;
-15. the framework contains no accidental dependency on a specific active language.
+15. the framework contains no accidental dependency on a specific active language or on `gf-portfolio`.
 
 ---
 
 ## 21. Product statement
 
-> GF Wordbench is a single-language GF development and release workbench that combines authoritative GF execution with repeatable validation, regression scenarios, evidence-preserving diagnostics, anti-drift contracts, and structured reporting.
+> GF Wordbench is a one-active-project GF development and release workbench that combines authoritative GF execution with repeatable validation, regression scenarios, evidence-preserving diagnostics, anti-drift contracts, and structured reporting.
 
 Its purpose is not to make GF development abstract or bureaucratic.
 
-Its purpose is to make a complex language project understandable, testable, recoverable, and releasable.
+Its purpose is to make a complex language project understandable, testable, recoverable, and releasable while leaving cross-workspace portfolio aggregation to `gf-portfolio`.

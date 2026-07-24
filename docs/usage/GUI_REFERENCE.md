@@ -2,57 +2,73 @@
 
 **Document ID:** `GF-WB-GUI-REFERENCE`  
 **Status:** Normative user-interface and interaction reference  
-**Applies to:** GF Wordbench desktop GUI, shared validation services, application state, and generated run artifacts  
+**Applies to:** GF Wordbench desktop GUI, shared application services, application state and generated run artifacts  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\usage\GUI_REFERENCE.md`  
-**Document version:** `1.0.0`  
+**Document version:** `2.0.0`  
+**Last reviewed:** `2026-07-24`  
 **Primary platform:** Windows  
-**GUI toolkit:** PySide6 / Qt  
-**Execution model:** Desktop client over the shared GF Wordbench bootstrap and validation pipeline
+**GUI toolkit:** PySide6 / Qt Widgets  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Related locks:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`
 
 ---
 
 ## 1. Purpose
 
-This document defines the final GF Wordbench graphical user interface.
+This document defines the GF Wordbench desktop graphical interface.
 
 It specifies:
 
-- the GUI’s responsibilities and limits;
-- application startup and shutdown;
-- the main-window structure;
-- project and environment selection;
-- validation-mode behavior;
-- advanced execution options;
-- preflight validation;
-- run confirmation;
-- background execution;
-- progress, cancellation, and completion behavior;
-- results navigation;
-- persisted GUI state;
-- error presentation;
-- accessibility and keyboard behavior;
-- equivalence with the CLI;
-- security and path-handling rules;
-- migration from the current GF Audit interface;
-- required tests and anti-drift checks.
+- GUI responsibilities and limits;
+- startup and shutdown;
+- main-window information architecture;
+- active-project and environment selection;
+- validation modes and run options;
+- resolved-plan preview;
+- input validation and confirmation;
+- background execution and cancellation;
+- progress and result presentation;
+- artifact navigation;
+- local application state;
+- GUI and CLI equivalence;
+- accessibility, security and performance;
+- testing and anti-drift rules.
 
-The GUI is a client of the GF Wordbench framework.
+The GUI is an entrypoint into the shared GF Wordbench application.
 
-It must not become a separate validation engine.
+It is not a separate validation engine.
 
 ---
 
-## 2. Related normative documents
+## 2. Product boundary
+
+One GUI session controls one active GF language project.
+
+The GUI does not provide:
+
+- several simultaneously active projects;
+- a multilingual workspace registry;
+- cross-workspace aggregation;
+- portfolio readiness or comparison;
+- `gf-portfolio` storage or services.
+
+The independent product `gf-portfolio` may open or consume public versioned Wordbench artifacts.
+
+GF Wordbench GUI functionality remains complete when `gf-portfolio` is absent.
+
+---
+
+## 3. Related authorities
 
 Read this document with:
 
 ```text
-docs/00_START_HERE.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/architecture/ARCHITECTURE_OVERVIEW.md
+docs/architecture/PRODUCT_BOUNDARIES.md
 docs/architecture/EXECUTION_FLOW.md
 docs/architecture/ERROR_HANDLING_MODEL.md
 docs/validation/VALIDATION_PIPELINE.md
@@ -66,40 +82,40 @@ docs/reports/REPORTING_OVERVIEW.md
 docs/reports/RAW_LOGS_REFERENCE.md
 ```
 
-When this document conflicts with a contract lock, the contract lock governs.
+Specialized locks and owner documents govern their respective contracts.
 
 ---
 
-## 3. Core GUI rule
+## 4. Core GUI rule
 
-> The GUI collects user intent, validates local inputs, calls the shared bootstrap and audit APIs, displays structured results, and opens generated artifacts.
+> The GUI collects user intent, calls shared application services, displays structured progress and results, and opens owned artifacts.
 
 The GUI must not:
 
 - compile GF modules directly;
 - execute `.gfs` scenarios directly;
-- construct a separate GF command model;
-- implement independent status aggregation;
-- parse reports to discover run results;
+- construct an independent GF command model;
+- implement separate file-selection or status aggregation;
+- parse Markdown reports to discover run results;
 - reclassify diagnostics;
-- update gold files during a normal run;
+- normalize scenario output;
+- update gold files during normal validation;
 - silently rewrite `project.toml`;
-- store language-project facts only in GUI state;
-- use different defaults or semantics from the CLI.
+- store project facts only in GUI state;
+- use different defaults or semantics from the CLI;
+- depend on `gf-portfolio`.
 
-Equivalent GUI and CLI inputs must produce equivalent `RunConfig` values and equivalent pipeline behavior.
+Equivalent GUI and CLI inputs produce equivalent resolved run configuration and pipeline behavior.
 
 ---
 
-## 4. Final product model
+## 5. Information model
 
-GF Wordbench operates on one active language project.
+The GUI presents three distinct layers.
 
-The GUI presents three conceptual layers.
+### 5.1 Project
 
-### 4.1 Project layer
-
-Portable language-project facts loaded from:
+Portable project facts come from:
 
 ```text
 project/project.toml
@@ -107,287 +123,229 @@ project/project.toml
 
 Examples:
 
-- project name;
+- project name and ID;
 - language code;
-- source directory;
-- entrypoints;
-- checkpoints;
-- required scenarios;
-- optional scenarios;
+- project root and source directory;
+- entrypoints and checkpoints;
+- required and optional scenarios;
 - release artifact policy.
 
-These values are normally read-only in the run interface.
+Project facts are read-only in the ordinary run screen.
 
-### 4.2 Environment layer
+### 5.2 Environment
 
-Machine-local values selected or discovered by the user.
-
-Examples:
+Machine-local values include:
 
 - GF executable;
 - RGL root;
 - output root;
-- optional path overrides.
+- approved local path overrides.
 
-These values may be persisted in local application state.
+These values may be stored in versioned local application state.
 
-### 4.3 Run layer
+### 5.3 Run request
 
-Values specific to the next validation request.
-
-Examples:
+Run-specific choices include:
 
 - validation mode;
 - target file;
-- selected checkpoint;
-- scenario filter;
+- checkpoint;
+- scenario scope;
 - timeout override;
 - diagnostic options;
 - previous-run comparison.
 
-Run values are validated before execution.
+Widgets collect a request. Bootstrap resolves the canonical run configuration.
 
 ---
 
-## 5. GUI authority boundaries
+## 6. Ownership
 
-### 5.1 GUI owns
-
-The GUI owns:
+### GUI entrypoint and presentation adapters own
 
 - visual layout;
 - widget state;
 - file and directory dialogs;
 - user confirmation;
-- local input feedback;
+- local validation feedback;
 - background-worker lifecycle;
 - progress presentation;
-- cancellation request;
-- result navigation;
-- safe display of errors;
+- cancellation requests;
+- result rendering;
+- artifact-opening actions;
 - application-state synchronization.
 
-### 5.2 Bootstrap owns
+### Bootstrap and application services own
 
-Bootstrap owns:
+- framework defaults;
+- project loading;
+- configuration precedence;
+- environment resolution;
+- canonical run configuration;
+- run-path creation;
+- mode prerequisites;
+- plan preview.
 
-- loading framework defaults;
-- loading `project.toml`;
-- resolving configuration precedence;
-- building canonical `RunConfig`;
-- creating run paths;
-- resolving environment values;
-- validating mode-level prerequisites.
-
-### 5.3 Validation pipeline owns
-
-The validation pipeline owns:
+### Validation application services own
 
 - file selection;
-- scans;
-- compilation;
+- static scanning;
+- GF compilation;
 - diagnostics;
-- scenarios;
+- scenario execution;
 - gold comparison;
-- PGF build;
+- PGF construction;
 - release gates;
 - previous-run comparison;
-- final result;
-- reports;
-- manifest.
+- run result;
+- reports and manifest.
 
-### 5.4 Report readers own
-
-Report and summary loaders own:
+### Result readers own
 
 - reading `summary.json`;
-- rendering completed historical runs;
-- verifying supported schema versions;
-- exposing artifact links.
+- schema validation;
+- loading completed runs;
+- optional manifest verification;
+- exposing artifact references.
 
-The GUI must not parse `summary.md` as the machine source of truth.
+The GUI does not parse `summary.md` as a machine source.
 
 ---
 
-## 6. Technology baseline
+## 7. Architecture
 
-The final desktop GUI uses:
+The GUI is an entrypoint and adapter in the hexagonal modular monolith.
 
-```text
-Python 3
-PySide6
-Qt Widgets
-```
-
-Expected implementation zone:
+Dependency direction:
 
 ```text
-app/main_gui.py
-app/gui/
+Qt widgets
+    → GUI controller/presenter
+    → application use cases
+    → ports
+    → adapters
 ```
 
-Recommended structure:
+The GUI does not import validation-stage implementations directly.
+
+Conceptual placement:
 
 ```text
 app/
-├── main_gui.py
-└── gui/
-    ├── __init__.py
-    ├── main_window.py
-    ├── controllers.py
-    ├── workers.py
-    ├── dialogs.py
-    ├── models.py
-    ├── validators.py
-    ├── widgets.py
-    └── resources/
+├── entrypoints/
+│   └── gui/
+├── application/
+├── ports/
+├── adapters/
+└── bootstrap/
 ```
 
-The structure may be simplified while the codebase is small.
+Internal filenames may vary while dependency direction remains fixed.
 
-The following boundaries must remain:
-
-```text
-view widgets
-→ GUI controller
-→ shared bootstrap
-→ audit_core
-```
-
-Worker code must not contain business rules that belong to the pipeline.
+Worker code contains transport and lifecycle logic, not validation business rules.
 
 ---
 
-## 7. Application startup
+## 8. Startup
 
-### 7.1 Canonical launcher
-
-Windows convenience launcher:
+Canonical launch forms may include:
 
 ```text
 launch_gui.bat
-```
-
-Canonical Python entrypoint:
-
-```text
 python -m app.main_gui
 ```
 
-A packaged executable may be added later.
+All launch methods call one GUI entrypoint.
 
-All launch methods must call the same `main()` entrypoint.
-
-### 7.2 Startup sequence
-
-The final startup sequence is:
+Startup sequence:
 
 ```text
 create QApplication
-→ install top-level exception handler
-→ build AppConfig
-→ load canonical application state
-→ migrate legacy state when applicable
-→ load active project summary
-→ create MainWindow
-→ apply restored window and selection state
+→ install top-level exception handling
+→ build application configuration
+→ load versioned local state
+→ import supported legacy state when present
+→ load the active project
+→ create the main window
+→ restore safe presentation and selection state
 → validate passive environment hints
-→ show window
-→ enter Qt event loop
+→ show the window
+→ enter the Qt event loop
 ```
 
-### 7.3 Startup failure
+Startup does not automatically launch a validation run.
 
-A fatal startup error should show:
+Passive checks are read-only, bounded and do not create a completed run.
 
-- concise error title;
+Fatal startup errors show:
+
+- concise title;
 - actionable message;
-- optional technical details;
-- log location when available.
-
-The application should exit with a non-zero status when the main window cannot be initialized safely.
-
-### 7.4 No automatic validation
-
-Startup must not automatically launch a full validation run.
-
-Passive project and environment checks may run when they:
-
-- are read-only;
-- do not invoke expensive GF work;
-- do not create a completed run;
-- do not modify project files.
+- technical details when requested;
+- log path when available.
 
 ---
 
-## 8. Application shutdown
+## 9. Shutdown
 
-### 8.1 Normal shutdown
+### Normal close
 
-On normal close:
+On close:
 
-1. synchronize widgets into application state;
-2. persist allowed local state atomically;
-3. preserve last-run pointers;
-4. close child dialogs;
+1. synchronize permitted preferences;
+2. persist state atomically;
+3. retain completed-run pointers;
+4. close dialogs;
 5. release worker resources;
 6. exit the Qt event loop.
 
-### 8.2 Shutdown during a run
+### Close during an active run
 
-If a validation run is active, the GUI must not silently exit.
-
-Display a confirmation:
+The GUI displays:
 
 ```text
-A validation run is still active.
+A validation run is active.
 Cancel the run and close GF Wordbench?
 ```
 
-Available choices:
+Choices:
 
 ```text
 Continue running
 Cancel and close
 ```
 
-Where supported, an additional choice may minimize the application instead of closing.
+When cancellation is requested, the GUI:
 
-### 8.3 Cancellation before close
-
-The GUI must:
-
-- send a cancellation request through the pipeline cancellation interface;
-- wait for worker termination without blocking the event loop indefinitely;
-- enforce a bounded shutdown timeout;
-- preserve partial run evidence;
-- persist `is_running = false`;
-- never record the run as successful.
+- uses the shared cancellation interface;
+- keeps the event loop responsive;
+- applies a bounded shutdown wait;
+- preserves partial evidence;
+- does not record success;
+- persists no active-running state.
 
 ---
 
-## 9. Main-window objectives
+## 10. Main-window goals
 
-The main window must let the user:
+The main window lets the user:
 
 1. identify the active project;
-2. verify local GF environment;
-3. select a validation mode;
+2. validate the local GF environment;
+3. choose a validation mode;
 4. set mode-relevant options;
 5. inspect the resolved plan;
-6. launch or cancel a run;
-7. observe progress;
-8. understand the final status;
-9. open the run directory and reports;
-10. inspect recent or historical results.
+6. start or cancel a run;
+7. observe structured progress;
+8. understand the run outcome;
+9. open generated artifacts;
+10. inspect recent compatible runs.
 
-The main window should not expose every internal framework option by default.
-
-Advanced settings belong in an expandable section or dedicated dialog.
+Advanced controls remain collapsed or placed in a dedicated dialog.
 
 ---
 
-## 10. Recommended main-window layout
+## 11. Main-window information architecture
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -405,25 +363,23 @@ Advanced settings belong in an expandable section or dedicated dialog.
 │ Resolved Plan                                                            │
 │ Files | Entrypoints | Scenarios | PGF | Previous-run comparison           │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ [Run Validation] [Cancel] [Open Last Run] [Open Summary] [More Results]   │
+│ [Run Validation] [Cancel] [Open Last Run] [Open Reports]                  │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Progress / Current Stage                                                  │
-│ Overall status | Stage | Subject | Progress | Elapsed time                │
+│ Progress                                                                 │
+│ Status | Stage | Subject | Progress | Elapsed time                        │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Results / Activity                                                        │
-│ Summary cards, diagnostics, warnings, and bounded activity log            │
+│ Results / Activity                                                       │
+│ Summary, diagnostics, warnings and bounded activity                       │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-The exact visual arrangement may evolve.
+Visual arrangement may evolve.
 
-The information architecture and ownership rules are normative.
+Information ownership and semantics are normative.
 
 ---
 
-# 11. Project section
-
-## 11.1 Required fields
+## 12. Project section
 
 Display:
 
@@ -439,168 +395,88 @@ Checkpoint count
 Required scenario count
 ```
 
-### 11.1.1 Read-only project identity
+Project identity is read-only in the validation screen.
 
-Project identity values are read-only in the validation screen.
+A dedicated project-configuration workflow may edit project facts.
 
-Editing project configuration requires a dedicated project-configuration workflow.
+### Project selection
 
-### 11.1.2 Project root selector
-
-The user may browse to another GF Wordbench root or active project root when project switching is supported.
-
-Selection must resolve a valid:
+A selected root must resolve the canonical active project configuration:
 
 ```text
 project/project.toml
 ```
 
-or the configured equivalent.
+An invalid project shows precise configuration errors and disables validation.
 
-### 11.1.3 Invalid project
+A template containing unresolved placeholders is shown as uninitialized.
 
-An invalid project is shown with:
+The GUI does not guess project or language identifiers.
 
-```text
-Project status: Invalid
-```
+### Project switching
 
-The GUI must list precise configuration errors.
+Only one project is active in one session.
 
-The run action remains disabled until required project errors are resolved.
+Switching:
 
-### 11.1.4 Uninitialized template
+1. requires no active run;
+2. loads the new project configuration;
+3. clears incompatible project-derived choices;
+4. retains compatible machine-local preferences;
+5. updates the window;
+6. rebuilds the run plan;
+7. does not modify the previous project.
 
-A copied project containing unresolved template placeholders must be identified as uninitialized.
-
-The GUI may offer:
-
-```text
-Initialize Project
-Open Project Documentation
-```
-
-It must not guess language identifiers.
+A missing previously selected project produces a nonfatal notice. The GUI does not select an unrelated directory automatically.
 
 ---
 
-## 12. Project switching
+## 13. Environment section
 
-### 12.1 One active project
-
-Only one project is active in one GUI session.
-
-Switching project:
-
-1. confirms no run is active;
-2. loads the new `project.toml`;
-3. clears project-derived selections that no longer exist;
-4. retains compatible environment preferences;
-5. updates the window title;
-6. revalidates mode options;
-7. does not rewrite the prior project.
-
-### 12.2 State separation
-
-Project-specific recent selections should be keyed by stable project ID if persisted.
-
-Machine-local environment values may remain global.
-
-### 12.3 Stale paths
-
-When the previously used project no longer exists:
-
-- show a non-fatal startup notice;
-- keep the project field empty or invalid;
-- do not select an unrelated directory automatically.
-
----
-
-# 13. Environment section
-
-## 13.1 GF executable
+### GF executable
 
 Display:
 
 ```text
-GF executable path
+executable path
 resolution source
 detected GF version
-compatibility state
+compatibility result
 ```
-
-Resolution source examples:
-
-```text
-explicit GUI
-application state
-environment
-PATH discovery
-```
-
-### 13.1.1 Browse behavior
-
-File filter on Windows:
-
-```text
-GF executable (gf.exe)
-Executables (*.exe)
-All files (*)
-```
-
-On POSIX:
-
-```text
-All files (*)
-```
-
-### 13.1.2 Validation
 
 Before a required run:
 
-- path exists or command resolves;
-- selection is not a directory;
-- executable can be launched where platform checks permit;
-- the final resolved executable is shown in the run plan.
+- the path or command resolves;
+- the selection is not a directory;
+- launchability is checked where appropriate;
+- the resolved executable appears in the plan.
 
-The GUI must not silently substitute another GF installation after confirmation.
+After confirmation, the GUI does not silently substitute another installation.
 
----
+### RGL root
 
-## 13.2 RGL root
-
-Display and allow selection of the local RGL root.
-
-Validation should verify:
+Validate:
 
 - path exists;
 - path is a directory;
-- required project-declared subpaths can be resolved;
-- selected RGL is compatible with project policy where known.
+- project-required subpaths resolve;
+- compatibility policy is satisfied.
 
-A missing RGL root blocks runs that require it.
+A missing required RGL root blocks the run.
 
----
-
-## 13.3 Output root
-
-The output root is machine-local.
+### Output root
 
 Requirements:
 
-- path is explicit after resolution;
+- resolved path is explicit;
 - directory exists or can be created;
-- write access can be verified;
-- output is not inside a protected source directory unless policy allows it;
-- current run directory is never overwritten.
+- write access is available;
+- source directories are protected;
+- a run directory is never overwritten.
 
-The GUI should display available disk-space warnings when practical.
+### Environment presentation state
 
----
-
-## 13.4 Environment status
-
-Recommended states:
+UI-only states may include:
 
 ```text
 Ready
@@ -610,39 +486,26 @@ Checking
 Unknown
 ```
 
-These are UI presentation states.
+These are not run validation statuses.
 
-They are not canonical run validation statuses.
+Detailed reasons remain accessible.
 
-The detailed reason must remain accessible.
+### Test Environment
 
----
+A bounded environment check may:
 
-## 14. Environment test action
+- resolve and probe GF;
+- validate the RGL root;
+- validate output access;
+- show compatibility.
 
-Provide an optional action:
-
-```text
-Test Environment
-```
-
-It may:
-
-- resolve GF executable;
-- run the bounded version probe;
-- validate RGL path;
-- validate output-root write access;
-- display compatibility.
-
-It must not compile active project files unless explicitly named as a smoke test.
-
-Environment-test results are not a release run.
+It does not compile active project files unless an explicit smoke operation is selected.
 
 ---
 
-# 15. Validation modes
+## 14. Validation modes
 
-The GUI exposes exactly the canonical modes:
+The GUI exposes exactly:
 
 ```text
 quick
@@ -651,7 +514,7 @@ release
 diagnostic
 ```
 
-Display labels may be title-cased:
+Display labels:
 
 ```text
 Quick
@@ -660,118 +523,96 @@ Release
 Diagnostic
 ```
 
-Persisted and structured values remain lowercase canonical identifiers.
+Persisted and structured values remain canonical lowercase identifiers.
 
-Legacy values:
+Legacy state values may be imported as:
 
 ```text
-file
-all
+file → quick
+all  → diagnostic
 ```
 
-may be migrated on state load but must not appear as final choices.
+They are not displayed as canonical modes.
 
 ---
 
-## 16. Quick mode
+## 15. Quick mode
 
-### 16.1 Purpose
+Purpose:
 
-Fast validation during normal editing.
+```text
+fast validation during editing
+```
 
-### 16.2 Required control
+Required control:
 
 ```text
 Target file or module
 ```
 
-### 16.3 Selection behavior
+The selector:
 
-The target selector should:
+- lists active-project GF sources;
+- supports browsing;
+- converts valid selections to project-relative identity;
+- rejects paths outside allowed roots.
 
-- default to the last valid project-local target;
-- list project source files;
-- allow browsing;
-- convert absolute browser selection to project-relative identity;
-- reject files outside the active project unless explicit diagnostic policy permits them.
-
-### 16.4 Typical enabled options
+Typical options:
 
 ```text
 Run static scan
 Compile target
 Run configured smoke scenario
-Compare with previous compatible quick run
+Compare with previous compatible run
 Keep OK details
 ```
 
-### 16.5 Run-plan preview
-
-Show:
-
-```text
-1 target file
-dependent smoke entrypoint, if applicable
-selected smoke scenarios
-PGF build: not required
-```
+The plan shows target count, selected scenarios and whether PGF construction is excluded.
 
 ---
 
-## 17. Checkpoint mode
+## 16. Checkpoint mode
 
-### 17.1 Purpose
+Purpose:
 
-Validate a declared subsystem or development milestone.
+```text
+validate a declared project subsystem
+```
 
-### 17.2 Required control
+Required control:
 
 ```text
 Checkpoint
 ```
 
-The checkpoint list comes from `project.toml`.
+The checkpoint list comes from project configuration.
 
-### 17.3 Checkpoint display
-
-Recommended row fields:
+The GUI may show:
 
 ```text
 checkpoint ID
 display name
 module count
 scenario count
-last status
-last run date
+previous compatible outcome
+previous run date
 ```
 
-Historical fields are derived from compatible `summary.json` files.
+Historical values come from compatible `summary.json` files.
 
-### 17.4 Checkpoint options
-
-The user may view:
-
-- included modules;
-- required entrypoints;
-- required scenarios;
-- expected gold files;
-- gate criteria.
-
-The GUI must not allow arbitrary editing of checkpoint membership in the run screen.
+Checkpoint membership is not edited in the run screen.
 
 ---
 
-## 18. Release mode
+## 17. Release mode
 
-### 18.1 Purpose
+Purpose:
 
-Evaluate the active project’s declared release criteria.
+```text
+evaluate all declared release criteria
+```
 
-### 18.2 Required confirmation
-
-Release mode requires a stronger confirmation than other modes.
-
-The dialog must summarize:
+Confirmation shows:
 
 ```text
 Project
@@ -783,91 +624,76 @@ Required scenarios
 Gold comparisons
 PGF targets
 Output root
-Strict validation state
+Strict policy
 ```
 
-Recommended confirmation text:
+Required confirmation text clearly states that:
 
-```text
-Start release validation?
-This run will execute every required release stage and may take longer.
-Gold files will not be modified.
-```
+- every required stage executes;
+- the run may take longer;
+- gold files are not modified.
 
-### 18.3 Locked constraints
-
-The GUI must disable or reject:
+Release mode rejects:
 
 ```text
 no_compile = true
 skip required scenarios
-skip required PGF build
+skip required PGF construction
 automatic gold update
 ignore required artifact failure
 ```
 
-### 18.4 Release completion
-
-The GUI must not display “Release passed” unless:
+The GUI displays release success only when:
 
 ```text
 overall_status = OK
 ```
 
-and required manifest verification passed.
+and required artifact integrity checks pass.
 
 ---
 
-## 19. Diagnostic mode
+## 18. Diagnostic mode
 
-### 19.1 Purpose
-
-Collect broad evidence for difficult failures.
-
-### 19.2 Typical controls
+Purpose:
 
 ```text
-Subject scope
-Verbose GF output
-Keep OK detail reports
-Run dependency introspection
-Run selected scenarios
-Extended timeout
-Maximum files
-Previous-run comparison
+collect broad evidence for difficult failures
 ```
 
-### 19.3 Safety
+Typical controls:
 
-Diagnostic mode may expose advanced options.
+```text
+subject scope
+verbose GF output
+keep OK details
+dependency introspection
+selected scenarios
+extended timeout
+maximum files
+previous-run comparison
+scan only
+```
 
-It must still enforce:
+Diagnostic mode still enforces:
 
-- finite timeout;
+- finite timeouts;
 - output containment;
 - no shell injection;
 - no automatic gold update;
 - one resolved GF executable;
 - bounded generation.
 
-### 19.4 No-compile option
-
-`Scan only` may be available in diagnostic mode.
-
-The GUI must show:
+When `Scan only` is selected, the GUI states:
 
 ```text
-Compilation-dependent conclusions will be unavailable.
+Compilation-dependent conclusions are unavailable.
 This run cannot satisfy checkpoint or release criteria.
 ```
 
 ---
 
-# 20. Mode-dependent widgets
-
-Widgets must enable or disable according to selected mode.
-
-Recommended matrix:
+## 19. Mode-dependent controls
 
 | Control | Quick | Checkpoint | Release | Diagnostic |
 |---|:---:|:---:|:---:|:---:|
@@ -875,72 +701,58 @@ Recommended matrix:
 | Checkpoint selector | Hidden | Required | Read-only all | Optional |
 | Scenario filter | Optional | Limited | Read-only required set | Optional |
 | Scan only | Optional | Disabled | Disabled | Optional |
-| Skip version probe | Optional warning | Restricted | Disabled | Optional |
-| Keep OK details | Optional | Optional | Recommended/locked by policy | Optional |
-| CPU stats | Optional | Optional | Optional | Optional |
-| Max files | Hidden | Hidden | Disabled | Optional |
-| PGF build | Hidden | Conditional | Required by project | Optional |
-| Previous diff | Optional | Recommended | Required by policy | Optional |
+| Skip version probe | Warning | Restricted | Disabled | Optional |
+| Keep OK details | Optional | Optional | Policy-controlled | Optional |
+| CPU statistics | Optional | Optional | Optional | Optional |
+| Maximum files | Hidden | Hidden | Disabled | Optional |
+| PGF build | Hidden | Conditional | Project-required | Optional |
+| Previous comparison | Optional | Recommended | Policy-controlled | Optional |
 
-Disabled controls should explain why through accessible tooltip or inline text.
+Disabled controls explain their policy through accessible text or tooltips.
 
 ---
 
-# 21. Advanced options
+## 20. Advanced options
 
-Advanced options should be collapsed by default.
-
-Potential controls:
+Possible advanced controls:
 
 ```text
-Timeout override
-Keep OK details
-Compare previous run
-Skip version probe
-Scan only
-Emit GF CPU stats
-Maximum files
-Explicit GF path override
-Verbose GF output
-Strict mode
+timeout override
+keep OK details
+previous-run comparison
+skip version probe
+scan only
+GF CPU statistics
+maximum files
+explicit GF path override
+verbose GF output
+strict mode
 ```
 
-### 21.1 Project-owned options
-
-The GUI must not expose project-owned source rules as ordinary transient fields when they are authoritative in `project.toml`.
-
-Examples that should normally be read-only or hidden:
+Project-owned facts remain read-only:
 
 ```text
 source directory
 source glob
-include regex
-exclude regex
+include and exclude rules
 entrypoints
 checkpoint membership
 required scenarios
 ```
 
-### 21.2 Expert override
+An expert override:
 
-An expert override may be provided for diagnosis.
-
-When enabled:
-
-- show a warning;
-- record the override;
-- display it in confirmation;
-- store it only when safe;
-- never modify project configuration silently;
-- prevent release success if the override invalidates release policy.
+- is clearly marked;
+- appears in the resolved plan;
+- is recorded in run evidence;
+- never rewrites project configuration;
+- cannot produce release success when it violates release policy.
 
 ---
 
-# 22. Resolved-plan panel
+## 21. Resolved-plan panel
 
-Before a run starts, the GUI should show the resolved plan.
-
-Required fields:
+Before execution, show:
 
 ```text
 Mode
@@ -949,10 +761,10 @@ GF executable
 GF version or probe state
 RGL root
 Output root
-Target/checkpoint
-Files selected
-Entrypoints selected
-Scenarios selected
+Target or checkpoint
+Selected files
+Selected entrypoints
+Selected scenarios
 Gold comparisons
 PGF targets
 Timeouts
@@ -961,251 +773,144 @@ Strict constraints
 Overrides
 ```
 
-### 22.1 Preview source
+The plan comes from shared bootstrap and preview services.
 
-The plan must be built by shared bootstrap/selection preview services.
+The GUI does not duplicate selection algorithms.
 
-The GUI must not duplicate selection algorithms.
+Any relevant widget change invalidates or rebuilds the preview.
 
-### 22.2 Preview freshness
-
-Any relevant widget change invalidates the preview.
-
-The GUI should mark it:
-
-```text
-Plan changed — refresh required
-```
-
-or rebuild it automatically using a bounded read-only operation.
-
-### 22.3 Preview limitations
-
-If exact file selection requires run-directory creation or expensive discovery, the preview may show estimates.
-
-It must label them as estimates.
+Estimates are labeled explicitly when exact selection requires a full operation.
 
 ---
 
-# 23. Local input validation
+## 22. Input validation
 
-The GUI validates obvious inputs before confirmation.
-
-Examples:
+The GUI checks obvious local errors before confirmation:
 
 - required field empty;
-- directory missing;
-- file missing;
+- file or directory missing;
 - invalid integer;
 - invalid regex;
 - target outside project;
-- checkpoint unknown;
-- output unwritable;
+- unknown checkpoint;
+- unwritable output;
 - contradictory options.
 
-### 23.1 Shared validators
+Rules shared with CLI use shared validators.
 
-Where the rule affects CLI behavior, use shared validation services.
+Errors appear beside fields and in a concise summary, with focus moved to the first invalid field.
 
-GUI-only validators may check presentation-specific concerns.
-
-### 23.2 Validation presentation
-
-Show errors:
-
-- adjacent to the field when possible;
-- in a concise summary panel;
-- with focus moved to the first invalid field;
-- without losing entered values.
-
-### 23.3 No false success
-
-Passing GUI validation means only:
-
-```text
-the request is ready for bootstrap/pipeline validation
-```
-
-It does not prove the language project passes.
+Passing GUI validation means only that the request is ready for bootstrap and application validation.
 
 ---
 
-# 24. Run confirmation
+## 23. Confirmation
 
-A confirmation is required before launching:
+Confirmation is required for:
 
-- checkpoint;
-- release;
+- checkpoint runs;
+- release runs;
 - broad diagnostic runs;
-- any run with explicit risky override.
+- risky expert overrides.
 
-Quick mode may support a preference to skip confirmation after the first successful configuration, but release confirmation cannot be disabled.
+Release confirmation cannot be disabled.
 
-### 24.1 Confirmation content
-
-Show only resolved facts.
-
-Do not show raw widget values that bootstrap has replaced or normalized.
-
-### 24.2 Warning grouping
-
-Separate:
+The dialog separates:
 
 ```text
 Blocking errors
 Warnings
-Run plan
+Resolved plan
 ```
 
-The Run button must remain unavailable when blocking errors exist.
+Only resolved values are shown.
+
+The Run action remains disabled while blocking errors exist.
 
 ---
 
-# 25. Run execution
-
-## 25.1 Background worker
+## 24. Execution
 
 Validation runs outside the Qt GUI thread.
 
-The final design may use:
+Supported mechanisms may include:
 
 ```text
-QThread + worker QObject
-QThreadPool + QRunnable
+QThread with worker QObject
+QThreadPool with QRunnable
 background controller service
 ```
 
 Requirements:
 
-- UI remains responsive;
-- worker receives immutable resolved configuration;
-- progress crosses thread boundaries through signals;
-- GUI widgets are updated only on the GUI thread;
-- exceptions are captured and returned structurally;
-- worker cleanup is deterministic.
+- the UI remains responsive;
+- the worker receives immutable resolved configuration;
+- progress crosses thread boundaries through structured events;
+- widgets update only on the GUI thread;
+- exceptions return as structured framework errors;
+- cleanup is deterministic.
 
-### 25.1.1 Current foundation
+The worker calls one application use case.
 
-The current implementation already uses a worker moved to a `QThread` and emits started, finished, and failed signals.
+It does not call scanner, compiler, scenario runner or report writers directly.
 
-The final implementation extends this with:
-
-```text
-progress
-stage_changed
-subject_changed
-warning
-cancellation_acknowledged
-```
+Ordinary project failure returns a structured `RunResult`, not an exception.
 
 ---
 
-## 25.2 Shared pipeline call
-
-The worker calls the canonical orchestration API:
-
-```python
-run_audit(run_config)
-```
-
-or its deliberate successor.
-
-It must not call:
-
-```text
-scanner directly
-compiler directly
-scenario runner directly
-report writers directly
-```
-
-### 25.2.1 Result
-
-The worker returns:
-
-```text
-RunResult
-```
-
-A Python exception is reserved for infrastructure or unhandled framework failure.
-
-Ordinary project validation failure should still return a structured result.
-
----
-
-# 26. Running-state behavior
+## 25. Running state
 
 While a run is active:
 
-- Run button is disabled;
+- Run is disabled;
 - project switching is disabled;
-- environment path editing is disabled;
+- environment editing is disabled;
 - mode and target editing are disabled;
-- advanced execution settings are disabled;
+- advanced options are disabled;
 - Cancel is enabled;
-- artifact-opening actions remain enabled for completed prior runs;
-- progress and activity remain visible.
+- completed prior-run artifacts remain accessible;
+- progress remains visible.
 
-The GUI must not erase the last completed run pointers when a new run begins.
-
-It should distinguish:
+The GUI keeps separate references to:
 
 ```text
-Last completed run
-Current in-progress run
+last completed run
+current active run
 ```
 
-If the current run fails before finalization, the last completed run remains accessible.
+Starting a run does not erase the last completed run.
 
 ---
 
-# 27. Cancellation
+## 26. Cancellation
 
-## 27.1 Cancel button
+A visible Cancel action is available during work.
 
-A visible Cancel button is required while work is active.
+First request:
 
-### 27.1.1 First click
+- sends cancellation through the shared token or port;
+- displays `Cancelling…`;
+- prevents repeated duplicate requests;
+- does not block or terminate the GUI thread.
 
-The first click:
-
-- requests cancellation;
-- changes status to `Cancelling…`;
-- disables repeated cancel clicks temporarily;
-- does not kill the GUI thread.
-
-### 27.1.2 Pipeline response
-
-The pipeline:
+The application:
 
 - stops scheduling new work;
-- terminates owned external processes according to policy;
+- terminates owned processes according to policy;
 - preserves partial evidence;
-- builds a non-successful result when possible.
+- returns a non-successful result when possible.
 
-### 27.1.3 Completion display
-
-Display:
+Completion wording:
 
 ```text
 Run cancelled
 ```
 
-not:
-
-```text
-Run failed
-```
-
-unless an additional framework error occurred.
-
-Cancellation remains an execution state, not a successful validation status.
+Cancellation is not displayed as success or ordinary project failure unless an additional framework error exists.
 
 ---
 
-# 28. Progress presentation
-
-## 28.1 Required progress fields
+## 27. Progress
 
 Show:
 
@@ -1213,77 +918,45 @@ Show:
 current stage
 current subject
 completed subjects
-total subjects, when known
+total subjects when known
 elapsed time
 warning count
 failure count
 ```
 
-### 28.1.1 Unknown total
+Use indeterminate progress when totals are unknown.
 
-Use an indeterminate progress bar when exact total is not known.
+Progress comes from structured application events.
 
-### 28.1.2 Stage IDs
-
-The GUI may display friendly stage names.
-
-Technical details may include pipeline IDs such as:
-
-```text
-VAL-110
-VAL-140
-VAL-170
-```
-
-### 28.1.3 Progress truth
-
-Progress must come from pipeline events.
-
-The GUI must not infer progress by counting activity-log lines.
+The GUI does not infer progress from activity-log line counts.
 
 ---
 
-## 29. Activity panel
+## 28. Activity panel
 
-The activity panel is a bounded UI view.
-
-It is not `raw/master.log`.
+The activity view is bounded presentation, not `raw/master.log`.
 
 It may show:
 
 - stage transitions;
 - current subject;
 - concise warnings;
-- final counts;
+- counts;
 - artifact paths.
 
-### 29.1 Activity retention
+The GUI may cap lines for performance.
 
-The UI may cap visible lines for performance.
+`Clear Activity` clears only the widget.
 
-The full lifecycle record remains in:
+It does not delete run evidence.
 
-```text
-raw/master.log
-```
-
-### 29.2 Clear action
-
-`Clear Activity` clears only the UI view.
-
-It must not delete run logs.
-
-### 29.3 Sensitive content
-
-Activity text must not display secrets or full environment dumps.
+Secrets and full environment dumps are prohibited.
 
 ---
 
-# 30. Result summary
+## 29. Completion summary
 
-After completion, show a structured result panel.
-
-Required top-level fields:
+Display:
 
 ```text
 Overall status
@@ -1302,76 +975,42 @@ Regression summary
 Run directory
 ```
 
-### 30.1 Status rendering
-
-Canonical statuses:
-
-```text
-OK
-FAIL
-ERROR
-```
-
-`SKIPPED` is an item or stage status, not the completed overall run status.
-
-### 30.2 Color is supplemental
-
-Status must be conveyed by:
-
-- text;
-- icon or shape;
-- accessible name.
-
-Color alone is insufficient.
-
-### 30.3 Completion wording
-
-Use:
+Completion wording:
 
 ```text
 Validation passed
-Validation failed
+Validation completed with failures
 Validation error
 Run cancelled
 ```
 
-Do not say:
+Color is supplemental.
 
-```text
-Audit completed successfully
-```
-
-when `RunResult.overall_status` is `FAIL` or `ERROR`.
+Status is also conveyed through text, icon or shape and accessible name.
 
 ---
 
-# 31. Diagnostic result view
+## 30. Diagnostic result view
 
-The result view should separate:
+Separate:
 
 ```text
-Framework/environment errors
+Framework and environment errors
 Direct failures
-Downstream failures
+Required scenario failures
 Ambiguous failures
-Scenario failures
+Downstream failures
 Gold mismatches
 Artifact failures
-Non-blocking scan findings
+Nonblocking scan findings
 Regressions
 ```
 
-### 31.1 Direct-first order
+Direct failures appear before cascades.
 
-Likely direct failures appear before downstream cascades.
+Downstream rows link to blockers when known.
 
-### 31.2 Blocker navigation
-
-A downstream row should link to its blocker when known.
-
-### 31.3 Evidence actions
-
-Per result:
+Evidence actions may include:
 
 ```text
 Open stdout
@@ -1383,19 +1022,15 @@ Open scenario output
 Open gold diff
 ```
 
-Only existing paths are enabled.
+Only existing owned paths are enabled.
 
-### 31.4 No independent classification
-
-The GUI reads classification from structured results.
-
-It does not inspect message text to guess direct/downstream status.
+The GUI consumes diagnostic classification from structured results.
 
 ---
 
-# 32. Results navigation actions
+## 31. Artifact navigation
 
-Required actions after a completed run:
+Required actions:
 
 ```text
 Open Run Directory
@@ -1417,40 +1052,30 @@ Open Gold Diff
 Open Detail Report
 ```
 
-### 32.1 Machine summary
-
-“Open Machine Summary” opens:
+Machine summary opens:
 
 ```text
 summary.json
 ```
 
-### 32.2 Human summary
-
-“Open Human Summary” opens:
+Human summary opens:
 
 ```text
 summary.md
 ```
 
-The current generic “Open Summary” label should be replaced because the two summaries serve different audiences.
-
-### 32.3 Missing artifact
-
-When a referenced path is missing:
+When an artifact is missing:
 
 - show a clear error;
-- keep the run result visible;
-- offer to open the containing run directory;
-- do not reconstruct the missing artifact silently.
+- retain the result view;
+- offer the run directory;
+- do not reconstruct or regenerate the artifact silently.
 
 ---
 
-# 33. Historical runs
+## 32. Completed runs
 
-A final GUI should provide a recent-runs view.
-
-Recommended columns:
+A recent-runs view may show:
 
 ```text
 Run ID
@@ -1465,93 +1090,63 @@ Scenario failures
 Regression count
 ```
 
-### 33.1 Data source
-
-Load from:
+Data comes from:
 
 ```text
 summary.json
 ```
 
-and optionally verify with:
+and may be verified with:
 
 ```text
 manifest.json
 ```
 
-### 33.2 Compatibility
+Unsupported schemas are labeled explicitly.
 
-Unsupported schema versions should appear as:
-
-```text
-Unsupported historical schema
-```
-
-The GUI may offer migration through an explicit tool.
-
-### 33.3 No Markdown parsing
-
-Historical status must not be extracted from `summary.md`.
+Historical status is not extracted from Markdown.
 
 ---
 
-# 34. Compare-runs view
+## 33. Run comparison
 
-The GUI may provide comparison between compatible runs.
+Compatible runs may be compared using structured diff entries.
 
-It should display:
+Display categories:
 
 ```text
-Improved
 Regressed
 New
+Improved
 Removed
 Unchanged
 ```
 
-Data source:
+The GUI does not implement independent transition rules.
 
-```text
-structured diff entries
-```
-
-or a shared diff service.
-
-The GUI must not implement separate status-transition rules.
+Cross-workspace portfolio comparison remains outside Wordbench.
 
 ---
 
-# 35. Application state
+## 34. Application state
 
-## 35.1 Canonical state file
+Canonical state file:
 
 ```text
 .gf_wordbench_state.json
 ```
 
-Canonical schema:
+Schema:
 
 ```text
 gf-wordbench.app-state/1.0
 ```
 
-Legacy file:
-
-```text
-.gf_audit_state.json
-```
-
-may be imported during migration.
-
-## 35.2 State purpose
-
 Application state stores disposable local preferences.
 
-Deleting it must not damage the project.
+Deleting it does not damage the project.
 
-## 35.3 Persisted environment fields
-
-Permitted:
+### Permitted environment fields
 
 ```text
 project_root
@@ -1560,9 +1155,7 @@ gf_executable
 output_root
 ```
 
-## 35.4 Persisted selection fields
-
-Permitted:
+### Permitted selection fields
 
 ```text
 mode
@@ -1576,11 +1169,7 @@ no_compile
 emit_cpu_stats
 ```
 
-The final schema may add optional GUI-only presentation preferences after schema review.
-
-## 35.5 Persisted last-run fields
-
-Permitted:
+### Permitted completed-run fields
 
 ```text
 run_dir
@@ -1588,9 +1177,9 @@ summary_path
 status_message
 ```
 
-## 35.6 Runtime-only fields
+### Runtime-only fields
 
-Must not be persisted:
+Never persist:
 
 ```text
 is_running = true
@@ -1598,47 +1187,45 @@ current_run_config
 current_run_result
 worker object
 thread object
-open dialog objects
+dialogs
 progress subscriptions
 cancellation token
 ```
 
-On startup:
-
-```text
-is_running = false
-```
+Startup always begins with no active run.
 
 ---
 
-## 36. Project facts not stored in GUI state
+## 35. Project facts excluded from GUI state
 
-After `project.toml` becomes authoritative, do not persist these as independent GUI facts:
+Do not store independent copies of:
 
 ```text
-scan directory
-scan glob
+source directory
+source glob
 include regex
 exclude regex
 GF project path parts
-entrypoint list
-checkpoint list
+entrypoints
+checkpoints
 required scenarios
 optional scenarios
 release artifact names
 language code
 ```
 
-Temporary expert overrides may be persisted only under an explicit override structure and must never replace project configuration silently.
+These facts belong to `project.toml` and project-owned documents.
+
+Expert overrides remain explicitly separate from project authority.
 
 ---
 
-## 37. State-saving policy
+## 36. State persistence
 
-State should be saved:
+State is saved:
 
-- after meaningful preference changes, with debounce; or
-- on normal application close;
+- after meaningful preference changes, with debounce;
+- on normal close;
 - after a completed run;
 - after selecting a project or environment path.
 
@@ -1648,81 +1235,57 @@ Requirements:
 - UTF-8;
 - versioned schema;
 - no secrets;
-- malformed prior state does not crash startup;
-- failed save shows a warning without losing the current run.
+- safe recovery from malformed state;
+- save failure shown as a warning;
+- no loss of the current run result.
 
-### 37.1 Path normalization
+Local state paths may be absolute.
 
-State paths may be absolute local paths.
-
-Canonical writers should normalize separators to `/`.
-
-Readers accept native separators.
+Canonical writers use `/`; readers accept native separators.
 
 ---
 
-# 38. State migration
+## 37. Legacy state import
 
-Legacy flat fields may include:
+The GUI may import the predecessor state file:
 
 ```text
-selected_mode
-selected_target_file
-selected_project_root
-selected_rgl_root
-selected_gf_exe
-selected_out_root
-selected_scan_dir
-selected_scan_glob
-selected_gf_path
-selected_timeout_sec
-selected_max_files
-selected_include_regex
-selected_exclude_regex
-selected_keep_ok_details
-selected_diff_previous
-selected_skip_version_probe
-selected_no_compile
-selected_emit_cpu_stats
-is_running
-last_run_dir
-last_summary_path
-status_message
+.gf_audit_state.json
 ```
 
-Migration rules:
+Supported mapping includes:
 
 ```text
-all → diagnostic
+all  → diagnostic
 file → quick
 ```
 
-Local paths move into `environment`.
+Local paths move to environment state.
 
-Run preferences move into `selection`.
+Run preferences move to selection state.
 
-Last-run pointers move into `last_run`.
+Completed-run references move to the completed-run section.
 
 Project-owned fields are discarded once `project.toml` is authoritative.
 
-`is_running` is discarded.
+`is_running` is never imported.
 
-The legacy file remains untouched until the new state is written successfully.
+Import is atomic: the predecessor file remains untouched until the canonical state is written and verified.
 
 ---
 
-# 39. Error dialogs
+## 38. Error presentation
 
-Error dialogs should separate:
+Error dialogs separate:
 
 ```text
 summary
-action
+recommended action
 technical details
 evidence path
 ```
 
-### 39.1 Configuration error
+### Configuration error
 
 Example:
 
@@ -1735,210 +1298,146 @@ C:/tools/gf/gf.exe
 Select another executable and try again.
 ```
 
-### 39.2 Validation failure
+### Validation failure
 
-Ordinary project `FAIL` should normally be shown in the results view, not as an exception dialog.
+Ordinary project `FAIL` appears in the result view rather than as an exception.
 
-A brief completion notice may say:
-
-```text
-Validation completed with failures.
-```
-
-### 39.3 Framework error
+### Framework error
 
 Show:
 
 - concise message;
-- run directory if created;
-- machine summary if available;
-- expandable traceback or technical details;
+- run directory when created;
+- machine summary when available;
+- expandable technical details;
 - Copy Details action.
 
-### 39.4 Fatal GUI error
+### Fatal GUI error
 
-The top-level exception handler should:
+The top-level handler:
 
-- log the traceback;
-- show a critical dialog;
-- avoid exposing secrets;
-- preserve state where safe.
+- logs technical details;
+- shows a critical dialog;
+- avoids secrets;
+- preserves state where safe.
 
 ---
 
-# 40. Warning presentation
+## 39. Warnings
 
-Warnings do not block the run unless policy promotes them.
+Warnings are visible in:
+
+- confirmation;
+- running activity;
+- completion results;
+- reports when applicable.
 
 Examples:
 
-- GF version newer than tested range;
-- output root low on disk space;
-- previous baseline unavailable;
-- optional scenario missing;
+- GF version outside the tested range;
+- low output disk space;
+- unavailable previous baseline;
+- optional scenario unavailable;
 - expert override active;
-- scan-only diagnostic run;
-- non-blocking static findings.
+- scan-only diagnostic request;
+- nonblocking static findings.
 
-Warnings must be visible in:
-
-- confirmation;
-- running activity when discovered;
-- final result;
-- reports when applicable.
+Warnings block only when the governing policy makes them blocking.
 
 ---
 
-# 41. File and directory dialogs
+## 40. File and directory dialogs
 
-### 41.1 Initial directory
-
-Use, in order:
+Initial location precedence:
 
 1. current valid field path;
 2. active project root;
 3. last relevant directory;
 4. user home.
 
-### 41.2 Cancel behavior
+Cancelling a dialog preserves the current value.
 
-Cancelling a dialog leaves the current value unchanged.
+Valid selected target paths are displayed project-relatively where practical.
 
-### 41.3 Target file conversion
-
-When a selected target belongs to the active project:
-
-- display project-relative form where practical;
-- retain resolved absolute path internally only through bootstrap;
-- persist a stable project-relative target when the state schema supports it.
-
-### 41.4 Symlinks and junctions
-
-Path validation must use the shared containment policy.
-
-The GUI must not decide containment through string-prefix comparison.
+Containment uses shared normalized path policy, not string-prefix comparison.
 
 ---
 
-# 42. Keyboard behavior
+## 41. Keyboard and accessibility
 
 Minimum shortcuts:
 
 ```text
 Ctrl+R        Run validation
-Esc           Close non-critical dialog / request cancellation where safe
+Esc           Close dialog or request cancellation where safe
 Ctrl+O        Open project
 Ctrl+Shift+O  Open last run directory
-Ctrl+L        Focus activity/results log
+Ctrl+L        Focus activity/results
 Ctrl+,        Open settings
-F1            Open documentation/help
+F1            Open help
 ```
 
-Release validation should not start from an unconfirmed single shortcut.
+Release validation always requires confirmation.
 
-### 42.1 Default buttons
-
-- confirmation dialog default: Cancel/No for release;
-- normal quick confirmation may default to Run;
-- error dialog default: Close.
-
-### 42.2 Focus order
-
-Focus follows logical top-to-bottom input order.
-
-Disabled fields are skipped.
-
----
-
-# 43. Accessibility
-
-The GUI must support:
+Accessibility requirements:
 
 - keyboard-only navigation;
 - screen-reader labels;
 - visible focus;
 - high-DPI scaling;
-- text resizing through platform settings;
-- status text independent of color;
-- accessible names for icon-only buttons;
+- platform text scaling;
+- status independent of color;
+- accessible names for icon-only controls;
 - selectable error details;
 - sufficient contrast;
-- no information conveyed solely by hover.
+- no information conveyed only by hover.
 
-### 43.1 Dynamic updates
-
-Progress and final status changes should expose accessible announcements without flooding assistive technology.
-
-### 43.2 Tables
-
-Result tables require:
-
-- column headers;
-- meaningful row labels;
-- keyboard navigation;
-- accessible status text;
-- sortable behavior that does not change canonical data.
+Result tables provide headers, row labels, keyboard navigation and accessible status text.
 
 ---
 
-# 44. Localization
+## 42. Localization
 
-The first canonical UI language may be English.
+User-facing strings remain separate from logic.
 
-The code should keep user-facing strings separable from logic.
+Canonical identifiers are not translated:
 
-Requirements:
+```text
+quick
+checkpoint
+release
+diagnostic
+OK
+FAIL
+ERROR
+SKIPPED
+```
 
-- do not compare translated labels as canonical mode identifiers;
-- store stable internal values;
-- use Qt translation facilities if localization is introduced;
-- preserve GF and source diagnostics verbatim;
-- do not translate raw GF error messages inside evidence logs.
+Raw GF diagnostics remain verbatim in evidence.
 
-Documentation language may differ from UI language without changing runtime identifiers.
+Qt translation facilities may localize presentation labels.
 
 ---
 
-# 45. Window state and appearance
+## 43. Window and settings state
 
 Optional presentation state may include:
 
 ```text
-window size
-window position
+window size and position
 splitter positions
 selected results tab
 column widths
 theme preference
 ```
 
-These fields require addition to the application-state schema before canonical persistence.
-
-### 45.1 Safe restoration
+Such fields require schema definition before persistence.
 
 Restored windows must remain visible on current monitors.
 
-Invalid geometry falls back to platform defaults.
+Invalid geometry falls back to safe defaults.
 
-### 45.2 Minimum size
-
-The layout should remain usable at a documented minimum window size.
-
-The current foundation uses approximately:
-
-```text
-1100 × 760
-```
-
-The final GUI may adapt responsively.
-
----
-
-# 46. Settings dialog
-
-A settings dialog may manage machine-local preferences.
-
-Recommended sections:
+A settings dialog may contain:
 
 ```text
 Environment
@@ -1949,99 +1448,52 @@ Appearance
 Advanced
 ```
 
-### 46.1 Environment
-
-```text
-GF executable
-RGL root
-Output root
-```
-
-### 46.2 Execution defaults
-
-```text
-Default mode
-Default timeout
-Compare previous run
-Keep OK details
-CPU stats
-```
-
-### 46.3 Reports
-
-Only presentation preferences.
-
-Artifact names and required schemas remain framework-owned.
-
-### 46.4 Retention
-
-Links to cleanup policy and retention configuration.
-
-### 46.5 Advanced
-
-```text
-Strict compatibility
-Diagnostic maximum files
-Explicit GF path override
-Debug activity logging
-```
-
-### 46.6 No project editor by accident
-
-Do not place project entrypoints, scenarios, or language rules in general application settings.
+Project entrypoints, scenarios and language rules do not belong in general application settings.
 
 ---
 
-# 47. Project configuration workflow
+## 44. Project configuration workflow
 
-A future project editor may be provided.
+Project editing is separate from ordinary run controls.
 
-It is separate from the run interface.
+A project editor must:
 
-Requirements:
-
-- validate `gf-wordbench.project/1.0`;
-- show exact diff before save;
+- validate the canonical project schema;
+- show an exact diff before saving;
 - write atomically;
-- preserve comments only if the chosen TOML writer can do so safely;
-- never edit during an active run;
-- distinguish project facts from local environment paths;
-- update dependent project documentation when contracts change.
+- avoid edits during active runs;
+- separate project facts from local environment values;
+- preserve or explicitly manage TOML comments;
+- coordinate dependent project contracts.
 
-Until this workflow exists, the GUI should open `project.toml` in the user’s configured editor rather than provide partial unsafe editing.
-
----
-
-# 48. Gold update workflow
-
-Gold update is not part of normal validation.
-
-A dedicated GUI workflow may:
-
-1. select one scenario;
-2. execute it;
-3. normalize output;
-4. display expected versus actual diff;
-5. require explicit approval;
-6. write gold atomically;
-7. record the update.
-
-Requirements:
-
-- unavailable during an active normal run;
-- disabled for unsupported scenario contracts;
-- never triggered automatically after mismatch;
-- confirmation clearly states the file to change;
-- release validation never updates gold.
+When no safe editor is provided, the GUI opens `project.toml` in the configured external editor.
 
 ---
 
-# 49. GUI and CLI equivalence
+## 45. Gold update workflow
+
+Gold updates are separate from normal validation.
+
+A dedicated workflow:
+
+1. selects one scenario;
+2. executes it;
+3. normalizes output;
+4. displays expected and actual diff;
+5. requires explicit approval;
+6. writes the gold file atomically;
+7. records the update.
+
+It is unavailable during normal active runs, never triggered automatically and prohibited during release validation.
+
+---
+
+## 46. GUI and CLI equivalence
 
 For equivalent explicit inputs:
 
 ```text
-GUI RunConfig == CLI RunConfig
+GUI resolved RunConfig == CLI resolved RunConfig
 ```
 
 after canonical normalization.
@@ -2049,54 +1501,30 @@ after canonical normalization.
 Equivalence includes:
 
 - mode;
-- project;
+- project identity;
 - environment;
-- target/checkpoint;
+- target or checkpoint;
 - timeouts;
 - flags;
 - selected scenarios;
 - output root;
-- strict policy.
+- strict policy;
+- release gates;
+- report set.
 
-### 49.1 Shared builders
+Allowed differences are presentation-only:
 
-Both GUI and CLI must use:
-
-```text
-build_app_config
-project loader
-build_run_config
-shared validators
-run_audit
-```
-
-or their deliberate successors.
-
-### 49.2 Allowed differences
-
-Allowed presentation differences:
-
-- confirmation dialogs;
+- dialogs;
 - visual progress;
-- browser dialogs;
+- browser controls;
 - interactive cancellation;
-- artifact-opening buttons.
-
-Not allowed:
-
-- different file selection;
-- different GF arguments;
-- different status mapping;
-- different report set;
-- different release gates.
+- artifact-opening actions.
 
 ---
 
-# 50. Result loading
+## 47. Loading an existing run
 
-The GUI may open a completed run without re-executing it.
-
-Loading sequence:
+Sequence:
 
 ```text
 select run directory
@@ -2106,138 +1534,75 @@ select run directory
 → build read-only result view
 ```
 
-### 50.1 Unsupported schema
-
-Show:
+Unsupported schema:
 
 ```text
 This run uses an unsupported summary schema.
 ```
 
-Offer:
+Available actions may include opening raw files or using an explicit migration tool.
 
-- open raw directory;
-- open JSON as text;
-- explicit migration tool when available.
+A corrupt manifest produces an integrity warning without hiding the summary.
 
-### 50.2 Corrupt manifest
-
-Display:
-
-```text
-Artifact integrity warning
-```
-
-Do not hide the summary.
-
-Clearly mark unverified artifact links.
+Unverified artifact links are marked clearly.
 
 ---
 
-# 51. Security boundaries
+## 48. Security
 
-### 51.1 No shell construction
+The GUI:
 
-The GUI passes structured values to bootstrap.
-
-It does not construct operating-system command strings.
-
-### 51.2 Untrusted text
-
-Escape or safely render:
-
-- GF diagnostics;
-- source excerpts;
-- scenario output;
-- project names;
-- paths;
-- report snippets.
-
-### 51.3 External links
-
-Opening local artifacts uses platform-safe local-file APIs.
-
-The GUI should confirm before opening untrusted external URLs found in project content.
-
-### 51.4 Scenario trust
-
-The GUI may warn when a project contains `.gfs` shell-escape features prohibited by policy.
-
-It must not bypass the pipeline’s security validation.
-
-### 51.5 Secrets
-
-Do not persist or display:
-
-- tokens;
-- passwords;
-- private keys;
-- full environment dumps.
+- passes structured values to application services;
+- does not construct host command strings;
+- safely renders diagnostics, source excerpts, scenario output, project names and paths;
+- uses platform-safe local-file opening APIs;
+- confirms untrusted external URLs;
+- does not bypass scenario security policy;
+- does not persist or display tokens, passwords, private keys or full environment dumps;
+- validates path containment through shared policy.
 
 ---
 
-# 52. Performance
+## 49. Performance
 
-### 52.1 UI thread
-
-Never perform in the GUI thread:
+Never perform on the GUI thread:
 
 - GF execution;
-- broad filesystem scans;
+- broad filesystem scanning;
 - large hash computation;
-- manifest verification across large runs;
+- large manifest verification;
 - historical-run indexing;
 - report generation.
 
-### 52.2 Bounded rendering
+Large logs are streamed, virtualized or bounded with a link to the complete file.
 
-Large logs should be:
+Recent-run indexing occurs in the background.
 
-- streamed in bounded chunks;
-- virtualized;
-- truncated in the UI with a link to the full file.
-
-The GUI must not load a multi-gigabyte raw log into one text widget.
-
-### 52.3 Recent-run indexing
-
-Index in the background.
-
-Cache only derived metadata.
-
-Invalidate cache when summary or manifest fingerprints change.
+Derived caches are invalidated when summary or manifest fingerprints change.
 
 ---
 
-# 53. Multi-run policy
+## 50. Active-run policy
 
-The final baseline permits one active validation run per GUI instance.
+One GUI instance permits one active validation run.
 
 Starting a second run while one is active is prohibited.
 
-A future queue may be added through an architectural change.
+Independent instances must still respect run-directory collision protection and project-write safety.
 
-Multiple independent GUI instances may be restricted through a project lock or warning to avoid:
-
-- output collisions;
-- competing project edits;
-- excessive GF resource use.
-
-Run-directory collision protection remains mandatory.
+A queued multi-run engine requires a separate architectural contract.
 
 ---
 
-# 54. Crash recovery
+## 51. Crash recovery
 
-On startup, the GUI may detect incomplete run directories.
-
-It should display:
+On startup, incomplete run directories may be presented as:
 
 ```text
 Incomplete runs found
 ```
 
-Actions:
+Actions may include:
 
 ```text
 Open
@@ -2246,178 +1611,15 @@ Archive
 Delete through cleanup workflow
 ```
 
-It must not mark them successful.
+Incomplete runs are never marked successful.
 
-Application state must never restore `is_running=true`.
-
----
-
-# 55. Current implementation baseline
-
-The current GF Audit GUI already provides:
-
-- PySide6 main window;
-- project, RGL, GF executable, and output path fields;
-- scan directory and scan glob;
-- target-file browser;
-- `all` and `file` modes;
-- timeout;
-- include and exclude regex;
-- keep-OK-details option;
-- previous-run comparison;
-- skip-version-probe option;
-- scan-only option;
-- CPU-statistics option;
-- run confirmation;
-- background worker through `QThread`;
-- read-only activity widget;
-- last-run and summary opening;
-- local application state synchronization;
-- fatal-error dialog handling.
-
-These capabilities form the migration base.
+Application state never restores an active-running flag.
 
 ---
 
-# 56. Required migration to final GUI
+## 52. Controller flow
 
-## 56.1 Mode migration
-
-Replace visible modes:
-
-```text
-all
-file
-```
-
-with:
-
-```text
-diagnostic
-quick
-checkpoint
-release
-```
-
-State migration:
-
-```text
-all → diagnostic
-file → quick
-```
-
-## 56.2 Project configuration migration
-
-Remove ordinary editable run-screen fields for:
-
-```text
-scan directory
-scan glob
-include regex
-exclude regex
-```
-
-Load them from:
-
-```text
-project/project.toml
-```
-
-Advanced temporary overrides may remain under explicit expert mode.
-
-## 56.3 Target migration
-
-Quick target becomes a project-relative source selector.
-
-Checkpoint mode receives a declared checkpoint selector.
-
-Release mode receives a read-only complete release plan.
-
-## 56.4 Completion semantics
-
-The current UI may describe a returned run as “completed successfully” without first checking final `overall_status`.
-
-Final behavior must map:
-
-```text
-OK    → Validation passed
-FAIL  → Validation completed with failures
-ERROR → Validation could not be completed reliably
-```
-
-## 56.5 Result counts
-
-Migrate from legacy:
-
-```text
-ok_count
-fail_count
-```
-
-to canonical:
-
-```text
-files_ok
-files_fail
-files_error
-files_skipped
-scenarios_ok
-scenarios_fail
-scenarios_error
-scenarios_skipped
-```
-
-## 56.6 Last summary action
-
-Replace ambiguous:
-
-```text
-Open Summary
-```
-
-with separate:
-
-```text
-Open Machine Summary
-Open Human Summary
-```
-
-## 56.7 Running state
-
-Do not clear last completed run pointers when a new run starts.
-
-Track current and previous completed run separately.
-
-## 56.8 Cancellation
-
-Add a supported cancellation action and pipeline cancellation token.
-
-Closing the application during a run must follow the cancellation policy.
-
-## 56.9 Progress
-
-Extend worker signals beyond:
-
-```text
-started
-finished
-failed
-```
-
-to structured stage and subject progress.
-
-## 56.10 State migration
-
-Move from `.gf_audit_state.json` and flat fields to:
-
-```text
-.gf_wordbench_state.json
-gf-wordbench.app-state/1.0
-```
-
----
-
-# 57. Recommended final controller flow
+Conceptual controller flow:
 
 ```python
 def on_run_requested() -> None:
@@ -2428,13 +1630,13 @@ def on_run_requested() -> None:
         view.show_validation_errors(validation)
         return
 
-    resolved_plan = bootstrap.preview_run(ui_request)
-    view.show_plan(resolved_plan)
+    plan = bootstrap.preview_run(ui_request)
+    view.show_plan(plan)
 
-    if not view.confirm_run(resolved_plan):
+    if not view.confirm_run(plan):
         return
 
-    controller.start_run(resolved_plan.run_config)
+    controller.start_run(plan.run_config)
 ```
 
 Worker flow:
@@ -2442,7 +1644,7 @@ Worker flow:
 ```python
 def worker_run(run_config: RunConfig) -> None:
     try:
-        result = run_audit(
+        result = run_validation(
             run_config,
             progress_callback=emit_progress,
             cancellation_token=cancellation_token,
@@ -2462,15 +1664,13 @@ def on_finished(result: RunResult) -> None:
     state_store.save(state)
 ```
 
-These signatures are illustrative.
-
-Public APIs remain governed by the interfile contract lock.
+Signatures are illustrative. Public contracts remain owned by the interfile lock.
 
 ---
 
-# 58. Widget-state model
+## 53. GUI request model
 
-Recommended GUI request model:
+The widget request may contain:
 
 ```text
 project_root
@@ -2491,17 +1691,15 @@ strict
 advanced_overrides
 ```
 
-The GUI request is not yet a `RunConfig`.
+This request is not a `RunConfig`.
 
-Bootstrap resolves it.
-
-This separation prevents widgets from becoming the canonical configuration model.
+Bootstrap resolves and validates it.
 
 ---
 
-# 59. Signals and events
+## 54. Events
 
-Recommended worker/controller events:
+Structured events may include:
 
 ```text
 run_started
@@ -2517,256 +1715,192 @@ run_finished
 run_failed
 ```
 
-Event payloads should be immutable structured values.
+Payloads are immutable structured values.
 
-The activity panel renders them.
+Qt signals transport events to the presentation layer.
 
-Automation and reports do not depend on Qt signals.
+Reports and automation do not depend on Qt.
 
 ---
 
-# 60. Testing strategy
+## 55. Testing
 
-Recommended test directories:
+### Unit tests
 
-```text
-tests/gui/
-tests/contracts/
-tests/integration/
-```
-
-## 60.1 Unit tests
-
-Test:
+Cover:
 
 - state-to-widget loading;
 - widget-to-request collection;
-- mode-dependent enabling;
-- path-browser cancel behavior;
+- mode-dependent controls;
+- dialog cancellation;
 - project-relative target conversion;
-- validation message mapping;
-- result-status wording;
-- artifact action enabling;
-- last-run pointer retention;
-- state migration;
+- validation-message mapping;
+- result wording;
+- artifact-action enabling;
+- last-run retention;
+- legacy state import;
 - close-during-run logic.
 
-## 60.2 Controller tests
+### Controller tests
 
-Use fake bootstrap and audit services.
+Use fake bootstrap and application services.
 
-Test:
+Cover:
 
-- invalid request does not start worker;
-- confirmation rejection does not start worker;
+- invalid request does not start work;
+- rejected confirmation does not start work;
 - one worker per run;
 - progress routing;
 - cancellation routing;
-- structured `FAIL` is not treated as exception;
-- exception is shown as `ERROR`;
+- structured `FAIL` is not an exception;
+- infrastructure exception maps to `ERROR`;
 - completed result updates state;
-- state-save failure produces warning;
+- state-save failure produces a warning;
 - worker cleanup.
 
-## 60.3 Qt tests
+### Qt tests
 
-Use Qt-compatible test tooling to verify:
+Cover:
 
 - signals;
 - button states;
 - focus order;
-- keyboard shortcuts;
+- shortcuts;
 - modal dialogs;
 - thread-safe updates;
-- window close behavior;
+- close behavior;
 - accessibility labels where testable.
 
-## 60.4 Integration tests
+### Integration tests
 
-With a tiny fixture project:
+With a small fixture project:
 
 - launch GUI;
 - load project;
-- run quick validation;
-- render `OK`;
-- run failing validation;
-- render direct failure;
-- open run directory;
-- open summary files;
-- cancel a bounded long-running fake process;
-- reopen and restore state.
+- run successful quick validation;
+- render failure correctly;
+- open run artifacts;
+- cancel a bounded long operation;
+- restart and restore safe state.
 
-## 60.5 CLI equivalence tests
+### CLI equivalence tests
 
-For equivalent input:
+Equivalent GUI and CLI input must resolve to equal canonical run configuration.
 
-```text
-GUI request → RunConfig
-CLI args    → RunConfig
-```
-
-must compare equal after canonical normalization.
-
----
-
-# 61. Required GUI contract tests
-
-Recommended files:
-
-```text
-tests/contracts/test_gui_bootstrap_contract.py
-tests/contracts/test_gui_audit_contract.py
-tests/contracts/test_gui_state_contract.py
-tests/contracts/test_gui_cli_equivalence.py
-tests/contracts/test_gui_no_stage_bypass.py
-tests/contracts/test_gui_result_contract.py
-tests/contracts/test_gui_artifact_paths.py
-tests/contracts/test_gui_cancellation_contract.py
-```
-
-### 61.1 No-stage-bypass test
+### Boundary tests
 
 Verify GUI modules do not import or directly call:
 
 ```text
 scanner
 compiler
-scenario_runner
+scenario runner
 gold comparator
 report writers
 ```
 
-The permitted path is through shared orchestration.
-
-### 61.2 Artifact-path test
-
-Verify the GUI reads paths from structured results.
-
-It must not reconstruct:
-
-```text
-summary.json
-AI_READY.md
-raw/master.log
-```
-
-from hard-coded filenames when an owned path field exists.
+Verify artifact paths come from structured results rather than hard-coded reconstruction.
 
 ---
 
-# 62. GUI drift indicators
+## 56. Drift indicators
 
-Probable drift exists when:
+GUI drift exists when:
 
-- GUI and CLI create different `RunConfig` values;
-- GUI directly imports the compiler or scanner;
-- visible mode values remain `all` or `file`;
-- language-specific source paths remain in GUI defaults;
-- `project.toml` fields are duplicated in application state;
-- a returned `FAIL` is displayed as successful;
-- last-run paths are cleared before the current run completes;
-- GUI parses `summary.md` for status;
-- GUI reconstructs artifact paths;
-- report generation starts from a button independently of the run result;
-- release mode allows `no_compile`;
-- required scenario controls can be disabled in release mode;
-- a normal mismatch offers automatic gold overwrite without explicit workflow;
+- GUI and CLI resolve different run configuration;
+- GUI imports validation-stage implementations;
+- visible modes use legacy identifiers;
+- language-specific paths appear in framework GUI defaults;
+- project facts are duplicated in local state;
+- `FAIL` is displayed as success;
+- completed-run pointers are cleared at run start;
+- Markdown is parsed for status;
+- artifact paths are reconstructed;
+- report generation is launched independently of run results;
+- release mode permits forbidden skips;
+- gold mismatch offers automatic overwrite;
 - cancellation is represented as `OK`;
-- worker modifies widgets outside the GUI thread;
-- a large log is loaded without bounds;
-- state persists `is_running=true`;
-- invalid state crashes startup;
-- hidden environment values override confirmed visible values;
-- project switching occurs during an active run.
+- workers update widgets outside the GUI thread;
+- large logs are rendered without bounds;
+- state persists an active-running flag;
+- malformed state crashes startup;
+- hidden values override confirmed visible values;
+- project switching occurs during a run;
+- GUI behavior depends on `gf-portfolio`.
 
-Any drift indicator requires contract and test review.
+Any drift indicator requires coordinated contract and test correction.
 
 ---
 
-# 63. GUI change workflow
-
-A GUI contract change is complete only when:
+## 57. Change checklist
 
 ```text
 [ ] User goal identified
-[ ] Widget ownership identified
+[ ] Widget and application owner identified
 [ ] Bootstrap impact reviewed
 [ ] RunConfig impact reviewed
 [ ] CLI equivalence reviewed
 [ ] Application-state schema reviewed
 [ ] Mode matrix reviewed
 [ ] Accessibility reviewed
-[ ] Threading reviewed
-[ ] Cancellation reviewed
+[ ] Threading and cancellation reviewed
 [ ] Error presentation reviewed
-[ ] Artifact-path ownership reviewed
-[ ] Unit tests updated
-[ ] Qt tests updated
-[ ] Contract tests updated
-[ ] Documentation updated
-[ ] Migration behavior documented
+[ ] Artifact ownership reviewed
+[ ] Security reviewed
+[ ] Unit and Qt tests updated
+[ ] Contract and integration tests updated
+[ ] Owner documentation and locks updated
+[ ] Compatibility behavior defined when public contracts change
+[ ] Wordbench/Portfolio boundary preserved
 ```
 
-Examples of contract-changing edits:
-
-- adding a validation mode;
-- adding a persisted GUI field;
-- changing run confirmation;
-- changing worker/result signals;
-- adding direct stage execution;
-- changing cancellation semantics;
-- adding project editing;
-- adding gold update;
-- changing result-status wording;
-- changing artifact-opening behavior.
-
-No such change may be implemented in one GUI file only.
+A public GUI contract change is not implemented only in a widget file.
 
 ---
 
-# 64. Quick user workflow
+## 58. User workflows
 
-## 64.1 First launch
+### First launch
 
 1. Start GF Wordbench.
-2. Select or confirm the project root.
-3. Select the GF executable.
-4. Select the RGL root.
-5. Select the output root.
-6. Test the environment.
-7. Choose a validation mode.
-8. Review the resolved plan.
-9. Run validation.
-10. Open the generated summary.
+2. Select or confirm the active project.
+3. select the GF executable.
+4. select the RGL root.
+5. select the output root.
+6. test the environment.
+7. choose a validation mode.
+8. review the resolved plan.
+9. run validation.
+10. open the generated reports.
 
-## 64.2 Quick validation
+### Quick validation
 
 1. Choose `Quick`.
 2. Select a project source target.
-3. Confirm timeout and optional comparison.
-4. Select `Run Validation`.
+3. Confirm relevant options.
+4. Run validation.
 5. Review direct failures first.
-6. Open individual evidence as needed.
+6. Open evidence as needed.
 
-## 64.3 Checkpoint validation
+### Checkpoint validation
 
 1. Choose `Checkpoint`.
 2. Select a declared checkpoint.
-3. Review included modules and scenarios.
+3. Review modules and scenarios.
 4. Run validation.
-5. Inspect checkpoint gates and regressions.
+5. Inspect gates and regressions.
 
-## 64.4 Release validation
+### Release validation
 
 1. Choose `Release`.
-2. Resolve all environment warnings.
-3. Review the complete release plan.
-4. Confirm the strict run.
-5. Wait for required stages.
-6. Verify final status and manifest.
-7. Open release artifacts.
+2. Resolve blocking environment issues.
+3. Review the release plan.
+4. Confirm the run.
+5. Observe required stages.
+6. verify outcome and manifest.
+7. open release artifacts.
 
-## 64.5 Diagnostic validation
+### Diagnostic validation
 
 1. Choose `Diagnostic`.
 2. Select scope.
@@ -2777,9 +1911,9 @@ No such change may be implemented in one GUI file only.
 
 ---
 
-# 65. Troubleshooting the GUI
+## 59. Troubleshooting
 
-## 65.1 GUI does not start
+### GUI does not start
 
 Check:
 
@@ -2787,63 +1921,57 @@ Check:
 Python environment
 PySide6 installation
 application traceback
-launch_gui.bat working directory
+launcher working directory
 ```
 
-Run:
+Run the Python module entrypoint from a terminal to expose startup errors.
 
-```text
-python -m app.main_gui
-```
+### Run button disabled
 
-from a terminal to expose startup errors.
-
-## 65.2 Run button disabled
-
-Possible reasons:
+Possible causes:
 
 - invalid project;
 - missing GF executable;
-- missing RGL root;
-- required target/checkpoint not selected;
+- missing RGL;
+- required target or checkpoint not selected;
 - active run already in progress;
-- release constraints unresolved.
+- unresolved release constraints.
 
-The GUI should display the specific blocking reason.
+The GUI displays the blocking reason.
 
-## 65.3 Run appears frozen
+### Run appears frozen
 
-Check:
+Inspect:
 
 - current stage;
 - elapsed time;
-- active subject;
+- current subject;
 - timeout policy;
 - `raw/master.log`.
 
-The GUI thread should remain responsive.
+The GUI thread remains responsive.
 
-Use Cancel when the operation exceeds expected duration.
-
-## 65.4 Last run cannot open
+### Last run cannot open
 
 The stored path may no longer exist.
 
-Use the recent-runs browser or select the output root.
+Use recent runs or select the output root.
 
-The GUI must not claim the run was deleted by GF Wordbench unless cleanup records prove it.
+The GUI does not claim deletion without cleanup evidence.
 
-## 65.5 State is corrupt
+### State is corrupt
 
-GF Wordbench should ignore or quarantine malformed state and start with safe defaults.
+Malformed state is ignored or quarantined.
+
+The GUI starts with safe defaults.
 
 Project files remain unaffected.
 
 ---
 
-# 66. Canonical interface labels
+## 60. Canonical labels
 
-Recommended final English labels:
+Section labels:
 
 ```text
 Project
@@ -2888,43 +2016,40 @@ Cancelling
 
 Labels may be localized.
 
-Internal identifiers remain canonical English tokens.
+Internal identifiers remain stable tokens.
 
 ---
 
-# 67. Final invariants
+## 61. Invariants
 
-The final GUI must satisfy all of the following.
-
-1. One active project per session.
+1. One active project exists per GUI session.
 2. Project facts come from `project.toml`.
 3. Environment preferences remain local.
-4. Four canonical modes are exposed.
-5. GUI and CLI share builders and orchestration.
-6. GUI never bypasses `run_audit`.
+4. Four canonical validation modes are exposed.
+5. GUI and CLI share bootstrap and application services.
+6. The GUI never bypasses shared validation orchestration.
 7. Validation runs outside the GUI thread.
 8. Cancellation preserves evidence.
-9. A returned `FAIL` is not displayed as success.
+9. `FAIL` is never displayed as success.
 10. `summary.json` is the machine source for completed runs.
 11. Artifact paths come from structured results.
-12. State is versioned and atomic.
-13. Runtime worker objects are not persisted.
+12. Application state is versioned and atomic.
+13. Runtime worker objects are never persisted.
 14. Normal validation never updates gold.
 15. Release mode enforces required stages.
 16. Raw diagnostics remain accessible.
 17. Color is not the only status signal.
 18. Large logs are rendered with bounds.
 19. Closing during a run requires explicit cancellation.
-20. No active-language identifiers are hard-coded in generic GUI code.
+20. Generic GUI code contains no active-language identifiers.
+21. The GUI remains independent from `gf-portfolio`.
 
 ---
 
-# 68. Final rule
+## 62. Enforcement
 
-The GUI is a trustworthy control surface only when it remains equivalent to the framework it represents.
-
-> GF Wordbench’s GUI must make the resolved validation plan visible, execute it only through shared orchestration, preserve responsiveness and evidence, display structured outcomes accurately, and keep project facts separate from local interface state.
+> GF Wordbench's GUI makes the resolved validation plan visible, executes it only through shared application services, preserves responsiveness and evidence, displays structured outcomes accurately, and keeps project facts separate from local interface state.
 
 The GUI may simplify interaction.
 
-It must not simplify away required evidence, required stages, diagnostic uncertainty, or release constraints.
+It must not simplify away required evidence, required stages, diagnostic uncertainty, security constraints or release policy.

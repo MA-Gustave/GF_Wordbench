@@ -2,11 +2,11 @@
 
 **Document ID:** `GF-WB-ARCH-COMPONENT-MAP`  
 **Status:** Normative architecture reference  
-**Applies to:** GF Wordbench framework, active project boundary, project template, validation artifacts, and external GF integration  
+**Applies to:** GF Wordbench framework, active project boundary, project template, validation artifacts, external GF integration, and the public Portfolio-consumer boundary  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Target architecture:** Final GF Wordbench architecture  
-**Implementation status:** Tracked outside this document  
-**Last structural review:** 2026-07-22
+**Architecture:** Hexagonal modular monolith  
+**Last structural review:** 2026-07-24
 
 ---
 
@@ -45,7 +45,7 @@ project/docs/INTERFILE_CONTRACT_LOCK.md
 
 GF Wordbench is a reusable Python orchestration framework around the Grammatical Framework toolchain.
 
-It validates one active language project at a time.
+One Wordbench workspace contains exactly one active GF language project. Each run resolves exactly one active project and one normative language target.
 
 The architecture must preserve these principles:
 
@@ -98,7 +98,15 @@ the operating system
 the process API
 the filesystem
 terminal and desktop environment
-optional external tools explicitly contracted later
+optional external tools governed by an accepted contract
+gf-portfolio as an optional read-only consumer of public versioned artifacts
+```
+
+`gf-portfolio` is an independent product. It may consume finalized public Wordbench artifacts, but GF Wordbench must not import, call, configure, store private state for, or require `gf-portfolio`.
+
+```text
+gf-portfolio -> public versioned GF Wordbench artifacts
+GF Wordbench -X-> gf-portfolio runtime, code, storage or configuration
 ```
 
 GF Wordbench does not own GF semantics.
@@ -144,6 +152,7 @@ flowchart TD
     PROJECT[Active Language Project]
     GOLD[Gold Files]
     RUN[Run Artifacts]
+    PORTFOLIO[gf-portfolio]
 
     CLI --> BOOT
     GUI --> BOOT
@@ -179,6 +188,7 @@ flowchart TD
     COMP --> RUN
     SCEN --> RUN
     REPORTS --> RUN
+    RUN -. public versioned artifacts .-> PORTFOLIO
 
     STATE --> FS
     PCONF --> FS
@@ -191,24 +201,44 @@ flowchart TD
 
 ---
 
-## 5. Layer model
+## 5. Modular and hexagonal model
 
-GF Wordbench has eight architectural layers.
+GF Wordbench is organized through five functional modules and six architectural rings.
 
-| Layer | Purpose | May depend on |
+Functional modules own product capabilities:
+
+| Module | Primary responsibility | Representative components |
 |---|---|---|
-| 1. Presentation | CLI and GUI interaction | application services, shared models |
-| 2. Configuration | defaults, active project loading, run construction, state | filesystem primitives, shared models |
-| 3. Orchestration | validation planning and execution sequence | validation stages, result services, reports |
-| 4. Validation stages | file selection, scan, compile, scenarios | process/filesystem primitives, models |
-| 5. Interpretation | diagnostics, fingerprints, classification, diff, result building | models and pure evidence |
-| 6. Reporting | persistent run artifacts and human reports | completed result models, filesystem primitives |
-| 7. Infrastructure | process, path, I/O, logging | Python standard library |
-| 8. Active project | language configuration, GF source, scenarios, inputs, gold | GF and project documentation |
+| `projects` | Active-project identity, configuration, initialization, reset, migration, template handoff | project loader, project configuration, active-project boundary, template |
+| `runs` | Run construction, lifecycle, orchestration, cancellation, finalization and run-path ownership | bootstrap, run orchestrator, state, path allocation |
+| `validation` | Deterministic file selection, static scanning, GF compilation, PGF construction and native `.gfs` scenarios | selector, scanner, compiler, scenario runner |
+| `diagnostics` | Evidence normalization, fingerprints, result construction, causal classification and previous-run comparison | diagnostic normalizer, fingerprint service, result builder, classifier, diff |
+| `reporting` | Machine, human and AI-oriented reports, details, logs and artifact manifests | report writers and manifest publication |
 
-Dependencies normally flow downward.
+Architectural rings control dependency direction:
 
-A lower layer must not import a higher presentation or orchestration layer.
+| Ring | Purpose | Dependency rule |
+|---|---|---|
+| `domain` | Stable models, value objects, invariants and policies | depends on no framework, UI, filesystem or process implementation |
+| `application` | Use cases, run planning and coordination | depends on domain and ports |
+| `ports` | Interfaces required by application services | contains contracts, not external implementations |
+| `adapters` | GF, process, filesystem, persistence, report and project-configuration implementations | implements ports and depends outward on external systems |
+| `entrypoints` | CLI and GUI interaction | invokes application use cases and renders results |
+| `bootstrap` | Configuration resolution and dependency composition | wires entrypoints, application services, ports and adapters |
+
+Canonical dependency direction:
+
+```text
+entrypoints -> application
+bootstrap -> application + ports + adapters
+application -> domain + ports
+adapters -> ports + external systems
+domain -> no outward implementation dependency
+```
+
+The `Kind` column in the component registry classifies component responsibility. It does not define a second architectural layer hierarchy.
+
+A component must not bypass its ring boundary, reach into another module’s private implementation, or introduce a reverse dependency from GF Wordbench to `gf-portfolio`.
 
 ---
 
@@ -251,6 +281,7 @@ A lower layer must not import a higher presentation or orchestration layer.
 | CMP-PROJECT-DOCS | Language-project specification | `project/docs/` | Active project |
 | CMP-TEMPLATE | Reusable empty project | `templates/project/` | Template |
 | CMP-GF | Grammatical Framework executable | external `gf` / `gf.exe` | External |
+| EXT-PORTFOLIO | Optional public-artifact consumer | external `gf-portfolio` product | External companion |
 
 The registry identifies architectural owners.
 
@@ -275,8 +306,8 @@ app/main_cli.py
 - request configuration construction from `app/bootstrap.py`;
 - invoke the audit orchestrator;
 - render concise terminal status;
-- map final run outcomes to process exit codes;
-- expose contract, schema, project, and gold maintenance commands when implemented.
+- map terminal run outcomes to process exit codes;
+- expose the documented contract, schema, project, and gold maintenance commands.
 
 **Consumes**
 
@@ -483,7 +514,7 @@ app/bootstrap.py
 - build immutable or effectively immutable application configuration;
 - combine framework defaults, active-project configuration, and explicit user overrides;
 - validate required environment paths;
-- build the final `RunConfig`;
+- build the resolved `RunConfig`;
 - construct deterministic GF path parts;
 - validate mode-specific requirements;
 - create or request run-path construction;
@@ -590,7 +621,7 @@ app/models.py
 
 **Responsibilities**
 
-Define stable boundary models, including the final equivalents of:
+Define the canonical boundary models, including:
 
 ```text
 AppConfig
@@ -797,7 +828,7 @@ app/audit/compiler.py
 - construct the documented GF compilation request;
 - compile individual modules;
 - compile configured checkpoints;
-- compile final entrypoints;
+- compile configured release entrypoints;
 - build the release PGF;
 - call the generic process runner;
 - preserve command, working directory, environment policy, streams, exit code, timeout, and duration;
@@ -984,7 +1015,7 @@ app/audit/result_model.py
 - enforce model invariants;
 - provide safe default values;
 - ensure paths use canonical bases;
-- construct final per-file and per-scenario results;
+- construct completed per-file and per-scenario results;
 - aggregate run totals.
 
 **Produces**
@@ -1368,7 +1399,7 @@ project/project.toml
 - required and optional scenarios;
 - release requirements.
 
-One GF Wordbench copy has one active project.
+One GF Wordbench workspace has exactly one active project.
 
 ---
 
@@ -1477,7 +1508,6 @@ project/docs/
 - syntax and constructor rules;
 - validation specification;
 - coverage matrix;
-- status ledger;
 - decision log;
 - known issues;
 - release criteria;
@@ -1509,7 +1539,7 @@ The template must not retain data from the active project.
 
 ---
 
-# 16. External component
+# 16. External components
 
 ## 16.1 CMP-GF — Grammatical Framework
 
@@ -1548,6 +1578,35 @@ The complete boundary is governed by:
 ```text
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 ```
+
+---
+
+
+## 16.2 EXT-PORTFOLIO — Optional Portfolio consumer
+
+**Provider**
+
+```text
+gf-portfolio
+```
+
+**Permitted interaction**
+
+- discover or register several independent Wordbench workspaces in Portfolio-owned state;
+- read finalized public Wordbench artifacts;
+- index, compare and aggregate results in Portfolio-owned schemas;
+- preserve Wordbench project and run identities;
+- handle incompatible public schema versions without mutating Wordbench artifacts.
+
+**Must not**
+
+- import private Wordbench modules;
+- modify project configuration, scenarios, golds or run artifacts;
+- become required for Wordbench startup, validation, reporting or tests;
+- share a private database or mandatory runtime service with Wordbench;
+- cause Wordbench schemas to contain Portfolio registry or aggregation state.
+
+The complete product boundary is governed by ADR-0011, ADR-0012 and `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`.
 
 ---
 
@@ -1713,6 +1772,9 @@ reports
 
 active project
     → GF
+
+public Wordbench artifacts
+    → optional gf-portfolio consumer
 ```
 
 ## 20.2 Prohibited directions
@@ -1746,6 +1808,8 @@ CLI parser → reports
 
 active project source → Python framework internals
 template project → active project
+
+GF Wordbench → gf-portfolio runtime, storage, code, or configuration
 ```
 
 Circular dependencies between architectural layers are prohibited.
@@ -1790,7 +1854,7 @@ Extract them only after an independent boundary becomes real.
 
 # 22. Deliberately rejected components
 
-The final architecture does not include separate components for:
+The architecture does not include separate components for:
 
 ```text
 a Python reimplementation of the GF shell
@@ -1811,9 +1875,9 @@ These would add coordination cost without creating a useful ownership boundary.
 
 # 23. Legacy and migration boundaries
 
-GF Wordbench evolves from the existing `gf-audit` implementation.
+GF Wordbench preserves documented compatibility with relevant `gf-audit` artifacts and behaviors.
 
-The following may exist during migration but are not independent final architectural owners:
+The following compatibility elements may exist during migration but are not independent architectural owners:
 
 ```text
 legacy application name: gf-audit
@@ -1937,7 +2001,8 @@ A component review must verify:
 - no undocumented persisted fields;
 - no consumer imports of private provider helpers;
 - no circular dependency;
-- no unjustified micro-component.
+- no unjustified micro-component;
+- no reverse dependency from GF Wordbench to `gf-portfolio`.
 
 ---
 
@@ -1952,17 +2017,14 @@ This document must be reviewed:
 - when project initialization changes;
 - when a new external tool becomes required;
 - when a persisted format gains a new writer;
-- after a significant drift incident.
+- after a significant drift incident;
+- when the public artifact boundary consumed by `gf-portfolio` changes.
 
-Implementation progress must not be tracked here because it changes too frequently.
-
-Use the codebase guide, changelog, issues, or implementation ledger for progress.
-
-This map describes the intended stable architecture.
+This map changes only when component ownership, contracts, dependencies or architectural boundaries change.
 
 ---
 
-# 28. Final component rule
+# 28. Component rule
 
 > Every architectural responsibility has one owner, and every owner has a bounded responsibility.
 

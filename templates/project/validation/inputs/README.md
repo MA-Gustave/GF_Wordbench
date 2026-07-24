@@ -1513,9 +1513,9 @@ Any drift indicator requires contract review.
 | Gold updates | `docs/scenarios/UPDATING_GOLD_FILES.md` |
 | Output normalization | `docs/scenarios/OUTPUT_NORMALIZATION.md` |
 | Scenario validation | `docs/validation/SCENARIO_VALIDATION.md` |
-| Project validation spec | `templates/project/docs/VALIDATION_SPEC.md` |
-| Coverage matrix | `templates/project/docs/TEST_COVERAGE_MATRIX.md` |
-| Status ledger | `templates/project/docs/STATUS_LEDGER.md` |
+| Project validation spec | `templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md` |
+| Coverage matrix | `templates/project/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md` |
+| Status ledger | `templates/project/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` |
 | Known issues | `templates/project/docs/KNOWN_ISSUES.md` |
 | Active input directory | `project/validation/inputs/` |
 

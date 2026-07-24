@@ -7,8 +7,8 @@
 **Canonical repository name:** `GF_Wordbench`  
 **Canonical package/distribution name:** `gf-wordbench`  
 **Canonical CLI name:** `gf-wordbench`  
-**Target architecture:** Final GF Wordbench architecture  
-**Last structural review:** 2026-07-22
+**Canonical path:** `docs/reference/FILE_NAMING_CONVENTIONS.md`  
+**Last structural review:** 2026-07-24
 
 ---
 
@@ -43,6 +43,7 @@ Canonical public names must change only through coordinated migration.
 This reference must remain consistent with:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -54,6 +55,8 @@ docs/projects/CREATING_A_PROJECT.md
 docs/projects/MIGRATING_AN_EXISTING_LANGUAGE.md
 docs/release/VERSIONING_POLICY.md
 docs/release/MIGRATION_AND_DEPRECATION.md
+docs/operations/RUN_DIRECTORY_LIFECYCLE.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 docs/reference/SCHEMA_INDEX.md
 docs/reference/STATUS_VALUES.md
 project/project.toml
@@ -126,7 +129,7 @@ branch names unless a release process depends on them
 
 # 4. Normative terms
 
-- **CANONICAL NAME**: name emitted or created by current GF Wordbench writers.
+- **CANONICAL NAME**: name emitted or created by canonical GF Wordbench writers.
 - **LEGACY NAME**: older accepted name read only for compatibility.
 - **PUBLIC NAME**: name referenced by users, automation, schemas, reports, or another file.
 - **PRIVATE NAME**: implementation detail with no external consumer.
@@ -272,7 +275,7 @@ Runtime-native paths may use platform separators internally.
 
 Rules:
 
-- current writers emit `/` in JSON, TOML, manifests, and contract examples;
+- canonical writers emit `/` in JSON, TOML, manifests, and contract examples;
 - legacy readers accept `\`;
 - display code may render native paths for user convenience;
 - path equality uses normalized semantic paths, not raw string equality;
@@ -347,7 +350,7 @@ Python import package names use underscores:
 gf_wordbench
 ```
 
-when or if a top-level import package uses the distribution name.
+for Python identifiers derived from the distribution name. The application package root remains governed by the packaging contract.
 
 ---
 
@@ -398,9 +401,9 @@ scripts
 runs
 ```
 
-Only directories actually used by the implementation should be created.
+Only directories with a documented owner, responsibility, and lifecycle are created.
 
-Recommended meaning:
+Canonical meaning:
 
 | Directory | Purpose |
 |---|---|
@@ -499,8 +502,8 @@ diff.py
 fingerprint.py
 result_model.py
 report_json.py
-report_markdown.py
-report_ai.py
+report_md.py
+report_ai_ready.py
 report_logs.py
 report_details.py
 process_utils.py
@@ -593,7 +596,7 @@ Packaging console script:
 gf-wordbench = "app.main_cli:main"
 ```
 
-The exact import target must match implementation.
+The exact import target matches the packaging and entrypoint contracts.
 
 Avoid multiple competing CLI roots such as:
 
@@ -859,7 +862,14 @@ Rules:
 
 ---
 
-# 23. Contract lock filenames
+# 23. Anti-drift document filenames
+
+Canonical cross-document controls:
+
+```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/DOCUMENTATION_CORRECTION_LEDGER.md
+```
 
 Canonical framework locks:
 
@@ -883,10 +893,13 @@ templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 
 Rules:
 
-- filenames are identical where the role is the same in active project and template;
-- directory context disambiguates scope;
-- do not add language names to the active lock filename;
-- do not create duplicate unofficial locks.
+- `DOCUMENTATION_ALIGNMENT_LOCK.md` governs cross-document interpretation;
+- `DOCUMENTATION_CORRECTION_LEDGER.md` coordinates correction work and does not redefine product behavior;
+- specialized locks retain their exact canonical names;
+- active-project and template locks use the same filename because directory context defines scope;
+- language names are not added to lock filenames;
+- duplicate unofficial locks are prohibited;
+- a new lock requires a distinct owner and non-overlapping contract surface.
 
 ---
 
@@ -916,10 +929,13 @@ project/lib/src/<language-directory>/
 
 Rules:
 
-- one repository contains one active `project/`;
+- one GF Wordbench workspace contains exactly one active `project/`;
 - do not name active projects `project1`, `current_project`, or language-specific top-level alternatives;
 - clone/reset operations replace or recreate the content under `project/`;
-- language identity comes from `project/project.toml`, not the directory name.
+- language identity comes from `project/project.toml`, not the directory name;
+- `projects/<id>/`, `workspaces/<id>/`, and selectable language-profile directories are not Wordbench runtime models;
+- multi-workspace and multilingual aggregation belong to the independent `gf-portfolio` product;
+- GF Wordbench filenames and paths do not expose private `gf-portfolio` storage, configuration, or registry identities.
 
 ---
 
@@ -962,7 +978,6 @@ MORPHOLOGY_SPEC.md
 SYNTAX_AND_CONSTRUCTOR_RULES.md
 VALIDATION_SPEC.md
 TEST_COVERAGE_MATRIX.md
-STATUS_LEDGER.md
 DECISION_LOG.md
 KNOWN_ISSUES.md
 RELEASE_CRITERIA.md
@@ -1158,7 +1173,7 @@ The module declaration and project dependency map are authoritative.
 
 Backup or retired source must not match active source selection.
 
-Recommended archive patterns outside active source root:
+Canonical archive patterns outside the active source root:
 
 ```text
 archive/GrammarEng.gf
@@ -1454,7 +1469,7 @@ Canonical pattern:
 run_<run-id>
 ```
 
-Recommended run ID:
+Canonical run ID:
 
 ```text
 YYYYMMDD_HHMMSS
@@ -1549,7 +1564,7 @@ Rules:
 - `AI_READY.md` uses uppercase identity;
 - `top_errors.txt` uses lowercase snake case;
 - `manifest.json` is machine-readable;
-- current writers emit only these names.
+- canonical writers emit only these names.
 
 Legacy aliases may be read from historical summaries but not written.
 
@@ -1633,7 +1648,7 @@ Rules:
 
 A safe target key converts a logical identity into a portable filename stem.
 
-Recommended algorithm:
+Canonical algorithm:
 
 ```text
 1. take normalized project-relative identity
@@ -1669,7 +1684,7 @@ The safe-key algorithm becomes contractual when persisted paths depend on it.
 
 # 47. Safe-key hash suffix
 
-Recommended suffix:
+Canonical suffix:
 
 ```text
 --<8-lowercase-hex>
@@ -1693,13 +1708,13 @@ Rules:
 
 # 48. Filename length policy
 
-Recommended maximum generated basename:
+Canonical maximum generated basename:
 
 ```text
 120 characters
 ```
 
-Recommended maximum safe key before extensions:
+Canonical maximum safe key before extensions:
 
 ```text
 96 characters
@@ -1718,7 +1733,7 @@ Rules:
 
 # 49. Detail report filenames
 
-Recommended pattern:
+Canonical pattern:
 
 ```text
 <safe-target-key>.md
@@ -1764,7 +1779,7 @@ Rules:
 - no language suffix unless an additional subdirectory is justified;
 - manifest identifies actual artifact roles.
 
-Optional future artifact directories should use lowercase kebab or simple lowercase nouns:
+Additional artifact directories use lowercase kebab case or simple lowercase nouns:
 
 ```text
 artifacts/graphs
@@ -1808,7 +1823,7 @@ Rules:
 
 # 52. Release package filenames
 
-Recommended pattern:
+Canonical pattern:
 
 ```text
 <project-id>-<project-version>.<archive-extension>
@@ -1847,7 +1862,7 @@ Package naming must be defined by release policy before automation depends on it
 
 # 53. Schema fixture filenames
 
-Recommended pattern:
+Canonical pattern:
 
 ```text
 <schema-short-name>_<case>.<extension>
@@ -1928,7 +1943,7 @@ Examples:
 .parse.gold.tmp
 ```
 
-When concurrent writers are possible:
+When concanonical writers are possible:
 
 ```text
 .<basename>.<process-or-random-safe-token>.tmp
@@ -1957,9 +1972,16 @@ If filesystem lock or incomplete-run markers are introduced, use hidden lowercas
 
 Such names require explicit ownership and lifecycle.
 
+`.finalizing` and any incomplete-run marker are governed by:
+
+```text
+docs/operations/RUN_DIRECTORY_LIFECYCLE.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
+```
+
 Do not introduce sentinel files ad hoc.
 
-A sentinel becomes contractual when discovery or cleanup depends on it.
+A sentinel becomes contractual when run discovery, finalization, recovery, or cleanup depends on it.
 
 ---
 
@@ -2019,7 +2041,7 @@ Do not use these directories as active providers.
 
 # 59. Windows launcher filenames
 
-Recommended root or script names:
+Canonical root or script names:
 
 ```text
 run-gf-wordbench.cmd
@@ -2147,7 +2169,7 @@ Project contract IDs use:
 PIFC-<DOMAIN>-<NUMBER>
 ```
 
-or the active canonical project-lock family when finalized.
+or the family defined by the active canonical project lock.
 
 External contract IDs use:
 
@@ -2473,7 +2495,7 @@ Legacy read-only source:
 
 Rules:
 
-- current writer emits only `.gf_wordbench_state.json`;
+- the canonical writer emits only `.gf_wordbench_state.json`;
 - one state file per application scope;
 - state must not be confused with project configuration;
 - do not add version numbers to filename;
@@ -2806,7 +2828,7 @@ Rules:
 
 - first attempt may omit suffix only when no retry is possible;
 - when retries are supported, consistent suffixing for every attempt is preferred;
-- final result references all attempts;
+- the aggregate result references all attempts;
 - do not overwrite failed-attempt evidence.
 
 ---
@@ -2951,7 +2973,7 @@ release manifests
 public Python imports
 ```
 
-Before implementation, the owner selects a canonical name.
+Before introducing a public asset, the owner selects its canonical name.
 
 ---
 
@@ -3116,8 +3138,8 @@ Use explicit names when multiple formats exist:
 
 ```text
 report_json.py
-report_markdown.py
-report_ai.py
+report_md.py
+report_ai_ready.py
 manifest_writer.py
 summary_reader.py
 project_loader.py
@@ -3268,7 +3290,7 @@ Canonical migration mappings:
 
 Rules:
 
-- current filenames and writers use GF Wordbench identity;
+- canonical filenames and writers use GF Wordbench identity;
 - historical fixtures preserve old names;
 - compatibility code may recognize old names;
 - new docs must not present legacy names as canonical.
@@ -3277,7 +3299,7 @@ Rules:
 
 # 104. Naming migration outputs
 
-Recommended migration report:
+Canonical migration report:
 
 ```text
 migration-<migration-id>.md
@@ -3448,9 +3470,9 @@ Do not put an example file beside the canonical active project where discovery m
 
 # 110. Naming local overrides
 
-GF Wordbench should avoid project-local override files unless explicitly designed.
+Project-local override files are not part of the canonical project contract.
 
-If introduced, use a clear non-canonical filename such as:
+An explicitly supported local-override contract uses a clearly noncanonical filename such as:
 
 ```text
 project.local.toml
@@ -3486,7 +3508,7 @@ Rules:
 - project identity must not depend on undocumented `.env`;
 - `.env.example` contains placeholders only.
 
-No automatic `.env` support should be assumed without implementation and security review.
+Automatic `.env` loading is outside this naming contract and requires an explicit configuration and security contract.
 
 ---
 
@@ -3708,7 +3730,7 @@ run-relative paths
 generated basenames
 ```
 
-Recommended ownership:
+Canonical ownership:
 
 ```text
 app/utils/path_utils.py
@@ -3719,7 +3741,7 @@ Do not duplicate regexes in CLI, GUI, project loader, and report writers.
 
 ---
 
-# 122. Recommended identifier patterns
+# 122. Identifier patterns
 
 Conceptual patterns:
 
@@ -4075,7 +4097,7 @@ A clone/reset operation may create staging directories:
 
 only within an owned parent and with explicit lifecycle.
 
-Final active directory remains:
+The canonical active directory remains:
 
 ```text
 project
@@ -4131,17 +4153,19 @@ Do not introduce competing summary files without a distinct role.
 
 ---
 
-# 140. Naming status ledgers and decision logs
+# 140. Naming decision logs, known issues, and release criteria
 
 Canonical project files:
 
 ```text
-STATUS_LEDGER.md
 DECISION_LOG.md
 KNOWN_ISSUES.md
+RELEASE_CRITERIA.md
 ```
 
-Entries inside them use stable IDs when needed.
+These documents contain durable project decisions, accepted limitations, and release requirements.
+
+`STATUS_LEDGER.md` is not a canonical implementation-progress document. Legacy durable content from such a file is migrated to the appropriate owner document rather than maintained as a parallel status tracker.
 
 Do not create:
 
@@ -4149,9 +4173,10 @@ Do not create:
 STATUS_LEDGER_2.md
 DECISIONS_NEW.md
 ISSUES_FINAL.md
+RELEASE_CRITERIA_LATEST.md
 ```
 
-Split only when scale and ownership justify a versioned structural change.
+Split a document only when scale and ownership justify a coordinated structural change.
 
 ---
 
@@ -4233,7 +4258,7 @@ Do not create uncontrolled numbered files.
 
 GF Wordbench run evidence is immutable per run and should not need log rotation inside one run.
 
-Application-global logs, if introduced, may use:
+Application-global logs, when governed by an explicit logging policy, use:
 
 ```text
 gf-wordbench.log
@@ -4248,9 +4273,7 @@ Do not rotate canonical run reports.
 
 # 146. Naming cache directories
 
-No cache is required by the core architecture.
-
-If introduced:
+No cache directory is canonical. An explicitly owned cache contract uses:
 
 ```text
 .gf-wordbench-cache/
@@ -4289,7 +4312,7 @@ Do not encode `.venv` location into project configuration.
 
 # 148. Naming coverage and test outputs
 
-Recommended conventional names:
+Canonical conventional names:
 
 ```text
 .coverage
@@ -4358,7 +4381,7 @@ Use only if framework and project releases share a repository and need disambigu
 
 If the repository contains only the project release line, simple `v1.2.0` may be appropriate.
 
-The release policy owns the final tag form.
+The release policy owns the canonical tag form.
 
 ---
 
@@ -4518,39 +4541,34 @@ Do not include full SHA-256 in filenames unless immutable content-addressed stor
 
 # 159. Naming content-addressed artifacts
 
-GF Wordbench does not currently require content-addressed storage.
+Content-addressed storage is not part of the canonical GF Wordbench artifact model.
 
-If introduced, use a dedicated directory:
+An extension that adopts content-addressed storage uses a dedicated namespace such as:
 
 ```text
 artifacts/by-sha256/<full-hash>
 ```
 
-with a manifest mapping logical identity to content identity.
+and requires a manifest mapping logical identity to content identity.
 
-Do not mix content-addressed names with human-owned canonical report names.
+Content-addressed names must not replace human-owned canonical report names or erase artifact roles and provenance.
 
 ---
 
-# 160. Naming policy for future plugins
+# 160. Plugin naming boundary
 
-A dynamic plugin system is not part of the current core architecture.
+GF Wordbench does not define a dynamic third-party plugin namespace.
 
-If introduced, plugin IDs should use:
+The diagnostic tool registry is not a general plugin system.
 
-```text
-reverse-domain or lowercase dotted identifier
-```
+Therefore:
 
-Example:
+- no canonical `plugins/` directory is created;
+- no plugin IDs are persisted;
+- package discovery does not load arbitrary third-party code;
+- a plugin extension requires its own accepted architecture, security, lifecycle, and naming contract.
 
-```text
-org.example.gf-wordbench.graphviz
-```
-
-Plugin filenames and package names would require a separate plugin contract.
-
-Do not reserve or create plugin directories preemptively.
+Names such as reverse-domain plugin IDs are outside this reference until such a separate contract exists.
 
 ---
 
@@ -4598,7 +4616,7 @@ AI_BRIEF.md
 AI_READY.md
 ```
 
-as current outputs merely to support an alias.
+as canonical outputs merely to support an alias.
 
 ---
 
@@ -4716,7 +4734,7 @@ expected-parse.txt
 
 only as historical migration sources.
 
-Current active exact expectations use:
+Canonical active exact expectations use:
 
 ```text
 parse.gold
@@ -4731,7 +4749,7 @@ Assertion-only expectations belong in scenario configuration or markers, not amb
 Canonical project release criteria:
 
 ```text
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 Framework release policy:
@@ -4878,9 +4896,9 @@ User/project owner decides.
 
 ---
 
-# 176. Naming check commands
+# 176. Naming validation commands
 
-Suggested commands:
+Canonical command family:
 
 ```text
 gf-wordbench names check
@@ -4888,7 +4906,7 @@ gf-wordbench names check --strict
 gf-wordbench project names check
 ```
 
-Potential checks:
+The command validates:
 
 ```text
 canonical report names
@@ -4903,13 +4921,13 @@ template/project parity
 safe-key collisions
 ```
 
-These commands are future targets until implemented.
+Command availability and option semantics are owned by `docs/usage/CLI_REFERENCE.md`; this document owns only their naming family.
 
 ---
 
 # 177. Naming check severity
 
-Recommended classifications:
+Canonical classifications:
 
 ```text
 error
@@ -4987,7 +5005,7 @@ gf-audit
 
 Legacy run artifact aliases are read from historical summaries.
 
-Current run filenames follow GF Wordbench canonical layout.
+Canonical run filenames follow the GF Wordbench run layout.
 
 Old run directories remain historical and are not renamed automatically.
 
@@ -5240,7 +5258,7 @@ A consumer must not independently invent a name owned elsewhere.
 
 # 191. Required tests
 
-Recommended files:
+Canonical test files:
 
 ```text
 tests/reference/test_file_naming.py
@@ -5293,7 +5311,7 @@ gold updater writes matching gold name
 project loader validates canonical project paths
 compiler/log writers use safe-key service
 CLI and GUI do not reconstruct artifact filenames
-current writers emit no legacy names
+canonical writers emit no legacy names
 ```
 
 ---
@@ -5315,7 +5333,7 @@ An asset is naming-compliant when:
 
 ---
 
-# 194. Final invariants
+# 194. Normative invariants
 
 GF Wordbench naming must preserve:
 
@@ -5339,17 +5357,17 @@ GF Wordbench naming must preserve:
 18. no `new`, `old`, `final`, `latest`, `_v2`, or date suffixes in active canonical names.
 19. no silent public identifier sanitization.
 20. versioned migration for public renames.
-21. current writers emit no legacy names.
+21. canonical writers emit no legacy names.
 22. one owner per generated naming family.
 23. source provenance is preserved.
 24. naming does not substitute for structured status or metadata.
 
 ---
 
-# 195. Final rule
+# 195. Governing rule
 
 > Name files by their stable responsibility and identity, not by their temporary development state.
 
-A canonical name must remain understandable after the current implementation, developer, machine, and release have changed.
+A canonical name remains understandable across code revisions, maintainers, machines, and releases.
 
-GF Wordbench names should make ownership and purpose obvious without encoding transient status, personal environment details, or speculative architecture.
+GF Wordbench names make ownership and purpose obvious without encoding transient status, personal environment details, or speculative architecture.

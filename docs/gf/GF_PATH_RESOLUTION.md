@@ -1,17 +1,20 @@
 # GF Wordbench — GF Path Resolution
 
 **Document ID:** `GF-WB-GF-PATH-RESOLUTION`  
-**Status:** Final technical specification  
-**Applies to:** GF compilation, GF shell scenarios, grammar loading, introspection, and PGF construction  
+**Status:** Normative technical specification  
+**Applies to:** GF compilation, native `.gfs` scenarios, grammar loading, introspection, and PGF construction for one active Wordbench project  
 **Owner:** GF Wordbench maintainers  
 **Normative counterparts:**  
+- `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
 - `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`
 - `docs/PERSISTED_SCHEMA_LOCK.md`
 - `docs/INTERFILE_CONTRACT_LOCK.md`
 - `docs/configuration/PROJECT_TOML_REFERENCE.md`
 - `docs/configuration/ENVIRONMENT_AND_PATHS.md`
+- `docs/decisions/ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md`
 
-**Document version:** `1.0.0`
+**Document version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -21,7 +24,9 @@ This document defines how GF Wordbench constructs, validates, records, and suppl
 
 The GF search path determines where GF resolves imported modules, compiled modules, RGL resources, project helpers, and other dependencies. A path that differs between compilation, scenarios, and release builds can produce false failures, false successes, or machine-specific behavior.
 
-GF Wordbench therefore uses one centralized path-resolution process.
+GF Wordbench therefore uses one centralized path-resolution process inside the GF anti-corruption boundary.
+
+The resolver operates for exactly one active project in one run. Validation use cases request GF operations through `GfToolPort`; the GF adapter resolves and supplies the effective path together with its provenance.
 
 > Every GF operation in one run MUST consume the same resolved GF path unless the operation declares and records an explicit contract-specific extension.
 
@@ -46,7 +51,8 @@ This specification governs:
 - command-line serialization;
 - recorded path evidence;
 - path compatibility across compilation, scenarios, and PGF builds;
-- migration from the former `gf-audit` path builder.
+- migration from the former `gf-audit` path builder;
+- isolation of path resolution from `gf-portfolio` and other external consumers.
 
 This specification does not govern:
 
@@ -56,7 +62,8 @@ This specification does not govern:
 - report retention;
 - GF's internal precedence rules;
 - module-to-module contracts inside the active language project;
-- the contents of RGL modules.
+- the contents of RGL modules;
+- discovery, indexing, or orchestration of several Wordbench workspaces by `gf-portfolio`.
 
 ---
 
@@ -70,7 +77,7 @@ This specification does not govern:
 - **RGL ALIAS**: documented short name that resolves beneath the configured RGL root.
 - **EXPLICIT PATH**: complete GF path supplied directly for one run.
 - **DERIVED PATH**: path constructed from project configuration and the environment.
-- **EFFECTIVE PATH**: final ordered, normalized, validated, deduplicated path used by GF.
+- **EFFECTIVE PATH**: ordered, normalized, validated, deduplicated path used by GF.
 - **PATH SOURCE**: origin of a path part, such as explicit override, project configuration, RGL alias, or environment fallback.
 - **PORTABLE PATH**: path stored relative to the project root and using `/`.
 - **ENVIRONMENT PATH**: machine-local absolute path such as the RGL root.
@@ -124,25 +131,36 @@ The framework owns:
 - passing it to GF;
 - recording it in run metadata.
 
-### 4.4 Single implementation owner
+### 4.4 Single owner
 
-Exactly one framework component MUST own effective GF path construction.
+Exactly one GF anti-corruption adapter MUST own effective GF path construction.
 
-Recommended module:
+Canonical adapter role:
 
 ```text
-app/gf/path_resolver.py
+app/adapters/gf/path_resolver.py
 ```
 
-Recommended public operation:
+Canonical operation:
 
 ```python
 resolve_gf_path(request: GFPathRequest) -> GFPathResolution
 ```
 
-Compilation, scenario execution, version-dependent adapters, and PGF construction MUST consume the resulting object.
+`GfToolPort` accepts typed GF operations. The GF adapter consumes `GFPathResolution` when translating those operations into executable requests.
 
-They MUST NOT implement independent path-building logic.
+Compilation, scenario execution, introspection, version-specific command construction, and PGF construction MUST NOT implement independent path-building logic.
+
+### 4.5 Portfolio boundary
+
+`gf-portfolio` MAY consume completed public Wordbench run artifacts that describe the effective GF path.
+
+It MUST NOT:
+
+- supply or override Wordbench path configuration;
+- register several workspaces inside the Wordbench resolver;
+- introduce Portfolio roots, project IDs, or storage paths into `project.toml`;
+- become a dependency of `GfToolPort`, the resolver, or any Wordbench run.
 
 ---
 
@@ -582,18 +600,11 @@ Recursive discovery is prohibited because it:
 
 ### 11.5 Required versus optional aliases
 
-The project MAY declare required RGL aliases.
+Every entry declared in `gf.path_parts` is required.
 
-A final implementation may extend the `[gf]` table with:
+The resolver MAY add an optional compatibility alias only when a framework compatibility policy names it explicitly. An omitted optional alias MUST remain visible in resolution evidence and MUST NOT satisfy a project-declared requirement.
 
-```toml
-required_path_parts = [
-  "rgl:abstract",
-  "rgl:common",
-]
-```
-
-Until that field is introduced through a schema revision, every configured `path_parts` entry is treated as required unless compatibility policy marks a known alias optional.
+Introducing separate required and optional project fields is a versioned schema change governed by `PROJECT_TOML_REFERENCE.md` and `PERSISTED_SCHEMA_LOCK.md`.
 
 ---
 
@@ -639,7 +650,7 @@ Trailing separators are removed except for filesystem roots.
 
 `.` segments are normalized.
 
-`..` is allowed only during initial parsing when final resolution remains under the permitted root.
+`..` is allowed only during initial parsing when the resolved result remains under the permitted root.
 
 Canonical project configuration SHOULD reject `..` before resolution.
 
@@ -766,7 +777,7 @@ It MAY create run-owned output and artifact directories.
 
 ## 15. Effective path data model
 
-Recommended immutable models:
+Canonical immutable models:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -815,7 +826,7 @@ They MUST NOT receive only an undocumented concatenated string when they also ne
 
 ### 15.2 Immutability
 
-After run configuration is finalized, the effective resolution SHOULD be immutable for the run.
+After run configuration is resolved and frozen, the effective resolution MUST remain immutable for the run.
 
 ---
 
@@ -877,47 +888,35 @@ The logged command and executed command MUST derive from the same argument list.
 
 ## 17. Shared use across GF operations
 
-The following components MUST consume the same resolution service.
+All GF-backed validation capabilities consume the same resolution through `GfToolPort` and the GF anti-corruption adapter.
 
 ### 17.1 Source compilation
 
-```text
-app/audit/compiler.py
-```
-
-Uses the effective path for per-file GF compilation.
+`validation.application` submits a typed compilation operation. The GF adapter supplies the effective path to GF and returns preserved process evidence plus interpreted compilation results.
 
 ### 17.2 Scenario execution
 
-```text
-app/audit/scenario_runner.py
-```
-
-Uses the same effective path when loading grammars and running `.gfs` scripts.
+`validation.application` submits the registered native `.gfs` scenario operation. Grammar loading and script execution use the same effective path as compilation.
 
 ### 17.3 PGF construction
 
-```text
-app/audit/pgf_builder.py
-```
+`validation.application` submits the project-defined PGF operation. Release-entrypoint construction uses the same effective path and verifies the expected artifact.
 
-Uses the same effective path for final entrypoint construction.
+### 17.4 GF introspection
 
-### 17.4 GF shell introspection
-
-Any morphology, generation, missing-linearization, or grammar-inspection stage uses the same effective path.
+Morphology, generation, missing-linearization, and grammar-inspection operations use the same effective path through the same port and adapter.
 
 ### 17.5 Allowed extension
 
-A stage MAY request additional temporary path parts only when:
+A GF operation MAY request additional temporary path parts only when:
 
-- the contract documents the reason;
+- its contract documents the reason;
 - the added paths are validated;
 - the base effective path remains intact;
 - the extension is recorded;
-- the stage result records its extended path.
+- the operation result records its extended path.
 
-Silent stage-specific path changes are prohibited.
+Silent operation-specific path changes are prohibited.
 
 ---
 
@@ -962,7 +961,7 @@ GF version or capability context
 
 ### 19.1 `summary.json`
 
-Recommended metadata shape:
+Canonical metadata shape:
 
 ```json
 {
@@ -980,7 +979,7 @@ Recommended metadata shape:
 }
 ```
 
-The final schema MUST be coordinated with `PERSISTED_SCHEMA_LOCK.md`.
+The persisted schema MUST be coordinated with `PERSISTED_SCHEMA_LOCK.md`.
 
 ### 19.2 Human report
 
@@ -1119,7 +1118,7 @@ It MUST NOT be accepted in canonical project paths.
 
 ## 23. Migration from `gf-audit`
 
-The earlier implementation contains two path-building locations:
+The legacy GF Audit baseline contains two path-building locations:
 
 - bootstrap default-path construction;
 - compiler fallback resolution.
@@ -1145,7 +1144,7 @@ detected RGL subdirectories:
 
 It joins those entries into one GF path string.
 
-### 23.2 Migration target
+### 23.2 Canonical replacement
 
 GF Wordbench moves this behavior to one resolver and replaces language-specific defaults with:
 
@@ -1187,7 +1186,7 @@ Any difference in effective directories or order must be reviewed.
 
 ## 24. Error model
 
-Recommended path-resolution error codes:
+Canonical path-resolution error codes:
 
 ```text
 GF_PATH_PROJECT_ROOT_MISSING
@@ -1259,9 +1258,9 @@ Diagnostics MUST NOT suggest creating missing source or RGL directories automati
 
 ## 26. Contract invariants
 
-The following invariants are final.
+The following invariants are normative.
 
-1. One resolver owns effective GF path construction.
+1. One resolver owns effective GF path construction for one active project in one run.
 2. CLI and GUI produce equivalent path requests from equivalent inputs.
 3. Compilation, scenarios, introspection, and PGF build share one base resolution.
 4. Project-owned paths are portable and project-relative.
@@ -1281,6 +1280,7 @@ The following invariants are final.
 18. Normal reports do not reconstruct the GF path independently.
 19. Path-resolution changes are contract changes.
 20. Path-list separator behavior is centralized and tested.
+21. `gf-portfolio` cannot supply, override, or persist Wordbench path resolution.
 
 ---
 
@@ -1303,14 +1303,15 @@ The following are prohibited:
 - dropping provenance after deduplication;
 - using report prose as the source of path configuration;
 - allowing GUI and CLI resolution precedence to differ;
-- changing the effective path after run configuration is finalized;
-- using a successful exit from one path configuration as proof another configuration is valid.
+- changing the effective path after run configuration is frozen;
+- using a successful exit from one path configuration as proof another configuration is valid;
+- accepting Portfolio workspace roots or registry state as Wordbench path input.
 
 ---
 
 ## 28. Required tests
 
-Recommended test files:
+Canonical test files:
 
 ```text
 tests/gf/test_path_resolver.py
@@ -1380,7 +1381,9 @@ Real-GF tests SHOULD be marked separately when GF is not available in every deve
 
 ---
 
-## 29. Suggested CLI diagnostics
+## 29. CLI path diagnostics
+
+The CLI reference owns the exact command syntax. The path-resolution command surface includes:
 
 Resolve without executing GF:
 
@@ -1406,7 +1409,7 @@ Validate project and RGL paths:
 gf-wordbench paths check
 ```
 
-Suggested output:
+Canonical output:
 
 ```text
 GF path resolution: OK
@@ -1423,7 +1426,7 @@ Effective path:
   4 rgl      C:/work/gf-rgl/src/prelude
 ```
 
-These commands are product recommendations. Their exact CLI syntax becomes normative only when locked by the CLI reference and implementation contract.
+These commands MUST remain synchronized with `docs/usage/CLI_REFERENCE.md` and `docs/reference/COMMAND_REFERENCE.md`.
 
 ---
 
@@ -1559,11 +1562,12 @@ A coordinated change MUST update:
 10. contract tests;
 11. migration tests;
 12. this document;
-13. relevant lock files.
+13. relevant lock files;
+14. `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` when the product boundary changes.
 
 ---
 
-## 32. Final rule
+## 32. Core rule
 
 > GF Wordbench resolves the GF path once, validates it once, records it once, and reuses that same resolution everywhere GF is invoked.
 

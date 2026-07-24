@@ -6,15 +6,17 @@
 **Primary owners:** GF Wordbench maintainers  
 **Test framework:** `pytest`  
 **Supporting tools:** `pytest-cov`, `ruff`, `mypy`  
-**Specification version:** `1.0`  
-**Target product state:** Final architecture  
-**Last reviewed:** 2026-07-22  
+**Specification version:** `1.1`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Product-boundary authority:** ADR-0001, ADR-0011 and ADR-0012  
+**Contract authorities:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`  
+**Last reviewed:** 2026-07-24  
 
 ---
 
 ## 1. Purpose
 
-This document defines the final testing strategy for GF Wordbench.
+This document defines the testing strategy for GF Wordbench.
 
 It specifies:
 
@@ -35,7 +37,7 @@ It specifies:
 - local and CI commands;
 - release gates;
 - failure triage;
-- migration from the current GF Audit baseline.
+- compatibility with the inherited GF Audit evidence and formats.
 
 The goal is not merely to accumulate tests.
 
@@ -69,6 +71,11 @@ GF Wordbench therefore uses a layered suite.
 The following documents define behaviors tested by this specification:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/architecture/PRODUCT_BOUNDARIES.md
+docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 docs/architecture/ARCHITECTURE_OVERVIEW.md
 docs/architecture/DATA_MODEL.md
 docs/architecture/ARTIFACT_MODEL.md
@@ -90,8 +97,8 @@ The active language project has separate language-validation evidence under:
 
 ```text
 project/validation/
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 ```
 
 Framework tests must not hardcode one active language.
@@ -149,9 +156,22 @@ This document does not define:
 - a requirement for mutation-testing tools in version `1.0`;
 - a requirement for property-testing libraries in version `1.0`.
 
-Property-based or mutation testing may be added later where it provides stable value.
+Property-based or mutation testing may be added where it provides stable value.
 
 It is not required merely to increase tool count.
+
+## 5.1 Independent-product boundary
+
+GF Wordbench tests run without `gf-portfolio` installed, configured or available.
+
+The suite verifies:
+
+- no Wordbench package imports `gf-portfolio`;
+- no Wordbench schema contains a Portfolio workspace registry or private Portfolio state;
+- no validation, diagnostic, reporting or release test requires a Portfolio service;
+- Wordbench produces finalized public artifacts without a Portfolio runtime;
+- external consumers may read public versioned artifacts without mutating them;
+- Portfolio-specific adapters and aggregation tests remain outside the Wordbench core suite.
 
 ---
 
@@ -192,7 +212,7 @@ A failing integration test should retain enough evidence to explain:
 
 ## 6.4 Boundary focus
 
-Contract tests verify boundaries, not private implementation details.
+Contract tests verify boundaries, not private code details.
 
 ## 6.5 Minimal mocking
 
@@ -202,7 +222,7 @@ Do not mock every helper inside the component under test.
 
 ## 6.6 Realistic fixtures
 
-Fixtures should resemble canonical project, run, schema, and GF evidence formats.
+Fixtures resemble canonical project, run, schema, and GF evidence formats.
 
 ## 6.7 No false success
 
@@ -231,7 +251,7 @@ A test may assert several closely related invariants, but its failure must ident
 
 # 7. Test layers
 
-The final suite has eight layers.
+The suite has eight layers.
 
 ```text
 1. unit
@@ -265,7 +285,7 @@ Examples:
 - migration field mapping;
 - release-gate predicates.
 
-Unit tests should:
+Unit tests:
 
 - use `tmp_path` for filesystem needs;
 - use explicit dataclass/model builders;
@@ -282,11 +302,12 @@ Component tests exercise one architectural owner with its immediate collaborator
 Examples:
 
 ```text
-compiler with fake ProcessResult
-scenario runner with fake process runner
-audit core with fake stages
-report writer with real RunResult fixture
-bootstrap with temporary project and controlled environment
+validation compilation service with fake ProcessResult
+scenario validation service with fake external-tool port
+runs coordinator with fake validation stages
+reporting service with real RunResult fixture
+projects loader with temporary project configuration
+bootstrap with controlled ports and environment
 ```
 
 Component tests prove:
@@ -305,16 +326,17 @@ Contract tests verify documented provider-consumer agreements.
 
 Examples:
 
-- CLI and GUI use the same configuration builder;
-- report writers consume `RunResult`;
-- compiler returns the documented compile model;
-- process runner preserves stdout and stderr;
-- artifact paths come from `RunPaths`;
+- CLI and GUI call the same application use cases;
+- reporting consumes structured run results;
+- validation returns the documented compile and scenario models;
+- the external-tool adapter preserves stdout and stderr;
+- artifact paths come from the runs-owned path registry;
 - normal validation does not modify gold;
-- project loader accepts the canonical schema;
-- readers accept documented legacy forms;
-- no report imports compiler or scenario runner;
-- no component reconstructs owned artifact names.
+- the projects module accepts the canonical project schema;
+- readers accept documented legacy forms through migration;
+- reporting does not import validation execution adapters;
+- no component reconstructs artifacts owned by another module;
+- Wordbench starts, tests and produces artifacts without `gf-portfolio`.
 
 Contract tests are required because local unit tests may all pass while cross-file behavior drifts.
 
@@ -420,7 +442,7 @@ CLI arguments
     → manifest verification
 ```
 
-End-to-end tests should use:
+End-to-end tests use:
 
 - a fake GF executable for the standard cross-platform suite;
 - a real GF executable for a smaller release integration suite.
@@ -452,38 +474,38 @@ A release is not accepted based only on percentage coverage.
 
 # 16. Canonical test directory structure
 
-Recommended final structure:
-
 ```text
 tests/
 ├── conftest.py
 ├── unit/
-│   ├── audit/
-│   ├── config/
+│   ├── projects/
+│   ├── runs/
+│   ├── validation/
 │   ├── diagnostics/
+│   ├── reporting/
+│   ├── schemas/
 │   ├── paths/
-│   ├── process/
-│   ├── reports/
-│   ├── scenarios/
-│   └── schemas/
+│   └── process/
 ├── components/
 │   ├── test_bootstrap.py
-│   ├── test_compiler.py
-│   ├── test_pgf_builder.py
-│   ├── test_scenario_runner.py
-│   ├── test_audit_core.py
-│   └── test_report_coordinator.py
+│   ├── test_project_loader.py
+│   ├── test_run_coordinator.py
+│   ├── test_compilation_service.py
+│   ├── test_scenario_service.py
+│   ├── test_diagnostics_service.py
+│   └── test_reporting_service.py
 ├── contracts/
-│   ├── test_bootstrap_contracts.py
-│   ├── test_audit_stage_contracts.py
+│   ├── test_project_contracts.py
+│   ├── test_run_contracts.py
+│   ├── test_validation_contracts.py
+│   ├── test_diagnostics_contracts.py
+│   ├── test_reporting_contracts.py
 │   ├── test_model_contracts.py
-│   ├── test_report_contracts.py
-│   ├── test_scenario_contracts.py
 │   ├── test_artifact_ownership.py
-│   ├── test_project_config_contracts.py
 │   ├── test_dependency_directions.py
 │   ├── test_environment_contract.py
 │   ├── test_filesystem_contract.py
+│   ├── test_product_boundary.py
 │   └── test_windows_contract.py
 ├── schemas/
 │   ├── test_project_schema.py
@@ -515,9 +537,9 @@ tests/
     └── fixture_paths.py
 ```
 
-This is the target organization.
+This organization is canonical.
 
-A migration may occur incrementally.
+A file may move without changing its test intent, but each test remains assigned to one stable proof responsibility.
 
 ---
 
@@ -527,10 +549,10 @@ A new test file is justified when it owns a stable test domain.
 
 Do not create one file per function.
 
-Recommended balance:
+Required balance:
 
-- one test module per cohesive implementation owner;
-- separate contract tests from implementation tests;
+- one test module per cohesive contract owner;
+- separate contract tests from component and unit tests;
 - separate real-GF tests from fake-process tests;
 - separate schema versions or formats when fixtures become substantial.
 
@@ -542,7 +564,7 @@ Small related tests may remain together.
 
 The project uses `pytest`.
 
-Recommended configuration:
+Canonical configuration:
 
 ```toml
 [tool.pytest.ini_options]
@@ -567,7 +589,7 @@ markers = [
 ]
 ```
 
-The exact final `pyproject.toml` may add coverage defaults through documented commands rather than forcing coverage on every quick local run.
+`pyproject.toml` may add coverage defaults through documented commands rather than forcing coverage on every quick local run.
 
 ---
 
@@ -587,7 +609,7 @@ This prevents a test from being excluded accidentally from release gates.
 
 Invalid pytest configuration must fail.
 
-Warnings caused by deprecated test configuration should be resolved deliberately.
+Warnings caused by deprecated test configuration are resolved deliberately.
 
 ---
 
@@ -720,7 +742,7 @@ ruff
 mypy
 ```
 
-The final project may pin compatible version ranges in `pyproject.toml`.
+The project pins compatible version ranges in `pyproject.toml` according to dependency policy.
 
 A new mandatory test dependency requires:
 
@@ -739,7 +761,7 @@ The project’s declared minimum Python version is authoritative.
 
 The baseline currently targets Python `3.11`.
 
-The final CI matrix should include:
+The CI matrix includes:
 
 ```text
 minimum supported Python
@@ -902,7 +924,7 @@ Canonical fixture text uses:
 ```text
 UTF-8 without BOM
 LF
-final newline where required
+terminating newline where required
 ```
 
 Compatibility fixtures should explicitly include:
@@ -962,7 +984,7 @@ rather than inventing metadata.
 
 Tests should use shared fixture builders for large models.
 
-Recommended helpers:
+Canonical helpers:
 
 ```python
 make_app_config(...)
@@ -981,7 +1003,7 @@ Builders should:
 - provide canonical safe defaults;
 - expose meaningful overrides;
 - return real production models;
-- avoid `SimpleNamespace` after the final models exist;
+- use typed shared models at cross-component boundaries;
 - remain test-only.
 
 ---
@@ -1004,7 +1026,7 @@ The inherited GF Audit tests use `SimpleNamespace` for some CLI and report fixtu
 
 This is acceptable for the historical baseline.
 
-The final suite should migrate cross-component tests toward actual typed models because:
+Cross-component tests use actual typed models because:
 
 - field mistakes should fail early;
 - serialization meaning matters;
@@ -1043,12 +1065,12 @@ Good:
 
 ```text
 scenario runner’s process executor dependency
-audit core’s stage functions
+runs coordinator’s validation-stage dependencies
 CLI’s application service
 clock provider
 ```
 
-Avoid patching deeply nested implementation helpers whose names are not part of a contract.
+Avoid patching deeply nested private helpers whose names are not part of a contract.
 
 ---
 
@@ -1092,7 +1114,7 @@ A fake executable must:
 - return documented exit codes;
 - clean up through the process runner.
 
-Platform wrapper scripts may differ, but behavior should be equivalent.
+Platform wrapper scripts may differ, but behavior remains equivalent.
 
 ---
 
@@ -1109,7 +1131,7 @@ scenario-success
 scenario-marker-fail
 ```
 
-It is not a reimplementation of GF.
+It does not reproduce GF semantics.
 
 It only provides controlled external-process evidence for framework integration tests.
 
@@ -1119,7 +1141,7 @@ Tests of actual GF semantics remain in the real-GF suite.
 
 # 45. Captured GF evidence
 
-Diagnostic tests should use captured stdout and stderr fixtures.
+Diagnostic tests use captured stdout and stderr fixtures.
 
 They should test:
 
@@ -1138,7 +1160,7 @@ Derived expected diagnostic records belong in separate fixture metadata or asser
 
 # 46. Small real-GF fixture grammar
 
-The real-GF suite should use a tiny language-neutral or synthetic fixture grammar.
+The real-GF suite uses a tiny language-neutral or synthetic fixture grammar.
 
 It should contain:
 
@@ -1179,7 +1201,7 @@ The fixture must:
 
 Real-GF tests obtain configuration from explicit test inputs.
 
-Recommended variables:
+Canonical test-harness variables:
 
 ```text
 GF_WORDBENCH_TEST_GF_EXE
@@ -1215,7 +1237,7 @@ A skip is not acceptable when:
 - a dependency import fails unexpectedly;
 - setup is invalid.
 
-Release jobs should assert zero unexpected skips in required markers.
+Release jobs assert zero unexpected skips in required markers.
 
 ---
 
@@ -1268,7 +1290,7 @@ Repeated reruns are not a substitute for fixing nondeterminism.
 
 # 52. Unit test domains
 
-The final unit suite should include cohesive coverage for:
+The unit suite includes cohesive coverage for:
 
 ```text
 config parsing
@@ -1385,7 +1407,7 @@ The inherited baseline already tests:
 - empty files;
 - summary-log creation.
 
-The final scanner suite must additionally test:
+The scanner suite also tests:
 
 - doubled GF quotes;
 - nested comments if supported by scanner policy;
@@ -1444,7 +1466,7 @@ Component tests use fake process results.
 Required cases:
 
 - canonical command order;
-- source file is final source argument;
+- source file is the terminal source argument;
 - GF path option;
 - output directory option;
 - CPU option enabled and disabled;
@@ -1565,7 +1587,7 @@ marker phrase inside unrelated text
 marker-free approved scenario
 ```
 
-Marker parsing has one implementation owner.
+Marker parsing has one authoritative owner.
 
 ---
 
@@ -1632,7 +1654,7 @@ Required cases:
 - wrong schema version;
 - wrong normalization version;
 - CRLF compatibility;
-- final newline;
+- terminating newline;
 - Unicode;
 - diff creation;
 - no modification during validation;
@@ -1674,7 +1696,7 @@ The inherited baseline already tests:
 - missing prior summary;
 - `DiffEntry` results.
 
-The final suite must add:
+The suite includes:
 
 - project identity filtering;
 - schema-version validation;
@@ -1713,7 +1735,7 @@ Tests must verify:
 - deterministic order;
 - UTF-8;
 - LF;
-- final newline for text;
+- terminating newline for text;
 - bounded excerpts;
 - secret redaction;
 - partial-run rendering;
@@ -1762,7 +1784,7 @@ Required cases:
 - previous-run regression;
 - missing optional sections;
 - relative artifact links;
-- final newline.
+- terminating newline.
 
 Golden report fixtures may be used when the stable layout is intentionally locked.
 
@@ -1801,7 +1823,7 @@ Required cases:
 - tab removal;
 - newline removal;
 - Unicode;
-- final newline.
+- terminating newline.
 
 ---
 
@@ -1817,7 +1839,7 @@ Required cases:
 - deterministic path order;
 - path containment;
 - modified artifact detection;
-- final-write timing;
+- finalization timing;
 - self-entry policy;
 - atomic write;
 - cleanup/export consumer compatibility.
@@ -1887,24 +1909,24 @@ Where automated launcher execution is unreliable, static contract tests may insp
 
 # 79. Dependency-direction tests
 
-Contract tests should inspect imports or architecture metadata to prohibit:
+Contract tests inspect imports or architecture metadata to enforce:
 
 ```text
-reports → compiler
-reports → scanner
-reports → scenario_runner
-models → reports
-models → GUI
-process_utils → audit models
-scanner → compiler
-compiler → reports
-classifier → process execution
-project configuration → GUI state
+domain → no GUI, CLI, filesystem, process, JSON/TOML library or GF executable
+application → domain and ports
+adapters → ports and external systems
+entrypoints → application
+bootstrap → application, ports and adapters
+reporting → no validation execution adapters
+diagnostics → no process launch outside the external-tool port
+projects → no GUI state authority
+functional module → no private internals of another functional module
+GF Wordbench → no gf-portfolio runtime, storage, configuration or private schemas
 ```
 
-Expected high-level directions should remain intact.
+Expected high-level directions remain intact.
 
-A dependency test must parse Python imports reliably enough to avoid naive substring matches.
+A dependency test parses Python imports and package metadata rather than relying on naive substring matches.
 
 ---
 
@@ -1925,24 +1947,30 @@ Verify:
 
 # 81. Anti-drift tests
 
-Recommended automated checks:
+Required automated checks:
 
 ```text
-public documented provider exists
+documented provider exists
 documented consumer exists
-public symbol exists
+public contract symbol or port exists
 required model field exists
-status values match documentation
-schema IDs and versions match lock
-artifact filenames match RunPaths
-report writers return paths
-no report imports execution stages
-no GUI bypasses application service
-no framework source contains active-language paths
-no normal validation modifies gold
+status values match their owner reference
+schema IDs and versions match the persisted-schema lock
+artifact filenames match the runs-owned path registry
+reporting returns owned paths
+reporting imports no execution adapters
+entrypoints do not bypass application use cases
+framework source contains no active-language defaults
+normal validation does not modify gold
+project template remains language-neutral
+one workspace resolves one active project
+one run resolves one active project and target
+Wordbench imports no gf-portfolio package
+Wordbench schemas contain no Portfolio registry or private state
+Wordbench tests and release gates pass with gf-portfolio absent
 ```
 
-These checks supplement—not replace—review of contract locks.
+These checks supplement review of ADRs and contract locks; they do not replace it.
 
 ---
 
@@ -2017,7 +2045,7 @@ malicious report text
 invalid Unicode
 ```
 
-Security tests should assert safe failure and evidence preservation.
+Security tests assert safe failure and evidence preservation.
 
 ---
 
@@ -2101,7 +2129,7 @@ Verify:
 
 # 90. End-to-end fake-GF tests
 
-A fake-GF E2E fixture should cover:
+A fake-GF E2E fixture covers:
 
 ### Success
 
@@ -2153,7 +2181,7 @@ temporary canonical project
     → manifest verification
 ```
 
-The fixture should remain small enough for every release candidate.
+The fixture remains small enough for every release candidate.
 
 ---
 
@@ -2200,12 +2228,12 @@ Avoid fragile microbenchmarks in the mandatory suite.
 
 Coverage is a diagnostic and release gate, not a quality substitute.
 
-Recommended final policy:
+Coverage policy:
 
 ```text
 overall line coverage minimum: 85%
 changed production lines minimum: 90%
-critical modules branch coverage target: 90%
+critical modules branch coverage minimum: 90%
 ```
 
 Critical modules include:
@@ -2219,9 +2247,9 @@ gold update
 artifact manifest
 ```
 
-The exact threshold may be adjusted deliberately before the first stable release.
+A threshold change is explicit, reviewed and recorded.
 
-It must not be lowered silently to pass a release.
+A threshold is never lowered silently to pass a release.
 
 ---
 
@@ -2235,7 +2263,7 @@ Legitimate exclusions may include:
 - GUI entrypoint wrapper;
 - version metadata constant.
 
-Every `pragma: no cover` should have a defensible reason.
+Every `pragma: no cover` has a documented reason.
 
 Do not exclude complex error paths merely because they are difficult to test.
 
@@ -2253,9 +2281,9 @@ Line coverage alone is insufficient for:
 - schema-version handling;
 - report failure isolation.
 
-Branch coverage should be enabled in release coverage runs.
+Branch coverage is enabled in release coverage runs.
 
-Recommended command:
+Canonical command:
 
 ```text
 python -m pytest \
@@ -2277,7 +2305,7 @@ ruff format --check
 mypy
 ```
 
-Recommended commands:
+Canonical commands:
 
 ```text
 python -m ruff check .
@@ -2303,7 +2331,7 @@ Generated fixture data and gold output must not be reformatted by Python formatt
 
 # 99. Type-checking focus
 
-Type checking should especially protect:
+Type checking especially protects:
 
 ```text
 shared models
@@ -2323,7 +2351,7 @@ Tests may use typed builders to expose model drift.
 
 # 100. Package-build tests
 
-A release candidate should test:
+A release candidate tests:
 
 ```text
 build wheel
@@ -2341,7 +2369,7 @@ The installed package must not depend on repository-relative import accidents.
 
 # 101. Documentation tests
 
-Documentation checks should verify:
+Documentation checks verify:
 
 - referenced canonical files exist;
 - lock IDs are unique;
@@ -2416,7 +2444,7 @@ A command that updates test golds must not also approve project language golds i
 
 # 105. Failure messages
 
-Assertions should explain the contract.
+Assertions explain the contract.
 
 Prefer:
 
@@ -2473,7 +2501,7 @@ Use parameterization for:
 - platform-safe arguments;
 - report ordering.
 
-Parameter IDs should be readable.
+Parameter IDs are readable.
 
 Do not hide complex distinct scenarios in one unreadable parameter matrix.
 
@@ -2481,7 +2509,7 @@ Do not hide complex distinct scenarios in one unreadable parameter matrix.
 
 # 108. Test naming
 
-Recommended form:
+Canonical form:
 
 ```text
 test_<unit>_<condition>_<expected>
@@ -2496,7 +2524,7 @@ test_release_gate_missing_required_pgf_fails
 test_summary_writer_paths_are_run_relative
 ```
 
-Names should communicate the contract without reading the body.
+Names communicate the contract without reading the body.
 
 ---
 
@@ -2515,7 +2543,7 @@ Do not add docstrings that merely repeat the test name.
 
 # 110. Regression tests
 
-Every fixed defect should receive a regression test when reproducible.
+Every reproducible fixed defect receives a regression test.
 
 The test should:
 
@@ -2619,7 +2647,7 @@ A GF command or interpretation change requires:
 
 # 115. Local development sequence
 
-Recommended focused loop:
+Focused development loop:
 
 ```text
 1. run test file for changed owner
@@ -2652,7 +2680,7 @@ A developer changing schemas, process behavior, or GF integration should also ru
 
 # 117. CI stages
 
-Recommended CI stages:
+CI stages:
 
 ```text
 1. static
@@ -2679,6 +2707,7 @@ ruff check
 mypy
 documentation consistency
 dependency-direction checks
+independent-product boundary checks
 ```
 
 No GF is required.
@@ -2711,9 +2740,10 @@ schema tests
 migration tests
 artifact ownership
 anti-drift checks
+Wordbench-without-Portfolio checks
 ```
 
-This stage should be mandatory for every change.
+This stage is mandatory for every change.
 
 ---
 
@@ -2753,7 +2783,7 @@ run summary
 manifest when generated
 ```
 
-The job should fail if required GF tests are unexpectedly skipped.
+The job fails if required GF tests are unexpectedly skipped.
 
 ---
 
@@ -2780,7 +2810,7 @@ Verifies console entrypoints and optional GUI packaging where supported.
 
 On failure, retain only useful bounded evidence.
 
-Recommended:
+Canonical:
 
 ```text
 pytest report
@@ -2959,9 +2989,9 @@ Do not immediately lower the threshold.
 
 ---
 
-# 135. Current GF Audit baseline
+# 135. Legacy GF Audit evidence preserved
 
-The inherited test suite currently contains five main modules:
+The GF Audit suite provides five historical test modules:
 
 ```text
 tests/test_classifier.py
@@ -2971,7 +3001,7 @@ tests/test_scanner.py
 tests/test_smoke.py
 ```
 
-The baseline development configuration already includes:
+Its development configuration includes:
 
 ```text
 pytest
@@ -2980,43 +3010,51 @@ ruff
 mypy
 ```
 
-The existing suite provides useful coverage for:
+The following evidence remains part of Wordbench compatibility coverage:
 
 - failure classification;
-- previous-run diff;
+- previous-run comparison;
 - AI-ready reporting;
 - static scanning;
-- CLI smoke and exit behavior.
-
-This baseline is retained and expanded.
-
----
-
-# 136. Baseline strengths
-
-Existing tests already prove important behaviors such as:
-
-- improved/regressed/new/removed diff states;
+- CLI smoke and exit behavior;
+- improved, regressed, new and removed comparison states;
 - legacy AI report path loading;
-- scanner findings;
 - scanner exclusion of comments and strings;
 - scanner empty-file handling;
-- AI-ready report generation;
-- CLI success/failure/runtime exit paths.
+- report generation and top-error rendering.
 
-These should be migrated, not discarded.
+These tests are migrated or wrapped without discarding their regression value.
 
 ---
 
-# 137. Baseline limitations
+# 136. Legacy compatibility obligations
 
-The inherited suite does not yet provide complete final coverage for:
+Compatibility tests preserve:
+
+```text
+legacy mode aliases
+legacy state loading
+legacy run-summary shapes
+legacy AI report aliases
+legacy source fingerprints
+legacy top-error structures
+legacy scanner rules
+legacy CLI exit semantics where retained by contract
+```
+
+Canonical writers emit only Wordbench formats and names.
+
+---
+
+# 137. Wordbench coverage domains
+
+The Wordbench suite covers:
 
 ```text
 project.toml
 application-state schema
-RunPaths ownership
-central process runner
+runs-owned path registry
+external-tool port and process adapter
 launch failure
 cancellation
 process-tree termination
@@ -3031,62 +3069,36 @@ manifest
 release gates
 schema versions
 migration matrix
-GUI equivalence
-dependency-direction checks
+CLI and GUI application-boundary equivalence
+dependency directions
 security containment
+independent-product boundary
 ```
-
-The final test architecture fills these gaps.
 
 ---
 
-# 138. Baseline migration phases
+# 138. Legacy fixture migration
 
-## Phase 1 — Preserve existing tests
+Cross-component fixtures use typed production models.
 
-Keep the current five modules passing while foundational models are introduced.
+`SimpleNamespace` remains only for narrow protocol stubs where dynamic shape is the intended boundary.
 
-## Phase 2 — Add typed builders
-
-Replace broad `SimpleNamespace` fixtures with production models where cross-component contracts matter.
-
-## Phase 3 — Split cohesive domains
-
-Move tests into final directories without changing behavior unnecessarily.
-
-## Phase 4 — Add contracts and schemas
-
-Lock current and target boundaries.
-
-## Phase 5 — Add process and fake-GF integration
-
-Test external execution without requiring GF.
-
-## Phase 6 — Add real-GF fixture
-
-Prove supported external contracts.
-
-## Phase 7 — Add scenarios, golds, and PGF
-
-Complete validation-stage coverage.
-
-## Phase 8 — Add E2E and release verification
-
-Prove the complete final architecture.
+Legacy tests retain recognizable names, fixtures and historical evidence when moved into the canonical directory structure.
 
 ---
 
 # 139. Test migration rule
 
-Moving a test file is not itself improved coverage.
+Moving a test file is not improved coverage by itself.
 
 During migration:
 
 - preserve test intent;
 - keep regression history recognizable;
-- avoid rewriting all assertions simultaneously with production changes;
+- avoid rewriting every assertion simultaneously with source changes;
 - add missing contract tests separately;
-- remove obsolete baseline tests only after equivalent or stronger proof exists.
+- remove a legacy test only after equivalent or stronger proof exists;
+- preserve legacy inputs unchanged until canonical migration succeeds.
 
 ---
 
@@ -3114,6 +3126,7 @@ A GF Wordbench framework release requires:
 [ ] no strict xpass
 [ ] documentation consistency passes
 [ ] repository fixtures remain unchanged
+[ ] Wordbench passes without `gf-portfolio` installed or configured
 ```
 
 ---
@@ -3305,6 +3318,7 @@ Any drift indicator requires review before release.
 [ ] Skip behavior is intentional
 [ ] No hidden global state remains
 [ ] Related contract/schema tests are updated
+[ ] Product boundary remains independent from `gf-portfolio`
 [ ] Gold changes were reviewed
 ```
 
@@ -3328,11 +3342,12 @@ Any drift indicator requires review before release.
 [ ] POSIX behavior is genuinely exercised
 [ ] Coverage reports are generated
 [ ] Flaky tests have no silent quarantine
+[ ] Wordbench suite passes with `gf-portfolio` absent
 ```
 
 ---
 
-# 150. Final invariants
+# 150. Invariants
 
 1. The default suite does not require GF.
 2. Real-GF tests are explicit and required for release.
@@ -3364,10 +3379,11 @@ Any drift indicator requires review before release.
 28. Package installation is tested in a clean environment.
 29. Failed integration tests preserve diagnostic evidence.
 30. Testing complexity exists only to prove a real architectural, compatibility, platform, or safety boundary.
+31. Wordbench tests, validation and release verification require no `gf-portfolio` runtime, storage, configuration or service.
 
 ---
 
-# 151. Final rule
+# 151. Governing rule
 
 GF Wordbench testing follows one proof chain:
 

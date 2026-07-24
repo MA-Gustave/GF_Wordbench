@@ -7,9 +7,12 @@
 **Project owner after initialization:** `<PROJECT_OWNER>`  
 **Project identity after initialization:** `<PROJECT_ID>`  
 **Target language after initialization:** `<LANGUAGE_NAME>`  
-**Canonical target path after initialization:** `project/docs/RELEASE_CRITERIA.md`  
-**Release-criteria version:** `1.0`  
-**Last template review:** 2026-07-22  
+**Template path:** `templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md`  
+**Canonical target path after initialization:** `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`  
+**Documentation alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Diagnostic-tool authority:** `docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md`  
+**Release-criteria version:** `1.1`  
+**Last template review:** `2026-07-24`  
 
 ---
 
@@ -39,7 +42,7 @@ The criteria cover:
 - gold comparisons;
 - bounded generation;
 - missing-function inspection;
-- final PGF construction;
+- release PGF construction;
 - artifact integrity;
 - regression review;
 - known issues;
@@ -62,6 +65,15 @@ During project initialization, maintainers must:
 8. record the initial baseline run.
 
 An initialized active project must not retain unresolved required placeholders.
+
+The initialized workspace contains exactly one active GF language project.
+The independent `gf-portfolio` product may consume completed public Wordbench
+artifacts, but it does not select project targets, execute GF, mutate evidence,
+or define Wordbench release gates. GF Wordbench has no runtime dependency on
+Portfolio code, storage, configuration, or services.
+
+This template records release evidence, blockers, exceptions, and decisions.
+It does not track coding progress.
 
 ---
 
@@ -109,7 +121,7 @@ release
 
 Checkpoint and diagnostic evidence may support release.
 
-They do not replace a final release-mode run.
+They do not replace the current release-mode run.
 
 Recommended command:
 
@@ -129,7 +141,7 @@ gf-wordbench validate `
   --project-root <PROJECT_ROOT>
 ```
 
-The final project may require explicit environment paths according to installation policy.
+The initialized project may require explicit environment paths according to installation policy.
 
 ---
 
@@ -220,7 +232,7 @@ Its failure policy must be explicit.
 
 ### 6.4 Not Applicable
 
-The project does not implement the relevant feature.
+The declared release scope does not include the relevant feature.
 
 The project must record why it is not applicable.
 
@@ -347,12 +359,12 @@ The template defines the following baseline registry.
 | `RC-GENERATION-001` | Required generation checks are bounded and pass | Conditional | Release Blocking | generation scenario |
 | `RC-MORPH-001` | Required morphology checks pass | Conditional | Release Blocking | morphology scenario |
 | `RC-LEXICON-001` | Required release lexicon is complete | Conditional | Release Blocking | lexicon validation |
-| `RC-PGF-001` | Final PGF build succeeds | Required | Release Blocking | PGF process result |
+| `RC-PGF-001` | Release PGF build succeeds | Required | Release Blocking | PGF process result |
 | `RC-PGF-002` | Expected PGF exists and is non-empty | Required | Release Blocking | artifact check |
 | `RC-ARTIFACT-001` | Required artifacts are registered | Required | Release Blocking | artifact registry |
 | `RC-REGRESSION-001` | Regression comparison completed | Required | Release Blocking | compatible baseline diff |
 | `RC-REGRESSION-002` | No unapproved regression remains | Required | Release Blocking | regression review |
-| `RC-STATUS-001` | Status ledger has no blocking entry | Required | Release Blocking | ledger review |
+| `RC-STATUS-001` | Validation ledger has no blocking entry | Required | Release Blocking | ledger review |
 | `RC-DOC-001` | Required project documentation complete | Required | Release Blocking | documentation checker |
 | `RC-SECURITY-001` | Scenario and path security checks pass | Required | Release Blocking | security checker |
 | `RC-REPRO-001` | Release run is reproducible and current | Required | Release Blocking | clean release run |
@@ -363,7 +375,7 @@ The template defines the following baseline registry.
 
 The initialized project may add stricter criteria.
 
-It must not remove a baseline required gate merely because implementation is incomplete.
+It must not remove a baseline required gate merely because current evidence is missing or a criterion fails.
 
 ---
 
@@ -449,7 +461,7 @@ normalization policy where configured
 
 ## 12.3 Required logical fields
 
-The initialized project must define the final schema’s required fields, including the canonical equivalents of:
+The initialized project must define the canonical schema fields, including:
 
 ```text
 project.id
@@ -613,8 +625,8 @@ project/docs/LANGUAGE_ARCHITECTURE.md
 - inherited RGL strategy documented;
 - extension/override policy documented;
 - structural preservation policy documented;
-- architecture does not describe historical modules as current;
-- implementation does not contradict the documented direction.
+- architecture does not describe obsolete modules as current;
+- source, configuration, and evidence do not contradict the documented architecture.
 
 ## 15.3 Evidence
 
@@ -658,12 +670,12 @@ scenario -> input
 scenario -> marker
 scenario -> gold
 entrypoint -> PGF
-project document -> implementation
+project document -> source, configuration, or evidence
 ```
 
-## 16.3 Contract status
+## 16.3 Contract lifecycle and applicability
 
-Final active project contract lifecycle:
+Active project contract lifecycle:
 
 ```text
 Active
@@ -671,13 +683,17 @@ Deprecated
 Retired
 ```
 
-Project status/implementation problems belong in:
+Lifecycle describes whether a contract governs the project. It does not describe
+coding progress.
+
+Validation failures, release blockers, accepted exceptions, missing evidence,
+and resolution history belong in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
-Applicability belongs in a separate field:
+Applicability remains a separate field:
 
 ```text
 Required
@@ -729,7 +745,7 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 
 ```text
 resources/morphology
-    -> category implementations
+    -> category providers
     -> syntax/structural/extensions
     -> grammar/syntax entrypoints
     -> language/API/release entrypoint
@@ -768,7 +784,7 @@ project/docs/RESEARCH_EVIDENCE.md
 - scope/dialect/register explicit;
 - high-risk claims adequately supported;
 - counterevidence reviewed;
-- implementation trace current;
+- source and contract trace current;
 - validation trace current;
 - AI-generated material not treated as evidence;
 - source licenses reviewed;
@@ -812,7 +828,7 @@ Identify suspicious source patterns without replacing GF compilation.
 
 ## 19.3 Example finding families
 
-The final scanner reference owns exact rules.
+The canonical scanner reference owns exact rules.
 
 Possible families include:
 
@@ -927,7 +943,7 @@ Each checkpoint:
 - has required supporting scenarios;
 - includes its dependency closure;
 - is current in the dependency map;
-- has no unresolved required status-ledger blocker.
+- has no unresolved required validation-ledger blocker.
 
 ## 21.3 Failure
 
@@ -946,7 +962,7 @@ A release entrypoint compiling successfully does not override a failed required 
 project/project.toml
 project/validation/scenarios/
 project/validation/gold/
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 ## 22.2 Required conditions
@@ -1118,22 +1134,26 @@ or another version-compatible supported GF mechanism.
 - required markers complete;
 - no required function remains missing;
 - explicitly unsupported functions are documented and outside release scope;
-- status ledger agrees;
+- validation ledger agrees;
 - project contract agrees;
 - scenario/gold assertion is stable.
 
-## 26.4 Exceptions
+## 26.4 Declared scope exclusions
 
-A deliberate partial project must define:
+A release may exclude a feature only when the exclusion is part of the declared
+release scope.
+
+The exclusion record defines:
 
 - exact excluded surface;
 - user impact;
-- project version/maturity;
-- status-ledger entries;
-- release label;
+- affected gates;
+- validation-ledger entry or accepted exception;
+- release-note wording;
 - explicit approval.
 
-A stable complete release cannot hide missing required functions.
+A required function inside the declared release scope cannot be hidden or waived
+by changing report wording.
 
 ---
 
@@ -1313,7 +1333,7 @@ Define authoritative release lexicon specification:
 
 ---
 
-# 32. `RC-PGF-001` — Final PGF build succeeds
+# 32. `RC-PGF-001` — Release PGF build succeeds
 
 **Applicability:** Required  
 **Severity:** Release Blocking  
@@ -1324,7 +1344,7 @@ Define authoritative release lexicon specification:
 gf -make -optimize-pgf <PATH_OPTIONS> <RELEASE_ENTRYPOINTS>
 ```
 
-The final command is built by GF Wordbench according to the external-tool contract.
+The command is built by GF Wordbench according to the external-tool contract.
 
 ## 32.2 Configured release entrypoints
 
@@ -1396,7 +1416,7 @@ This condition is at least:
 FAIL
 ```
 
-or `ERROR` according to the final operation contract.
+or `ERROR` according to the owning operation contract.
 
 ---
 
@@ -1453,7 +1473,7 @@ Replace table:
 Define baseline policy:
 
 ```text
-automatic latest compatible finalized release run
+automatic latest compatible accepted release run
 ```
 
 or:
@@ -1465,7 +1485,7 @@ explicit baseline: <BASELINE_POLICY>
 ## 35.2 Required conditions
 
 - baseline selection deterministic;
-- baseline finalized;
+- baseline completed and accepted;
 - schema compatible or migrated;
 - project identity compatible;
 - mode/scope compatible;
@@ -1533,7 +1553,7 @@ A broad “expected changes” note is insufficient.
 
 ---
 
-# 37. `RC-STATUS-001` — No blocking status-ledger entry
+# 37. `RC-STATUS-001` — No blocking validation-ledger entry
 
 **Applicability:** Required  
 **Severity:** Release Blocking  
@@ -1541,31 +1561,36 @@ A broad “expected changes” note is insufficient.
 ## 37.1 Required document
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
-## 37.2 Required conditions
+## 37.2 Ledger purpose
 
-- every temporary implementation registered;
-- every fallback registered;
-- every warning registered;
-- every blocked feature registered;
-- every disabled operation registered;
-- source comments and ledger agree;
-- resolved entries retain resolution;
-- each active entry has owner;
-- each active entry has next action or exit condition;
+The ledger records project-owned validation facts, release blockers, accepted
+exceptions, missing evidence, contract contradictions, and resolution history.
+
+It does not record coding progress.
+
+## 37.3 Required conditions
+
+- every release blocker is registered;
+- every accepted exception identifies its gate, scope, owner, approval, and review trigger;
+- every missing-evidence record identifies the required proof;
+- every contract contradiction identifies the governing authority;
+- source comments, project documents, validation results, and ledger records agree;
+- resolved entries retain their evidence and resolution;
+- each open entry has an owner and explicit exit condition;
 - no release-blocking entry remains unresolved.
 
-## 37.3 Approval exception
+## 37.4 Nonblocking limitation
 
-A non-blocking known limitation may ship only when:
+A nonblocking known limitation may ship only when:
 
-- user impact documented;
+- user impact is documented;
 - release notes include it;
-- validation coverage prevents accidental worsening;
-- owner assigned;
-- project maturity label is accurate.
+- validation coverage detects accidental worsening;
+- an owner and review trigger are recorded;
+- the release decision identifies the accepted limitation.
 
 ---
 
@@ -1583,9 +1608,9 @@ project/docs/LANGUAGE_ARCHITECTURE.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/RESEARCH_EVIDENCE.md
-project/docs/VALIDATION_SPEC.md
-project/docs/RELEASE_CRITERIA.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
@@ -1636,13 +1661,14 @@ The project may mark `RESEARCH_EVIDENCE.md` not applicable only when no language
 
 Normal project scenarios must not use commands capable of executing system commands or piping to system utilities.
 
-Any future exception requires:
+Any auxiliary executable requires:
 
-- explicit security policy;
-- project decision;
-- isolated environment;
+- an accepted security policy;
+- a static ADR-0013 registry entry;
+- declared argument, timeout, output, mutability, network, and evidence contracts;
+- isolated execution when the tool contract requires it;
 - release review;
-- external-tool contract update.
+- external-tool contract alignment.
 
 ---
 
@@ -1664,8 +1690,8 @@ Any future exception requires:
 - clean/current artifact directory;
 - deterministic file/scenario ordering;
 - current source fingerprints recorded;
-- final run not cancelled;
-- final run finalized;
+- release run not cancelled;
+- release run completed and sealed;
 - release commit identified;
 - rerun under equivalent environment produces equivalent required outcomes.
 
@@ -1743,11 +1769,11 @@ Markdown is not the primary machine schema.
 - sizes match;
 - SHA-256 hashes match;
 - no duplicate path/role ambiguity;
-- final PGF listed;
+- release PGF listed;
 - raw evidence required by policy listed;
-- manifest validates after all artifacts are finalized.
+- manifest validates after all artifacts are closed and immutable.
 
-## 42.2 Finalization
+## 42.2 Manifest sealing
 
 The manifest should be written only after required artifacts exist.
 
@@ -1824,7 +1850,7 @@ Role names may be used instead of personal names.
 
 ## 44.2 Required conditions
 
-- final release run `overall_status=OK`;
+- release run `overall_status=OK`;
 - all required gates `OK`;
 - no required gate `SKIPPED`;
 - known issues reviewed;
@@ -1864,46 +1890,39 @@ Delete the example row after initialization if no additional gates exist.
 
 ---
 
-# 46. Criteria for a partial or preview release
+# 46. Scoped release profiles
 
-A project may intentionally publish a partial release.
+A project may publish different declared release profiles when optional feature
+families are intentionally outside a profile's scope.
 
-It must not use the same maturity claim as a complete stable release.
+A profile is defined by configuration and release criteria. It is not a coding
+progress label.
 
-Required distinctions:
+## 46.1 Profile requirements
 
-```text
-Preview
-Experimental
-Incomplete
-Stable
-```
+Every release profile requires:
 
-These are project release maturity labels.
+- valid project identity and configuration;
+- an explicit included and excluded feature surface;
+- secure scenarios and registered auxiliary tools;
+- reproducible validation and build;
+- a verified manifest;
+- documentation that matches the declared surface;
+- no missing required evidence inside the profile;
+- no false claim that an excluded feature was validated;
+- a validation-ledger review;
+- user-facing limitations for deliberate scope exclusions.
 
-## 46.1 Preview requirements
+## 46.2 Complete configured profile
 
-A preview release still requires:
+A release profile passes only when:
 
-- valid configuration;
-- secure scenarios;
-- reproducible build;
-- manifest;
-- documented incomplete surface;
-- status ledger;
-- no false claim of completeness;
-- user-facing limitation list.
-
-## 46.2 Stable release requirements
-
-A stable release requires:
-
-- every required release-scope function implemented;
-- no blocking evidence gap;
-- no blocking status-ledger entry;
-- all required scenarios and gold pass;
-- final PGF valid;
-- all required gates `OK`.
+- every function required by that profile is covered;
+- no blocking evidence gap remains;
+- no blocking validation-ledger entry remains;
+- all required scenarios and gold comparisons pass;
+- the release PGF is valid when required;
+- all applicable required gates are `OK`.
 
 ---
 
@@ -1940,7 +1959,7 @@ Rules:
 - order matches `project.toml`;
 - checkpoint purpose is architectural;
 - successful compile from clean source required;
-- missing lower checkpoint cannot be ignored because the final entrypoint compiles.
+- a missing lower checkpoint cannot be ignored because the release entrypoint compiles.
 
 ---
 
@@ -1992,7 +2011,7 @@ project/docs/RESEARCH_EVIDENCE.md
 
 # 52. Required documentation table
 
-Replace status values during initialization:
+Replace the example rows during initialization:
 
 | Document | Required | Completion owner | Review evidence |
 |---|:---:|---|---|
@@ -2000,9 +2019,9 @@ Replace status values during initialization:
 | `CATEGORY_AND_LINCAT_CONTRACT.md` | Yes | `<OWNER>` | `<REVIEW>` |
 | `MODULE_DEPENDENCY_MAP.md` | Yes | `<OWNER>` | dependency gate |
 | `RESEARCH_EVIDENCE.md` | `<YES_CONDITIONAL>` | `<OWNER>` | research gate |
-| `VALIDATION_SPEC.md` | Yes | `<OWNER>` | scenario coverage |
-| `RELEASE_CRITERIA.md` | Yes | `<OWNER>` | release review |
-| `STATUS_LEDGER.md` | Yes | `<OWNER>` | ledger gate |
+| `VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md` | Yes | `<OWNER>` | scenario coverage |
+| `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` | Yes | `<OWNER>` | release review |
+| `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` | Yes | `<OWNER>` | ledger gate |
 | `DECISION_LOG.md` | Yes | `<OWNER>` | decision review |
 | `INTERFILE_CONTRACT_LOCK.md` | Yes | `<OWNER>` | contract gate |
 
@@ -2073,7 +2092,7 @@ The approval run must be:
 
 - release mode;
 - strict;
-- finalized;
+- completed and sealed;
 - current project revision;
 - current project configuration;
 - current scenarios/gold/docs;
@@ -2132,7 +2151,7 @@ def decide_project_release(gates):
 
 Conditional gates whose condition is true are normalized to required before evaluation.
 
-The implementation may differ.
+The code structure may differ.
 
 The behavior is normative.
 
@@ -2160,7 +2179,7 @@ release gate
 required report/integrity result
 ```
 
-A required skipped subject becomes an error before final success evaluation.
+A required skipped subject becomes an error before release success evaluation.
 
 ---
 
@@ -2172,7 +2191,7 @@ A required skipped subject becomes an error before final success evaluation.
 3. verify baseline comparability
 4. determine accidental or intentional change
 5. review research evidence when linguistic
-6. update implementation or decision
+6. update source, configuration, contract, or decision
 7. update scenarios/gold intentionally
 8. record approval or fix
 9. rerun release validation
@@ -2247,8 +2266,8 @@ Explicit security review is required when release changes:
 - path containment;
 - generated-file cleanup;
 - gold-writing behavior;
-- remote/network access;
-- plugin/external tool;
+- remote or network access;
+- registered diagnostic tool or executable adapter;
 - research-data storage;
 - secret handling;
 - manifest hashing;
@@ -2322,22 +2341,22 @@ Required first-release conditions:
 
 ---
 
-# 66. Preview-to-stable promotion
+# 66. Release-profile expansion
 
-Promotion to stable requires review of all provisional exceptions.
+Expanding a release profile requires review of every newly included contract and accepted exception.
 
 Checklist:
 
 ```text
-[ ] preview limitations reviewed
-[ ] required feature scope finalized
-[ ] all stable claims supported
-[ ] temporary fallbacks resolved or removed
+[ ] current profile limitations reviewed
+[ ] expanded feature scope declared
+[ ] all profile claims supported
+[ ] blockers and accepted exceptions reviewed
 [ ] blocking status entries resolved
-[ ] scenarios expanded to stable scope
+[ ] scenarios cover the expanded scope
 [ ] gold reviewed
 [ ] regression baseline available
-[ ] public project contracts stabilized
+[ ] public project contracts reviewed
 [ ] release notes identify compatibility commitments
 ```
 
@@ -2348,18 +2367,18 @@ Checklist:
 ```text
 [ ] `project.toml` parses
 [ ] schema ID/version supported
-[ ] project ID final
-[ ] project name final
-[ ] language name final
-[ ] language code final
-[ ] module suffix final or not applicable
+[ ] project ID confirmed
+[ ] project name confirmed
+[ ] language name confirmed
+[ ] language code confirmed
+[ ] module suffix confirmed or not applicable
 [ ] source root exists
 [ ] source glob correct
 [ ] entrypoints ordered
 [ ] checkpoints ordered
 [ ] scenario IDs unique
-[ ] release entrypoints final
-[ ] expected artifacts final
+[ ] release entrypoints confirmed
+[ ] expected artifacts confirmed
 [ ] no old-language identifiers remain
 [ ] no required placeholders remain
 ```
@@ -2392,9 +2411,9 @@ Checklist:
 [ ] R3/R4 evidence thresholds met
 [ ] contradictions addressed
 [ ] evidence gaps reviewed
-[ ] status ledger current
-[ ] no blocking status entry
-[ ] temporary code has exit condition
+[ ] validation ledger current
+[ ] no blocking validation-ledger entry
+[ ] every accepted exception has an exit or review condition
 [ ] decision log current
 [ ] release-impacting decisions approved
 ```
@@ -2461,6 +2480,9 @@ Checklist:
 
 ```text
 [ ] scenario system commands absent
+[ ] every auxiliary executable has an ADR-0013 registry entry
+[ ] project text cannot choose an executable or interpreter
+[ ] no Wordbench runtime dependency on `gf-portfolio`
 [ ] path security passes
 [ ] finite timeouts configured
 [ ] output limits configured
@@ -2469,7 +2491,7 @@ Checklist:
 [ ] no secrets in reports
 [ ] privacy-sensitive research data excluded
 [ ] working tree/release revision policy satisfied
-[ ] release run finalized
+[ ] release run completed and sealed
 [ ] release evidence retained
 [ ] equivalent rerun policy satisfied
 ```
@@ -2488,9 +2510,9 @@ Checklist:
 [ ] project version chosen
 [ ] framework version recorded
 [ ] release commit recorded
-[ ] final run ID recorded
+[ ] release run ID recorded
 [ ] approval roles completed
-[ ] final decision recorded
+[ ] release decision recorded
 ```
 
 ---
@@ -2540,9 +2562,9 @@ Checklist:
 - Release reviewer: `<ROLE>`
 - Security reviewer: `<ROLE_OR_NOT_APPLICABLE>`
 
-### Final statement
+### Approval statement
 
-`<FINAL_APPROVAL_STATEMENT>`
+`<APPROVAL_STATEMENT>`
 ```
 
 Store the completed approval in the project’s release evidence location.
@@ -2597,7 +2619,7 @@ Copy for project-specific gates:
 Every release gate with executable evidence must be represented in:
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 The validation specification owns:
@@ -2688,19 +2710,30 @@ Release criteria should verify:
 
 ---
 
-# 82. Status-ledger alignment
+# 82. Validation-ledger alignment
 
-A release criterion must not assume an implementation is stable when the status ledger marks it:
+A release criterion must agree with the active facts in:
 
 ```text
-temporary
-fallback
-warning
-blocked
-disabled
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
-The release decision must use the ledger’s active information.
+Relevant entries include:
+
+```text
+validation failure
+release blocker
+accepted exception
+missing evidence
+contract contradiction
+resolved item with retained evidence
+```
+
+The ledger must not use coding-progress labels to weaken or postpone a release
+criterion.
+
+The release decision consumes only evidence-backed entries whose scope and
+blocking policy are explicit.
 
 ---
 
@@ -2931,9 +2964,9 @@ Retain release evidence according to project policy.
 Recommended retained items:
 
 - release manifest;
-- final summary JSON;
+- release summary JSON;
 - release approval;
-- final PGF hash;
+- release PGF hash;
 - source commit;
 - project version;
 - GF version;
@@ -2983,7 +3016,7 @@ A hotfix still requires:
 - identified affected criterion;
 - targeted tests;
 - required scenario/checkpoint rerun;
-- final PGF rebuild;
+- release PGF rebuild;
 - manifest;
 - approval;
 - new project version.
@@ -2998,9 +3031,9 @@ Changing this document’s required meaning requires review of:
 
 ```text
 project.toml
-VALIDATION_SPEC.md
+VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
 INTERFILE_CONTRACT_LOCK.md
-STATUS_LEDGER.md
+STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
 DECISION_LOG.md
 scenarios
 gold files
@@ -3046,7 +3079,7 @@ Required:
 - contract review;
 - migration;
 - release-note entry;
-- retired gate ID retained historically.
+- retired gate ID retained for traceability.
 
 ---
 
@@ -3156,7 +3189,7 @@ Recommended command:
 gf-wordbench validate --mode release --strict
 ```
 
-A future explicit project check may provide preflight:
+Project preflight uses:
 
 ```text
 gf-wordbench project check --strict
@@ -3185,7 +3218,7 @@ Probable release-criteria drift exists when:
 - missing PGF is accepted;
 - gold changes during normal validation;
 - research evidence is omitted for linguistic acceptance;
-- status-ledger blocker is ignored;
+- validation-ledger blocker is ignored;
 - dependency map is incomplete;
 - contract lock contains unresolved placeholders;
 - reports show `OK` while manifest verification fails;
@@ -3194,9 +3227,12 @@ Probable release-criteria drift exists when:
 - exception has no expiry;
 - project identity differs between documents;
 - an active template example remains;
-- gate ID is reused with a new meaning.
+- gate ID is reused with a new meaning;
+- the validation ledger uses coding-progress labels;
+- a project scenario or configuration selects an unregistered executable;
+- release evidence contains `gf-portfolio` registry or aggregation state.
 
-Any indicator blocks final release review.
+Any indicator blocks release review.
 
 ---
 
@@ -3220,11 +3256,11 @@ Any indicator blocks final release review.
 [ ] Add project-specific gates
 [ ] Delete non-applicable examples
 [ ] Align project.toml
-[ ] Align VALIDATION_SPEC.md
+[ ] Align VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
 [ ] Align INTERFILE_CONTRACT_LOCK.md
 [ ] Align MODULE_DEPENDENCY_MAP.md
 [ ] Align RESEARCH_EVIDENCE.md
-[ ] Align STATUS_LEDGER.md
+[ ] Align STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md as a validation and blocker ledger
 [ ] Align DECISION_LOG.md
 [ ] Run placeholder scan
 [ ] Run project check
@@ -3242,14 +3278,16 @@ Any indicator blocks final release review.
 [ ] No required gate is `SKIPPED`
 [ ] No required result is `FAIL`
 [ ] No required result is `ERROR`
-[ ] Final release run is current
+[ ] Release run is current
 [ ] Expected PGF verified
 [ ] Manifest verified
 [ ] Regression review complete
-[ ] Status ledger clear
+[ ] Validation ledger has no blocking entry
 [ ] Research evidence reviewed
 [ ] Documentation complete
 [ ] Security review complete
+[ ] Every auxiliary executable is registered under ADR-0013
+[ ] `gf-portfolio` boundary verified
 [ ] Approval recorded
 ```
 
@@ -3263,9 +3301,9 @@ templates/project/docs/LANGUAGE_ARCHITECTURE.md
 templates/project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 templates/project/docs/MODULE_DEPENDENCY_MAP.md
 templates/project/docs/RESEARCH_EVIDENCE.md
-templates/project/docs/VALIDATION_SPEC.md
-templates/project/docs/RELEASE_CRITERIA.md
-templates/project/docs/STATUS_LEDGER.md
+templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
+templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md
+templates/project/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
 templates/project/docs/DECISION_LOG.md
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 templates/project/validation/scenarios/
@@ -3278,12 +3316,14 @@ templates/project/validation/gold/
 
 ```text
 docs/projects/PROJECT_MODEL.md
-docs/projects/PROJECT_DIRECTORY_LAYOUT.md
-docs/projects/ADDING_A_NEW_LANGUAGE.md
+docs/REPOSITORY_STRUCTURE.md
+docs/projects/CREATING_A_PROJECT.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
 docs/validation/VALIDATION_MODES.md
 docs/validation/RELEASE_GATES.md
 docs/validation/REGRESSION_COMPARISON.md
-docs/gf/GF_MODULE_COMPILATION.md
+docs/gf/GF_COMPILATION.md
 docs/gf/GF_SCRIPT_EXECUTION.md
 docs/gf/GF_VERSION_COMPATIBILITY.md
 docs/scenarios/SCENARIO_FORMAT.md
@@ -3297,6 +3337,8 @@ docs/reference/EXIT_CODES.md
 docs/development/BACKWARD_COMPATIBILITY.md
 docs/release/VERSIONING_POLICY.md
 docs/release/RELEASE_PROCESS.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -3305,10 +3347,10 @@ SECURITY.md
 
 ---
 
-# 112. Final rule
+# 112. Core rule
 
 A release is a verified project state, not a successful command invocation.
 
 Therefore:
 
-> Initialize every criterion for the actual language project, require every applicable blocking gate to be `OK`, preserve raw and normalized evidence, verify the final PGF and manifest, review linguistic and contractual changes, and record approval only for the exact source revision that produced the release artifacts.
+> Initialize every criterion for the actual language project, require every applicable blocking gate to be `OK`, preserve raw and normalized evidence, verify the release PGF and manifest, review linguistic and contractual changes, and record approval only for the exact source revision that produced the release artifacts.

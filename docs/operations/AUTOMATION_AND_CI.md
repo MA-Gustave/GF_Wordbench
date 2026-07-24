@@ -3,10 +3,11 @@
 **Document ID:** `GF-WB-OPS-AUTOMATION-CI`  
 **Status:** Normative  
 **Applies to:** Continuous integration, scheduled validation, release automation, and machine-driven GF Wordbench execution  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Operations contract version:** `1.0.0`  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\operations\AUTOMATION_AND_CI.md`  
-**Last structural review:** 2026-07-22
+**Operations contract version:** `1.1.0`  
+**Target path:** `docs/operations/AUTOMATION_AND_CI.md`  
+**Last structural review:** `2026-07-24`
 
 ---
 
@@ -31,7 +32,7 @@ It establishes:
 - concurrency and cancellation;
 - failure recovery;
 - provider-neutral CI requirements;
-- the transition from the predecessor `gf-audit` interface.
+- compatibility with documented legacy `gf-audit` entrypoints and mode aliases.
 
 The central rule is:
 
@@ -83,12 +84,13 @@ This document does not define:
 - cloud billing;
 - runner image maintenance outside GF Wordbench requirements;
 - repository branch-protection UI steps;
-- the internal implementation of validation stages;
+- the internal code of validation stages;
 - automatic AI diagnosis;
 - automatic source modification;
 - automatic gold acceptance;
 - deployment of services unrelated to GF Wordbench;
-- a general workflow engine.
+- a general workflow engine;
+- cross-workspace aggregation, portfolio registries, or Portfolio-owned release views.
 
 Exact command syntax belongs to:
 
@@ -104,11 +106,16 @@ docs/reference/EXIT_CODES.md
 
 This document defines the behavioral contract those interfaces must support.
 
+Cross-workspace discovery and aggregation belong to the independent `gf-portfolio` product. Wordbench automation remains complete without Portfolio.
+
 ---
 
 ## 4. Related normative documents
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -126,15 +133,15 @@ docs/release/VERSIONING_POLICY.md
 docs/release/RELEASE_PROCESS.md
 docs/reference/EXIT_CODES.md
 docs/reference/COMMAND_REFERENCE.md
-project/docs/VALIDATION_SPEC.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 When a CI rule overlaps a persisted artifact schema, `PERSISTED_SCHEMA_LOCK.md` is authoritative.
 
 When it overlaps GF process behavior, `EXTERNAL_TOOL_CONTRACT_LOCK.md` is authoritative.
 
-When it overlaps project release policy, `project/docs/RELEASE_CRITERIA.md` may add stricter requirements but may not weaken framework integrity requirements.
+When it overlaps project release policy, `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` may add stricter requirements but may not weaken framework integrity requirements.
 
 ---
 
@@ -170,35 +177,32 @@ When it overlaps project release policy, `project/docs/RELEASE_CRITERIA.md` may 
 
 ## 6.1 Public-interface rule
 
-Automation must invoke GF Wordbench through:
+Automation must invoke GF Wordbench through the installed public CLI entrypoint defined by `CLI_REFERENCE.md`.
 
-```text
-supported installed CLI entrypoint
-```
-
-or:
+The source-tree entrypoint:
 
 ```text
 python -m app.main_cli
 ```
 
-during a documented source-tree development transition.
+may be used only when `CLI_REFERENCE.md` lists it as a supported development entrypoint.
 
 Automation must not import private helpers to assemble a custom pipeline.
 
 ## 6.2 One core path
 
-Local CLI, CI, and release automation must reach the same:
+Local CLI, CI, and release automation must reach the same hexagonal application path:
 
 ```text
-bootstrap
-→ audit core
-→ validation stages
-→ result construction
-→ reports
+entrypoints
+→ bootstrap
+→ application services
+→ projects, runs, validation, diagnostics, and reporting modules
+→ ports and adapters
+→ GF, filesystem, process, and persistence boundaries
 ```
 
-CI must not create an alternate compiler, scanner, scenario runner, classifier, or report writer.
+CI must not create an alternate compiler, scanner, scenario runner, classifier, report writer, or run orchestrator.
 
 ## 6.3 Structured-decision rule
 
@@ -220,7 +224,7 @@ CI must not decide release status by parsing:
 
 A failing validation job must still preserve available evidence.
 
-Artifact upload and final gate evaluation must be designed so validation failure does not prevent evidence collection.
+Artifact upload and workflow-gate evaluation must be designed so validation failure does not prevent evidence collection.
 
 ## 6.5 No mutation rule
 
@@ -265,6 +269,33 @@ CI configuration must not silently change:
 - failure classification.
 
 Overrides must be explicit and recorded in resolved run evidence.
+
+---
+
+## 6.8 Workspace and Portfolio boundary
+
+Each GF Wordbench validation job operates on:
+
+```text
+one workspace
+one active project
+one normative language target
+one run directory
+```
+
+A Wordbench workflow must not aggregate several projects or select project identity from external portfolio state.
+
+`gf-portfolio` may consume public versioned `summary.json`, `manifest.json`, and other documented artifacts after a Wordbench run is published.
+
+GF Wordbench automation must not:
+
+- import or call Portfolio code;
+- require Portfolio runtime, storage, configuration, or availability;
+- write Portfolio registry or aggregation state;
+- use a Portfolio result to determine Wordbench validation or release success;
+- permit Portfolio to mutate Wordbench project or run artifacts.
+
+Portfolio ingestion or publication failure does not change the recorded Wordbench run result.
 
 ---
 
@@ -319,7 +350,7 @@ project configuration check
 bounded GF validation
 structured result verification
 artifact upload
-final gate
+workflow gate
 ```
 
 ## 8.4 Required behavior
@@ -331,7 +362,7 @@ final gate
 [ ] Project configuration is validated before GF execution.
 [ ] GF validation is bounded.
 [ ] Validation evidence is uploaded on success and failure.
-[ ] The final status is derived from exit category and structured summary.
+[ ] The workflow status is derived from exit category and structured summary.
 ```
 
 ## 8.5 Changed-file optimization
@@ -579,7 +610,7 @@ release-promotion
 
 Not every workflow needs every job.
 
-Logical separation may be implemented as separate jobs or explicit steps when the runner is simple.
+Logical separation may be represented as separate jobs or explicit steps when the runner is simple.
 
 ---
 
@@ -686,7 +717,7 @@ documentation existence
 
 ## 16.2 Target command concepts
 
-The final CLI may expose command concepts equivalent to:
+The public CLI exposes operations equivalent to:
 
 ```text
 contracts check
@@ -698,7 +729,7 @@ scenarios check
 
 Exact syntax belongs to `CLI_REFERENCE.md`.
 
-CI must not implement independent partial versions of these checks once supported commands exist.
+CI must not create independent partial versions of these checks once supported commands exist.
 
 ## 16.3 Strict mode
 
@@ -757,7 +788,7 @@ GF preflight failure prevents GF validation but does not prevent:
 - Python tests;
 - contract checks;
 - evidence upload;
-- clear final CI failure.
+- clear workflow failure.
 
 ---
 
@@ -811,7 +842,7 @@ The CI command must:
 
 CI should enable the documented UTF-8 Python and process policy.
 
-On Windows, the invocation must avoid locale-dependent decoding where the implementation supports explicit UTF-8 mode.
+On Windows, the invocation must avoid locale-dependent decoding where the runtime supports explicit UTF-8 mode.
 
 ## 18.5 Output directory
 
@@ -827,11 +858,11 @@ The validation step should:
 2. capture the process exit code;
 3. preserve the run directory path;
 4. continue to result verification and artifact upload;
-5. fail the final gate after evidence is archived.
+5. fail the workflow gate after evidence is archived.
 
-A CI provider’s temporary `continue-on-error` mechanism may be used only to preserve evidence.
+A CI provider’s `continue-on-error` control-flow mechanism may be used only to preserve evidence.
 
-It must not mark the final workflow successful.
+It must not mark the workflow successful.
 
 ---
 
@@ -855,7 +886,7 @@ Exact numeric categories are owned by:
 docs/reference/EXIT_CODES.md
 ```
 
-The final system should distinguish at least:
+The exit-code contract distinguishes at least:
 
 ```text
 validation failure
@@ -887,30 +918,20 @@ CI must preserve available bootstrap stderr and fail clearly.
 
 An exit `0` without the required summary is a contract failure.
 
-## 19.5 Transitional predecessor behavior
+## 19.5 Legacy exit compatibility
 
-The predecessor CLI currently distinguishes:
+Compatibility entrypoints may preserve the documented legacy numeric mapping:
 
 ```text
-0 success
-1 audit failures
-2 invalid arguments
-3 runtime error
+0 = required criteria passed
+1 = validation failure
+2 = invalid invocation or configuration
+3 = runtime or framework error
 ```
 
-Its current success calculation is based on file `fail_count`.
+The authoritative mapping remains `docs/reference/EXIT_CODES.md`.
 
-That behavior is transitional.
-
-The final CI gate must use final overall status, including:
-
-- file failures;
-- file errors;
-- scenario failures;
-- scenario errors;
-- required skipped work;
-- artifact failures;
-- report and manifest requirements.
+Exit decisions must use the overall structured run status. File `fail_count` alone is never sufficient because scenario failures, file errors, required skipped work, artifact failures, report failures, and manifest failures also affect the result.
 
 ---
 
@@ -958,7 +979,7 @@ If `summary.json` is missing or invalid, CI must not reconstruct success from `s
 
 Legacy summary loading may be used in migration and regression comparison.
 
-A final release run must emit the canonical current schema.
+A release run must emit the canonical supported schema.
 
 ---
 
@@ -1368,15 +1389,13 @@ Enable the documented UTF-8 policy for Python and captured GF output.
 
 ## 29.4 Exit capture
 
-PowerShell automation must capture the native process exit code through the supported mechanism and preserve it until the final gate.
+PowerShell automation must capture the native process exit code through the supported mechanism and preserve it until the workflow gate.
 
-## 29.5 Launcher transition
+## 29.5 Launcher boundary
 
-A local Windows launcher may delegate to the CLI.
+A local Windows launcher may delegate to the public CLI.
 
-CI should invoke the CLI directly.
-
-Launcher-specific behavior must not be required for correct validation.
+CI invokes the CLI directly. Interactive pause behavior, shell convenience logic, or launcher-specific path discovery must not be required for validation.
 
 ---
 
@@ -1562,7 +1581,7 @@ workflow timeout
 The job timeout must allow GF Wordbench to:
 
 - terminate owned processes;
-- write final structured results;
+- write completed structured results;
 - write reports;
 - upload evidence.
 
@@ -1685,12 +1704,12 @@ locate run directory
 verify available structured output
 upload available evidence
 evaluate summary/manifest consistency
-apply final CI failure
+apply workflow failure
 ```
 
 The validation step must not terminate the job before mandatory evidence upload.
 
-The final gate must preserve the original validation failure category when possible.
+The workflow gate must preserve the original validation failure category when possible.
 
 ---
 
@@ -1850,9 +1869,9 @@ Publish jobs must not commit generated changes back to the source branch unless 
 
 Normal CI must never update gold.
 
-## 44.2 Proposed gold workflow
+## 44.2 Gold-review workflow
 
-A dedicated maintenance workflow may generate proposed normalized output or a patch for review.
+A dedicated maintenance workflow may generate candidate normalized output or a patch for review.
 
 It must:
 
@@ -1988,7 +2007,7 @@ job artifact-archive:
   run even when validation failed
   upload available run evidence
 
-job final-gate:
+job workflow-gate:
   fail according to saved exit and structured verification
 ```
 
@@ -2059,16 +2078,16 @@ jobs:
           name: <STABLE_BUNDLE_NAME>
           path: <RESOLVED_RUN_DIRECTORY>
 
-      - name: Apply final gate
+      - name: Apply workflow gate
         if: always()
         shell: pwsh
         run: |
           <FAIL_FROM_SAVED_VALIDATION_AND_VERIFICATION_STATUS>
 ```
 
-`continue-on-error` in this pattern is temporary control flow.
+`continue-on-error` in this pattern is provider control flow used only to preserve evidence.
 
-The final gate must still fail the job.
+The workflow gate must still fail the job.
 
 ---
 
@@ -2105,7 +2124,7 @@ exit 0
 
 The capture step exits successfully only so evidence steps can continue.
 
-A later gate exits with the saved non-zero result when appropriate.
+The workflow gate later exits with the saved non-zero result when appropriate.
 
 CI variable names shown above are workflow-local examples, not GF Wordbench public environment-variable names.
 
@@ -2113,16 +2132,11 @@ CI variable names shown above are workflow-local examples, not GF Wordbench publ
 
 # 50. Run-directory discovery
 
-## 50.1 Preferred mechanism
+## 50.1 Machine-consumable mechanism
 
-The CLI should expose the created run directory through a stable machine-consumable mechanism defined in `CLI_REFERENCE.md`.
+Automation obtains the created run directory through the stable mechanism defined in `CLI_REFERENCE.md`.
 
-Possible mechanisms include:
-
-- explicit requested run output path;
-- structured console record;
-- provider output written by a wrapper;
-- canonical result pointer.
+The mechanism must be unambiguous for concurrent jobs and may use a caller-supplied unique output root, a machine-readable CLI record, or another documented public output contract.
 
 ## 50.2 Forbidden heuristic
 
@@ -2136,100 +2150,39 @@ when concurrent or previous runs can exist.
 
 ## 50.3 Unique output root
 
-Until a dedicated machine output exists, CI should provide a unique job-specific output root and require exactly one run directory beneath it.
+When automation supplies a job-specific output root, exactly one Wordbench run directory may be created beneath that root for the invocation.
 
-This transitional rule must be tested.
+The invariant must be covered by operations tests.
 
 ---
 
-# 51. Current implementation transition
+# 51. Legacy CLI compatibility
 
-## 51.1 Existing interface
+Canonical automation uses the GF Wordbench product identity, command surface, modes, exit semantics, and structured schemas defined by the owning references.
 
-The predecessor implementation currently provides:
-
-```text
-console entrypoint: gf-audit-cli
-module entrypoint: python -m app.main_cli
-modes: all, file
-required environment arguments:
-  --project-root
-  --rgl-root
-  --gf-exe
-  --out-root
-```
-
-It also exposes:
+Compatibility entrypoints may accept documented legacy forms, including:
 
 ```text
---scan-dir
---scan-glob
---gf-path
---timeout-sec
---max-files
---target-file
---include-regex
---exclude-regex
---skip-version-probe
---no-compile
---emit-cpu-stats
---keep-ok-details
---diff-previous
+legacy command alias: gf-audit-cli
+legacy mode alias: file → quick
+legacy mode alias: all  → diagnostic
 ```
 
-## 51.2 Existing exit behavior
+Legacy flags may be accepted only when `CLI_REFERENCE.md` defines their canonical meaning.
 
-The current CLI uses:
+Compatibility rules:
 
-```text
-0 = success
-1 = audit failures
-2 = invalid arguments
-3 = runtime error
-```
+- canonical workflows use `quick`, `checkpoint`, `diagnostic`, or `release`;
+- `file` may prove only the equivalent `quick` scope;
+- `all` may prove only the equivalent `diagnostic` scope;
+- no legacy alias may claim checkpoint or release coverage unless those canonical stages actually execute;
+- scenario, gold, PGF, manifest, and release-gate success must appear in structured canonical-schema evidence;
+- interactive launcher behavior is never part of the CI contract;
+- compatibility aliases do not change canonical writers, schemas, artifact names, or validation semantics;
+- the overall structured status, not file `fail_count`, determines the command result;
+- deprecation and removal of aliases follow the compatibility policy owned by `CLI_REFERENCE.md` and release documentation.
 
-## 51.3 Existing launcher behavior
-
-The current Windows CLI launcher can delegate through:
-
-- an explicit Python environment variable;
-- a local virtual environment;
-- `uv`;
-- the Python launcher;
-- `python` on `PATH`.
-
-It may pause interactively on errors.
-
-CI must not use the interactive pause behavior.
-
-## 51.4 Mode migration
-
-During migration:
-
-```text
-file → quick
-all  → diagnostic
-```
-
-Checkpoint and release workflows must not pretend that legacy `all` proves the new final release contract.
-
-## 51.5 Package and command rename
-
-The final installed command should use the GF Wordbench product identity defined by `CLI_REFERENCE.md` and package metadata.
-
-Legacy command aliases may remain temporarily with deprecation warnings.
-
-Canonical CI examples and new workflows must use only the final command after it is implemented.
-
-## 51.6 Exit migration
-
-The final CLI exit decision must use overall structured status rather than only file `fail_count`.
-
-## 51.7 Transitional CI
-
-A transitional CI pipeline may run the current interface, but it must state that the resulting evidence covers only implemented predecessor capabilities.
-
-It must not claim scenario, gold, PGF, manifest, or final release gates passed when those capabilities did not execute.
+A compatibility workflow must preserve the same evidence-first, non-interactive, security, and artifact-integrity requirements as the canonical CLI.
 
 ---
 
@@ -2271,7 +2224,7 @@ Such a script becomes a supported operations component and requires tests.
 
 ---
 
-# 53. Result verification implementation
+# 53. Result verification component
 
 A verifier should:
 
@@ -2419,7 +2372,7 @@ Expose:
 - toolchain versions;
 - run ID;
 - artifact upload status;
-- final category.
+- terminal workflow category.
 
 ## 57.2 No sensitive logging
 
@@ -2443,7 +2396,7 @@ Console output should remain bounded and direct reviewers to artifacts.
 
 ## 58.1 Source of notification
 
-Notifications must derive from final job status and structured result.
+Notifications must derive from terminal job status and the structured result.
 
 ## 58.2 Content
 
@@ -2501,8 +2454,8 @@ Every automation responsibility must have one owner.
 | Workflow trigger policy | Repository operations policy |
 | Canonical mode semantics | GF Wordbench validation policy |
 | Project requiredness | `project/project.toml` and project release criteria |
-| CLI syntax | `CLI_REFERENCE.md` and CLI implementation |
-| Exit codes | `EXIT_CODES.md` and CLI implementation |
+| CLI syntax | `CLI_REFERENCE.md` and CLI component |
+| Exit codes | `EXIT_CODES.md` and CLI component |
 | GF process contract | External-tool contract owner |
 | Summary schema | Persisted-schema owner |
 | Manifest schema | Persisted-schema and manifest owner |
@@ -2554,7 +2507,7 @@ Probable automation drift exists when:
 - CI treats console wording as a schema;
 - CI treats exit `0` as success when `summary.json` is missing;
 - CI ignores overall `ERROR`;
-- CI uses legacy `all` as final release proof;
+- CI uses legacy `all` as release proof;
 - CI skips required scenarios through an undocumented flag;
 - CI updates gold;
 - CI reuses cached `.pgf` as current proof;
@@ -2572,7 +2525,9 @@ Probable automation drift exists when:
 - a retry overwrites earlier evidence;
 - a dependency update becomes authoritative without compatibility validation;
 - a documentation change alters a contract but skips all contract checks;
-- provider action versions drift without review.
+- provider action versions drift without review;
+- CI requires `gf-portfolio` to execute or decide a Wordbench run;
+- CI writes Portfolio registry or aggregation fields into Wordbench artifacts.
 
 Every drift indicator requires either restoration of the established boundary or a coordinated documented change.
 
@@ -2622,45 +2577,46 @@ Every drift indicator requires either restoration of the established boundary or
 [ ] Publish job does not rebuild
 [ ] Gold files remain unchanged
 [ ] Release evidence is retained
-[ ] Final gate cannot be bypassed by temporary continue-on-error
+[ ] Workflow gate cannot be bypassed by provider continue-on-error control flow
 [ ] Workflow and wrapper tests pass
 [ ] Related operations documentation is current
+[ ] Wordbench validation and release remain independent of `gf-portfolio`
 ```
 
 ---
 
-# 64. Implementation completion criteria
+# 64. Automation conformance criteria
 
-The automation system is complete when:
+An automation configuration conforms to this contract only when:
 
 ```text
-[ ] Public non-interactive CLI is final
-[ ] Canonical modes are supported
-[ ] Exact exit-code contract is documented
-[ ] Machine-consumable run-path capture exists
-[ ] Summary verifier exists
-[ ] Manifest verifier exists
-[ ] Pull-request workflow exists
-[ ] Integration-checkpoint workflow exists
-[ ] Scheduled-diagnostic workflow exists
-[ ] Release workflow exists
-[ ] Evidence uploads execute on failure
-[ ] Trust classification is enforced
-[ ] Untrusted workflows receive no secrets
+[ ] It invokes the documented public non-interactive CLI
+[ ] It uses canonical modes
+[ ] It follows the documented exit-code contract
+[ ] It captures the run path through a machine-consumable mechanism
+[ ] It verifies summary.json
+[ ] It verifies manifest.json when artifact integrity applies
+[ ] It provides pull-request, integration-checkpoint, scheduled-diagnostic, and release workflows where those workflow families are used
+[ ] It uploads available evidence after validation failure
+[ ] It classifies trust before granting secrets or privileged execution
+[ ] Untrusted workflows receive no protected secrets
 [ ] GF and RGL identities are recorded
 [ ] Dependency installation is reproducible
-[ ] Cache policy is enforced
+[ ] Caches are not treated as validation proof
 [ ] Release artifacts are promoted without rebuild
-[ ] Workflow tests cover success and failure
-[ ] Transition from legacy CLI is documented
-[ ] Release rehearsal passes
+[ ] Workflow tests cover success, failure, cancellation, missing evidence, and publication errors
+[ ] Legacy aliases obey the compatibility contract
+[ ] Release rehearsal verifies immutable promotion and recovery
+[ ] No Wordbench workflow depends on gf-portfolio
 ```
+
+These are conformance requirements, not a progress registry.
 
 ---
 
-# 65. Final enforcement rule
+# 65. Automation rule
 
-CI is an orchestrator of GF Wordbench, not a second implementation of GF Wordbench.
+CI orchestrates GF Wordbench; it is not a second validation engine.
 
 The repository, project configuration, validation core, result models, reports, and manifests already own the relevant semantics.
 

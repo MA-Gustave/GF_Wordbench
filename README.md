@@ -15,7 +15,7 @@ GF sources
     → human, machine and AI-ready reports
 ```
 
-GF Wordbench is designed for **one active GF language project per repository copy**. It is not a multi-language orchestration platform.
+GF Wordbench is designed for **one active GF language project per workspace**. Multi-workspace, multilingual portfolio aggregation belongs to the independent `gf-portfolio` product; GF Wordbench has no runtime dependency on it.
 
 ---
 
@@ -391,7 +391,7 @@ The template mirrors the project documentation and validation structure, but con
 
 ### Separation rule
 
-Framework code must not contain active-language assumptions except in clearly identified examples, migration fixtures or historical compatibility tests.
+Framework code must not contain active-language assumptions except in clearly identified examples, migration fixtures or legacy compatibility tests.
 
 ```text
 framework
@@ -672,10 +672,12 @@ See [`docs/architecture/ARCHITECTURE_OVERVIEW.md`](docs/architecture/ARCHITECTUR
 
 ## Anti-drift contracts
 
-GF Wordbench maintains five contract-lock files with separate scopes.
+GF Wordbench maintains seven coordinated anti-drift documents.
 
 | Path | Scope |
 |---|---|
+| [`docs/DOCUMENTATION_ALIGNMENT_LOCK.md`](docs/DOCUMENTATION_ALIGNMENT_LOCK.md) | Cross-document product identity, authority order and correction rules |
+| [`docs/DOCUMENTATION_CORRECTION_LEDGER.md`](docs/DOCUMENTATION_CORRECTION_LEDGER.md) | Coordination of documentation corrections across branches |
 | [`docs/INTERFILE_CONTRACT_LOCK.md`](docs/INTERFILE_CONTRACT_LOCK.md) | Python and framework file boundaries |
 | [`docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`](docs/EXTERNAL_TOOL_CONTRACT_LOCK.md) | GF, process, filesystem and platform boundaries |
 | [`docs/PERSISTED_SCHEMA_LOCK.md`](docs/PERSISTED_SCHEMA_LOCK.md) | Versioned persisted formats and migrations |
@@ -713,7 +715,7 @@ gf-wordbench schemas check
 gf-wordbench schemas check --strict
 ```
 
-The exact implemented command surface is defined by the CLI reference and must remain synchronized with the code.
+The command surface is defined by the CLI reference and must remain synchronized with the code.
 
 ---
 

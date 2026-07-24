@@ -3,11 +3,13 @@
 **Document ID:** `GF-WB-REPORT-AI-READY`  
 **Status:** Normative  
 **Applies to:** `AI_READY.md` generated for a completed GF Wordbench validation run  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
 **Writer owner:** `app/reports/report_ai_ready.py`  
 **Soft-schema version:** `1.0`  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\reports\AI_READY_REFERENCE.md`  
-**Last structural review:** 2026-07-22
+**Reference version:** `1.1.0`  
+**Target path:** `docs/reports/AI_READY_REFERENCE.md`  
+**Last structural review:** `2026-07-24`
 
 ---
 
@@ -61,6 +63,19 @@ It is not optimized for:
 
 Automation must consume `summary.json` and `manifest.json`, not parse `AI_READY.md`.
 
+### 2.1 Portfolio boundary
+
+`gf-portfolio` may display or link `AI_READY.md` as a human-oriented diagnostic artifact.
+
+It must not parse the packet to determine project status, release readiness, regression state, or aggregate metrics. Portfolio automation must consume the public versioned `summary.json` and `manifest.json` contracts.
+
+The Wordbench writer must not:
+
+- call or import `gf-portfolio`;
+- emit Portfolio registry or aggregation state;
+- send the packet to Portfolio or any network service;
+- change packet content according to Portfolio availability.
+
 ---
 
 ## 3. Scope
@@ -83,7 +98,7 @@ This document defines:
 - prompt-injection containment;
 - compatibility and versioning;
 - testing requirements;
-- migration from the current predecessor writer.
+- compatibility with legacy AI-ready report forms.
 
 ---
 
@@ -111,6 +126,7 @@ Those responsibilities belong to their respective architecture, validation, diag
 ## 5. Related normative documents
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/architecture/ARTIFACT_MODEL.md
@@ -186,7 +202,7 @@ The canonical file uses:
 
 - UTF-8 without BOM;
 - LF newlines;
-- one final newline;
+- one trailing newline;
 - no NUL characters;
 - valid Markdown;
 - deterministic ordering.
@@ -209,7 +225,7 @@ Recommended manifest role:
 ai_ready_report
 ```
 
-The manifest reference document owns the final role vocabulary.
+The manifest reference document owns the canonical role vocabulary.
 
 ---
 
@@ -229,13 +245,13 @@ Canonical public contract:
 write_ai_ready(run_result: RunResult) -> Path
 ```
 
-The implementation may use an internal rendering helper.
+The writer may use an internal rendering helper.
 
 Only the public writer is part of the stable interfile contract unless another symbol is explicitly exported and locked.
 
 ## 8.3 Input
 
-The writer consumes one completed or finalizable structured `RunResult`.
+The writer consumes one completed structured `RunResult` ready for report publication.
 
 The result may contain:
 
@@ -291,7 +307,7 @@ The failure must:
 - preserve already captured evidence;
 - identify the failed report path;
 - preserve the original exception or structured reason;
-- remain visible in the final run;
+- remain visible in the completed run;
 - block release only according to report and release policy.
 
 ---
@@ -593,7 +609,7 @@ The complete top-error list belongs under `Evidence`.
 
 ## 13.7 No contradictory totals
 
-Totals must derive from the same final structured result.
+Totals must derive from the same canonical structured result.
 
 The writer must not independently recount raw logs in a way that conflicts with `RunResult`.
 
@@ -605,7 +621,7 @@ The writer must not independently recount raw logs in a way that conflicts with 
 
 Provide a cautious, concise orientation to the most actionable evidence.
 
-This section is not a final diagnosis.
+This section is not a definitive diagnosis.
 
 ## 14.2 Required content
 
@@ -767,7 +783,7 @@ The required heading remains:
 
 ## 16.1 Purpose
 
-List every file result with final status `FAIL` or `ERROR`, preserving causal classification.
+List every file result whose recorded status is `FAIL` or `ERROR`, preserving causal classification.
 
 ## 16.2 Required ordering
 
@@ -783,7 +799,7 @@ Default order:
 7. normalized project-relative path
 ```
 
-A simpler implementation may order by causal class and path when status ordering is already stable.
+A conforming writer may order by causal class and path when status ordering is already stable.
 
 The ordering must be deterministic.
 
@@ -872,7 +888,7 @@ A successful file with noteworthy scan findings may be summarized under `Evidenc
 
 ## 17.1 Purpose
 
-List every scenario with final status `FAIL` or `ERROR`.
+List every scenario whose recorded status is `FAIL` or `ERROR`.
 
 ## 17.2 Required ordering
 
@@ -943,11 +959,11 @@ A scenario with exit code `0` remains failing when:
 
 Malformed marker protocol, timeout, launch failure, invalid assertion configuration, or unreadable required evidence should remain distinguishable from a validly evaluated linguistic mismatch.
 
-## 17.7 No scenarios implemented
+## 17.7 No scenario results
 
-During migration, when the final scenario runner is not yet implemented, the section must say so explicitly when represented by run capabilities.
+When a run contains no scenario results, the section must state whether scenario execution was outside the selected mode, intentionally skipped, blocked, or unavailable because of a recorded run error.
 
-It must not claim that zero scenarios means scenario validation passed.
+Zero scenario results must never be interpreted as successful scenario validation.
 
 ---
 
@@ -1044,7 +1060,7 @@ Lines from different files or streams must not be combined into one unlabeled co
 
 ## 19.1 Source
 
-Top errors derive from the final structured top-error records.
+Top errors derive from the canonical structured top-error records.
 
 ## 19.2 Complete listing
 
@@ -1087,7 +1103,7 @@ When a configured packet-size limit prevents full inline display:
 - preserve the highest-ranked records;
 - do not claim the displayed subset is complete.
 
-The standard final configuration should normally include all top errors because the list is already aggregated.
+The standard configuration should normally include all top errors because the list is already aggregated.
 
 ---
 
@@ -1117,7 +1133,7 @@ maximum packet size target: 256 KiB
 
 These are language-neutral framework defaults.
 
-Changing a limit without changing report meaning is normally a compatible implementation change.
+Changing a limit without changing report meaning is normally a compatible internal change.
 
 A persistent or user-configurable limit requires configuration and schema documentation.
 
@@ -1157,7 +1173,7 @@ Canonical omission marker inside text excerpts:
 ... <excerpt omitted> ...
 ```
 
-A simple `...` may be retained for compatibility, but the final form should make omission explicit.
+A simple `...` may be retained for compatibility, but canonical output should make omission explicit.
 
 ## 20.6 Truncation disclosure
 
@@ -1466,7 +1482,7 @@ It only writes local Markdown.
 Use `Notes` for packet-level limitations such as:
 
 - no failures found;
-- no scenario runner available in the current implementation;
+- scenario execution was not included in the run;
 - evidence excerpt omitted due to size;
 - previous run unavailable;
 - optional artifact missing;
@@ -1569,7 +1585,7 @@ Order by stable artifact role, not filesystem discovery order.
 
 ## 29.6 Ties
 
-Use lowercase normalized identity as the final tiebreaker.
+Use lowercase normalized identity as the last tiebreaker.
 
 ---
 
@@ -1811,7 +1827,7 @@ These values answer different questions and must not be collapsed into one label
 
 ## 35.1 All failures represented
 
-Every final file or scenario result with status `FAIL` or `ERROR` must be represented in the packet unless a documented packet-size limit requires omission.
+Every file or scenario result with status `FAIL` or `ERROR` must be represented in the packet unless a documented packet-size limit requires omission.
 
 ## 35.2 Explicit omission
 
@@ -1914,7 +1930,7 @@ The writer should tolerate:
 
 It must not tolerate silently:
 
-- invalid final status vocabulary;
+- invalid canonical status vocabulary;
 - contradictory result identity;
 - unsafe artifact path traversal;
 - required section omission;
@@ -1933,110 +1949,40 @@ Canonical behavior:
 2. encode as UTF-8;
 3. write in the target directory;
 4. flush and close;
-5. replace the final path atomically where supported;
+5. replace the target path atomically where supported;
 6. preserve the previous valid report if replacement fails before commit.
 
 A partially written packet must not be presented as finalized.
 
 ---
 
-# 40. Current implementation transition
+# 40. Legacy compatibility
 
-The predecessor writer already supports:
+Canonical writers emit the section names and ordering defined by soft-schema version `1.0`.
 
-- `# AI Ready Packet`;
-- `Run Summary`;
-- `Outcome`;
-- a conditional `Diagnosis Snapshot`;
-- failing file summaries;
-- compile progression excerpts;
-- stderr and fatal excerpts;
-- scan notes;
-- skipped files;
-- previous-run changes;
-- artifact paths;
-- a ready-made diagnostic prompt;
-- deterministic top-error ordering;
-- single-failure deduplication.
+Compatibility readers may recognize these legacy aliases:
 
-The final contract requires the following coordinated changes.
+| Legacy form | Canonical form |
+|---|---|
+| `## Artifact Paths` | `## Artifacts` |
+| `## Failing File` | `## Failing Files` |
+| `## Ready Prompt For AI` | `## Analysis Request` |
+| mode `file` | mode `quick` |
+| mode `all` | mode `diagnostic` |
 
-## 40.1 Required heading changes
+Compatibility rules:
 
-```text
-## Artifact Paths
-→ ## Artifacts
-```
+- required canonical sections remain present even when empty;
+- `Diagnosis Snapshot`, `Failing Scenarios`, and `Evidence` are always emitted;
+- file and scenario entries reference packet-local evidence IDs;
+- compile, scan, scenario, and gold excerpts are attributed under `Evidence`;
+- paths prefer run-relative or project-relative representation;
+- every structured top-error record is included unless a disclosed packet-size limit applies;
+- zero scenario results never imply successful scenario validation;
+- legacy aliases are accepted only by compatibility readers;
+- canonical writers do not emit legacy headings or legacy mode names.
 
-```text
-## Failing File
-→ ## Failing Files
-```
-
-The plural required heading is used even for one failure.
-
-## 40.2 Required new sections
-
-Add always-present:
-
-```text
-## Failing Scenarios
-## Evidence
-```
-
-## 40.3 Diagnosis section
-
-`Diagnosis Snapshot` becomes always present.
-
-When no failures exist, it states `None` or the canonical no-failure sentence.
-
-## 40.4 Evidence relocation
-
-Compile, scan, scenario, and gold excerpts should be indexed under `Evidence`.
-
-File and scenario entries should reference evidence IDs.
-
-This reduces duplication and improves attribution.
-
-## 40.5 Prompt heading
-
-Legacy:
-
-```text
-## Ready Prompt For AI
-```
-
-Final optional heading:
-
-```text
-## Analysis Request
-```
-
-The final request includes prompt-injection guidance and evidence-citation requirements.
-
-## 40.6 Artifact paths
-
-Final output should prefer run-relative and project-relative paths over absolute paths.
-
-## 40.7 Scenarios
-
-The writer must add scenario rendering when `ScenarioResult` becomes active.
-
-Zero scenario results must not be interpreted as scenario success during migration.
-
-## 40.8 Canonical modes
-
-Legacy mode names are normalized before display.
-
-## 40.9 Top errors
-
-The final writer includes every structured top-error record unless an explicit packet-size limit is disclosed.
-
-## 40.10 Compatibility
-
-During migration, tests may accept both legacy and final optional headings.
-
-Release `1.0` canonical writers emit only the final headings.
+A compatibility reader must preserve the meaning of statuses, evidence classes, paths, and required sections. It must not use a legacy Markdown report as a replacement for `summary.json`.
 
 ---
 
@@ -2167,7 +2113,7 @@ Verify:
 - canonical path owner;
 - UTF-8;
 - LF;
-- final newline;
+- trailing newline;
 - exact first heading.
 
 ## 42.2 Required-section tests
@@ -2189,7 +2135,7 @@ Verify:
 - exact order;
 - presence in empty runs;
 - plural `Failing Files`;
-- final `Artifacts` heading.
+- canonical `Artifacts` heading.
 
 ## 42.3 Source-of-truth tests
 
@@ -2285,7 +2231,7 @@ Verify:
 - legacy top-error mappings;
 - legacy `file` and `all` modes normalize;
 - legacy path field aliases load before rendering;
-- final headings are emitted;
+- canonical headings are emitted;
 - optional legacy heading readers remain separate from canonical writer behavior.
 
 ---
@@ -2362,7 +2308,7 @@ Probable drift exists when:
 - one failure appears in contradictory sections;
 - `Failing Scenarios` is absent;
 - `Evidence` is absent;
-- `Artifact Paths` remains the canonical final heading;
+- `Artifact Paths` is emitted instead of the canonical `Artifacts` heading;
 - a single failure changes the required heading to singular;
 - required sections disappear when empty;
 - only the first top error is shown without disclosure;
@@ -2380,7 +2326,7 @@ Probable drift exists when:
 - the packet is used as a migration source;
 - automation parses Markdown instead of `summary.json`;
 - artifact paths are reconstructed by the writer;
-- legacy mode names appear in canonical final output;
+- legacy mode names appear in canonical output;
 - omitted failures are not counted;
 - the packet claims scenario validation passed when scenarios were not executed.
 
@@ -2391,10 +2337,10 @@ Any indicator requires restoration of the contract or a coordinated versioned ch
 # 45. Review checklist
 
 ```text
-[ ] Writer consumes final RunResult
+[ ] Writer consumes completed RunResult
 [ ] No validation stage is rerun
 [ ] Canonical output path is used
-[ ] UTF-8, LF, and final newline are correct
+[ ] UTF-8, LF, and trailing newline are correct
 [ ] First heading is exact
 [ ] All seven required sections exist
 [ ] Required sections are in canonical order
@@ -2423,16 +2369,17 @@ Any indicator requires restoration of the contract or a coordinated versioned ch
 [ ] Evidence cannot escape Markdown fences
 [ ] Secrets are redacted
 [ ] No network or AI call occurs
+[ ] No Portfolio call, registry state, or aggregation field is emitted
 [ ] Report generation does not mutate RunResult
 [ ] Atomic writing is used
 [ ] Contract tests pass
 [ ] Persisted-schema compatibility is reviewed
-[ ] Manifest includes the finalized packet
+[ ] Manifest includes the published packet
 ```
 
 ---
 
-# 46. Final enforcement rule
+# 46. Packet rule
 
 `AI_READY.md` exists to reduce the distance between a failed validation run and a careful diagnosis.
 

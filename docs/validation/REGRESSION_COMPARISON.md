@@ -2,13 +2,14 @@
 
 **Document ID:** `GF-WB-VALIDATION-REGRESSION-COMPARISON`  
 **Status:** Normative validation specification  
-**Applies to:** Comparison between finalized GF Wordbench runs  
-**Primary implementation:** `app/audit/diff.py`  
+**Applies to:** Comparison between completed GF Wordbench runs for one active project  
+**Canonical owner:** `app/audit/diff.py`  
 **Primary input:** `run_<run-id>/summary.json`  
 **Primary output:** `RunResult.diff_entries` and `summary.json::diff_entries`  
 **Owner:** GF Wordbench maintainers  
 **Schema dependency:** `gf-wordbench.run-summary/1.x`  
-**Last structural review:** 2026-07-22  
+**Normative counterparts:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`, `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`, `docs/reference/STATUS_VALUES.md`  
+**Last reviewed:** 2026-07-24  
 
 ---
 
@@ -16,7 +17,7 @@
 
 Regression comparison answers one focused question:
 
-> What validation outcomes changed between the current run and one earlier comparable run?
+> What validation outcomes changed between the current run and one earlier compatible run?
 
 It identifies:
 
@@ -106,16 +107,28 @@ Regression comparison does not:
 - create a general time-series analytics platform;
 - make incompatible runs appear equivalent.
 
-A future analytics subsystem may consume run summaries, but it remains separate from this validation comparison.
+A separate analytics subsystem may consume run summaries, but it remains separate from this validation comparison.
 
 ---
 
-## 5. Terminology
 
-- **Current run**: the run being finalized.
+## 5. Product boundary
+
+Regression comparison belongs to GF Wordbench and compares runs produced for one active project.
+
+It may inspect earlier compatible runs under the configured Wordbench output root or an explicitly supplied baseline. It does not discover other Wordbench workspaces, aggregate several active projects, or build multilingual portfolio history.
+
+The independent `gf-portfolio` product may consume public, versioned Wordbench summaries and manifests. That optional consumption does not change baseline selection, comparison semantics, Wordbench schemas, or the read-only treatment of prior runs.
+
+---
+
+## 6. Terminology
+
+
+- **Current run**: the run being completed.
 - **Baseline run**: the earlier run selected for comparison.
 - **Candidate run**: an earlier run considered during baseline discovery.
-- **Comparable run**: a candidate whose identity and execution scope are compatible enough for meaningful comparison.
+- **Compatible run**: a candidate whose identity and execution scope are compatible enough for meaningful comparison.
 - **Subject**: one compared entity, such as a file, scenario, or run-level result.
 - **Subject identity**: `subject_kind + subject_id`.
 - **Primary status**: the canonical validation status used for transition classification.
@@ -127,9 +140,9 @@ A future analytics subsystem may consume run summaries, but it remains separate 
 
 ---
 
-## 6. Separation from other comparison systems
+## 7. Separation from other comparison systems
 
-## 6.1 Regression comparison versus Git diff
+### 7.1 Regression comparison versus Git diff
 
 Regression comparison compares validation outcomes:
 
@@ -146,7 +159,7 @@ A file may:
 
 Both forms of evidence are useful and distinct.
 
-## 6.2 Regression comparison versus gold comparison
+### 7.2 Regression comparison versus gold comparison
 
 Gold comparison evaluates:
 
@@ -168,7 +181,7 @@ A scenario may fail gold in both runs and therefore remain `unchanged` in regres
 
 A scenario may change from gold failure to gold success and therefore be `improved`.
 
-## 6.3 Regression comparison versus source fingerprinting
+### 7.3 Regression comparison versus source fingerprinting
 
 A fingerprint answers whether source content identity changed.
 
@@ -176,7 +189,7 @@ Regression comparison answers whether validation outcome changed.
 
 Fingerprint changes may enrich a diff message, but they do not define `improved` or `regressed`.
 
-## 6.4 Regression comparison versus release gates
+### 7.4 Regression comparison versus release gates
 
 Release gates decide whether the current project is release-ready.
 
@@ -188,9 +201,19 @@ A project may add an explicit no-regression release policy, but that policy must
 
 ---
 
-# 7. Execution position
 
-Regression comparison occurs after current structured results are coherent and before final report serialization.
+### 7.5 Regression comparison versus portfolio aggregation
+
+Regression comparison compares two compatible Wordbench runs for the same active project.
+
+Portfolio aggregation compares public results from several independent workspaces or projects. It belongs to `gf-portfolio` and must not alter Wordbench baseline discovery, subject identities, transition rules, or run artifacts.
+
+
+---
+
+## 8. Execution position
+
+Regression comparison occurs after current structured results are coherent and before report serialization.
 
 Canonical order:
 
@@ -214,15 +237,15 @@ The current result remains valid when regression comparison cannot be completed.
 
 ---
 
-# 8. Public component contract
+## 9. Public component contract
 
-## 8.1 Component
+### 9.1 Component
 
 ```text
 app/audit/diff.py
 ```
 
-## 8.2 Public responsibilities
+### 9.2 Public responsibilities
 
 The component owns:
 
@@ -232,13 +255,13 @@ load_previous_summary(...)
 build_diff_entries(...)
 ```
 
-The final implementation may refine signatures, but these logical responsibilities remain separate:
+Concrete function signatures may vary, but these logical responsibilities remain separate:
 
 1. discover;
 2. load and migrate;
 3. compare.
 
-## 8.3 Forbidden responsibilities
+### 9.3 Forbidden responsibilities
 
 The diff component must not:
 
@@ -256,9 +279,9 @@ The diff component must not:
 
 ---
 
-# 9. Enabling comparison
+## 10. Enabling comparison
 
-## 9.1 Configuration
+### 10.1 Configuration
 
 Regression comparison is controlled by a resolved run option logically equivalent to:
 
@@ -266,9 +289,9 @@ Regression comparison is controlled by a resolved run option logically equivalen
 diff_previous = true | false
 ```
 
-## 9.2 Default
+### 10.2 Default
 
-Recommended default:
+Default:
 
 ```text
 true
@@ -278,7 +301,7 @@ for checkpoint, release, and diagnostic modes.
 
 Quick mode may enable it when a comparable target baseline can be found.
 
-## 9.3 Disabled comparison
+### 10.3 Disabled comparison
 
 When disabled:
 
@@ -290,9 +313,9 @@ No previous run is loaded.
 
 Reports state that comparison was disabled only when that information is useful.
 
-## 9.4 Explicit baseline
+### 10.4 Explicit baseline
 
-A future or final CLI may allow:
+The CLI may support:
 
 ```text
 --compare-to <run-directory-or-summary.json>
@@ -306,13 +329,13 @@ An explicit baseline:
 - must not be modified;
 - must be recorded in current-run metadata or comparison evidence.
 
-Adding the persisted baseline-reference field requires coordination with `PERSISTED_SCHEMA_LOCK.md`.
+The persisted baseline-reference field is governed by `PERSISTED_SCHEMA_LOCK.md`.
 
 ---
 
-# 10. Baseline discovery
+## 11. Baseline discovery
 
-## 10.1 Automatic discovery root
+### 11.1 Automatic discovery root
 
 Automatic discovery searches the current run's configured output root.
 
@@ -325,7 +348,7 @@ Example:
 └── run_20260722_150000/   <- current
 ```
 
-## 10.2 Candidate directory
+### 11.2 Candidate directory
 
 A directory is an initial candidate when:
 
@@ -335,27 +358,27 @@ A directory is an initial candidate when:
 - it contains or may contain `summary.json`;
 - it is ordered earlier than the current run by the run-order policy.
 
-## 10.3 Finalized candidate
+### 11.3 Completed candidate
 
-The preferred baseline must be finalized.
+The preferred baseline must be completed.
 
-A run is finalized when:
+A run is completed when:
 
 - its `summary.json` is readable;
 - its required summary structure is valid;
 - its run identity is coherent;
 - it is not marked incomplete;
-- its final status is available;
+- its terminal status is available;
 - manifest requirements are satisfied when the run's schema and mode require them.
 
 Legacy runs created before manifest support may remain eligible through compatibility policy.
 
-## 10.4 Selection rule
+### 11.4 Selection rule
 
 Automatic selection chooses:
 
 ```text
-the most recent eligible comparable earlier run
+the most recent eligible compatible earlier run
 ```
 
 It must not simply choose the lexically previous directory if that directory is:
@@ -367,13 +390,13 @@ It must not simply choose the lexically previous directory if that directory is:
 - newer than the current run by metadata;
 - the current run under another path alias.
 
-## 10.5 Current implementation baseline
+### 11.5 Legacy baseline discovery
 
-The earlier implementation discovers the lexically most recent `run_*` directory whose name sorts before the current run.
+Legacy baseline discovery selects the lexically most recent `run_*` directory whose name sorts before the current run.
 
-The final implementation preserves compatibility with that layout while adding explicit eligibility checks.
+Canonical baseline discovery preserves compatibility with that layout while applying explicit eligibility checks.
 
-## 10.6 No candidate
+### 11.6 No candidate
 
 When no eligible prior run exists:
 
@@ -389,15 +412,15 @@ The current run may record:
 comparison_status = no_baseline
 ```
 
-only if such a field is added through the persisted-schema process.
+when the persisted schema defines that field.
 
 Without that field, a report may state the condition from in-memory comparison context.
 
 ---
 
-# 11. Comparability
+## 12. Comparability
 
-## 11.1 Required comparability checks
+### 12.1 Required comparability checks
 
 An automatic baseline must match the current run on:
 
@@ -410,7 +433,7 @@ supported summary schema
 status vocabulary
 ```
 
-## 11.2 Project identity
+### 12.2 Project identity
 
 Canonical match:
 
@@ -428,7 +451,7 @@ Legacy runs without `project_id` may use a documented migration inference from:
 
 Inference must be visible and tested.
 
-## 11.3 Mode compatibility
+### 12.3 Mode compatibility
 
 Default automatic comparison requires the same canonical mode:
 
@@ -447,7 +470,7 @@ versus
 complete release run
 ```
 
-## 11.4 Legacy modes
+### 12.4 Legacy modes
 
 Migration aliases:
 
@@ -458,19 +481,19 @@ all  -> diagnostic
 
 Aliases are normalized before comparability checks.
 
-## 11.5 Quick target compatibility
+### 12.5 Quick target compatibility
 
 Two quick runs are automatically comparable only when they target the same stable target identity.
 
 Canonical target identity is project-relative.
 
-## 11.6 Checkpoint compatibility
+### 12.6 Checkpoint compatibility
 
 Two checkpoint runs should compare the same checkpoint scope.
 
 Until an explicit checkpoint ID is persisted, automatic comparison may require equivalent selected subject sets or an explicit baseline.
 
-## 11.7 Release compatibility
+### 12.7 Release compatibility
 
 Release runs are comparable when:
 
@@ -481,7 +504,7 @@ Release runs are comparable when:
 
 Changes to project release requirements must be surfaced as context, not silently ignored.
 
-## 11.8 Diagnostic compatibility
+### 12.8 Diagnostic compatibility
 
 Diagnostic runs are comparable when project ID and canonical mode match.
 
@@ -489,7 +512,7 @@ Newly added optional diagnostics appear as `new`.
 
 Removed diagnostics appear as `removed`.
 
-## 11.9 GF version difference
+### 12.9 GF version difference
 
 Different GF versions do not automatically make runs incomparable.
 
@@ -497,7 +520,7 @@ The comparison must disclose the version change.
 
 A version change may explain outcome changes but does not erase them.
 
-## 11.10 Normalization-version difference
+### 12.10 Normalization-version difference
 
 Scenario output comparisons across different normalization versions require caution.
 
@@ -505,7 +528,7 @@ Scenario primary statuses may still be compared.
 
 Gold-detail comparison must be marked as potentially incompatible when normalization meaning changed.
 
-## 11.11 Incompatible baseline
+### 12.11 Incompatible baseline
 
 An automatically discovered incompatible candidate is skipped and discovery continues to older candidates.
 
@@ -515,9 +538,9 @@ It must not silently produce authoritative diff entries.
 
 ---
 
-# 12. Baseline loading
+## 13. Baseline loading
 
-## 12.1 Accepted input
+### 13.1 Accepted input
 
 The loader accepts:
 
@@ -531,17 +554,17 @@ or:
 path to a run directory containing summary.json
 ```
 
-## 12.2 Canonical encoding
+### 13.2 Canonical encoding
 
 ```text
 UTF-8 JSON
 ```
 
-## 12.3 Root type
+### 13.3 Root type
 
 The JSON root must be an object.
 
-## 12.4 Supported forms
+### 13.4 Supported forms
 
 The loader supports:
 
@@ -550,7 +573,7 @@ The loader supports:
 - the documented older flat summary;
 - supported legacy artifact aliases.
 
-## 12.5 Legacy migration
+### 13.5 Legacy migration
 
 Legacy loading may normalize:
 
@@ -563,7 +586,7 @@ legacy totals -> canonical totals
 absolute project paths -> project-relative paths when safely resolvable
 ```
 
-## 12.6 Read-only behavior
+### 13.6 Read-only behavior
 
 Loading a baseline must not rewrite:
 
@@ -575,7 +598,7 @@ Loading a baseline must not rewrite:
 
 Migration occurs in memory unless an explicit migration command is invoked.
 
-## 12.7 Invalid summary
+### 13.7 Invalid summary
 
 An invalid automatically discovered summary:
 
@@ -590,7 +613,7 @@ If all candidates are invalid:
 diff_entries = []
 ```
 
-## 12.8 Unsupported schema
+### 13.8 Unsupported schema
 
 An unsupported major schema is not loaded as if compatible.
 
@@ -602,9 +625,9 @@ comparison unavailable: unsupported baseline schema
 
 ---
 
-# 13. Subject model
+## 14. Subject model
 
-## 13.1 Canonical identity
+### 14.1 Canonical identity
 
 Every diff subject is identified by:
 
@@ -612,7 +635,7 @@ Every diff subject is identified by:
 subject_kind + subject_id
 ```
 
-## 13.2 Subject kinds
+### 14.2 Subject kinds
 
 Canonical values:
 
@@ -622,7 +645,7 @@ scenario
 run
 ```
 
-## 13.3 File subject ID
+### 14.3 File subject ID
 
 Canonical file identity:
 
@@ -636,7 +659,7 @@ Example:
 lib/src/french/GrammarFre.gf
 ```
 
-## 13.4 Scenario subject ID
+### 14.4 Scenario subject ID
 
 Canonical scenario identity:
 
@@ -650,7 +673,7 @@ Example:
 linearize-basic
 ```
 
-## 13.5 Run subject ID
+### 14.5 Run subject ID
 
 Run-level comparisons use stable metric identifiers rather than the run ID.
 
@@ -664,7 +687,7 @@ release-pgf
 
 Run-level subject IDs must be documented before use.
 
-## 13.6 Legacy file identity
+### 14.6 Legacy file identity
 
 Legacy `DiffEntry.file_path` migrates to:
 
@@ -673,7 +696,7 @@ subject_kind = file
 subject_id = normalized file_path
 ```
 
-## 13.7 Duplicate identity
+### 14.7 Duplicate identity
 
 A single run must not contain duplicate canonical identities.
 
@@ -683,9 +706,9 @@ The comparison must not choose one duplicate silently.
 
 ---
 
-# 14. Path normalization
+## 15. Path normalization
 
-## 14.1 Canonical file path
+### 15.1 Canonical file path
 
 Persisted canonical file paths are:
 
@@ -695,7 +718,7 @@ Persisted canonical file paths are:
 - free of drive letters;
 - stable across developer machines.
 
-## 14.2 Legacy absolute paths
+### 15.2 Legacy absolute paths
 
 A legacy absolute path may be converted to project-relative form when:
 
@@ -703,18 +726,18 @@ A legacy absolute path may be converted to project-relative form when:
 - containment is verified;
 - relative identity is unambiguous.
 
-## 14.3 Case policy
+### 15.3 Case policy
 
 Path case comparison follows the project identity policy.
 
-Recommended canonical policy:
+Canonical policy:
 
 - preserve original path case for display;
 - use normalized comparison keys;
 - account for case-insensitive Windows filesystems;
 - avoid collapsing two legitimately distinct case-sensitive paths without warning.
 
-## 14.4 Separators
+### 15.4 Separators
 
 Input may contain:
 
@@ -729,13 +752,13 @@ Canonical comparison key uses:
 /
 ```
 
-## 14.5 Symlinks
+### 15.5 Symlinks
 
 Persisted identity is logical project-relative identity, not a machine-specific resolved symlink target.
 
 Security containment remains the responsibility of path validation.
 
-## 14.6 Rename behavior
+### 15.6 Rename behavior
 
 Without an explicit rename map:
 
@@ -752,9 +775,9 @@ A report may note equal fingerprints as a possible rename, but `change_kind` rem
 
 ---
 
-# 15. Primary statuses
+## 16. Primary statuses
 
-## 15.1 Subject validation statuses
+### 16.1 Subject validation statuses
 
 Canonical statuses:
 
@@ -765,7 +788,7 @@ ERROR
 SKIPPED
 ```
 
-## 15.2 Run overall statuses
+### 16.2 Run overall statuses
 
 Canonical run statuses:
 
@@ -775,14 +798,14 @@ FAIL
 ERROR
 ```
 
-## 15.3 Meaning
+### 16.3 Meaning
 
 - `OK`: required validation passed.
 - `FAIL`: validation executed sufficiently and a criterion failed.
 - `ERROR`: validation could not execute or be interpreted reliably.
 - `SKIPPED`: subject was intentionally not executed.
 
-## 15.4 Empty status
+### 16.4 Empty status
 
 Canonical v1 `DiffEntry` should use `null` for a missing side if the schema is revised accordingly.
 
@@ -792,13 +815,13 @@ During migration compatibility, an absent previous or current subject may be rep
 
 Legacy empty strings are accepted only for migration.
 
-## 15.5 No status invention
+### 16.5 No status invention
 
 The comparison component must not create new validation statuses.
 
 ---
 
-# 16. Change kinds
+## 17. Change kinds
 
 Canonical values:
 
@@ -814,9 +837,9 @@ No other value may be emitted without a schema change.
 
 ---
 
-# 17. Transition semantics
+## 18. Transition semantics
 
-## 17.1 Conservative principle
+### 18.1 Conservative principle
 
 Only clear status transitions become `improved` or `regressed`.
 
@@ -824,7 +847,7 @@ Inventory changes remain `new` or `removed`.
 
 Ambiguous transitions remain `unchanged` with a detail message unless a documented transition rule applies.
 
-## 17.2 Canonical transition matrix
+### 18.2 Canonical transition matrix
 
 For subjects present in both runs:
 
@@ -847,24 +870,24 @@ For subjects present in both runs:
 | `SKIPPED` | `ERROR` | `regressed` only when newly required and comparable; otherwise `unchanged` with detail |
 | `SKIPPED` | `SKIPPED` | `unchanged` |
 
-## 17.3 Required flag context
+### 18.3 Required flag context
 
 Scenario transitions involving `SKIPPED` require the previous and current `required` flags.
 
 The comparison must not label an optional unselected scenario as a regression merely because another run selected it.
 
-## 17.4 Baseline implementation compatibility
+### 18.4 Legacy transition compatibility
 
-The original implementation defines the minimal transitions:
+Legacy behavior defines the minimal transitions:
 
 ```text
 FAIL -> OK = improved
 OK -> FAIL = regressed
 ```
 
-The final implementation extends this safely to canonical `ERROR` and `SKIPPED` states while preserving the original cases.
+The comparison component extends this safely to canonical `ERROR` and `SKIPPED` states while preserving the original cases.
 
-## 17.5 Same status, changed meaning
+### 18.5 Same status, changed meaning
 
 The primary `change_kind` remains `unchanged` when status is the same.
 
@@ -884,9 +907,9 @@ The message may report:
 
 ---
 
-# 18. New subjects
+## 19. New subjects
 
-## 18.1 Definition
+### 19.1 Definition
 
 A subject is `new` when:
 
@@ -895,7 +918,7 @@ absent in baseline
 present in current run
 ```
 
-## 18.2 Meaning
+### 19.2 Meaning
 
 `new` is an inventory change.
 
@@ -908,7 +931,7 @@ Examples:
 - newly registered scenario;
 - newly required release gate.
 
-## 18.3 Message
+### 19.3 Message
 
 The message must include the current status.
 
@@ -920,7 +943,7 @@ New required scenario fails.
 New optional scenario was skipped.
 ```
 
-## 18.4 Release impact
+### 19.4 Release impact
 
 A new required failing subject affects current release status through normal validation gates.
 
@@ -928,9 +951,9 @@ The `new` change kind does not need to duplicate that gate logic.
 
 ---
 
-# 19. Removed subjects
+## 20. Removed subjects
 
-## 19.1 Definition
+### 20.1 Definition
 
 A subject is `removed` when:
 
@@ -939,7 +962,7 @@ present in baseline
 absent in current run
 ```
 
-## 19.2 Meaning
+### 20.2 Meaning
 
 `removed` is an inventory change.
 
@@ -952,13 +975,13 @@ It may mean:
 - configuration drift;
 - accidental omission.
 
-## 19.3 Comparability safeguard
+### 20.3 Comparability safeguard
 
 Before reporting `removed`, the runs must be scope-compatible.
 
 Otherwise broad differences in selected subjects could create false removals.
 
-## 19.4 Message
+### 20.4 Message
 
 The message includes the previous status.
 
@@ -968,7 +991,7 @@ Example:
 Removed file; previous status was OK.
 ```
 
-## 19.5 Release impact
+### 20.5 Release impact
 
 Removing a required file or scenario is handled by project configuration and release gates.
 
@@ -976,9 +999,9 @@ Regression comparison reports the inventory change but does not independently de
 
 ---
 
-# 20. File comparison
+## 21. File comparison
 
-## 20.1 Primary fields
+### 21.1 Primary fields
 
 File transition classification uses:
 
@@ -986,7 +1009,7 @@ File transition classification uses:
 status
 ```
 
-## 20.2 Detail fields
+### 21.2 Detail fields
 
 Messages may compare:
 
@@ -1002,9 +1025,9 @@ fingerprint.hash
 scan_counts
 ```
 
-## 20.3 Detail priority
+### 21.3 Detail priority
 
-Recommended detail-message priority:
+Detail-message priority:
 
 1. primary status transition;
 2. error kind changed;
@@ -1019,7 +1042,7 @@ A message should remain concise.
 
 Detailed field-by-field evidence remains in the two summaries.
 
-## 20.4 Fingerprint use
+### 21.4 Fingerprint use
 
 Fingerprint equality may support:
 
@@ -1042,13 +1065,13 @@ source changed
 
 It does not prove causality.
 
-## 20.5 Scan-count changes
+### 21.5 Scan-count changes
 
 Static scan counts are secondary details.
 
 A scan-count change does not independently redefine file compile status.
 
-## 20.6 Direct/downstream transition
+### 21.6 Direct/downstream transition
 
 Examples:
 
@@ -1069,21 +1092,21 @@ This preserves the distinction between status and diagnosis.
 
 ---
 
-# 21. Scenario comparison
+## 22. Scenario comparison
 
-## 21.1 Primary identity
+### 22.1 Primary identity
 
 ```text
 scenario_id
 ```
 
-## 21.2 Primary field
+### 22.2 Primary field
 
 ```text
 status
 ```
 
-## 21.3 Detail fields
+### 22.3 Detail fields
 
 Messages may compare:
 
@@ -1100,7 +1123,7 @@ section completion
 produced artifact set
 ```
 
-## 21.4 Gold transition examples
+### 22.4 Gold transition examples
 
 | Previous | Current | Primary result |
 |---|---|---|
@@ -1110,7 +1133,7 @@ produced artifact set
 | No gold in either run | compare other assertions |
 | Gold policy added | scenario may be `new` or detail changed depending on identity and scope |
 
-## 21.5 Required flag change
+### 22.5 Required flag change
 
 A scenario changing from optional to required is a material detail.
 
@@ -1123,13 +1146,13 @@ message = required flag changed: false -> true
 
 If it is now required and fails, current validation and release gates handle the failure.
 
-## 21.6 Script hash change
+### 22.6 Script hash change
 
 A changed `.gfs` script hash is useful context.
 
 It does not create a separate change kind.
 
-## 21.7 Normalization-version change
+### 22.7 Normalization-version change
 
 A changed normalization version must be disclosed.
 
@@ -1137,15 +1160,15 @@ Exact output-detail comparison may be considered non-equivalent, but primary sta
 
 ---
 
-# 22. Run-level comparison
+## 23. Run-level comparison
 
-## 22.1 Purpose
+### 23.1 Purpose
 
 Run-level entries summarize a small number of stable outcomes.
 
 They must not duplicate every total.
 
-## 22.2 Recommended run subjects
+### 23.2 Canonical run subjects
 
 ```text
 overall-status
@@ -1153,7 +1176,7 @@ release-pgf
 required-scenarios
 ```
 
-## 22.3 Overall status
+### 23.3 Overall status
 
 Example:
 
@@ -1168,7 +1191,7 @@ Example:
 }
 ```
 
-## 22.4 Count changes
+### 23.4 Count changes
 
 Counts may be reported in summaries, but they should not generate separate `DiffEntry` records for every integer by default.
 
@@ -1181,21 +1204,21 @@ files_excluded
 duration_ms
 ```
 
-## 22.5 Duration
+### 23.5 Duration
 
 Duration is not a validation regression in this subsystem.
 
 Performance regression analysis requires a separate policy with repeatability controls.
 
-## 22.6 GF version
+### 23.6 GF version
 
 GF version change is comparison context.
 
-It is not a `DiffEntry` subject unless a future policy explicitly defines one.
+It is not a `DiffEntry` subject unless a explicit policy explicitly defines one.
 
 ---
 
-# 23. DiffEntry schema
+## 24. DiffEntry schema
 
 Canonical persisted structure:
 
@@ -1210,7 +1233,7 @@ Canonical persisted structure:
 }
 ```
 
-## 23.1 Required fields
+### 24.1 Required fields
 
 ```text
 subject_kind
@@ -1221,7 +1244,7 @@ change_kind
 message
 ```
 
-## 23.2 Legacy structure
+### 24.2 Legacy structure
 
 Legacy entries may use:
 
@@ -1242,7 +1265,7 @@ subject_kind = file
 subject_id = file_path
 ```
 
-## 23.3 Message role
+### 24.3 Message role
 
 `message` is human-readable context.
 
@@ -1254,11 +1277,11 @@ They must not parse `message` to recover:
 - statuses;
 - change kind.
 
-## 23.4 Extension policy
+### 24.4 Extension policy
 
-New optional fields require a compatible schema update.
+Optional fields require a compatible schema update.
 
-Possible future fields:
+Possible extension fields:
 
 ```text
 detail_changes
@@ -1267,11 +1290,11 @@ current_run_id
 comparison_confidence
 ```
 
-They must not be added ad hoc.
+They are never added ad hoc.
 
 ---
 
-# 24. Deterministic ordering
+## 25. Deterministic ordering
 
 Canonical severity order:
 
@@ -1290,7 +1313,7 @@ subject_kind order
 then normalized subject_id
 ```
 
-Recommended subject-kind order:
+Canonical subject-kind order:
 
 ```text
 run
@@ -1309,9 +1332,9 @@ No ordering may depend on:
 
 ---
 
-# 25. Message construction
+## 26. Message construction
 
-## 25.1 Requirements
+### 26.1 Requirements
 
 Messages must be:
 
@@ -1321,7 +1344,7 @@ Messages must be:
 - based on structured evidence;
 - free of unsupported causal claims.
 
-## 25.2 Examples
+### 26.2 Examples
 
 ```text
 Status changed: FAIL -> OK.
@@ -1333,7 +1356,7 @@ Status unchanged at FAIL; diagnostic class changed: downstream -> direct.
 Status unchanged at OK; source fingerprint changed.
 ```
 
-## 25.3 Prohibited message claims
+### 26.3 Prohibited message claims
 
 Do not write:
 
@@ -1347,7 +1370,7 @@ The dependency definitely caused the failure.
 
 unless the structured evidence explicitly proves the claim.
 
-## 25.4 Error text
+### 26.4 Error text
 
 Full raw GF errors should not be duplicated into every message.
 
@@ -1355,9 +1378,9 @@ Use concise summaries and preserve raw evidence paths elsewhere.
 
 ---
 
-# 26. Comparison outcome
+## 27. Comparison outcome
 
-## 26.1 Successful comparison
+### 27.1 Successful comparison
 
 A successful comparison may produce:
 
@@ -1373,9 +1396,9 @@ Zero entries can mean:
 - no baseline;
 - identical subject inventories with filtering configured to omit unchanged entries.
 
-The implementation and report must distinguish these conditions internally where necessary.
+The comparison component and reports distinguish these conditions internally where necessary.
 
-## 26.2 Filtering unchanged entries
+### 27.2 Filtering unchanged entries
 
 Canonical `summary.json` may retain all entries, including `unchanged`.
 
@@ -1383,7 +1406,7 @@ A UI or human report may hide unchanged entries by default.
 
 Filtering display must not mutate stored diff data.
 
-## 26.3 Comparison warning
+### 27.3 Comparison warning
 
 Warnings may include:
 
@@ -1398,7 +1421,7 @@ detail comparison partially unavailable
 
 Warnings do not automatically change validation status.
 
-## 26.4 Comparison error
+### 27.4 Comparison error
 
 Comparison errors include:
 
@@ -1416,15 +1439,15 @@ Strict CI may choose to fail the command when an explicitly required comparison 
 
 ---
 
-# 27. Release and CI policy
+## 28. Release and CI policy
 
-## 27.1 Informational default
+### 28.1 Informational default
 
 Regression comparison is informational by default.
 
 Current validation truth remains primary.
 
-## 27.2 Optional no-regression gate
+### 28.2 Optional no-regression gate
 
 A project or CI policy may require:
 
@@ -1444,14 +1467,14 @@ Such a gate must define:
 - baseline compatibility;
 - behavior when no baseline exists.
 
-## 27.3 Recommended release gate
+### 28.3 Canonical no-regression gate
 
-Balanced recommendation:
+Canonical release policy:
 
 ```text
 fail release comparison gate when:
   a required file or required scenario is regressed
-  and a compatible finalized release baseline exists
+  and a compatible completed release baseline exists
 ```
 
 Do not fail solely because:
@@ -1461,13 +1484,13 @@ Do not fail solely because:
 - a new passing subject appears;
 - an intentionally removed subject appears.
 
-## 27.4 CI explicit baseline
+### 28.4 CI explicit baseline
 
 CI should prefer an explicit known baseline artifact when deterministic release comparison is required.
 
 Automatic "previous directory" discovery is more suitable for local development history.
 
-## 27.5 Branch awareness
+### 28.5 Branch awareness
 
 GF Wordbench does not infer Git branches from run directories.
 
@@ -1475,27 +1498,27 @@ CI is responsible for supplying the intended baseline when branch context matter
 
 ---
 
-# 28. Failure resilience
+## 29. Failure resilience
 
-## 28.1 Missing output root
+### 29.1 Missing output root
 
 No baseline is available.
 
 Return an empty diff.
 
-## 28.2 Missing summary
+### 29.2 Missing summary
 
 Skip the candidate.
 
-## 28.3 Invalid JSON
+### 29.3 Invalid JSON
 
 Skip automatic candidate and record warning.
 
-## 28.4 Invalid previous result
+### 29.4 Invalid previous result
 
 Do not mutate the current result.
 
-## 28.5 Diff algorithm exception
+### 29.5 Diff algorithm exception
 
 The orchestrator:
 
@@ -1504,33 +1527,33 @@ The orchestrator:
 - continues report generation;
 - preserves current validation status unless comparison was explicitly required.
 
-## 28.6 Partial current run
+### 29.6 Partial current run
 
 A partial current run may be compared only when its structured results are coherent.
 
 The diff must not compare uninitialized placeholders as real statuses.
 
-## 28.7 Cancelled current run
+### 29.7 Cancelled current run
 
 A cancelled run may produce historical context, but reports must clearly identify it as partial.
 
-It must not be selected automatically as a future finalized baseline unless finalization policy explicitly permits partial baselines.
+It must not be selected automatically as a later completed baseline unless run-closure policy explicitly permits partial baselines.
 
 ---
 
-# 29. Security and integrity
+## 30. Security and integrity
 
-## 29.1 Read-only baseline
+### 30.1 Read-only baseline
 
 The baseline is opened read-only.
 
-## 29.2 Path containment
+### 30.2 Path containment
 
 Automatic discovery remains inside the configured output root.
 
 Explicit baseline paths undergo normal path and permission validation.
 
-## 29.3 Symlinks and junctions
+### 30.3 Symlinks and junctions
 
 Strict mode should reject a baseline path that escapes the approved root through:
 
@@ -1540,25 +1563,25 @@ Strict mode should reject a baseline path that escapes the approved root through
 
 Explicit external baselines require deliberate policy.
 
-## 29.4 Untrusted JSON
+### 30.4 Untrusted JSON
 
 Summary loading uses safe JSON parsing.
 
 No arbitrary object deserialization is permitted.
 
-## 29.5 Resource limits
+### 30.5 Resource limits
 
 A baseline summary should have a reasonable size limit.
 
 A maliciously large summary must not exhaust memory.
 
-## 29.6 Manifest verification
+### 30.6 Manifest verification
 
 When a baseline includes a canonical manifest, strict comparison may verify the summary hash before loading.
 
 Legacy runs without manifests remain usable only under legacy compatibility policy.
 
-## 29.7 Secrets
+### 30.7 Secrets
 
 Diff messages must not expose secrets from:
 
@@ -1569,7 +1592,7 @@ Diff messages must not expose secrets from:
 
 ---
 
-# 30. Canonical algorithm
+## 31. Canonical algorithm
 
 ```python
 def compare_with_previous(current_run_result):
@@ -1640,11 +1663,11 @@ The behavior is normative.
 
 ---
 
-# 31. Current-to-final migration
+## 32. Legacy file-only migration
 
-## 31.1 Existing file-only model
+### 32.1 Legacy file-only model
 
-The earlier implementation uses:
+The legacy file-only model uses:
 
 ```python
 DiffEntry(
@@ -1658,9 +1681,9 @@ DiffEntry(
 
 It compares `FileResult` maps keyed by normalized file path.
 
-## 31.2 Final generalized model
+### 32.2 Canonical generalized model
 
-The final model uses:
+The canonical model uses:
 
 ```python
 DiffEntry(
@@ -1679,23 +1702,16 @@ This supports:
 - scenarios;
 - selected run-level outcomes.
 
-## 31.3 Required migration work
+### 32.3 Migration requirements
 
-```text
-[ ] update DiffEntry model
-[ ] add legacy file_path reader
-[ ] update JSON writer
-[ ] update JSON loader
-[ ] update Markdown report
-[ ] update AI report
-[ ] update GUI display
-[ ] add scenario indexing
-[ ] add run-level subject policy
-[ ] update tests
-[ ] increment schema minor version if required
-```
+The canonical model uses `subject_kind` and `subject_id`. Readers accept legacy `file_path` entries during the documented compatibility window and normalize them in memory.
 
-## 31.4 Compatibility
+Writers emit only the canonical generalized shape. JSON, Markdown, AI-ready, GUI and CLI consumers use structured `DiffEntry` fields and never recover identity or change semantics by parsing message text.
+
+Schema, loaders, reports, fixtures and tests change together when this migration contract changes.
+
+
+### 32.4 Compatibility
 
 Canonical writers must emit the generalized shape.
 
@@ -1703,15 +1719,15 @@ Readers continue accepting legacy file-only entries during the support window.
 
 ---
 
-# 32. Reporting requirements
+## 33. Reporting requirements
 
-## 32.1 Summary JSON
+### 33.1 Summary JSON
 
 `summary.json` stores canonical `diff_entries`.
 
-## 32.2 Markdown summary
+### 33.2 Markdown summary
 
-Recommended sections:
+Report sections:
 
 ```text
 Regressions
@@ -1724,7 +1740,7 @@ Comparison warnings
 
 Empty low-value sections may be omitted or state `None`.
 
-## 32.3 AI packet
+### 33.3 AI packet
 
 `AI_READY.md` should prioritize:
 
@@ -1738,7 +1754,7 @@ It must link to current evidence.
 
 It must not quote an entire previous run unnecessarily.
 
-## 32.4 GUI
+### 33.4 GUI
 
 The GUI may provide filters for:
 
@@ -1755,7 +1771,7 @@ run
 
 GUI filtering does not alter `RunResult`.
 
-## 32.5 Console
+### 33.5 Console
 
 The CLI should print concise counts rather than every unchanged entry by default.
 
@@ -1771,7 +1787,7 @@ unchanged: 27
 
 ---
 
-# 33. Deterministic test fixtures
+## 34. Deterministic test fixtures
 
 Fixtures should include:
 
@@ -1787,9 +1803,9 @@ Legacy fixtures may include Windows absolute paths to validate migration.
 
 ---
 
-# 34. Required tests
+## 35. Required tests
 
-Recommended structure:
+Test structure:
 
 ```text
 tests/regression/
@@ -1810,7 +1826,7 @@ tests/regression/
 └── test_diff_reporting.py
 ```
 
-## 34.1 Discovery tests
+### 35.1 Discovery tests
 
 Verify:
 
@@ -1824,7 +1840,7 @@ Verify:
 - collision-suffixed run IDs;
 - explicit baseline used.
 
-## 34.2 Compatibility tests
+### 35.2 Compatibility tests
 
 Verify:
 
@@ -1837,7 +1853,7 @@ Verify:
 - normalization-version difference warning;
 - unsupported schema.
 
-## 34.3 Loading tests
+### 35.3 Loading tests
 
 Verify:
 
@@ -1853,7 +1869,7 @@ Verify:
 - legacy `ai_brief_path`;
 - legacy `file_path` diff entry.
 
-## 34.4 Identity tests
+### 35.4 Identity tests
 
 Verify:
 
@@ -1865,7 +1881,7 @@ Verify:
 - file and scenario with same text remain distinct;
 - rename becomes removed plus new.
 
-## 34.5 Transition tests
+### 35.5 Transition tests
 
 Verify every canonical transition in the matrix.
 
@@ -1879,7 +1895,7 @@ absent -> present = new
 present -> absent = removed
 ```
 
-## 34.6 File-detail tests
+### 35.6 File-detail tests
 
 Verify:
 
@@ -1892,7 +1908,7 @@ Verify:
 - scan counts changed;
 - no unsupported causal claim.
 
-## 34.7 Scenario tests
+### 35.7 Scenario tests
 
 Verify:
 
@@ -1905,7 +1921,7 @@ Verify:
 - normalization version changed;
 - marker failure detail changed.
 
-## 34.8 Ordering tests
+### 35.8 Ordering tests
 
 Verify canonical order:
 
@@ -1919,7 +1935,7 @@ unchanged
 
 Then subject kind and subject ID.
 
-## 34.9 Resilience tests
+### 35.9 Resilience tests
 
 Verify:
 
@@ -1929,7 +1945,7 @@ Verify:
 - comparison warning recorded;
 - comparison-required policy can fail explicitly.
 
-## 34.10 Security tests
+### 35.10 Security tests
 
 Verify:
 
@@ -1942,9 +1958,9 @@ Verify:
 
 ---
 
-# 35. Acceptance examples
+## 36. Acceptance examples
 
-## 35.1 File improvement
+### 36.1 File improvement
 
 Previous:
 
@@ -1971,7 +1987,7 @@ Diff:
 }
 ```
 
-## 35.2 File regression
+### 36.2 File regression
 
 Previous:
 
@@ -1991,7 +2007,7 @@ Result:
 regressed
 ```
 
-## 35.3 Same failure, different error
+### 36.3 Same failure, different error
 
 Previous:
 
@@ -2012,7 +2028,7 @@ change_kind = unchanged
 message = Status unchanged at FAIL; error kind changed: TYPE -> SYNTAX.
 ```
 
-## 35.4 New failing scenario
+### 36.4 New failing scenario
 
 Previous:
 
@@ -2034,7 +2050,7 @@ change_kind = new
 
 Current validation still fails through normal required-scenario logic.
 
-## 35.5 Removed passing file
+### 36.5 Removed passing file
 
 Previous:
 
@@ -2056,7 +2072,7 @@ change_kind = removed
 
 The comparison does not guess whether the file was renamed.
 
-## 35.6 GF version changed
+### 36.6 GF version changed
 
 Previous:
 
@@ -2083,7 +2099,7 @@ The message must not state that GF version B caused the regression.
 
 ---
 
-# 36. Performance constraints
+## 37. Performance constraints
 
 The algorithm should be:
 
@@ -2103,7 +2119,7 @@ where:
 - `C` is current subject count;
 - `N` is union subject count.
 
-The implementation should not perform nested full-list comparisons.
+The algorithm must not perform nested full-list comparisons.
 
 Baseline discovery should stop after finding the newest eligible baseline.
 
@@ -2111,9 +2127,9 @@ No external process is launched.
 
 ---
 
-# 37. Logging and observability
+## 38. Logging and observability
 
-Recommended master-log events:
+Master-log events:
 
 ```text
 diff_disabled
@@ -2128,7 +2144,7 @@ diff_build_done
 diff_failed
 ```
 
-Recommended structured context:
+Structured context:
 
 ```text
 baseline run ID
@@ -2145,14 +2161,14 @@ Do not log full baseline JSON.
 
 ---
 
-# 38. Anti-drift rules
+## 39. Anti-drift rules
 
 The following indicate regression-comparison drift:
 
 - diff reads `summary.md`;
 - GUI and CLI select different baselines;
 - one caller compares absolute paths and another relative paths;
-- `file_path` remains canonical after generalized subjects are implemented;
+- `file_path` remains canonical after generalized subjects are enforced;
 - a new change kind appears without schema update;
 - status transition rules exist only inside report code;
 - scenario comparison uses filename instead of scenario ID;
@@ -2172,7 +2188,7 @@ Any indicator requires coordinated review.
 
 ---
 
-# 39. Contract-change workflow
+## 40. Contract-change workflow
 
 A comparison-contract change must state:
 
@@ -2213,9 +2229,9 @@ Required checklist:
 
 ---
 
-# 40. Implementation completion checklist
+## 41. Contract acceptance checklist
 
-The final regression-comparison system is complete when:
+The regression-comparison contract is satisfied when:
 
 ```text
 [ ] comparison uses summary.json only
@@ -2227,15 +2243,15 @@ The final regression-comparison system is complete when:
 [ ] malformed candidates are skipped safely
 [ ] canonical schema is validated
 [ ] supported legacy summaries load
-[ ] canonical subject identity is implemented
+[ ] canonical subject identity is enforced
 [ ] file identities are project-relative
 [ ] scenario identities use scenario_id
 [ ] duplicate identities fail clearly
-[ ] five canonical change kinds are implemented
+[ ] five canonical change kinds are enforced
 [ ] status transition matrix is tested
 [ ] original FAIL->OK and OK->FAIL behavior is preserved
 [ ] detail changes do not overwrite primary status semantics
-[ ] deterministic ordering is implemented
+[ ] deterministic ordering is enforced
 [ ] missing baseline returns empty diff
 [ ] diff failure preserves current result
 [ ] reports consume structured DiffEntry
@@ -2243,14 +2259,14 @@ The final regression-comparison system is complete when:
 [ ] baseline is never modified
 [ ] strict manifest verification is supported
 [ ] no-regression gate is explicit, not implicit
-[ ] unit tests pass
-[ ] legacy migration tests pass
-[ ] Windows path tests pass
+[ ] unit tests cover the contract
+[ ] legacy migration tests cover supported inputs
+[ ] Windows path tests cover canonical identity
 ```
 
 ---
 
-# 41. Related documents
+## 42. Related documents
 
 ```text
 docs/architecture/EXECUTION_FLOW.md
@@ -2267,14 +2283,19 @@ docs/reports/SUMMARY_MARKDOWN_REFERENCE.md
 docs/reports/AI_READY_REFERENCE.md
 docs/reference/STATUS_VALUES.md
 docs/reference/SCHEMA_INDEX.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
+docs/reference/STATUS_VALUES.md
+docs/decisions/ADR-0005-FILE-AND-SCENARIO-RESULTS.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 SECURITY.md
 ```
 
 ---
 
-# 42. Final rule
+## 43. Governing rule
 
 Regression comparison is historical context built from structured validation evidence.
 
@@ -2282,4 +2303,4 @@ It must remain conservative.
 
 Therefore:
 
-> Compare only compatible finalized runs, identify subjects by stable canonical identity, classify only documented status transitions, preserve inventory changes as `new` or `removed`, and never let a missing or damaged baseline corrupt the current run.
+> Compare only compatible completed runs, identify subjects by stable canonical identity, classify only documented status transitions, preserve inventory changes as `new` or `removed`, and never let a missing or damaged baseline corrupt the current run.

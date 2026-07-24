@@ -1,8 +1,16 @@
 # Security Policy
 
+**Status:** Normative  
+**Applies to:** GF Wordbench, the active project in the current workspace, external-tool execution, persisted evidence and local operations  
+**Owner:** GF Wordbench maintainers  
+**Last reviewed:** `2026-07-24`  
+**Authority:** accepted ADRs, `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` and the specialized contract locks
+
+---
+
 ## 1. Purpose
 
-GF Wordbench is a local development and validation framework for Grammatical Framework projects.
+GF Wordbench is a local validation, diagnostics, regression-testing and release-readiness workbench for Grammatical Framework language projects.
 
 It launches external tools, reads language-project files, executes GF scenarios, creates run directories, writes reports, and compares generated output with reviewed expectations. Those operations cross trust boundaries and can affect the local filesystem and process environment.
 
@@ -25,12 +33,14 @@ GF Wordbench is designed as a local developer tool.
 
 The core workflow:
 
-- reads one active GF language project;
+- reads the one active GF language project configured for the current workspace;
 - launches an explicitly resolved GF executable;
 - captures stdout, stderr, exit state, duration, and artifacts;
 - writes evidence under a controlled run root;
 - produces machine-readable and human-readable reports;
 - may execute project-owned `.gfs` scenarios.
+
+Each run is scoped to one active project in one workspace. Portfolio-wide aggregation and cross-workspace orchestration belong to the independent `gf-portfolio` product; GF Wordbench has no runtime dependency on it.
 
 GF Wordbench is **not a security sandbox**.
 
@@ -967,7 +977,7 @@ Back up:
 - reviewed scenarios;
 - gold files;
 - project configuration;
-- contract locks;
+- documentation alignment and contract locks;
 - decision logs;
 - release evidence.
 
@@ -1131,7 +1141,7 @@ When a vulnerability is confirmed:
 5. create and test the fix;
 6. review adjacent contracts for similar defects;
 7. update security tests;
-8. update affected contract locks and schemas;
+8. update affected owner documents, alignment or contract locks, and schemas;
 9. prepare release notes and migration guidance;
 10. coordinate disclosure.
 
@@ -1198,6 +1208,7 @@ Before a production release:
 [ ] Security tests pass
 [ ] Real-GF integration tests pass where available
 [ ] CLI and GUI resolve equivalent security settings
+[ ] Documentation alignment and affected owner documents are current
 [ ] External-tool contracts are current
 [ ] Persisted schemas and migrations are current
 [ ] Path-containment tests pass
@@ -1219,23 +1230,25 @@ Before a production release:
 Security-sensitive behavior is also governed by:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
-This policy defines security expectations.
+`docs/DOCUMENTATION_CORRECTION_LEDGER.md` coordinates documentation corrections performed across branches, but it does not replace an owner document or a specialized contract lock.
 
-The contract locks define the exact boundaries that implementations must preserve.
+This policy defines security expectations. The documentation alignment lock defines cross-document authority and interpretation. The specialized contract locks define the exact boundaries that code, configuration, persisted data, project assets and templates must preserve.
 
-When documents conflict:
+Resolve documentary authority according to `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`. Until the owner documents are corrected together:
 
 1. choose the safer behavior temporarily;
 2. preserve raw evidence;
 3. stop destructive or external execution when necessary;
-4. document the conflict;
-5. update the relevant normative files together;
+4. record the conflict in `docs/DOCUMENTATION_CORRECTION_LEDGER.md`;
+5. update every affected owner document and lock together;
 6. add a regression test.
 
 ---

@@ -2,173 +2,170 @@
 
 **Document ID:** `GF-WB-DEV-BACKWARD-COMPATIBILITY`  
 **Status:** Normative development policy  
-**Applies to:** GF Wordbench framework, persisted artifacts, public commands, project templates, active projects, and supported external-tool integrations  
+**Applies to:** GF Wordbench framework, public commands, persisted artifacts, project templates, active projects and supported external-tool integrations  
 **Canonical package:** `gf-wordbench`  
 **Canonical CLI:** `gf-wordbench`  
-**Initial stable compatibility line:** `1.x`  
+**Compatibility line:** `1.x`  
 **Owner:** GF Wordbench maintainers  
-**Last structural review:** 2026-07-22  
+**Last reviewed:** `2026-07-24`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Related locks:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`
 
 ---
 
 ## 1. Purpose
 
-This document defines what GF Wordbench promises to preserve across releases.
+This document defines what GF Wordbench preserves across releases and how incompatible historical inputs are handled.
 
-Backward compatibility is not one undifferentiated promise. GF Wordbench has several independently versioned surfaces:
+Compatibility applies independently to:
 
 - command-line syntax;
 - process exit codes;
-- Python entry points;
+- declared Python entrypoints;
 - shared result models;
-- active-project configuration;
+- project configuration;
 - application state;
-- run summaries;
-- manifests;
+- run summaries and manifests;
 - scenario outputs and gold files;
-- human-facing report structure;
+- human-report soft schemas;
 - run-directory layout;
 - project templates;
 - external GF command contracts;
-- GF project interfile contracts;
+- active-project interfile contracts;
 - Windows launchers;
 - documented environment variables.
 
-Each surface has a different consumer and a different safe migration path.
+The governing rule is:
 
-This policy prevents two opposite failures:
+> Preserve documented contracts, migrate persisted meaning explicitly, emit only canonical forms and keep legacy handling isolated from the current architecture.
 
-1. **silent breakage**, where existing projects or automation stop working without a migration path;
-2. **permanent legacy accumulation**, where every historical implementation detail becomes frozen forever.
+This policy prevents:
 
-The governing principle is:
-
-> Preserve documented contracts, migrate persisted meaning, deprecate deliberately, and keep private implementation details free to evolve.
+- silent breakage of projects, automation and persisted evidence;
+- permanent propagation of legacy behavior through core components.
 
 ---
 
-## 2. Scope
+## 2. Product boundary
 
-This policy governs compatibility for:
+GF Wordbench compatibility concerns one active project per workspace and one normative project target per run.
+
+It does not create compatibility contracts for:
+
+- multi-workspace registries;
+- multilingual portfolio databases;
+- cross-project readiness models;
+- `gf-portfolio` private schemas, storage or services.
+
+Allowed dependency direction:
+
+```text
+gf-portfolio -> public versioned GF Wordbench artifacts
+```
+
+GF Wordbench must remain installable, executable and testable without `gf-portfolio`.
+
+External consumers depend only on documented public artifacts and interfaces.
+
+---
+
+## 3. Compatibility surfaces
+
+This policy governs:
 
 ```text
 gf-wordbench command
 public subcommands and options
 process exit codes
 documented environment variables
-public Python entry points
+declared Python entrypoints
 shared serialized model fields
 project/project.toml
 .gf_wordbench_state.json
-legacy .gf_audit_state.json
-run_<id>/summary.json
-run_<id>/manifest.json
-scenario .out files
-scenario .gold files
+supported legacy .gf_audit_state.json input
+run_<run-id>/summary.json
+run_<run-id>/manifest.json
+scenario normalized output
+scenario gold files
 summary.md required headings
 AI_READY.md required headings
 top_errors.txt line format
-run directory names and owned artifact paths
+run-directory names and owned artifact paths
 project template layout
 GF executable invocation contracts
 supported GF versions and capabilities
 active-project contract migrations
 ```
 
-It also governs compatibility shims used to import the earlier audit implementation.
+A detail is not a public compatibility surface unless it is documented, persisted, externally consumed or declared by a contract lock.
 
----
-
-## 3. Exclusions
-
-The following are not backward-compatible public surfaces unless another contract explicitly says otherwise:
+Examples of non-public details:
 
 - private Python helpers;
-- functions or classes whose names begin with `_`;
+- private module paths;
 - local variable names;
-- implementation-specific exception stack traces;
-- internal log wording;
-- console progress wording;
-- GUI widget placement;
-- GUI visual styling;
-- Python object identity;
-- dictionary key order in JSON;
-- temporary files deleted before finalization;
-- test-only fixtures not declared as compatibility fixtures;
-- private module import paths;
+- exception traceback wording;
+- console progress prose;
+- GUI placement and styling;
+- temporary files removed before run finalization;
 - undocumented environment variables;
-- source-code formatting;
-- performance characteristics without an explicit performance contract;
-- current implementation quirks contradicted by normative documentation.
-
-An excluded detail becomes a compatibility surface when:
-
-- it is documented as stable;
-- another component depends on it;
-- external automation consumes it;
-- it is persisted and later read;
-- a contract lock declares it;
-- a migration registry lists it.
+- test fixtures not declared as compatibility fixtures;
+- implementation quirks contradicted by normative documentation.
 
 ---
 
 ## 4. Normative terms
 
-- **MUST**: mandatory for compatibility.
-- **MUST NOT**: prohibited.
-- **SHOULD**: expected unless a documented exception exists.
-- **SHOULD NOT**: normally prohibited.
-- **MAY**: optional.
-- **CANONICAL**: form emitted by the current stable writer or interface.
-- **LEGACY**: older supported input form not emitted by canonical writers.
-- **COMPATIBLE CHANGE**: change that preserves documented meaning for supported consumers.
-- **BREAKING CHANGE**: change requiring a major version, explicit migration, or both.
-- **DEPRECATION**: supported feature scheduled for removal.
-- **ALIAS**: accepted old name mapped to a canonical name without changing meaning.
-- **MIGRATION**: explicit conversion from one documented representation to another.
-- **SHIM**: temporary compatibility implementation that adapts an old interface.
-- **SUPPORT WINDOW**: releases or schema versions that current readers still accept.
-- **PUBLIC SURFACE**: documented contract used outside its owning implementation file.
-- **LOSSLESS MIGRATION**: conversion preserving all required meaning.
-- **LOSSY MIGRATION**: conversion where some meaning cannot be preserved and losses are reported.
+- **CANONICAL**: form emitted by the current writer or public interface.
+- **LEGACY**: supported historical input not emitted canonically.
+- **COMPATIBLE CHANGE**: preserves documented meaning for supported consumers.
+- **BREAKING CHANGE**: requires a major version, explicit migration or both.
+- **DEPRECATION**: temporary continued support for a replaced public element.
+- **ALIAS**: historical name mapped exactly to a canonical name.
+- **MIGRATION**: explicit conversion between documented representations.
+- **SHIM**: isolated adapter for an older public interface.
+- **SUPPORT WINDOW**: versions or forms accepted by current readers.
+- **LOSSLESS MIGRATION**: preserves all required meaning.
+- **LOSSY MIGRATION**: cannot preserve all meaning and reports every loss.
+- **PUBLIC SURFACE**: documented contract used outside its owner.
 
 ---
 
-## 5. Core compatibility rules
+## 5. Core rules
 
-### 5.1 Canonical writers, tolerant readers
+### 5.1 Canonical writers and tolerant readers
 
-Current writers MUST emit only canonical forms.
+Current writers emit only canonical forms.
 
-Current readers SHOULD accept:
+Current readers may accept:
 
-- the current canonical major version;
+- the current schema major;
 - supported minor versions of that major;
-- the immediately previous canonical major when a tested migration exists;
-- explicitly registered unversioned legacy forms during their support period.
+- the immediately preceding major when a tested migration exists;
+- explicitly registered unversioned predecessor forms.
 
-Readers MUST NOT reinterpret unknown meaning silently.
+Readers must reject or preserve unknown meaning without reinterpretation.
 
 ### 5.2 One meaning per identifier
 
-A command, field, enum value, contract ID, artifact name, or status string MUST NOT be reused for a different meaning.
+A command, field, enum value, artifact role, contract ID or status token must not be reused for another meaning.
 
-Removed identifiers remain documented as retired when historical consumers may encounter them.
+Historical identifiers remain documented where readers may still encounter them.
 
-### 5.3 Explicit migration
+### 5.3 Explicit persisted migration
 
 A breaking persisted-format change requires:
 
-- a new schema version;
+- a schema version change;
 - a reader or migrator;
-- compatibility tests;
+- compatibility fixtures;
 - loss reporting;
 - release notes;
-- an updated contract lock.
+- relevant lock updates.
 
 ### 5.4 No legacy emission
 
-Canonical writers MUST NOT emit legacy aliases merely because readers still accept them.
+Canonical writers never emit accepted legacy aliases.
 
 Examples:
 
@@ -179,33 +176,31 @@ write mode=quick
 read ai_brief_path
 write artifacts.ai_ready
 
-read sha1_short
-write canonical SHA-256 fields
+read legacy SHA-1 evidence
+write no fabricated SHA-256 value
 ```
 
-### 5.5 No silent fallback with changed semantics
+### 5.5 No semantic fallback
 
-A fallback is allowed only when it preserves documented meaning.
+Fallback is allowed only when documented meaning is preserved.
 
-If an older GF version, schema, or command cannot provide equivalent semantics, GF Wordbench must:
+When equivalent behavior is unavailable, Wordbench:
 
-- reject it;
-- mark it unsupported;
-- or continue with an explicit warning and reduced guarantee.
+- rejects the input;
+- reports it as unsupported;
+- or proceeds with an explicit reduced-guarantee warning.
 
-It must not call the result equivalent without evidence.
+It does not silently claim equivalence.
 
-### 5.6 Compatibility is tested behavior
+### 5.6 Compatibility is tested
 
-A compatibility promise without a test is incomplete.
-
-Every supported alias, legacy reader, migration, or compatibility adapter must have a test fixture.
+Every supported alias, legacy reader, migration and external-tool adapter has a fixture or contract test.
 
 ---
 
-# 6. Versioning model
+## 6. Versioning
 
-## 6.1 Framework version
+### 6.1 Framework version
 
 GF Wordbench uses semantic versioning:
 
@@ -213,47 +208,26 @@ GF Wordbench uses semantic versioning:
 MAJOR.MINOR.PATCH
 ```
 
-Example:
+**MAJOR** changes incompatible stable public contracts when ordinary migration or aliasing cannot preserve them.
 
-```text
-1.4.2
-```
+**MINOR** adds compatible functionality such as:
 
-### MAJOR
+- optional fields;
+- optional commands;
+- optional report sections;
+- additional reader support;
+- deprecation warnings;
+- compatible GF capabilities.
 
-Increment for incompatible changes to one or more stable public surfaces when compatibility cannot be preserved through an ordinary alias or migration.
+**PATCH** fixes behavior without redefining public meaning, including:
 
-### MINOR
-
-Increment for backward-compatible functionality, including:
-
-- new optional fields;
-- new optional commands;
-- new optional report sections;
-- expanded reader support;
-- deprecated aliases;
-- compatible GF capability support.
-
-### PATCH
-
-Increment for backward-compatible fixes, including:
-
-- bug fixes;
-- stricter validation of already invalid input;
-- documentation corrections;
-- security fixes preserving interfaces;
+- parsing and path fixes;
 - deterministic-order fixes;
-- diagnostic-parser fixes that do not redefine public status meaning.
+- report escaping;
+- security corrections;
+- diagnostic recognition improvements under existing status semantics.
 
-## 6.2 Pre-1.0 behavior
-
-Before the first stable `1.0.0` release, public surfaces may still change.
-
-However, every persisted format and migration fixture must already be versioned.
-
-Pre-release status does not permit silent data corruption.
-
-## 6.3 Schema versions
+### 6.2 Persisted schema versions
 
 Persisted schemas use:
 
@@ -268,212 +242,89 @@ gf-wordbench.project/1.0
 gf-wordbench.run-summary/1.1
 ```
 
-Patch-level implementation fixes do not require schema patch versions.
+Implementation-only fixes do not change a schema version.
 
-## 6.4 Contract versions
+### 6.3 Contract versions
 
-Contract locks may use:
+Contract-lock versions change only when the documented boundary changes.
 
-```text
-MAJOR.MINOR.PATCH
-```
-
-A contract version changes when the documented boundary changes, not for prose-only corrections.
-
-## 6.5 CLI contract version
-
-The CLI contract follows the framework major version unless a release explicitly documents a separate lifecycle.
+Prose correction without semantic change does not require a contract-version increment.
 
 ---
 
-# 7. Compatibility surfaces
+## 7. Compatibility ownership
 
-| Surface | Canonical owner | Compatibility mechanism |
+| Surface | Owner | Mechanism |
 |---|---|---|
-| CLI commands/options | `app/main_cli.py` | aliases, deprecation, major-version removal |
-| Exit codes | CLI and exit-code reference | stable numeric meanings |
-| Python entry points | owning modules | wrappers, adapters, major-version removal |
-| Shared models | `app/models.py` | optional defaults, serializers, migrations |
-| Project config | project schema/loader | schema versions and migrator |
-| App state | state manager | legacy import, canonical rewrite |
-| Run summary | JSON writer/reader | versioned schemas and migrations |
-| Manifest | manifest writer/verifier | versioned schemas |
-| Scenario output | scenario runner | normalization version |
-| Gold files | project maintainers | explicit reviewed update |
-| Human reports | report writers | soft-schema versions |
-| Run layout | `RunPaths` owner | aliases/readers, major changes |
-| External GF commands | command builders | version/capability adapters |
-| Project template | initializer | template migration guidance |
-| Project contracts | active project | project migration and validation |
+| CLI commands and options | CLI entrypoint | aliases, warnings, major-version removal |
+| Exit codes | CLI/application result owner | stable numeric meanings |
+| Python entrypoints | declaring module and interfile lock | wrappers and adapters |
+| Shared models | domain/application model owner | defaults, serializers and migrations |
+| Project config | project loader and schema owner | schema versions |
+| Application state | state adapter | legacy import and canonical rewrite |
+| Run summary | summary reader/writer | schema migration |
+| Manifest | manifest reader/writer | schema migration and verification |
+| Scenario output | scenario normalizer | normalization versions |
+| Gold files | active-project maintainers | reviewed updates |
+| Human reports | report writers | soft-schema compatibility |
+| Run paths | run-path owner | explicit migration and aliases |
+| External GF commands | GF adapter | version/capability adapters |
+| Project template | project initializer | migration guidance |
+| Project contracts | active-project owner | explicit project migration |
+| Deprecation schedule | release owner | changelog and removal release |
+
+No reader rewrites an artifact it does not own.
 
 ---
 
-# 8. Compatibility classes
+## 8. Support policy
 
-Every public element should be classified as one of:
-
-```text
-stable
-provisional
-experimental
-deprecated
-retired
-internal
-```
-
-## 8.1 Stable
-
-A stable element follows this document’s compatibility rules.
-
-## 8.2 Provisional
-
-A provisional element is expected to become stable but may change before a declared release milestone.
-
-Its limitations must be documented.
-
-## 8.3 Experimental
-
-An experimental element:
-
-- is opt-in;
-- may change in minor versions;
-- must not be required for ordinary stable workflows;
-- must be clearly labeled;
-- must not silently create canonical persisted data without a schema.
-
-## 8.4 Deprecated
-
-A deprecated element remains supported temporarily.
-
-It must have:
-
-- a canonical replacement;
-- a warning;
-- a removal target;
-- tests during the support period.
-
-## 8.5 Retired
-
-A retired element is no longer accepted by current interfaces.
-
-Historical readers or migration tools may still recognize it.
-
-## 8.6 Internal
-
-An internal element has no compatibility promise.
-
----
-
-# 9. Support windows
-
-## 9.1 Framework releases
-
-Recommended stable policy:
-
-- current minor release line: fully supported;
-- previous minor in the same major: security and critical compatibility fixes when practical;
-- older minors: upgrade required;
-- previous major: migration support only when explicitly documented.
-
-## 9.2 Persisted schemas
-
-Current readers SHOULD support:
+Current readers support:
 
 ```text
-current major
-immediately previous major when migration exists
-registered unversioned GF Audit legacy forms
+current schema major
+supported minor versions
+immediately previous major when a tested migration exists
+registered predecessor GF Audit forms
 ```
 
 Current writers emit:
 
 ```text
-latest supported canonical version only
+latest supported canonical form only
 ```
 
-## 9.3 CLI aliases
+A deprecated CLI or Python alias remains available for at least one documented release transition unless immediate removal is required for security or data integrity.
 
-A deprecated stable CLI alias should remain for:
+Project templates from the preceding supported release line remain loadable or have an explicit migration.
+
+GF support is capability-based and documented through:
 
 ```text
-at least one minor release
+minimum supported version
+tested versions
+known incompatible versions
 ```
 
-Recommended for widely used aliases:
-
-```text
-two minor releases or one major transition
-```
-
-## 9.4 Python APIs
-
-A deprecated stable Python symbol should remain for at least one minor release unless:
-
-- a critical security issue requires removal;
-- keeping it would corrupt data;
-- it was incorrectly documented as stable.
-
-## 9.5 External GF versions
-
-GF Wordbench maintains:
-
-```text
-minimum_supported_gf_version
-tested_gf_versions
-known_incompatible_gf_versions
-```
-
-Support is capability-based where possible.
-
-## 9.6 Project templates
-
-A project created by the previous stable minor should remain loadable by the current stable minor.
-
-A project from an older schema may require explicit migration.
+The support matrix records tested combinations only.
 
 ---
 
-# 10. Deprecation lifecycle
+## 9. Deprecation
 
-Canonical lifecycle:
-
-```text
-stable
-  -> deprecated
-  -> retired
-```
-
-Optional earlier stages:
-
-```text
-experimental
-  -> provisional
-  -> stable
-```
-
-## 10.1 Introducing deprecation
-
-A deprecation change must define:
+A deprecation defines:
 
 ```text
 deprecated element
 canonical replacement
-first deprecated version
-earliest removal version
+first affected release
+earliest removal release
 warning behavior
 migration instructions
 tests
 ```
 
-## 10.2 Warning requirements
-
-Warnings must:
-
-- identify the deprecated element;
-- identify the replacement;
-- avoid printing once per item in large loops;
-- appear at most once per relevant invocation by default;
-- remain visible unless normal warnings are explicitly suppressed.
+Warnings identify the old element and its replacement.
 
 Example:
 
@@ -481,13 +332,7 @@ Example:
 WARNING: --mode all is deprecated; use --mode diagnostic.
 ```
 
-## 10.3 Canonical internal form
-
-Aliases are normalized at the boundary.
-
-Internal components receive only canonical values.
-
-Example:
+Aliases normalize at the public boundary:
 
 ```text
 CLI input: all
@@ -495,75 +340,56 @@ RunConfig.mode: diagnostic
 summary.json: diagnostic
 ```
 
-## 10.4 Removal
-
 Before removal:
 
-- update changelog;
-- update migration documentation;
-- remove canonical help listing;
-- retain historical fixture coverage where migration still reads the old form;
-- ensure errors identify the replacement when practical.
+- update the changelog and migration guide;
+- remove the alias from canonical examples and help when scheduled;
+- preserve historical fixtures where readers still migrate it;
+- return a clear replacement message.
 
-## 10.5 Security exception
-
-A dangerous interface may be removed sooner.
-
-The release must explain:
-
-- security reason;
-- affected versions;
-- mitigation;
-- replacement;
-- migration impact.
+Unsafe behavior may be removed immediately with a security explanation and migration guidance.
 
 ---
 
-# 11. Compatibility registry
+## 10. Compatibility registry
 
-The compatibility registry is maintained in documentation and tests.
-
-Current initial registry:
-
-| Legacy element | Canonical replacement | Compatibility policy |
+| Legacy element | Canonical replacement | Policy |
 |---|---|---|
-| Package/project label `Grammatical_Framework_audit` | `GF Wordbench` | Historical reference only |
-| CLI executable `gf-audit` | `gf-wordbench` | Temporary executable alias |
+| Product label `Grammatical_Framework_audit` | `GF Wordbench` | Historical text only |
+| CLI executable `gf-audit` | `gf-wordbench` | Optional boundary alias |
 | `mode=file` | `mode=quick` | Read/CLI alias; never write |
 | `mode=all` | `mode=diagnostic` | Read/CLI alias; never write |
-| `--target-file` | `--target` | Deprecated CLI alias |
-| `--skip-version-probe` | `--no-version-probe` | Deprecated CLI alias |
-| `--emit-cpu-stats` | `--cpu-stats` | Deprecated CLI alias |
-| `--timeout-sec` | `--compile-timeout` | Deprecated CLI alias |
-| `--diff-previous` | `--compare-previous` | Deprecated CLI alias |
-| `--scan-dir` | project source configuration | Migration-only override |
-| `--scan-glob` | project source configuration | Migration-only override |
-| `--include-regex` | project selection configuration | Migration-only override |
-| `--exclude-regex` | project selection configuration | Migration-only override |
-| `--gf-path` | project toolchain plus environment resolution | Migration-only override |
+| `--target-file` | `--target` | CLI alias |
+| `--skip-version-probe` | `--no-version-probe` | CLI alias |
+| `--emit-cpu-stats` | `--cpu-stats` | CLI alias |
+| `--timeout-sec` | `--compile-timeout` | CLI alias |
+| `--diff-previous` | `--compare-previous` | CLI alias |
+| `--scan-dir` | project source configuration | Explicit migration override only |
+| `--scan-glob` | project source configuration | Explicit migration override only |
+| `--include-regex` | project selection configuration | Explicit migration override only |
+| `--exclude-regex` | project selection configuration | Explicit migration override only |
+| `--gf-path` | project and environment path resolution | Explicit migration override only |
 | `.gf_audit_state.json` | `.gf_wordbench_state.json` | Import and migrate |
 | unversioned state | `gf-wordbench.app-state/1.0` | Read legacy; write canonical |
-| flat `summary.json` | `gf-wordbench.run-summary/1.0` | Migrate |
-| nested unversioned `summary.json` | `gf-wordbench.run-summary/1.0` | Migrate |
+| unversioned flat summary | `gf-wordbench.run-summary/1.0` | Migrate |
+| unversioned nested summary | `gf-wordbench.run-summary/1.0` | Migrate |
 | `ai_brief_path` | `artifacts.ai_ready` | Read alias only |
-| absolute `ai_ready_path` | run-relative `artifacts.ai_ready` | Convert when contained |
-| `sha1_short` | SHA-256 fingerprint fields | Import only |
-| total `ok` | `files_ok` | Rename during migration |
-| total `fail` | `files_fail` | Rename during migration |
+| absolute `ai_ready_path` | run-relative `artifacts.ai_ready` | Convert after containment verification |
+| `sha1_short` | explicit legacy fingerprint evidence | Never relabel as SHA-256 |
+| total `ok` | `files_ok` | Migrate |
+| total `fail` | `files_fail` | Migrate |
 | top-error mapping | structured top-error array | Normalize |
-| `DiffEntry.file_path` | `subject_kind + subject_id` | Migrate as file subject |
-| diagnostic class `script_error` | `error_kind=SCRIPT` plus causal class | Migrate from evidence |
-| diagnostic class `framework_error` | canonical technical error kind plus causal class | Migrate from evidence |
-| `# GF Audit Summary` | `# GF Wordbench Audit Summary` | Human legacy only |
-| language identity in GUI state | `project.toml` | Ignore/remove during migration |
+| `DiffEntry.file_path` | generalized subject identity | Migrate as file subject |
+| diagnostic class `script_error` | `error_kind=SCRIPT` plus causal class | Evidence-based migration |
+| diagnostic class `framework_error` | technical error kind plus causal class | Evidence-based migration |
+| `# GF Audit Summary` | `# GF Wordbench Audit Summary` | Historical human report only |
+| language identity in GUI state | `project.toml` | Ignore during state migration |
 
-Canonical writers must not emit any value in the legacy column.
+Canonical writers emit none of the legacy forms.
 
 ---
 
-# 12. Command-line compatibility
-
-## 12.1 Stable command identity
+## 11. CLI compatibility
 
 Canonical command:
 
@@ -571,195 +397,101 @@ Canonical command:
 gf-wordbench
 ```
 
-Stable public subcommands:
+Canonical command and option names are governed by `docs/usage/CLI_REFERENCE.md`.
 
-```text
-validate
-project check
-scenarios check
-gold update
-schemas check
-reports check
-```
+Compatible changes include:
 
-Adding a new optional subcommand is normally backward-compatible.
+- adding an optional command or flag;
+- accepting another safe path spelling;
+- improving invalid-input diagnostics;
+- adding a documented alias;
+- adding an explicit positive/negative Boolean pair.
 
-Removing or reusing a stable subcommand is breaking.
+Breaking changes include:
 
-## 12.2 Option compatibility
+- removing a stable command without migration;
+- reusing a command or option for another meaning;
+- changing a value type;
+- adding a required positional argument;
+- changing path-base interpretation;
+- changing a default that materially changes validation or artifacts;
+- allowing an option to bypass required release guarantees.
 
-Compatible changes:
-
-- add an optional flag with a safe default;
-- add a repeatable optional selector;
-- accept another path spelling;
-- improve validation error wording;
-- add a deprecated alias.
-
-Breaking changes:
-
-- remove a stable option without lifecycle;
-- change an option’s meaning;
-- change its value type;
-- change default behavior materially;
-- make a previously optional action destructive;
-- permit an option in a mode where it weakens required guarantees;
-- change path-base interpretation.
-
-## 12.3 Boolean options
-
-Boolean option pairs should use explicit positive/negative forms where state matters:
-
-```text
---compare-previous
---no-compare-previous
-```
-
-Changing only the default may be breaking when behavior or generated artifacts change materially.
-
-## 12.4 Positional arguments
-
-Adding a required positional argument is breaking.
-
-Adding an optional positional argument is discouraged because parsing may become ambiguous.
-
-## 12.5 Help text
-
-Help wording is not a machine API.
-
-Command names, option names, accepted values, defaults, and exit meanings are contractual.
-
-## 12.6 Automation
-
-Automation must use:
+Automation uses:
 
 - exit codes;
 - `summary.json`;
 - `manifest.json`;
 - documented artifact paths.
 
-Console prose is not stable machine output unless an explicit machine-output option is introduced.
+Human terminal prose is not a machine API.
 
 ---
 
-# 13. Exit-code compatibility
+## 12. Exit-code compatibility
 
 Canonical codes:
 
 ```text
-0 = command succeeded and required validation passed
-1 = validation executed reliably but required validation failed
-2 = usage, configuration, schema, or requested-contract error
-3 = runtime, external-tool, I/O, timeout, cancellation, or integrity error
+0 = command succeeded and all required criteria passed
+1 = command completed but required criteria failed
+2 = invocation or pre-execution configuration was invalid
+3 = runtime, external-tool, I/O or integrity error
+4 = controlled cancellation
 ```
 
-These numeric meanings are stable for the `1.x` line.
+These meanings are stable within the compatibility line.
 
-Compatible:
+Wordbench never forwards a child GF code directly.
 
-- classify a newly detected invalid argument as `2`;
-- classify a new required validation failure as `1`;
-- classify a newly detected runtime-integrity failure as `3`.
+Compatible changes may classify a newly detected condition under an existing definition.
 
-Breaking:
+Breaking changes include:
 
-- reuse a code for a different category;
-- return `0` for a condition previously defined as required failure;
-- map runtime failure to validation failure without preserving distinction.
+- reusing a number for another meaning;
+- returning `0` for a required failure;
+- collapsing runtime errors into validation failure;
+- relabeling timeout as cancellation.
 
-A future additional exit code requires:
-
-- minor version at minimum;
-- updated reference;
-- unchanged meanings for existing codes;
-- CI tests.
+A new allocated code requires explicit contract and CI review while preserving meanings `0` through `4`.
 
 ---
 
-# 14. Python API compatibility
+## 13. Python API compatibility
 
-## 14.1 Stable entry points
-
-The primary stable application entry point is:
-
-```python
-run_audit(
-    run_config: RunConfig,
-    run_paths: RunPaths | None = None,
-) -> RunResult
-```
-
-Shared configuration builders and public report writers may also become stable when declared in the interfile lock.
-
-## 14.2 Public versus internal
-
-A Python symbol is stable only when:
+A symbol is public only when:
 
 - documented as public;
-- exported through the owning module’s public surface;
-- referenced by a contract lock;
+- exported through an owner-controlled surface;
+- declared by an interfile contract;
 - covered by compatibility tests.
 
-Importability alone does not make a symbol public.
+Importability alone does not create a public promise.
 
-## 14.3 Compatible function changes
+Compatible function changes include:
 
-Normally compatible:
+- adding a keyword-only optional parameter with a safe default;
+- broadening equivalent path-like input;
+- adding a public helper;
+- improving validation of already invalid input.
 
-- add a keyword-only optional parameter with a safe default;
-- broaden accepted path-like input without changing output;
-- return a subtype preserving documented behavior;
-- add a new public helper;
-- improve validation of invalid input.
+Breaking changes include:
 
-## 14.4 Breaking function changes
+- renaming or removing a public function;
+- changing positional order;
+- making an optional parameter required;
+- changing return type or meaning;
+- mutating previously immutable input;
+- changing documented exception categories;
+- adding hidden environment dependence.
 
-Breaking:
+A compatibility wrapper may delegate to the canonical function and emit a deprecation warning.
 
-- rename a public function;
-- remove a public parameter;
-- make an optional parameter required;
-- change positional parameter order;
-- change return type or meaning;
-- begin mutating inputs;
-- change exception categories relied upon by callers;
-- introduce hidden environment dependence.
-
-## 14.5 Compatibility wrapper
-
-A renamed function may retain a wrapper:
-
-```python
-def old_name(*args, **kwargs):
-    warnings.warn(
-        "old_name is deprecated; use new_name",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return new_name(*args, **kwargs)
-```
-
-The wrapper must preserve behavior during the deprecation period.
-
-## 14.6 Dataclass construction
-
-Adding a field is compatible only when:
-
-- it has a safe default;
-- it does not change existing field meaning;
-- serializers handle it;
-- readers tolerate absence in older data;
-- mutable defaults use factories.
-
-Reordering positional dataclass fields can break callers.
-
-Stable models should favor keyword construction.
+Stable models favor keyword construction.
 
 ---
 
-# 15. Shared result-model compatibility
-
-## 15.1 Model surfaces
+## 14. Shared model compatibility
 
 Key models include:
 
@@ -768,7 +500,8 @@ RunConfig
 RunPaths
 ScanCounts
 SourceFingerprint
-CompileSummary
+ProcessResult
+CompileResult
 FileResult
 ScenarioResult
 DiffEntry
@@ -776,72 +509,27 @@ TopError
 RunResult
 ```
 
-## 15.2 Field stability
-
 A stable field has:
 
-- stable name;
-- stable type;
-- stable meaning;
-- documented default when optional;
+- one name;
+- one type;
+- one meaning;
+- a documented optional default;
 - centralized serialization.
 
-## 15.3 Adding fields
+Adding an optional field is compatible when old data can omit it safely.
 
-A new optional field is compatible when:
+Removing, renaming or changing a field's type requires schema and migration review.
 
-- default preserves old behavior;
-- canonical serializer includes it according to schema version;
-- old summaries can be loaded without it;
-- callers are not required to inspect it.
+Adding an enum value requires at least a compatible schema update and consumer review because strict readers may reject unknown values.
 
-## 15.4 Removing or renaming fields
-
-Requires:
-
-- major model/schema change;
-- migration;
-- compatibility alias property or reader when practical;
-- tests.
-
-## 15.5 Enum values
-
-Adding an enum value can break strict consumers.
-
-Therefore:
-
-- at least a minor version increment is required;
-- strict readers reject unknown values;
-- tolerant historical readers may preserve unknown values without reinterpretation;
-- removing or redefining an enum value is breaking.
-
-## 15.6 Redundant compatibility fields
-
-Example:
-
-```text
-is_direct
-```
-
-may coexist with canonical:
-
-```text
-diagnostic_class
-```
-
-while older consumers depend on it.
-
-During coexistence:
-
-- both must remain coherent;
-- the canonical field wins on conflicting legacy input;
-- deprecation must be documented before removal.
+Redundant compatibility fields may coexist temporarily only when coherence is validated and one canonical field remains authoritative.
 
 ---
 
-# 16. `RunConfig` compatibility
+## 15. `RunConfig`
 
-## 16.1 Canonical modes
+Canonical modes:
 
 ```text
 quick
@@ -850,54 +538,37 @@ release
 diagnostic
 ```
 
-Legacy:
+Legacy inputs:
 
 ```text
 file
 all
 ```
 
-is normalized at input.
+normalize at the boundary.
 
-## 16.2 Project-owned configuration
-
-Language-specific settings move from generic framework defaults and old CLI options into:
+Language-specific configuration belongs to:
 
 ```text
 project/project.toml
 ```
 
-This migration is compatible when:
+A new optional run field needs a safe default.
 
-- old input remains readable during the transition;
-- canonical resolved `RunConfig` uses project values;
-- required release constraints are not weakened;
-- canonical outputs do not emit legacy settings.
+A new required project field requires:
 
-## 16.3 New configuration fields
+- project schema migration;
+- template update;
+- active-project migration guidance;
+- clear errors for unmigrated projects.
 
-New optional fields need safe defaults.
-
-New required fields require:
-
-- project schema major version or documented migration;
-- project-template update;
-- active-project migration;
-- clear error for unmigrated projects.
-
-## 16.4 Hidden defaults
-
-Changing a hidden default is potentially breaking.
-
-Important resolved defaults must be documented or persisted.
+Changing a hidden default is compatibility-sensitive when it changes behavior, evidence or artifact production.
 
 ---
 
-# 17. `RunPaths` and directory-layout compatibility
+## 16. Run paths and layout
 
-## 17.1 Stable artifact names
-
-Canonical:
+Stable artifact names:
 
 ```text
 summary.json
@@ -907,15 +578,7 @@ top_errors.txt
 manifest.json
 ```
 
-Changing these names is breaking unless:
-
-- old readers discover aliases;
-- a migration or compatibility symlink/copy policy exists;
-- `RunPaths`, reports, manifest, GUI, CLI, and tests update together.
-
-## 17.2 Stable directory roles
-
-Canonical run roles:
+Stable directory roles:
 
 ```text
 details/
@@ -929,194 +592,137 @@ artifacts/out/
 artifacts/pgf/
 ```
 
-Adding an optional directory is compatible.
-
-Changing ownership or path-base semantics is breaking.
-
-## 17.3 Run directory naming
-
-Canonical pattern:
+Canonical run-directory pattern:
 
 ```text
 run_<run-id>
 ```
 
-A collision suffix may be added without changing run identity semantics.
+Readers must not derive complete run metadata from the directory name.
 
-Readers must not derive all metadata from the directory name.
+Changing a stable path, ownership role or path base is breaking unless a documented migration preserves consumers.
 
-## 17.4 Legacy path aliases
+Persisted project-relative and run-relative paths use `/`.
 
-`ai_brief_path` may remain a read-only compatibility alias for `ai_ready_path` in Python model loading.
-
-Canonical paths and JSON use:
-
-```text
-AI_READY.md
-artifacts.ai_ready
-```
-
-## 17.5 Absolute to relative paths
-
-Canonical persisted run artifacts are run-relative where defined.
-
-Legacy absolute paths may be converted only when containment is verified.
-
-If conversion is impossible, migration records a loss or warning.
+Legacy absolute paths are converted only after containment verification.
 
 ---
 
-# 18. Project configuration compatibility
+## 17. Project configuration
 
-## 18.1 Canonical schema
+Canonical schema:
 
 ```text
-schema_id = gf-wordbench.project
-schema_version = 1.0
+gf-wordbench.project/1.0
 ```
 
-## 18.2 Stable project identity
-
-Fields defining identity are strongly compatible surfaces:
+Project identity includes:
 
 ```text
-project id
-project name
+project ID
+display name
 language code
 source root
-module suffix when defined
 entrypoints
 checkpoints
 required scenarios
 release targets
 ```
 
-Changing identity may require a project migration even when framework schema stays at the same major.
+Compatible project changes may add optional scenarios, metadata or checkpoints without redefining existing meaning.
 
-## 18.3 Compatible project changes
+Project migration is required for changes such as:
 
-Usually compatible:
+- project ID or language-code replacement;
+- source-root base changes;
+- module suffix or module-name changes;
+- required entrypoint removal;
+- scenario-ID renaming;
+- required gold-contract changes;
+- release artifact identity changes;
+- new mandatory configuration fields.
 
-- add an optional scenario;
-- add an optional documentation field;
-- add an optional checkpoint;
-- add an optional toolchain hint;
-- add an optional release metadata field;
-- expand source selection without changing existing identity meaning.
-
-## 18.4 Breaking project changes
-
-Examples:
-
-- rename project ID;
-- rename language code;
-- change source-root base semantics;
-- rename module suffix;
-- remove required entrypoint;
-- rename scenario IDs without mapping;
-- change a required gold contract;
-- change release artifact identity;
-- make an optional field required.
-
-## 18.5 Project migration
-
-A project migration must coordinate:
+A project migration coordinates:
 
 ```text
 project.toml
-GF source module names
+GF module filenames and declarations
 imports
 entrypoints
 scenarios
 gold files
+dependency maps
 project documentation
-dependency map
-status ledger
 release evidence
 ```
 
-Framework migration must not silently rewrite active project semantics during normal validation.
+Normal validation never silently rewrites project semantics.
 
 ---
 
-# 19. Application-state compatibility
+## 18. Application state
 
-## 19.1 Canonical state
+Canonical state:
 
 ```text
 .gf_wordbench_state.json
 gf-wordbench.app-state/1.0
 ```
 
-## 19.2 Legacy state
+Legacy state:
 
 ```text
 .gf_audit_state.json
 ```
 
-may be imported during the migration period.
+may be imported by the state adapter.
 
-## 19.3 State purpose
-
-State stores disposable UI convenience values.
+State stores disposable machine-local preferences.
 
 It is not authoritative for:
 
-- active language identity;
-- project entrypoints;
-- required scenarios;
-- release rules;
+- active project identity;
+- entrypoints;
+- scenarios;
+- release policy;
 - active execution objects.
 
-## 19.4 Migration behavior
+Migration:
 
-State migration should:
+1. reads legacy state without modifying it;
+2. extracts supported preferences;
+3. discards duplicated project facts;
+4. writes canonical state atomically;
+5. reports ignored fields.
 
-1. read legacy state without modifying it;
-2. extract supported convenience values;
-3. discard project identity fields moved to `project.toml`;
-4. write canonical state atomically;
-5. preserve a backup or source reference when appropriate;
-6. report ignored fields.
-
-## 19.5 Malformed state
-
-Malformed state should be ignored or quarantined.
-
-It must not prevent CLI validation or corrupt project configuration.
+Malformed state is ignored or quarantined and never blocks CLI validation.
 
 ---
 
-# 20. Run-summary compatibility
+## 19. Run-summary compatibility
 
-## 20.1 Canonical schema
+Canonical schema:
 
 ```text
 gf-wordbench.run-summary/1.x
 ```
 
-## 20.2 Supported legacy forms
+Supported predecessor forms may include:
 
 ```text
 unversioned flat GF Audit summary
 unversioned nested GF Audit summary
 ```
 
-## 20.3 Reader policy
+The reader:
 
-The loader:
-
-- detects canonical versus legacy form;
-- validates required meaning;
-- migrates into an in-memory canonical `RunResult`;
+- detects the form;
+- validates available meaning;
+- migrates to a canonical in-memory model;
 - records warnings and losses;
 - does not rewrite the source automatically.
 
-## 20.4 Writer policy
-
-The current writer emits only the latest supported canonical schema.
-
-## 20.5 Common migrations
+Typical mappings:
 
 ```text
 mode=file -> quick
@@ -1124,181 +730,107 @@ mode=all -> diagnostic
 ok -> files_ok
 fail -> files_fail
 ai_brief_path -> artifacts.ai_ready
-top-error mapping -> top-error array
-file-only DiffEntry -> generalized subject
-absolute run paths -> run-relative paths
-sha1_short -> imported legacy fingerprint evidence
+top-error mapping -> structured array
+file-only diff entry -> generalized file subject
+absolute run paths -> verified run-relative paths
+sha1_short -> explicit legacy evidence
 ```
 
-## 20.6 Pre-scenario runs
+Historical runs without scenarios use empty scenario collections plus an explicit “unavailable” compatibility note.
 
-Historical runs may lack:
+They do not claim that scenarios passed.
 
-```text
-scenario_results
-scenario totals
-scenario artifacts
-normalization version
-```
-
-Migration uses empty scenario collections and records that scenario data was unavailable.
-
-It must not claim scenarios passed.
-
-## 20.7 Missing required meaning
-
-If a legacy status or identity cannot be recovered:
-
-- preserve raw source;
-- report a loss;
-- mark affected data unknown or invalid;
-- do not fabricate a canonical success.
+Missing or unrecoverable required meaning remains unknown or invalid, never fabricated as success.
 
 ---
 
-# 21. Manifest compatibility
+## 20. Manifest compatibility
 
-## 21.1 Canonical schema
+Canonical schema:
 
 ```text
 gf-wordbench.artifact-manifest/1.x
 ```
 
-## 21.2 Addition of roles
+Adding an optional role is compatible under schema policy.
 
-Adding an optional manifest role is normally minor-compatible.
+Changing a role's meaning, path identity or hash semantics is compatibility-sensitive.
 
-Strict consumers must still handle unknown roles according to schema policy.
+Hash entries identify their algorithm explicitly.
 
-## 21.3 Hash algorithm
+Runs created before manifest support may remain readable but are not equivalent to manifest-verified release evidence.
 
-Changing the canonical hash algorithm is a schema change.
-
-During transition, entries may carry explicit:
-
-```text
-hash_algorithm
-```
-
-A verifier must not compare hashes using an assumed different algorithm.
-
-## 21.4 Missing legacy manifest
-
-Runs created before manifest support may remain readable.
-
-They cannot be considered equivalent to strict manifest-verified release runs.
-
-Reports should state:
+Reports state:
 
 ```text
 legacy run: manifest unavailable
 ```
 
-## 21.5 Artifact identity
-
-Changing artifact path or role meaning is breaking.
-
 ---
 
-# 22. Scenario-output compatibility
+## 21. Scenario output and normalization
 
-## 22.1 Canonical output
+Normalized scenario output has:
 
-Scenario normalized output has:
-
-- explicit UTF-8;
-- canonical LF;
+- UTF-8 encoding;
+- LF newlines;
 - stable marker handling;
-- normalization version;
-- deterministic content where exact gold applies.
+- a normalization identity or version;
+- deterministic content when exact gold comparison applies.
 
-## 22.2 Normalization changes
+A normalization change is compatible only when comparison meaning cannot change.
 
-A normalization change is compatible only when it cannot change existing comparison meaning.
+A meaning-changing normalization update requires:
 
-If existing gold meaning may change, the change requires:
+- normalization version change;
+- explicit gold review;
+- fixture updates;
+- compatibility tests;
+- release notes.
 
-- normalization version increment;
-- gold review;
-- affected fixture update;
-- migration/release note;
-- compatibility tests.
+Marker changes affect scripts, runner logic, normalized output, gold files and reports.
 
-## 22.3 Marker changes
+A transition may read both forms, while canonical scenarios emit only the current form.
 
-Changing marker syntax is breaking for:
-
-- scenario runner;
-- `.gfs` scripts;
-- normalized outputs;
-- gold files;
-- report interpretation.
-
-A transition may support both old and new markers for one deprecation period.
-
-Canonical scenarios emit only the new form.
-
-## 22.4 Missing markers in historical output
-
-Historical outputs without canonical markers may be readable only as raw legacy evidence.
-
-They must not be upgraded to confirmed scenario success without equivalent completion proof.
+Historical output without equivalent completion proof remains raw evidence, not confirmed scenario success.
 
 ---
 
-# 23. Gold-file compatibility
+## 22. Gold compatibility
 
-## 23.1 Gold ownership
+Gold files are reviewed active-project expectations.
 
-Gold files are reviewed project expectations.
+Framework upgrades do not rewrite them automatically.
 
-They are not automatically rewritten by framework upgrades.
+A gold-impacting change requires:
 
-## 23.2 Compatible framework change
-
-A framework change is gold-compatible when normalized semantically relevant output remains unchanged.
-
-## 23.3 Gold-impacting change
-
-A change that alters normalized output requires:
-
-- explicit gold diff;
+- explicit expected-versus-actual diff;
 - human review;
 - documented reason;
 - version-control update;
 - scenario validation;
 - release review.
 
-## 23.4 Project changes
-
-Linguistic changes may legitimately update gold.
-
-The commit or decision record should distinguish:
+Reasons distinguish:
 
 ```text
-expected linguistic change
-normalization-only change
-GF-version formatting change
+linguistic change
+normalization change
+GF-version presentation change
 bug fix
 ```
 
-## 23.5 Legacy gold
+Legacy gold is imported only when encoding, normalization and marker semantics are known to be equivalent.
 
-A legacy gold file may be imported if:
-
-- encoding is recoverable;
-- normalization contract is known;
-- marker/output semantics are equivalent.
-
-Otherwise, regenerate through explicit reviewed `gold update`.
+Otherwise, use an explicit reviewed gold-update workflow.
 
 ---
 
-# 24. Human-report compatibility
+## 23. Human-report compatibility
 
-Human reports use soft schemas.
+Human reports use documented soft schemas.
 
-## 24.1 `summary.md`
+### `summary.md`
 
 Canonical first heading:
 
@@ -1317,20 +849,7 @@ Regression Comparison
 Artifacts
 ```
 
-Compatible minor changes:
-
-- add optional subsection;
-- add optional table column;
-- improve prose;
-- add safe links.
-
-Breaking:
-
-- remove/rename required section;
-- change its meaning;
-- make Markdown machine-authoritative.
-
-## 24.2 `AI_READY.md`
+### `AI_READY.md`
 
 Canonical first heading:
 
@@ -1348,39 +867,28 @@ Failing Files
 Failing Scenarios
 Evidence
 Artifacts
+Ready Prompt For AI
 ```
 
-## 24.3 `top_errors.txt`
+### `top_errors.txt`
 
-Canonical line:
+Canonical line format:
 
 ```text
 <count>\t<error-kind>\t<message>
 ```
 
-Changing separators or field meaning is breaking.
+Compatible report changes may add optional sections or improve prose.
 
-## 24.4 Legacy report heading
+Removing or renaming a required heading, changing its meaning or making Markdown machine-authoritative is breaking.
 
-```text
-# GF Audit Summary
-```
-
-remains human-readable but is not emitted canonically.
-
-No migrator should use Markdown as the primary source when `summary.json` exists.
+Readers use `summary.json` when structured data exists.
 
 ---
 
-# 25. Regression-comparison compatibility
+## 24. Regression comparison
 
-## 25.1 Legacy model
-
-```text
-DiffEntry.file_path
-```
-
-## 25.2 Canonical model
+Canonical diff identity includes:
 
 ```text
 subject_kind
@@ -1391,18 +899,14 @@ change_kind
 message
 ```
 
-## 25.3 Migration
-
-Legacy entries become:
+Legacy `DiffEntry.file_path` maps to:
 
 ```text
 subject_kind = file
-subject_id = normalized file_path
+subject_id = normalized file path
 ```
 
-## 25.4 Change kinds
-
-Stable values:
+Canonical change kinds:
 
 ```text
 unchanged
@@ -1412,21 +916,15 @@ new
 removed
 ```
 
-Reusing one of these with a different meaning is breaking.
+Their meanings must not be reused.
 
-Adding another change kind requires schema and consumer review.
-
-## 25.5 Historical comparison
-
-A baseline with compatible subject identity and status meaning may be compared after migration.
-
-An incompatible baseline is skipped or rejected explicitly.
+Incompatible baselines are rejected or skipped explicitly.
 
 ---
 
-# 26. Diagnostic compatibility
+## 25. Diagnostic compatibility
 
-## 26.1 Canonical diagnostic classes
+Canonical causal classes:
 
 ```text
 ok
@@ -1437,29 +935,16 @@ noise
 skipped
 ```
 
-## 26.2 Canonical error kinds
+Canonical technical error kinds are governed by `docs/reference/DIAGNOSTIC_KINDS.md`.
 
-```text
-OK
-OTHER
-TYPE
-SYNTAX
-INTERNAL
-TIMEOUT
-SCRIPT
-CONFIG
-IO
-TOOL
-```
-
-## 26.3 Legacy classes
+Legacy values such as:
 
 ```text
 script_error
 framework_error
 ```
 
-must not be emitted canonically.
+are not emitted canonically.
 
 Migration separates:
 
@@ -1468,23 +953,15 @@ technical nature -> error_kind
 causal relationship -> diagnostic_class
 ```
 
-## 26.4 Parser improvements
+Diagnostic parser improvements are compatible when raw evidence and public meanings remain unchanged.
 
-Improving diagnostic recognition is normally patch-compatible when:
-
-- raw evidence remains unchanged;
-- canonical status meanings remain unchanged;
-- classification becomes more accurate under existing definitions.
-
-Changing the definition of `direct` or `downstream` is a compatibility-sensitive behavioral change and requires documented review.
+Redefining `direct`, `downstream` or status semantics requires coordinated compatibility review.
 
 ---
 
-# 27. External GF compatibility
+## 26. External GF compatibility
 
-## 27.1 Version policy
-
-GF Wordbench records and evaluates:
+Wordbench records:
 
 ```text
 minimum supported GF version
@@ -1492,34 +969,26 @@ tested GF versions
 known incompatible GF versions
 ```
 
-## 27.2 Unknown newer version
-
-Default non-strict behavior:
+For an unknown newer version, policy may:
 
 - warn;
-- perform supported capability checks;
-- continue when base contracts are satisfied;
-- record exact version.
+- probe required capabilities;
+- continue when the command contract is satisfied;
+- record the exact version.
 
-Strict/release policy may reject an unknown version.
+Strict or release policy may reject it.
 
-## 27.3 Older unsupported version
+An older version lacking required capabilities is rejected before validation.
 
-Reject before language validation when required capabilities are absent.
+Command adapters use:
 
-## 27.4 Capability adapters
-
-When GF command options vary, use:
-
-- version-gated command building;
+- version-gated argument construction;
 - capability probes;
-- documented compatibility adapters.
+- explicit equivalent commands.
 
-Silent fallback to different behavior is prohibited.
+Silent omission of a required option is prohibited.
 
-## 27.5 Command changes
-
-Changing any of these is compatibility-sensitive:
+Compatibility-sensitive external-tool fields include:
 
 ```text
 executable resolution
@@ -1527,200 +996,77 @@ argument order
 working directory
 GF search path
 stdin behavior
-timeout
+timeouts and budgets
 stdout/stderr interpretation
-expected artifact
+expected artifacts
 ```
 
-The external-tool lock, tests, configuration, models, and docs update together.
-
-## 27.6 Output changes
-
-When a GF upgrade changes output:
-
-1. preserve raw evidence;
-2. compare semantic meaning;
-3. update parser or normalization only for verified instability;
-4. review gold;
-5. update compatibility fixtures;
-6. document supported-version impact.
+GF upgrades that change output require preserved raw evidence, verified semantic comparison, parser or normalization review, gold review and version-labeled integration fixtures.
 
 ---
 
-# 28. Operating-system compatibility
+## 27. Operating systems, Python and dependencies
 
-## 28.1 Supported platforms
-
-Each release documents tested operating systems.
-
-A platform is supported only when:
-
-- installation works;
-- path handling works;
-- process launching works;
-- timeout termination works;
-- reports and artifacts work;
-- core tests pass.
-
-## 28.2 Windows paths
-
-Compatibility must cover:
-
-- drive letters;
-- spaces;
-- Unicode;
-- backslashes;
-- CRLF input;
-- `.exe`;
-- `.bat` launcher;
-- junctions and reparse points.
-
-## 28.3 POSIX paths
-
-Compatibility must cover:
-
-- `/` paths;
-- executable permissions;
-- signals;
-- symlinks;
-- shell-independent process launch.
-
-## 28.4 Persisted path form
-
-Canonical project-relative and run-relative paths use `/`.
-
-This provides cross-platform persisted identity.
-
-## 28.5 Platform-specific feature
-
-A platform-specific option may be added compatibly when:
-
-- optional;
-- clearly documented;
-- absent on unsupported platforms;
-- not required for canonical results.
-
----
-
-# 29. Python-version compatibility
-
-Each release documents:
+Each release documents tested:
 
 ```text
-minimum supported Python
-tested Python versions
-unsupported Python versions
+operating systems
+Python versions
+GF versions
 ```
 
-Dropping a supported Python minor requires at least:
+Supported platforms must pass installation, path, process, timeout and artifact tests.
 
-- a minor GF Wordbench release;
-- release-note notice;
-- installation metadata update;
-- CI update.
+Canonical persisted relative paths use `/`.
 
-Dropping Python support may be treated as breaking for deployment even when application APIs are unchanged.
+Windows coverage includes drive letters, spaces, Unicode, `.exe`, `.bat`, CRLF input and reparse-point safety.
 
-A major release is preferred when the impact is broad.
+POSIX coverage includes executable permissions, signals, symlinks and shell-independent launch.
 
----
+Dropping a supported Python or operating-system version requires release-note and compatibility review.
 
-# 30. Dependency compatibility
-
-## 30.1 Runtime dependencies
-
-GF Wordbench should keep runtime dependencies minimal.
-
-## 30.2 Compatible update
-
-A dependency update is compatible when:
-
-- documented behavior remains unchanged;
-- supported Python/platform ranges remain valid;
-- persisted output remains compatible;
-- tests pass.
-
-## 30.3 Breaking dependency update
-
-Examples:
-
-- drops supported Python;
-- changes GUI platform support;
-- changes TOML/JSON parsing semantics;
-- changes subprocess behavior;
-- changes persisted formatting;
-- requires a new system library.
-
-## 30.4 Locking
-
-Development/release dependencies may be constrained for reproducibility.
-
-Public library consumers should not be forced into unnecessarily exact transitive versions unless required.
+Dependency updates are compatible only when documented behavior, platform ranges and persisted output remain compatible.
 
 ---
 
-# 31. Project-template compatibility
-
-## 31.1 Template purpose
+## 28. Project template
 
 ```text
 templates/project/
 ```
 
-defines the canonical starting structure for new active projects.
+defines the generic starting structure.
 
-## 31.2 Framework versus existing project
+Updating the template does not silently modify existing projects.
 
-Updating the template does not automatically update an existing active project.
+Compatible template changes include optional documentation, scenario examples and optional configuration fields.
 
-Existing projects use:
+Breaking template changes include:
 
-- schema migration;
-- project migration guidance;
-- explicit copied files where needed.
+- moving required directories;
+- renaming `project.toml`;
+- changing scenario or gold identity;
+- requiring new project fields;
+- changing release artifact locations.
 
-## 31.3 Compatible template changes
+Such changes require a project migration checklist.
 
-Usually compatible:
-
-- add optional documentation;
-- add optional scenario example;
-- add optional configuration field;
-- improve comments.
-
-## 31.4 Breaking template changes
-
-Examples:
-
-- move required directories;
-- rename `project.toml`;
-- change scenario/gold identity rules;
-- change required entrypoint structure;
-- require new project fields;
-- change release artifact location.
-
-A project migration checklist is required.
+The template remains language-neutral and contains placeholders rather than active Albanian facts.
 
 ---
 
-# 32. Active-project compatibility
-
-The framework and active language project have separate compatibility responsibilities.
-
-## 32.1 Framework responsibility
+## 29. Active-project responsibility
 
 The framework preserves:
 
-- configuration schema;
+- project schema;
 - execution contracts;
 - result semantics;
 - report schemas;
 - migrations;
-- project template expectations.
+- template expectations.
 
-## 32.2 Project responsibility
-
-The active project preserves or migrates:
+The active project preserves or explicitly migrates:
 
 - GF module names;
 - imports;
@@ -1732,43 +1078,13 @@ The active project preserves or migrates:
 - release targets;
 - project documentation contracts.
 
-## 32.3 No hidden project migration
-
-A framework upgrade must not silently rename GF modules or rewrite linguistic gold.
-
-## 32.4 Project contract status
-
-Project interfile contracts use statuses such as:
-
-```text
-active
-experimental
-deprecated
-blocked
-retired
-```
-
-A deprecated project symbol or module needs a consumer migration plan.
+A framework upgrade never silently renames GF modules or rewrites linguistic gold.
 
 ---
 
-# 33. Migration architecture
+## 30. Migration architecture
 
-## 33.1 Responsibilities
-
-Recommended modules:
-
-```text
-app/schemas/versions.py
-app/schemas/validators.py
-app/schemas/migrations.py
-```
-
-or equivalent final owners.
-
-## 33.2 Migration direction
-
-Canonical migration direction:
+Migration direction:
 
 ```text
 older -> current
@@ -1776,43 +1092,27 @@ older -> current
 
 Automatic downgrade is not required.
 
-## 33.3 Stepwise migration
-
-For multiple major versions:
+For several major versions, stepwise migration is preferred:
 
 ```text
 v1 -> v2 -> v3
 ```
 
-is preferred over independent direct converters when stepwise logic is easier to test.
+Readers may migrate in memory without rewriting the source.
 
-## 33.4 In-memory migration
+An explicit persisted migration command:
 
-Readers may migrate legacy data in memory for use.
+- preserves the source;
+- writes atomically;
+- validates the destination;
+- reports warnings and losses;
+- is idempotent.
 
-They must not silently rewrite the source.
-
-## 33.5 Explicit persisted migration
-
-A separate explicit command may write the canonical destination.
-
-The command must:
-
-- preserve source;
-- write atomically;
-- validate destination;
-- report warnings and losses;
-- be idempotent.
-
----
-
-# 34. Migration result
-
-A migration should produce:
+Conceptual migration result:
 
 ```json
 {
-  "source_schema": "gf-audit.run-summary-current",
+  "source_schema": "gf-audit.run-summary",
   "source_version": "unversioned",
   "target_schema": "gf-wordbench.run-summary",
   "target_version": "1.0",
@@ -1824,7 +1124,7 @@ A migration should produce:
 }
 ```
 
-Canonical migration statuses:
+Migration statuses:
 
 ```text
 unchanged
@@ -1833,84 +1133,70 @@ migrated_with_warnings
 failed
 ```
 
-A migration must not return success when required meaning is lost.
+Required meaning loss prevents unqualified migration success.
 
 ---
 
-# 35. Migration safety
+## 31. Migration safety
 
 A migrator must:
 
 - read source without modifying it;
-- validate source as far as possible;
+- validate available source meaning;
 - cap input size;
-- use safe JSON/TOML/text parsing;
+- use safe JSON, TOML or text parsing;
 - avoid arbitrary object deserialization;
-- preserve unknown data only under explicit policy;
-- write a separate or atomic destination;
-- verify output;
-- avoid source-path traversal;
-- never execute content during migration;
-- avoid copying secrets into new artifacts.
-
----
-
-# 36. Loss reporting
+- preserve unknown fields only under explicit policy;
+- write to a separate or atomically replaced destination;
+- verify the result;
+- reject path traversal;
+- never execute migrated content;
+- avoid propagating secrets.
 
 Potential losses include:
 
 ```text
-absolute path could not be made project-relative
-legacy status has no canonical equivalent
-legacy timestamp lacks timezone
-raw artifact is missing
-sha1_short cannot become a real SHA-256
-scenario data did not exist
-ai_brief_path target is ambiguous
-top-error count is malformed
-duplicate file identity collapsed in legacy source
-unknown module suffix
+absolute path cannot be made relative
+legacy status has no equivalent
+timestamp lacks timezone
+raw artifact missing
+truncated SHA-1 cannot become SHA-256
+scenario data never existed
+artifact path is ambiguous
+top-error count malformed
+duplicate identity collapsed
+module suffix unknown
 ```
 
-For every loss, record:
+Each loss records:
 
 - field or subject;
 - original value when safe;
 - reason;
 - canonical fallback;
-- effect on reliability.
+- reliability impact.
 
-A fallback must not turn unknown validation into `OK`.
+Unknown validation never becomes `OK`.
 
 ---
 
-# 37. Idempotence
+## 32. Idempotence and adapters
 
-Running a migration twice on the same source must not:
+Repeated migration must not:
 
 - duplicate entries;
 - change identity;
-- keep incrementing versions;
+- repeatedly increment versions;
 - rewrite gold;
-- create new warnings without reason;
-- alter already canonical meaning.
+- change already canonical meaning.
 
-Canonical input may produce:
+Canonical input produces:
 
 ```text
 status = unchanged
 ```
 
----
-
-# 38. Compatibility adapters
-
-An adapter is appropriate when:
-
-- the external GF command differs by supported version;
-- an old CLI option maps exactly to a new one;
-- a legacy field has one unambiguous canonical replacement;
-- an older Python call can be wrapped safely.
+An adapter is appropriate when an old value maps exactly to one canonical value.
 
 An adapter is inappropriate when:
 
@@ -1918,37 +1204,34 @@ An adapter is inappropriate when:
 - required evidence is absent;
 - security guarantees differ;
 - data loss would be hidden;
-- two old values map ambiguously to one new value.
+- mapping is ambiguous.
 
-In those cases, require explicit migration or reject the input.
+Ambiguous input requires explicit migration or rejection.
 
 ---
 
-# 39. Strict mode
+## 33. Strict compatibility mode
 
-Strict mode tightens compatibility handling.
-
-It may reject:
+Strict mode may reject:
 
 - deprecated CLI aliases;
 - unversioned persisted data;
-- unknown schema fields where policy requires;
-- unknown enum values;
+- unknown fields or enums where required;
 - unknown newer GF versions;
 - missing manifests;
-- lossy migration;
+- lossy migrations;
 - legacy absolute artifact paths;
 - unsupported normalization versions.
 
-Strict mode must not reinterpret legacy input differently.
+Strict mode changes acceptance policy, not meaning.
 
-It changes acceptance policy, not meaning.
+It must not reinterpret legacy values differently from ordinary mode.
 
 ---
 
-# 40. Compatibility warnings
+## 34. Compatibility diagnostics
 
-Warnings should use stable categories:
+Structured warnings may use stable categories such as:
 
 ```text
 DEPRECATED_CLI
@@ -1961,219 +1244,142 @@ NORMALIZATION_VERSION_CHANGED
 MISSING_LEGACY_ARTIFACT
 ```
 
-A structured warning should include:
+A warning includes:
 
 ```text
 code
 message
 subject
 replacement
-removal_version when known
+removal release when applicable
 ```
 
-Human reports may render concise prose.
+Compatibility errors identify:
 
----
+- detected form;
+- expected form;
+- supported migration action;
+- whether the source changed.
 
-# 41. Compatibility errors
-
-Errors include:
+Examples:
 
 ```text
 unsupported schema major
 removed CLI option
 unknown required enum
-incompatible explicit baseline
+incompatible comparison baseline
 unsupported GF capability
 unrecoverable project identity
 unsafe legacy path
 ambiguous migration
-required field meaning lost
+required meaning lost
 ```
-
-The error must identify:
-
-- detected legacy/current form;
-- expected form;
-- supported migration command or documentation;
-- whether the source was modified.
 
 ---
 
-# 42. Compatibility and security
+## 35. Security and correctness
 
-Backward compatibility must not preserve insecure behavior indefinitely.
-
-Security overrides compatibility when an old interface permits:
+Backward compatibility does not preserve behavior that permits:
 
 - command injection;
 - path traversal;
 - unsafe deserialization;
-- arbitrary system command execution;
-- uncontrolled file deletion;
+- arbitrary host-command execution;
+- uncontrolled deletion;
 - secret disclosure;
-- source/gold overwrite;
+- source or gold overwrite;
 - unbounded external execution.
 
-Response options:
+A dangerous legacy interface may be disabled immediately, placed behind an explicit temporary unsafe mode or replaced by a safe adapter.
 
-1. disable immediately;
-2. require explicit unsafe legacy mode temporarily;
-3. provide a safe adapter;
-4. migrate data without executing it;
-5. release a security advisory.
-
-The change must remain transparent.
-
----
-
-# 43. Compatibility and correctness
-
-A stricter rejection of input that was always invalid is normally compatible.
+Stricter rejection of input that was always invalid is normally compatible.
 
 Examples:
 
-- reject negative timeout;
-- reject duplicate scenario ID;
-- reject path escaping project root;
-- reject downstream class without blockers;
-- reject status `OK` with error kind `TIMEOUT`.
+- negative timeout;
+- duplicate scenario ID;
+- path escape;
+- downstream classification without evidence;
+- `OK` with timeout error.
 
-However, when users reasonably relied on permissive behavior, release notes and migration guidance are still required.
+Release notes remain appropriate where permissive historical behavior was relied upon.
 
 ---
 
-# 44. Compatibility and determinism
+## 36. Determinism and reports
 
-Fixing nondeterministic ordering is normally compatible when array order was already documented.
+Fixing nondeterministic ordering is compatible when the canonical order was already documented.
 
-If consumers treated accidental order as meaningful, the canonical documented order still wins.
-
-Order-sensitive persisted changes require schema review.
-
-Canonical ordering includes:
+Canonical examples:
 
 ```text
-file_results -> normalized file path
-scenario_results -> configured execution order
-diff_entries -> severity then subject identity
-top_errors -> descending count then message
+file results -> normalized project-relative path
+scenario results -> configured order
+diff entries -> severity then subject
+top errors -> descending count then message
 manifest -> normalized artifact path
 entrypoints/checkpoints -> declared order
 ```
 
----
+Human report prose may improve without version change when required headings, statuses and artifact paths remain stable.
 
-# 45. Compatibility and reports
-
-Reports may improve prose without a version change when:
-
-- required headings remain;
-- status meaning remains;
-- machine data remains in `summary.json`;
-- artifact links remain valid.
-
-A prose change becomes compatibility-sensitive when:
-
-- automation has been explicitly told to consume it;
-- a required heading changes;
-- line format is documented;
-- another component parses it.
-
-The preferred solution is to move machine needs into a structured schema rather than freeze prose.
+Machine needs belong in structured schemas rather than frozen prose.
 
 ---
 
-# 46. Compatibility and GUI
+## 37. GUI and launcher compatibility
 
-GUI layout is not a stable API.
+GUI layout is not a machine API.
 
 Stable GUI behavior includes:
 
-- equivalent configuration to CLI;
-- same validation semantics;
-- same run artifacts;
-- same project identity;
-- same overall status;
+- equivalent resolved configuration to CLI;
+- identical validation semantics;
+- identical run artifacts;
+- identical project identity and status;
 - no hidden bypass of release rules.
 
-State-file migrations protect preferences, not pixel layout.
+State migration preserves preferences, not pixel layout.
 
----
+Launchers remain compatible when they:
 
-# 47. Compatibility and launchers
-
-Launchers are compatible when they continue to:
-
-- invoke canonical CLI/application entry point;
+- invoke the canonical entrypoint;
 - forward arguments;
-- preserve working-directory independence;
-- return the original process exit code;
-- avoid hidden options.
+- remain independent of the current working directory;
+- propagate the application exit code;
+- add no hidden options.
 
-Renaming a launcher may require a compatibility wrapper on platforms where users rely on shortcuts or scripts.
-
-Launchers must not become independent implementations.
+Launchers never become separate implementations.
 
 ---
 
-# 48. Compatibility test layers
+## 38. Compatibility tests
 
 Required categories:
 
 ```text
-unit alias tests
+boundary alias tests
 legacy schema fixture tests
 migration tests
-current round-trip tests
+canonical round-trip tests
 cross-version reader tests
-CLI help/exit tests
+CLI and exit-code tests
 external GF adapter tests
-project template migration tests
+project-template migration tests
 report soft-schema tests
-Windows path compatibility tests
+Windows path and launcher tests
 security regression tests
 ```
 
----
-
-# 49. Legacy fixture policy
-
-Legacy fixtures are allowed to contain old names and structures.
-
-They must be clearly located:
+Legacy fixtures live under a clearly historical path such as:
 
 ```text
 tests/fixtures/legacy/
 ```
 
-Suggested structure:
+Active framework tests otherwise avoid historical active-language identifiers.
 
-```text
-tests/fixtures/legacy/
-├── state/
-│   ├── gf_audit_state_valid.json
-│   └── gf_audit_state_malformed.json
-├── summaries/
-│   ├── flat_valid.json
-│   ├── nested_valid.json
-│   ├── ai_brief_path.json
-│   ├── mode_file.json
-│   ├── mode_all.json
-│   └── malformed.json
-├── reports/
-│   └── gf_audit_summary.md
-└── projects/
-    └── pre_project_toml/
-```
-
-Active framework tests must not otherwise hardcode historical language identifiers.
-
----
-
-# 50. Round-trip tests
-
-For every canonical persisted schema:
+Round-trip tests perform:
 
 ```text
 construct canonical model
@@ -2182,477 +1388,209 @@ validate
 load
 compare semantic equality
 serialize again
-verify deterministic canonical output
+verify deterministic output
 ```
 
-Exact JSON key order is not semantically required.
-
-Array order and path form are required where documented.
-
----
-
-# 51. Migration tests
-
-Each migration test should assert:
+Migration tests verify:
 
 ```text
-source remains unchanged
-target validates
-canonical writer emits no legacy aliases
-warnings are expected
-losses are expected
-migration is idempotent
-paths are safe
-result meaning is preserved
-```
-
-Lossy fixtures must verify that migration does not claim full success.
-
----
-
-# 52. CLI compatibility tests
-
-Required cases:
-
-```text
-gf-audit alias invokes canonical behavior
---mode file maps to quick
---mode all maps to diagnostic
---target-file maps to --target
---skip-version-probe maps to --no-version-probe
---emit-cpu-stats maps to --cpu-stats
---timeout-sec maps to compile timeout
---diff-previous maps to compare-previous
-deprecated aliases warn once
-canonical help prefers canonical names
-canonical RunConfig contains no legacy mode
-canonical summary contains no legacy mode
-exit-code meanings remain stable
+source unchanged
+target valid
+no legacy aliases emitted
+warnings and losses expected
+idempotence
+safe paths
+meaning preserved
 ```
 
 ---
 
-# 53. Model compatibility tests
-
-Test:
-
-- old constructor patterns still work during support window;
-- new optional fields default safely;
-- alias properties are read-only where appropriate;
-- inconsistent redundant fields fail validation;
-- serialization centralization;
-- no dynamic undocumented attributes;
-- unknown enum behavior;
-- `ScenarioResult` absence in historical summaries;
-- generalized `DiffEntry` migration.
-
----
-
-# 54. External-tool compatibility tests
-
-For each supported GF capability:
-
-- known supported version;
-- minimum supported version;
-- below-minimum version;
-- unknown newer version;
-- missing option;
-- changed stdout/stderr placement;
-- paths with spaces;
-- Windows executable;
-- timeout;
-- expected artifact missing;
-- capability adapter selection.
-
-Real-GF integration tests should be version-labeled.
-
----
-
-# 55. Report compatibility tests
-
-Verify:
-
-```text
-summary.md canonical heading
-summary.md required sections
-AI_READY.md canonical heading
-AI_READY.md required sections
-top_errors.txt tabs and ordering
-legacy report not used as machine truth
-optional new section does not break checker
-required-heading change requires soft-schema major
-```
-
----
-
-# 56. Compatibility release gate
+## 39. Release compatibility gate
 
 Before a stable release:
 
 ```text
 [ ] canonical writers emit no legacy aliases
 [ ] current schemas validate
-[ ] previous supported schemas load
-[ ] registered unversioned legacy summaries load
+[ ] supported previous schemas load
+[ ] registered predecessor summaries load
 [ ] migration losses are explicit
-[ ] deprecated CLI aliases behave as documented
+[ ] supported CLI aliases normalize correctly
 [ ] canonical CLI help is current
-[ ] exit codes remain stable
-[ ] project template is current
-[ ] previous stable project fixture loads
-[ ] run-summary round trip passes
+[ ] exit-code meanings remain stable
+[ ] project template matches the project schema
+[ ] previous supported project fixture loads or migrates
+[ ] summary round trip passes
 [ ] manifest verification passes
 [ ] scenario normalization compatibility passes
-[ ] gold impact reviewed
-[ ] tested GF versions pass
-[ ] Windows compatibility passes
-[ ] changelog includes deprecations
-[ ] removal targets are documented
-[ ] contract locks are updated
+[ ] gold impact is reviewed
+[ ] supported GF versions pass
+[ ] Windows paths and launchers pass
+[ ] security compatibility review passes
+[ ] changelog and migration documentation are current
+[ ] contract locks agree
+[ ] Wordbench remains independent from gf-portfolio
 ```
 
-A failed required compatibility test blocks release unless the release is an intentional major break with complete migration guidance.
+A required compatibility failure blocks release unless the release intentionally changes the major contract and supplies complete migration guidance.
 
 ---
 
-# 57. Breaking-change procedure
+## 40. Breaking-change procedure
 
-A proposed breaking change must document:
+A breaking proposal documents:
 
 ```text
-Affected surface:
-Current contract:
-New contract:
-Why compatibility cannot be preserved:
-Affected versions:
-Affected projects:
-Affected artifacts:
-Security impact:
-Data-loss risk:
-Migration path:
-Deprecation period:
-Removal release:
-Tests:
-Rollback:
+affected surface
+current contract
+new contract
+reason compatibility cannot be preserved
+affected versions and projects
+affected artifacts
+security impact
+data-loss risk
+migration path
+deprecation period when applicable
+removal release
+tests
+rollback
 ```
 
-Required coordinated updates:
+Coordinated updates include:
 
 ```text
 implementation
-all consumers
+consumers
 schema version
 migrator
 contract locks
-CLI/GUI
+CLI and GUI
 project template
 reports
-tests
-fixtures
+tests and fixtures
 release notes
 migration guide
 changelog
 ```
 
----
-
-# 58. Major-release requirements
-
-A major release must provide:
+A major release publishes:
 
 - compatibility summary;
-- removed-feature list;
-- schema migration table;
-- CLI migration table;
+- removed interfaces;
+- schema and CLI migration tables;
 - project migration checklist;
 - supported GF/Python/platform matrix;
-- known non-migratable cases;
-- explicit backup guidance;
+- non-migratable cases;
+- backup guidance;
 - release-validation evidence.
 
-A major release must not simply reject all earlier data without documenting why migration is impossible.
-
 ---
 
-# 59. Minor-release requirements
+## 41. Rollback and backups
 
-A minor release may add:
-
-- optional model fields;
-- optional report sections;
-- optional commands;
-- supported GF versions;
-- deprecation warnings;
-- compatible readers;
-- new optional scenario capabilities.
-
-It must not silently:
-
-- change status meaning;
-- change path bases;
-- remove accepted stable input;
-- alter required gold semantics;
-- change exit-code meanings;
-- bypass project configuration.
-
----
-
-# 60. Patch-release requirements
-
-A patch release may:
-
-- fix parsing;
-- correct migration bug;
-- fix incorrect alias mapping;
-- improve deterministic order;
-- fix report escaping;
-- fix path handling;
-- fix timeout handling;
-- close a security issue.
-
-It should avoid introducing new public features.
-
-A security patch may intentionally reject dangerous previously accepted input.
-
----
-
-# 61. Rollback considerations
-
-A migration should preserve enough source evidence to allow rollback.
-
-Recommended:
-
-- keep original file;
-- write canonical destination separately or atomically with backup;
-- record source schema;
-- record target schema;
-- record tool version;
-- avoid deleting legacy runs;
-- do not overwrite gold without explicit workflow.
-
-Rollback does not guarantee that a newer project can run on an older framework when new required features were introduced.
-
----
-
-# 62. Backup guidance
+Migrations preserve source evidence where possible.
 
 Before a major migration, back up:
 
 ```text
 project/
-project.toml
+project/project.toml
 validation scenarios
 gold files
 contract locks
-state file when preferences matter
+application state when useful
 selected release runs
-manifested artifacts
+manifested release artifacts
 ```
 
-Generated diagnostic runs may be recreated, but release evidence may need retention.
+A migration records source schema, target schema and tool version.
+
+Rollback does not guarantee that a project using new required features can run on an older framework.
 
 ---
 
-# 63. Removal of compatibility code
+## 42. Removing compatibility code
 
-Compatibility code should be removed when:
+Compatibility code may be removed when:
 
-- support window ended;
-- replacement is stable;
+- its support window ended;
+- the replacement is established;
 - migration documentation exists;
-- usage is no longer required by supported fixtures;
-- security impact is acceptable;
-- next major release permits removal.
+- supported fixtures no longer require runtime acceptance;
+- security constraints permit removal;
+- the scheduled release permits it.
 
 Before removal:
 
-- keep historical migration fixtures when useful;
-- remove alias from help earlier than parser acceptance if lifecycle says so;
-- update changelog;
-- test clear rejection message.
+- retain useful historical migration fixtures;
+- update help, changelog and migration documentation;
+- test clear rejection with replacement guidance.
 
-Compatibility code must not remain indefinitely without an owner.
-
----
-
-# 64. Avoiding compatibility complexity
-
-Backward compatibility should not create a second permanent architecture.
-
-Use these limits:
-
-1. Normalize aliases immediately at boundaries.
-2. Keep one canonical in-memory model.
-3. Keep one canonical writer per artifact.
-4. Keep legacy readers isolated.
-5. Do not spread legacy conditions through core stages.
-6. Do not preserve unsafe behavior.
-7. Do not support undocumented historical quirks.
-8. Do not add a migration framework more complex than the schemas require.
-9. Remove shims on schedule.
-10. Prefer explicit failure over ambiguous automatic conversion.
-
-Recommended layering:
+Legacy handling remains isolated:
 
 ```text
 legacy input
-    -> detector
-    -> legacy reader
-    -> migration adapter
-    -> canonical model
-    -> ordinary current system
+    → detector
+    → legacy reader
+    → migration adapter
+    → canonical model
+    → ordinary current system
 ```
 
-Not:
-
-```text
-legacy condition inside every compiler, classifier, report, GUI, and command
-```
+Legacy conditions must not spread through compilers, diagnostics, reports, GUI and current writers.
 
 ---
 
-# 65. Compatibility ownership
+## 43. Documentation
 
-| Domain | Owner |
-|---|---|
-| Framework version | package metadata/release owner |
-| CLI compatibility | `app/main_cli.py` and CLI docs |
-| Python API compatibility | owning module and interfile lock |
-| Model compatibility | `app/models.py` and schema layer |
-| Project config | project loader and project schema |
-| State migration | state manager |
-| Summary migration | summary loader/migrator |
-| Manifest compatibility | manifest writer/verifier |
-| Scenario normalization | scenario runner/normalizer |
-| Gold compatibility | active-project maintainers |
-| GF adapter | command builder/process integration |
-| Report soft schemas | report writers |
-| Project migration | active project owner |
-| Deprecation schedule | release owner |
+General compatibility policy belongs here.
 
-No reader may rewrite an artifact it does not own.
+Exact syntax and fields belong to their owner references.
 
----
-
-# 66. Documentation requirements
-
-Every deprecated or migrated surface must appear in at least one appropriate document:
+Compatibility-sensitive changes update the appropriate subset of:
 
 ```text
 CHANGELOG.md
 docs/release/MIGRATION_AND_DEPRECATION.md
-docs/development/BACKWARD_COMPATIBILITY.md
 docs/usage/CLI_REFERENCE.md
+docs/reference/EXIT_CODES.md
 docs/reference/SCHEMA_INDEX.md
 docs/reference/STATUS_VALUES.md
-relevant contract lock
+docs/configuration/PROJECT_TOML_REFERENCE.md
+docs/configuration/APPLICATION_STATE_REFERENCE.md
+docs/reports/
+docs/scenarios/
+relevant contract locks
+active-project migration documents
 ```
 
-Do not duplicate full rules everywhere.
-
-This document owns general compatibility policy.
-
-Specific references own exact syntax and fields.
+Internal changes that preserve public contracts do not require broad compatibility documentation updates.
 
 ---
 
-# 67. Changelog requirements
+## 44. Compatibility matrix
 
-Changelog sections should include:
+Each release publishes tested support:
 
-```text
-Added
-Changed
-Deprecated
-Removed
-Fixed
-Security
-Migration
-```
-
-A compatibility-sensitive entry identifies:
-
-- old form;
-- new form;
-- first affected release;
-- action required;
-- removal release where applicable.
-
----
-
-# 68. Compatibility matrix
-
-A release should publish a concise matrix:
-
-| Domain | Supported |
+| Domain | Supported values |
 |---|---|
-| GF Wordbench | current release line |
-| Python | declared versions |
-| GF | minimum/tested range |
-| Project schema | current major plus supported previous |
-| App-state schema | current plus registered legacy import |
-| Run-summary schema | current plus supported previous/legacy |
-| Manifest schema | current plus supported previous where applicable |
-| OS | tested platforms |
-| CLI aliases | active deprecation set |
+| GF Wordbench | declared release line |
+| Python | tested versions |
+| GF | minimum and tested versions |
+| Project schema | current and explicitly migratable versions |
+| Application-state schema | current and registered legacy import |
+| Run-summary schema | current and supported prior/legacy forms |
+| Manifest schema | current and supported prior forms |
+| Operating systems | tested platforms |
+| CLI aliases | documented active alias set |
 
-The matrix records actual tested support.
-
-It must not claim untested combinations as fully supported.
+Untested combinations are not claimed as fully supported.
 
 ---
 
-# 69. Known incompatible conditions
+## 45. Examples
 
-Examples that may require rejection:
-
-```text
-project schema newer than reader major
-run summary with redefined status meaning
-unknown required enum in strict mode
-GF below minimum supported capability
-gold normalization version with no adapter
-project identity migration with ambiguous module suffix
-manifest hash algorithm unknown to verifier
-unsafe legacy absolute path escaping approved root
-```
-
-The error should remain specific.
-
----
-
-# 70. Compatibility diagnostics
-
-Suggested command:
-
-```text
-gf-wordbench schemas check <path>
-```
-
-It reports:
-
-```text
-canonical and valid
-supported legacy
-migration recommended
-migration required
-unsupported newer schema
-invalid
-```
-
-A future aggregate command may be:
-
-```text
-gf-wordbench compatibility check
-```
-
-It is unnecessary until multiple compatibility checks cannot be expressed through existing commands.
-
-Avoid adding it merely for symmetry.
-
----
-
-# 71. Example: legacy CLI migration
+### Legacy CLI
 
 Input:
 
@@ -2669,18 +1607,9 @@ gf-wordbench validate
 --compile-timeout 60
 ```
 
-Behavior:
+The boundary emits warnings, constructs canonical `RunConfig` and writes only canonical report values.
 
-- warn for legacy executable;
-- warn for each unique deprecated option category;
-- build canonical `RunConfig`;
-- persist mode `quick`;
-- persist operation-specific timeout;
-- produce canonical report names.
-
----
-
-# 72. Example: legacy summary migration
+### Legacy summary
 
 Legacy:
 
@@ -2696,7 +1625,7 @@ Legacy:
 }
 ```
 
-Canonical in-memory result:
+Canonical in-memory form:
 
 ```json
 {
@@ -2720,19 +1649,9 @@ Canonical in-memory result:
 }
 ```
 
-Warnings:
+Warnings identify the unversioned schema, mode alias, path conversion, unavailable error kind and absent scenario data.
 
-```text
-legacy unversioned summary
-mode alias migrated
-absolute artifact path converted
-top-error kind unavailable; defaulted to OTHER
-scenario data unavailable
-```
-
----
-
-# 73. Example: non-migratable fingerprint
+### Non-migratable fingerprint
 
 Legacy:
 
@@ -2742,249 +1661,136 @@ Legacy:
 }
 ```
 
-Canonical SHA-256 cannot be reconstructed from a truncated SHA-1.
-
-Correct migration:
+Correct handling:
 
 ```text
-preserve sha1_short as legacy evidence
-leave canonical SHA-256 absent or unknown
-record loss
+preserve as legacy SHA-1 evidence
+leave canonical SHA-256 absent
+record a loss
 ```
 
-Incorrect migration:
+It is never copied into a SHA-256 field.
 
-```text
-copy a1b2c3d4 into sha256
-```
+### Project identity change
 
----
-
-# 74. Example: diagnostic-class migration
-
-Legacy:
-
-```json
-{
-  "diagnostic_class": "script_error",
-  "error_kind": "SCRIPT"
-}
-```
-
-Canonical result depends on evidence:
-
-```text
-error_kind = SCRIPT
-diagnostic_class = direct
-```
-
-when the current operation itself is the supported technical root.
-
-Or:
-
-```text
-error_kind = SCRIPT
-diagnostic_class = ambiguous
-```
-
-when causality cannot be recovered.
-
-The migrator must not always choose `direct` without evidence.
-
----
-
-# 75. Example: project identity change
-
-Old:
+Changing:
 
 ```text
 project id = sqi
 module suffix = Sqi
 ```
 
-New:
+to another active identity requires coordinated project migration across configuration, GF files, module declarations, imports, entrypoints, scenarios, golds, documentation and release artifacts.
 
-```text
-project id = alb
-module suffix = Alb
-```
+It is not a framework alias.
 
-This is not a simple framework alias.
+### GF option difference
 
-It requires project migration across:
+When a supported GF version lacks an option, Wordbench uses a documented equivalent only when capability evidence proves equivalent behavior.
 
-```text
-project.toml
-GF filenames
-module declarations
-imports
-entrypoints
-scenarios
-gold files
-dependency map
-documentation
-release artifacts
-```
-
-The old ID may remain as migration metadata, not active identity.
+Otherwise the operation is rejected for that version.
 
 ---
 
-# 76. Example: GF option compatibility
-
-Suppose one tested GF version supports an option and an older supported version does not.
-
-Allowed:
-
-```text
-capability probe
-select documented equivalent command
-record exact command and version
-```
-
-Not allowed:
-
-```text
-silently omit the option and claim identical validation
-```
-
-When no equivalent exists:
-
-```text
-reject that operation for the older GF version
-```
-
----
-
-# 77. Anti-drift indicators
+## 46. Drift indicators
 
 Compatibility drift exists when:
 
 - canonical writers emit legacy names;
-- aliases survive past the boundary into core models;
-- one reader migrates a field differently from another;
-- CLI and GUI interpret old state differently;
-- schema changes without version increment;
-- a required field is added without migration;
-- unknown enum becomes `OK`;
+- aliases enter core models;
+- readers migrate the same field differently;
+- CLI and GUI interpret legacy state differently;
+- a schema changes without versioning;
+- a required field appears without migration;
+- unknown meaning becomes `OK`;
 - Markdown becomes a migration source;
-- a legacy absolute path is trusted without containment;
-- `sha1_short` is mislabeled SHA-256;
-- new GF behavior silently changes gold meaning;
-- a deprecated option disappears without notice;
+- legacy absolute paths bypass containment;
+- truncated SHA-1 is labeled SHA-256;
+- a GF upgrade silently changes gold meaning;
+- an alias disappears without documented replacement;
 - exit-code meanings change;
-- project template changes but migration docs do not;
-- old-language identifiers appear in active framework defaults;
-- compatibility branches spread into compiler/report stages;
+- a template changes without project migration guidance;
+- historical language identifiers enter framework defaults;
+- migration branches spread into current execution stages;
 - a migrator modifies its source;
-- a migration loses data without reporting it;
-- a strict reader silently accepts unknown meaning;
-- a compatibility test fixture is removed before support ends.
+- loss is hidden;
+- strict mode accepts unknown meaning silently;
+- supported fixtures are removed too early;
+- Wordbench compatibility code depends on `gf-portfolio`.
 
-Any indicator requires compatibility review.
-
----
-
-# 78. Change-control template
-
-Every compatibility-sensitive change should answer:
-
-```text
-Surface:
-Current version:
-Target version:
-Current behavior:
-New behavior:
-Compatible or breaking:
-Legacy input affected:
-Canonical output affected:
-Alias or adapter:
-Migration:
-Warnings:
-Losses:
-Removal target:
-Security impact:
-Tests:
-Documentation:
-```
+Any drift indicator requires coordinated correction.
 
 ---
 
-# 79. Review checklist
+## 47. Review checklist
 
 ```text
 [ ] public surface identified
 [ ] owner identified
-[ ] current consumers identified
+[ ] consumers identified
 [ ] persisted impact reviewed
-[ ] CLI impact reviewed
-[ ] GUI impact reviewed
+[ ] CLI and GUI impact reviewed
 [ ] Python API impact reviewed
 [ ] GF version impact reviewed
 [ ] project-template impact reviewed
 [ ] active-project impact reviewed
 [ ] security impact reviewed
-[ ] compatible default selected
-[ ] schema version updated when needed
-[ ] migrator implemented when needed
+[ ] schema version changed when required
+[ ] migration or adapter defined
 [ ] canonical writer emits only canonical form
-[ ] legacy reader isolated
-[ ] warnings implemented
-[ ] removal target documented
-[ ] tests added
-[ ] fixtures added
-[ ] changelog updated
+[ ] legacy reader remains isolated
+[ ] warnings and losses are explicit
+[ ] tests and fixtures added
+[ ] changelog and migration guide updated
 [ ] contract locks updated
+[ ] removal release documented when applicable
+[ ] Wordbench/Portfolio boundary preserved
 ```
 
 ---
 
-# 80. Implementation completion checklist
-
-Backward compatibility is implemented adequately when:
+## 48. Conformance checklist
 
 ```text
-[ ] framework uses semantic versioning
+[ ] framework versions follow semantic versioning
 [ ] persisted schemas have explicit IDs and versions
 [ ] canonical writers emit no legacy aliases
-[ ] current readers load the current schema major
-[ ] supported previous major migration exists where promised
-[ ] registered GF Audit legacy state loads
-[ ] registered flat summary loads
-[ ] registered nested summary loads
-[ ] file/all modes normalize to quick/diagnostic
+[ ] current readers load the supported schema set
+[ ] registered predecessor state imports safely
+[ ] registered flat and nested summaries migrate
+[ ] file/all normalize to quick/diagnostic
 [ ] ai_brief_path migration is tested
-[ ] absolute artifact-path conversion is contained
-[ ] sha1_short is never mislabeled SHA-256
-[ ] old top-error mapping normalizes
-[ ] old DiffEntry file path normalizes
-[ ] legacy diagnostic classes migrate safely
-[ ] scenario absence in historical runs is explicit
+[ ] absolute artifact conversion verifies containment
+[ ] legacy fingerprints are not mislabeled
+[ ] top-error mappings normalize deterministically
+[ ] legacy diff entries gain explicit subject identity
+[ ] legacy diagnostic classes migrate from evidence
+[ ] missing scenario history remains explicit
 [ ] CLI aliases warn and normalize
-[ ] overall exit-code meanings are stable
-[ ] project schema migration is explicit
-[ ] state does not own active project identity
+[ ] exit-code meanings 0–4 remain stable
+[ ] project migration is explicit
+[ ] application state does not own project identity
 [ ] report soft schemas are tested
 [ ] normalization versions are enforced
-[ ] gold updates remain explicit
+[ ] gold changes remain explicit
 [ ] GF capability adapters are tested
 [ ] strict mode rejects unsupported meaning
-[ ] migrators are read-only on source
-[ ] migrations are idempotent
+[ ] migrators preserve source and are idempotent
 [ ] warnings and losses are structured
-[ ] previous stable project fixture loads
+[ ] supported project fixtures load or migrate
 [ ] Windows paths and launchers remain compatible
-[ ] security fixes can override unsafe compatibility
-[ ] compatibility shims have removal targets
-[ ] release gate passes
+[ ] security may reject unsafe historical behavior
+[ ] release compatibility gate passes
 ```
 
 ---
 
-# 81. Related documents
+## 49. Related documents
 
 ```text
 CHANGELOG.md
+SECURITY.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -3000,6 +1806,7 @@ docs/release/MIGRATION_AND_DEPRECATION.md
 docs/release/RELEASE_PROCESS.md
 docs/reports/SUMMARY_JSON_REFERENCE.md
 docs/reports/SUMMARY_MARKDOWN_REFERENCE.md
+docs/reports/AI_READY_REFERENCE.md
 docs/scenarios/OUTPUT_NORMALIZATION.md
 docs/scenarios/UPDATING_GOLD_FILES.md
 docs/usage/CLI_REFERENCE.md
@@ -3007,15 +1814,14 @@ docs/reference/EXIT_CODES.md
 docs/reference/SCHEMA_INDEX.md
 docs/reference/STATUS_VALUES.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
-SECURITY.md
 ```
 
 ---
 
-# 82. Final rule
+## 50. Enforcement
 
-GF Wordbench keeps one current architecture and explicit adapters at its boundaries.
+GF Wordbench keeps one canonical architecture and isolates compatibility at its boundaries.
 
 Therefore:
 
-> Accept documented legacy inputs only through isolated, tested readers or aliases; convert them to one canonical model; emit only current versioned formats; report every ambiguity or loss; and remove compatibility code on a declared schedule instead of allowing legacy behavior to spread through the system.
+> Accept documented historical inputs only through tested readers, aliases or migrations; convert them into one canonical model; emit only current versioned forms; report every ambiguity or loss; preserve security and correctness; and prevent legacy behavior from spreading through the current system.

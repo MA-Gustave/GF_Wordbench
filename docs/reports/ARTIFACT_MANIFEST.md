@@ -1,22 +1,25 @@
 # GF Wordbench — Artifact Manifest
 
 **Document ID:** `GF-WB-ARTIFACT-MANIFEST`  
-**Status:** Final normative specification  
-**Applies to:** Every finalized GF Wordbench run, with stricter completeness requirements in `release` mode  
+**Status:** Normative artifact-integrity specification  
+**Applies to:** every finalized GF Wordbench run for one active project and one normative language target, with stricter completeness requirements in `release` mode  
 **Owner:** GF Wordbench maintainers  
 **Manifest schema:** `gf-wordbench.artifact-manifest/1.0`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Schema authority:** `docs/PERSISTED_SCHEMA_LOCK.md`  
+**Artifact authority:** `docs/architecture/ARTIFACT_MODEL.md`  
+**Document version:** `1.0.0`  
+**Last reviewed:** `2026-07-24`
+
 **Normative counterparts:**
-- `docs/PERSISTED_SCHEMA_LOCK.md`
+
 - `docs/INTERFILE_CONTRACT_LOCK.md`
 - `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`
 - `docs/validation/RELEASE_GATES.md`
 - `docs/reports/REPORTING_OVERVIEW.md`
 - `docs/reports/SUMMARY_JSON_REFERENCE.md`
 - `docs/reports/RAW_LOGS_REFERENCE.md`
-- `docs/architecture/ARTIFACT_MODEL.md`
 - `docs/operations/RUN_DIRECTORY_LIFECYCLE.md`
-
-**Document version:** `1.0.0`
 
 ---
 
@@ -90,6 +93,41 @@ This document does not govern:
 
 ---
 
+## Product and public-artifact boundary
+
+One manifest belongs to exactly one finalized Wordbench run. That run belongs to exactly one active GF language project and one normative language target.
+
+Schema `1.0` obtains project identity through the required `summary.json` artifact:
+
+```text
+manifest.json
+    -> machine_summary entry
+    -> summary.json
+    -> run and project identity
+```
+
+The manifest and its listed public artifacts form a read-only interoperability boundary.
+
+The independent `gf-portfolio` product may:
+
+- read a finalized manifest;
+- verify listed bytes;
+- locate `summary.json`;
+- ingest public versioned Wordbench artifacts;
+- maintain its own indexing and aggregation state.
+
+`gf-portfolio` must not:
+
+- rewrite `manifest.json`;
+- modify a listed run artifact;
+- infer private Wordbench state;
+- require Wordbench to acknowledge ingestion;
+- participate in Wordbench manifest generation or verification.
+
+GF Wordbench manifest creation and verification must succeed without `gf-portfolio` installed or reachable.
+
+---
+
 ## 3. Canonical identity
 
 ### 3.1 Schema identity
@@ -136,68 +174,103 @@ The manifest is:
 
 ## 4. Ownership
 
-### 4.1 Manifest writer
+### 4.1 Reporting module
 
-One designated component owns `manifest.json`.
-
-Recommended module:
+The `reporting` module is the sole owner of:
 
 ```text
-app/reports/manifest.py
+manifest construction
+canonical JSON serialization
+atomic manifest writing
+manifest loading
+manifest verification
 ```
 
-Recommended public operation:
+Conceptual operations:
 
 ```python
-write_manifest(
+build_manifest(
     run_result: RunResult,
     run_paths: RunPaths,
     artifact_declarations: Sequence[ArtifactDeclaration],
+) -> ArtifactManifest
+```
+
+```python
+write_manifest(
+    manifest: ArtifactManifest,
+    run_paths: RunPaths,
 ) -> ManifestWriteResult
 ```
 
-The final implementation may use another module path, but ownership must remain singular and documented.
+```python
+verify_manifest(
+    manifest_path: Path,
+    run_root: Path,
+    policy: ManifestVerificationPolicy,
+) -> ManifestVerificationResult
+```
 
-### 4.2 Readers
+Exact private type and function names may vary. Ownership, inputs and outputs remain singular.
 
-Permitted readers include:
+### 4.2 Runs module
 
-- manifest verifier;
-- release gate engine;
-- CLI;
-- GUI;
-- CI automation;
-- archive/export tooling;
-- cleanup tooling;
-- support and diagnostic tools;
-- human reviewers.
+The `runs` module owns:
 
-### 4.3 Ownership invariant
+- the run identity;
+- the run directory;
+- finalization ordering;
+- the transition to a finalized lifecycle state;
+- the prohibition on post-manifest writes;
+- propagation of manifest failure into run status and release gates.
 
-Readers MUST NOT rewrite `manifest.json`.
+The runs module does not serialize or independently verify the manifest.
 
-A migration tool may create a new canonical manifest through an explicit migration operation.
+### 4.3 Artifact producers
 
-### 4.4 Artifact ownership
-
-The manifest inventories files owned by other components. It does not take ownership of those files.
+Validation, diagnostics and reporting producers register structured artifact declarations.
 
 Examples:
 
-| Artifact | Owner |
+| Artifact | Logical owner |
 |---|---|
-| `summary.json` | JSON report writer |
-| `summary.md` | Markdown report writer |
-| `AI_READY.md` | AI-ready report writer |
-| `top_errors.txt` | error-report writer |
-| compile stdout/stderr | compiler/process evidence owner |
-| scenario stdout/stderr | scenario runner |
-| normalized scenario output | scenario normalizer/runner |
-| `.gfo` | GF tool execution stage, catalogued by GF Wordbench |
-| `.pgf` | PGF build stage, catalogued by GF Wordbench |
-| `manifest.json` | manifest writer |
+| `summary.json` | reporting machine-summary writer |
+| `summary.md` | reporting human-summary writer |
+| `AI_READY.md` | reporting AI-handoff writer |
+| `top_errors.txt` | reporting log writer |
+| run master log | runs evidence writer |
+| compile stdout/stderr | external-tool evidence adapter for validation |
+| scenario stdout/stderr | external-tool evidence adapter for validation |
+| normalized scenario output | validation scenario normalizer |
+| `.gfo` | GF execution, catalogued by validation |
+| `.pgf` | GF execution, catalogued by the PGF validation stage |
+| `manifest.json` | reporting manifest writer |
 
-The manifest writer reads finalized files but MUST NOT alter their contents.
+Producers do not write manifest fragments and do not hash files owned by other producers.
+
+### 4.4 Readers
+
+Permitted readers include:
+
+- reporting manifest verifier;
+- runs release-gate consumer;
+- CLI and GUI entrypoints;
+- CI automation;
+- archive and export tooling;
+- cleanup tooling;
+- support and diagnostic tooling;
+- human reviewers;
+- optional `gf-portfolio` ingestion adapters.
+
+Readers must not rewrite `manifest.json` or listed artifacts.
+
+A migration operation may create a new canonical manifest from a supported legacy run while preserving provenance and without claiming unverifiable historical integrity.
+
+### 4.5 Ownership invariant
+
+The manifest inventories files owned by other components. It does not take ownership of their contents.
+
+The manifest writer reads only finalized bytes. It must not alter, normalize, redact or regenerate an artifact before hashing it.
 
 ---
 
@@ -245,6 +318,22 @@ Artifact entries are sorted by normalized run-relative path.
 
 A required artifact that cannot be verified invalidates the manifest.
 
+### 5.11 Single-run principle
+
+Every entry belongs to the same run root and the same run identity.
+
+### 5.12 Single-project principle
+
+The required machine summary identifies the one active project and normative language target represented by the run.
+
+### 5.13 Consumer-read-only principle
+
+External consumers, including `gf-portfolio`, may verify and copy public artifacts but must not mutate the manifested run.
+
+### 5.14 Portfolio-independence principle
+
+Manifest generation, verification and release gates do not depend on Portfolio availability, state or acknowledgment.
+
 ---
 
 ## 6. Canonical structure
@@ -270,7 +359,7 @@ Schema `1.0` uses this structure:
       "required": true,
       "size_bytes": 12345,
       "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      "created_by": "report_json"
+      "created_by": "reporting_json"
     }
   ]
 }
@@ -513,22 +602,22 @@ Identifies the owning producer component or stable producer ID.
 Recommended values:
 
 ```text
-report_json
-report_markdown
-report_ai_ready
-report_logs
-audit_core
-scanner
-compiler
-scenario_runner
-scenario_normalizer
-pgf_builder
+reporting_json
+reporting_markdown
+reporting_ai_ready
+reporting_logs
+runs
+validation_scanner
+validation_compiler
+validation_scenario
+validation_normalizer
+validation_pgf
 gf
 ```
 
 `created_by` is a logical producer identity, not necessarily a Python filename.
 
-Changing producer implementation without changing ownership does not require changing the value.
+Changing internal code without changing logical ownership does not require changing the producer ID.
 
 ---
 
@@ -882,13 +971,13 @@ Do not:
 
 Large files SHOULD be hashed in chunks.
 
-Recommended chunk size may be implementation-specific.
+Hashing uses bounded streaming chunks; chunk size is an internal performance choice.
 
 ### 13.4 Race protection
 
 The writer SHOULD detect files modified during hashing.
 
-Recommended procedure:
+Required race-safe procedure:
 
 1. read metadata before hashing;
 2. stream bytes and calculate digest;
@@ -984,9 +1073,9 @@ is an error.
 
 ### 16.1 Declared artifacts
 
-Owning components SHOULD register expected artifacts as structured declarations.
+Owning components register expected artifacts as structured declarations.
 
-Recommended model:
+Conceptual model:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1099,7 +1188,7 @@ JSON key order is not semantically significant.
 
 Canonical writers SHOULD use stable presentation order for review.
 
-Recommended root order:
+Canonical presentation order:
 
 ```text
 schema_id
@@ -1111,7 +1200,7 @@ hash_algorithm
 artifacts
 ```
 
-Recommended entry order:
+Canonical entry presentation order:
 
 ```text
 path
@@ -1205,6 +1294,7 @@ It MUST NOT parse human-readable reports to discover artifact paths.
 Verify:
 
 - `run_id` matches;
+- `summary.json` identifies exactly one active project and one normative language target;
 - all required summary artifact paths appear;
 - all manifest paths resolve beneath the same run root;
 - the summary-declared manifest path equals `manifest.json`;
@@ -1273,7 +1363,7 @@ Normal finalization MUST prohibit such writes.
 
 ### 22.1 Verification modes
 
-Recommended modes:
+Canonical verification modes:
 
 ```text
 standard
@@ -1321,7 +1411,7 @@ Includes strict verification plus:
 
 ### 22.5 Verification result
 
-Recommended model:
+Conceptual model:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1388,7 +1478,7 @@ A release run MUST NOT skip manifest verification.
 
 ## 24. Failure codes
 
-Recommended stable diagnostic codes:
+Canonical diagnostic codes:
 
 ```text
 MANIFEST_MISSING
@@ -1528,7 +1618,7 @@ Manifest entry requirements:
 ```text
 role = gfo
 media_type = application/octet-stream
-created_by = gf or compiler
+created_by = gf or validation_compiler
 ```
 
 A `.gfo` must be associated with the current run.
@@ -1541,7 +1631,7 @@ Manifest entry requirements:
 role = pgf
 media_type = application/octet-stream
 required = true when project release policy requires PGF
-created_by = gf or pgf_builder
+created_by = gf or validation_pgf
 ```
 
 A required PGF must:
@@ -1618,7 +1708,27 @@ The normalized current output in the manifest must be the exact file used by the
 
 ---
 
-## 30. Security
+## 30. Portfolio consumption
+
+A finalized manifest is a public Wordbench artifact suitable for optional read-only consumption by `gf-portfolio`.
+
+The Portfolio adapter:
+
+1. validates the manifest schema and paths;
+2. verifies required hashes according to its ingestion policy;
+3. locates the required `machine_summary`;
+4. reads project and language identity from `summary.json`;
+5. stores Portfolio-owned indexing and aggregation state separately;
+6. records the source manifest schema and digest;
+7. leaves the Wordbench run unchanged.
+
+Portfolio ingestion failure does not change the Wordbench run status or manifest.
+
+A Portfolio-specific cache, database, index or readiness model must not be added to the Wordbench manifest schema.
+
+---
+
+## 31. Security
 
 ### 30.1 Path containment
 
@@ -1650,15 +1760,15 @@ SHA-256 detects content change relative to the manifest.
 
 It does not prove who created or approved the manifest.
 
-### 30.7 Future signatures
+### 30.7 Detached signatures
 
-Detached signatures may be added through a separate security and schema contract.
+Detached signatures require a separate security and schema contract.
 
 ---
 
-## 31. Atomic writing
+## 32. Atomic writing
 
-### 31.1 Procedure
+### 32.1 Procedure
 
 The writer MUST:
 
@@ -1668,17 +1778,17 @@ The writer MUST:
 4. atomically replace `manifest.json`;
 5. re-read and validate final file.
 
-### 31.2 Existing manifest
+### 32.2 Existing manifest
 
 Normal initial finalization creates the manifest once.
 
 Regeneration explicitly replaces it atomically.
 
-### 31.3 Failure
+### 32.3 Failure
 
 A failed write MUST NOT leave a partial file at the canonical path.
 
-### 31.4 Temporary filename
+### 32.4 Temporary filename
 
 Temporary files must not be catalogued.
 
@@ -1686,9 +1796,9 @@ They should be cleaned after success or recoverable failure.
 
 ---
 
-## 32. Archive and export behavior
+## 33. Archive and export behavior
 
-### 32.1 Run archive
+### 33.1 Run archive
 
 An archive of a run SHOULD preserve:
 
@@ -1698,23 +1808,19 @@ An archive of a run SHOULD preserve:
 - permissions when relevant;
 - UTF-8 filenames.
 
-### 32.2 Verification after extraction
+### 33.2 Verification after extraction
 
-After extraction:
+After extraction, the canonical CLI manifest-verification operation produces the same artifact-integrity result.
 
-```text
-gf-wordbench manifest verify <run-dir>
-```
+Exact syntax is defined by `docs/usage/CLI_REFERENCE.md`.
 
-should produce the same artifact integrity result.
-
-### 32.3 Archive digest
+### 33.3 Archive digest
 
 An archive may have its own external SHA-256.
 
 That digest is separate from `manifest.json`.
 
-### 32.4 Portable export
+### 33.4 Portable export
 
 A portable export MAY redact local absolute paths inside reports only when:
 
@@ -1727,27 +1833,27 @@ Modifying a manifested run artifact in place is prohibited.
 
 ---
 
-## 33. Cleanup and retention
+## 34. Cleanup and retention
 
-### 33.1 Manifest-aware cleanup
+### 34.1 Manifest-aware cleanup
 
 Cleanup tooling SHOULD use the manifest to distinguish owned artifacts from unrelated files.
 
-### 33.2 Required artifact deletion
+### 34.2 Required artifact deletion
 
 Deleting a required manifested artifact invalidates the run's integrity.
 
-### 33.3 Optional artifact deletion
+### 34.3 Optional artifact deletion
 
 Deleting an optional manifested artifact also makes the original manifest fail verification.
 
 Optional means not required for run success, not disposable without integrity impact.
 
-### 33.4 Derived reduced package
+### 34.4 Derived reduced package
 
 To remove optional files while preserving integrity, create a new package and new manifest.
 
-### 33.5 Retention policy
+### 34.5 Retention policy
 
 Retention policy belongs to operations documentation.
 
@@ -1755,9 +1861,9 @@ The manifest records integrity, not retention duration.
 
 ---
 
-## 34. Migration
+## 35. Migration
 
-### 34.1 Legacy GF Audit runs
+### 35.1 Legacy GF Audit runs
 
 Earlier GF Audit runs may lack `manifest.json`.
 
@@ -1769,21 +1875,21 @@ manifest_status = absent_legacy
 
 They are not retroactively verified.
 
-### 34.2 Migration-generated manifest
+### 35.2 Migration-generated manifest
 
 A migration tool MAY generate a manifest for a legacy run when:
 
 - run root is identifiable;
 - artifact paths are safe;
 - ownership and role can be recovered;
-- generated status is clearly identified outside schema `1.0` or through a future optional field;
+- migration provenance is recorded through a compatible schema extension or a separate migration record;
 - no claim is made that historical bytes are original when provenance is uncertain.
 
-### 34.3 Canonical writer
+### 35.3 Canonical writer
 
 New GF Wordbench runs emit only the latest supported canonical manifest schema.
 
-### 34.4 Schema change
+### 35.4 Schema change
 
 Breaking examples:
 
@@ -1802,20 +1908,22 @@ Compatible examples:
 
 ---
 
-## 35. CLI behavior
+## 36. CLI behavior
 
-Recommended commands:
+The CLI exposes manifest operations equivalent to:
 
 ```text
-gf-wordbench manifest show <run-dir>
-gf-wordbench manifest verify <run-dir>
-gf-wordbench manifest verify <run-dir> --strict
-gf-wordbench manifest create <run-dir>
+show manifest metadata
+verify artifact integrity
+verify under strict or release policy
+create a manifest through an explicit maintenance operation
 ```
 
-### 35.1 `show`
+Exact command names, arguments and exit codes are owned by `docs/usage/CLI_REFERENCE.md`.
 
-Displays:
+### 36.1 Show behavior
+
+The show operation displays:
 
 - schema version;
 - run ID;
@@ -1825,17 +1933,17 @@ Displays:
 - roles;
 - total bytes.
 
-### 35.2 `verify`
+### 36.2 Verify behavior
 
-Validates manifest and file integrity.
+The verify operation validates the manifest and listed file integrity. It returns structured verification status and the documented CLI exit code.
 
-### 35.3 `create`
+### 36.3 Create behavior
 
-Creation is normally internal finalization behavior.
+Creation is normally part of run finalization.
 
-Manual creation must not guess missing ownership or requiredness silently.
+A manual maintenance operation must not guess missing ownership, role or requiredness. It either resolves declarations from supported structured evidence or fails explicitly.
 
-### 35.4 Output example
+### 36.4 Display example
 
 ```text
 Manifest: OK
@@ -1846,11 +1954,9 @@ Required artifacts: 18
 Total bytes: 1849201
 ```
 
-Exact CLI syntax becomes normative in `CLI_REFERENCE.md`.
-
 ---
 
-## 36. GUI behavior
+## 37. GUI behavior
 
 The GUI SHOULD display:
 
@@ -1874,7 +1980,7 @@ The GUI MUST NOT:
 
 ---
 
-## 37. CI behavior
+## 38. CI behavior
 
 A release CI job SHOULD:
 
@@ -1885,21 +1991,21 @@ A release CI job SHOULD:
 5. publish the PGF only when release decision is `READY`;
 6. retain verification output.
 
-### 37.1 Post-publication verification
+### 38.1 Post-publication verification
 
 CI MAY download the published artifact package and re-run verification.
 
-### 37.2 Working-directory mutation
+### 38.2 Working-directory mutation
 
 No step may modify manifested files between manifest creation and publication.
 
-### 37.3 Failure
+### 38.3 Failure
 
 Any required artifact mismatch fails the CI release job.
 
 ---
 
-## 38. Recommended implementation models
+## 39. Canonical conceptual models
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1938,27 +2044,27 @@ class ManifestWriteResult:
     message: str
 ```
 
-### 38.1 Paths in models
+### 39.1 Paths in models
 
 Manifest entry paths are canonical strings because they are persisted run-relative identifiers.
 
 Filesystem operations use resolved `Path` objects separately.
 
-### 38.2 Central serialization
+### 39.2 Central serialization
 
 One serializer owns JSON shape and ordering.
 
 ---
 
-## 39. API boundaries
+## 40. API boundaries
 
-### 39.1 Producers to manifest writer
+### 40.1 Producers to manifest writer
 
 Producers provide structured declarations.
 
 They do not write manifest fragments.
 
-### 39.2 Manifest writer to verifier
+### 40.2 Manifest writer to verifier
 
 The writer returns:
 
@@ -1966,25 +2072,25 @@ The writer returns:
 - structured write result;
 - optional in-memory manifest model.
 
-### 39.3 Verifier to release engine
+### 40.3 Verifier to release engine
 
 The verifier returns `ManifestVerificationResult`.
 
 The release engine does not parse verification prose.
 
-### 39.4 Reports
+### 40.4 Reports
 
 Reports may display manifest data.
 
 They do not create or verify artifacts independently.
 
-### 39.5 Cleanup/export
+### 40.5 Cleanup/export
 
 Cleanup and export read the manifest but do not change its meaning.
 
 ---
 
-## 40. Prohibited behavior
+## 41. Prohibited behavior
 
 The following are prohibited:
 
@@ -2006,11 +2112,13 @@ The following are prohibited:
 - assigning one path multiple roles through duplicate entries;
 - including project source or gold files as run-generated artifacts without an explicit copy/export contract;
 - considering an optional artifact removable while preserving original manifest validity;
-- claiming release readiness without manifest verification.
+- claiming release readiness without manifest verification;
+- allowing `gf-portfolio` or another consumer to rewrite the run;
+- storing Portfolio registry, cache or readiness state in the Wordbench manifest.
 
 ---
 
-## 41. Drift indicators
+## 42. Drift indicators
 
 Manifest drift is likely when:
 
@@ -2029,15 +2137,16 @@ Manifest drift is likely when:
 - `manifest.json` appears in its own artifacts array;
 - schema changes without version change;
 - cleanup deletes an entry without creating a new manifest;
-- archive export changes bytes but reuses the old manifest.
+- archive export changes bytes but reuses the old manifest;
+- manifest generation depends on Portfolio state or availability.
 
 Every indicator requires contract review.
 
 ---
 
-## 42. Required tests
+## 43. Required tests
 
-Recommended files:
+Required coverage is organized around:
 
 ```text
 tests/reports/test_manifest_writer.py
@@ -2049,7 +2158,7 @@ tests/integration/test_release_manifest.py
 tests/migrations/test_legacy_manifest.py
 ```
 
-### 42.1 Schema tests
+### 43.1 Schema tests
 
 - valid canonical manifest;
 - missing `schema_id`;
@@ -2065,7 +2174,7 @@ tests/migrations/test_legacy_manifest.py
 - Unicode round trip;
 - deterministic ordering.
 
-### 42.2 Path tests
+### 43.2 Path tests
 
 - root-level file;
 - nested file;
@@ -2082,7 +2191,7 @@ tests/migrations/test_legacy_manifest.py
 - path with spaces;
 - Unicode filename.
 
-### 42.3 Hash tests
+### 43.3 Hash tests
 
 - correct SHA-256;
 - one-byte modification;
@@ -2094,7 +2203,7 @@ tests/migrations/test_legacy_manifest.py
 - empty permitted file;
 - empty required PGF rejected by release policy.
 
-### 42.4 Requiredness tests
+### 43.4 Requiredness tests
 
 - missing required artifact;
 - missing optional declaration;
@@ -2103,9 +2212,10 @@ tests/migrations/test_legacy_manifest.py
 - failed compile still requires raw logs;
 - skipped scenario has no fabricated output.
 
-### 42.5 Consistency tests
+### 43.5 Consistency tests
 
 - summary run ID mismatch;
+- summary project identity missing or inconsistent;
 - summary required path absent;
 - scenario result output absent;
 - PGF requirement mismatch;
@@ -2113,7 +2223,7 @@ tests/migrations/test_legacy_manifest.py
 - creator/role mismatch;
 - media-type mismatch.
 
-### 42.6 Atomic-write tests
+### 43.6 Atomic-write tests
 
 - successful replacement;
 - invalid temporary JSON;
@@ -2122,7 +2232,7 @@ tests/migrations/test_legacy_manifest.py
 - postwrite re-read failure;
 - temporary cleanup.
 
-### 42.7 Finalization tests
+### 43.7 Finalization tests
 
 - successful release finalization;
 - manifest write failure transitions run to error;
@@ -2133,7 +2243,7 @@ tests/migrations/test_legacy_manifest.py
 
 ---
 
-## 43. Example complete manifest
+## 44. Example complete manifest
 
 ```json
 {
@@ -2154,7 +2264,7 @@ tests/migrations/test_legacy_manifest.py
       "required": true,
       "size_bytes": 8210,
       "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "created_by": "report_ai_ready"
+      "created_by": "reporting_ai_ready"
     },
     {
       "path": "artifacts/pgf/GrammarX.pgf",
@@ -2163,7 +2273,7 @@ tests/migrations/test_legacy_manifest.py
       "required": true,
       "size_bytes": 481920,
       "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "created_by": "pgf_builder"
+      "created_by": "validation_pgf"
     },
     {
       "path": "raw/master.log",
@@ -2172,7 +2282,7 @@ tests/migrations/test_legacy_manifest.py
       "required": true,
       "size_bytes": 12391,
       "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "created_by": "audit_core"
+      "created_by": "runs"
     },
     {
       "path": "summary.json",
@@ -2181,7 +2291,7 @@ tests/migrations/test_legacy_manifest.py
       "required": true,
       "size_bytes": 28943,
       "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "created_by": "report_json"
+      "created_by": "reporting_json"
     },
     {
       "path": "summary.md",
@@ -2190,7 +2300,7 @@ tests/migrations/test_legacy_manifest.py
       "required": true,
       "size_bytes": 7392,
       "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-      "created_by": "report_markdown"
+      "created_by": "reporting_markdown"
     },
     {
       "path": "top_errors.txt",
@@ -2199,7 +2309,7 @@ tests/migrations/test_legacy_manifest.py
       "required": true,
       "size_bytes": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "created_by": "report_logs"
+      "created_by": "reporting_logs"
     }
   ]
 }
@@ -2209,7 +2319,7 @@ The example hashes other than the known empty-file SHA-256 are placeholders and 
 
 ---
 
-## 44. Example verification failure
+## 45. Example verification failure
 
 ```json
 {
@@ -2230,7 +2340,7 @@ The example hashes other than the known empty-file SHA-256 are placeholders and 
 
 ---
 
-## 45. Review checklist
+## 46. Review checklist
 
 Before declaring manifest integrity `OK`:
 
@@ -2264,7 +2374,7 @@ Before declaring manifest integrity `OK`:
 
 ---
 
-## 46. Change policy
+## 47. Change policy
 
 A manifest change is contract-significant when it changes:
 
@@ -2302,7 +2412,7 @@ A coordinated change MUST update:
 
 ---
 
-## 47. Final enforcement rule
+## 47. Governing rule
 
 The manifest is the run's integrity ledger.
 

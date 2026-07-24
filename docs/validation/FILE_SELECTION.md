@@ -2,12 +2,13 @@
 
 **Document ID:** `GF-WB-VALIDATION-FILE-SELECTION`  
 **Status:** Normative  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\validation\FILE_SELECTION.md`  
+**Canonical path:** `docs/validation/FILE_SELECTION.md`  
 **Applies to:** GF source discovery, explicit target resolution, include and exclude filtering, mode-specific target construction, deterministic ordering, and exclusion reporting  
 **Owner:** GF Wordbench maintainers  
-**Contract reference:** `IFC-AUDIT-003`  
-**Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Contract references:** `IFC-WB-001`, `IFC-WB-002`, `IFC-WB-004`  
+**Document version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -27,7 +28,7 @@ It answers:
 - how file limits are applied;
 - how duplicate and ambiguous paths are handled;
 - how selected and excluded files are ordered;
-- which paths are returned to the audit orchestrator;
+- which paths are returned to run orchestration;
 - which failures are configuration errors rather than ordinary exclusions.
 
 The central rule is:
@@ -69,6 +70,19 @@ This document does not govern:
 - run-directory creation;
 - artifact retention.
 
+### 2.1 Product boundary
+
+File selection operates on exactly one resolved Wordbench workspace, one active project and one validation run.
+
+It MUST NOT:
+
+- discover projects through a Portfolio registry;
+- combine source roots from several Wordbench workspaces;
+- select files for several active language projects in one run;
+- depend on `gf-portfolio` state, storage or configuration.
+
+`gf-portfolio` may invoke independent Wordbench runs and consume their finalized public artifacts. It does not participate in source-file selection.
+
 ---
 
 ## 3. Authority boundary
@@ -104,9 +118,9 @@ The resolved `RunConfig` owns:
 - optional diagnostic file limit;
 - any documented explicit runtime override.
 
-### 3.3 File selector owns
+### 3.3 File-selection component owns
 
-`app/audit/file_selector.py` owns:
+The validation module's file-selection component owns:
 
 - candidate enumeration;
 - explicit path resolution;
@@ -118,17 +132,17 @@ The resolved `RunConfig` owns:
 - exclusion-reason construction;
 - expected module-name extraction from a filename.
 
-### 3.4 Audit orchestrator owns
+### 3.4 Run orchestration owns
 
-`app/audit/audit_core.py` owns:
+The application run orchestration owns:
 
-- invoking the selector once;
+- invoking file selection once;
 - recording selection counts;
 - sending only selected files to later stages;
-- preserving selector errors;
+- preserving selection errors;
 - deciding whether a configuration error aborts the run.
 
-The audit orchestrator MUST NOT duplicate selection rules.
+Run orchestration MUST NOT duplicate selection rules.
 
 ### 3.5 GF owns
 
@@ -247,9 +261,9 @@ Runtime selection example:
 
 ## 7. Configuration precedence
 
-The final selector receives already-resolved configuration.
+The selector receives already-resolved configuration.
 
-Recommended precedence:
+Canonical precedence:
 
 1. explicit CLI or GUI runtime value;
 2. documented project value;
@@ -330,7 +344,7 @@ MUST be rejected when resolution escapes the active project root.
 
 In strict mode, a source-root symlink resolving outside the project root MUST be rejected.
 
-A project that intentionally uses external source roots requires a future explicit multi-root contract. It MUST NOT be enabled through an accidental symlink.
+A project that intentionally uses an external source root requires an explicit configured alias and containment contract. It MUST NOT be enabled through an accidental symlink.
 
 ---
 
@@ -399,7 +413,7 @@ Those dependency files are not separately selected unless another mode or target
 
 `max_files` does not reduce quick mode below one target.
 
-Recommended configuration rule:
+Configuration rule:
 
 ```text
 max_files = 0 or 1
@@ -458,7 +472,7 @@ An empty checkpoint list MUST NOT yield a misleading successful checkpoint run.
 
 `max_files` MUST NOT truncate checkpoint targets.
 
-Recommended rule:
+Configuration rule:
 
 ```text
 max_files must be 0 in checkpoint mode
@@ -725,7 +739,7 @@ Canonical order:
 6. is readable according to platform policy
 ```
 
-Recommended exclusion reasons:
+Canonical exclusion reasons:
 
 ```text
 missing_file
@@ -881,7 +895,7 @@ Copy, backup, temporary, and disabled-file conventions may be represented by gen
 
 ---
 
-# 18. Recommended default filters
+# 18. Template default filters
 
 Generic project template:
 
@@ -916,7 +930,7 @@ The same file may enter selection through:
 
 Deduplication uses resolved filesystem identity.
 
-Recommended identity key:
+Identity key:
 
 ```python
 os.path.normcase(str(path.resolve()))
@@ -1114,7 +1128,7 @@ The selector MUST NOT return a successful partial checkpoint list.
 
 # 23. Selection result contract
 
-The current compatible public API is:
+The public file-selection API is:
 
 ```python
 def select_files(
@@ -1154,23 +1168,6 @@ Excluded entries contain:
 Persisted project-owned paths are project-relative and use `/`.
 
 The JSON report writer, not the selector, owns serialization.
-
-## 23.4 Optional future result model
-
-A future typed wrapper may be introduced:
-
-```python
-@dataclass(frozen=True, slots=True)
-class FileSelectionResult:
-    selected_files: tuple[Path, ...]
-    excluded_files: tuple[ExcludedFileEntry, ...]
-```
-
-It is useful only if it replaces the tuple consistently across all consumers.
-
-No dynamic or partially adopted wrapper may be introduced.
-
----
 
 # 24. Selection counts
 
@@ -1258,7 +1255,7 @@ Examples:
 - missing checkpoint configuration;
 - missing entrypoint configuration.
 
-Recommended result:
+Canonical result:
 
 ```text
 validation_status = ERROR
@@ -1275,7 +1272,7 @@ Examples:
 - broken symlink;
 - inaccessible target.
 
-Recommended result:
+Canonical result:
 
 ```text
 validation_status = ERROR
@@ -1292,7 +1289,7 @@ Examples:
 - required target excluded;
 - entrypoint not a `.gf` file.
 
-Recommended result:
+Canonical result:
 
 ```text
 validation_status = ERROR
@@ -1350,7 +1347,7 @@ It MUST NOT:
 - create run directories;
 - update `project.toml`;
 - change application state;
-- update status ledgers;
+- update project records;
 - normalize source files;
 - follow a remediation action automatically.
 
@@ -1384,7 +1381,7 @@ The framework SHOULD:
 - apply them only to short filenames and relative paths;
 - document that project maintainers own regex quality.
 
-A future regex timeout is unnecessary unless real evidence shows a need.
+Regex timeout is outside this contract and requires a coordinated contract change if introduced.
 
 ---
 
@@ -1559,7 +1556,7 @@ release criteria
 
 # 38. Legacy behavior and migration
 
-The earlier GF Audit selector currently:
+The predecessor GF Audit selector:
 
 - recognizes `file` and non-`file` behavior;
 - returns absolute selected paths;
@@ -1571,9 +1568,9 @@ The earlier GF Audit selector currently:
 - applies `max_files` during enumeration before regex filtering;
 - may represent outside-project paths as absolute matching strings.
 
-The final GF Wordbench contract changes these points:
+The GF Wordbench contract defines these canonical behaviors:
 
-| Earlier behavior | Final behavior |
+| Legacy GF Audit behavior | Canonical Wordbench behavior |
 |---|---|
 | `file` | normalized to `quick` before selection |
 | `all` or other branch | explicit `diagnostic` only |
@@ -1589,7 +1586,7 @@ Migration tests MUST cover both alias loading and canonical selector behavior.
 
 ---
 
-# 39. Recommended implementation flow
+# 39. Reference selection flow
 
 ```python
 def select_files(run_config: RunConfig) -> tuple[list[Path], list[ExcludedFileEntry]]:
@@ -1635,9 +1632,9 @@ This is a behavioral reference, not a mandatory function decomposition.
 
 ---
 
-# 40. Recommended internal helpers
+# 40. Internal helper boundary
 
-A balanced implementation may use:
+The file-selection component uses cohesive helpers such as:
 
 ```python
 select_files(...)
@@ -1734,7 +1731,7 @@ Tests may use platform-aware skips when behavior cannot be represented faithfull
 
 # 43. Required integration tests
 
-Integration tests should create temporary project trees covering:
+Integration tests create temporary project trees covering:
 
 ```text
 flat source directory
@@ -1777,12 +1774,12 @@ Deterministic ordinary tests are required.
 
 ---
 
-# 45. Acceptance criteria
+# 45. Conformance checks
 
-The file-selection subsystem is complete when:
+The file-selection contract is satisfied when:
 
 ```text
-[ ] canonical modes are implemented
+[ ] canonical modes are accepted and normalized
 [ ] legacy aliases are resolved before selection
 [ ] project and source roots are validated
 [ ] quick mode selects exactly one target
@@ -1790,7 +1787,7 @@ The file-selection subsystem is complete when:
 [ ] release mode selects the complete ordered union
 [ ] diagnostic mode enumerates recursively
 [ ] glob semantics are documented and tested
-[ ] exclude precedence is implemented
+[ ] exclude precedence is enforced
 [ ] invalid regexes fail clearly
 [ ] selected paths are unique and deterministic
 [ ] explicit required targets cannot be silently excluded
@@ -1800,7 +1797,7 @@ The file-selection subsystem is complete when:
 [ ] outside-root candidates are rejected
 [ ] selector has no side effects
 [ ] selector never invokes GF
-[ ] audit core does not duplicate filters
+[ ] run orchestration does not duplicate filters
 [ ] reports do not re-enumerate files
 [ ] Windows paths with spaces pass
 [ ] source and project lock documents agree
@@ -1976,7 +1973,7 @@ SyntaxX.gf
 Selection drift exists when:
 
 - CLI and GUI select different files for equivalent configuration;
-- `audit_core.py` applies its own regex;
+- run orchestration applies its own regex;
 - a report re-enumerates source files;
 - checkpoint order changes alphabetically;
 - release targets are truncated by `max_files`;
@@ -1999,7 +1996,7 @@ file selector
 project loader
 bootstrap
 RunConfig
-audit core
+run orchestration
 result model
 reports
 tests
@@ -2014,6 +2011,9 @@ this document
 
 | Topic | Document |
 |---|---|
+| Documentation alignment | `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` |
+| Single active project | `docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md` |
+| Independent Portfolio boundary | `docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md`, `docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md` |
 | Framework file boundary | `docs/INTERFILE_CONTRACT_LOCK.md` |
 | Project configuration schema | `docs/PERSISTED_SCHEMA_LOCK.md` |
 | Project TOML fields | `docs/configuration/PROJECT_TOML_REFERENCE.md` |
@@ -2024,11 +2024,11 @@ this document
 | Status values | `docs/reference/STATUS_VALUES.md` |
 | Active project targets | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
 | Dependency map | `project/docs/MODULE_DEPENDENCY_MAP.md` |
-| Validation specification | `project/docs/VALIDATION_SPEC.md` |
+| Validation specification | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` |
 
 ---
 
-# 50. Final rule
+# 50. Governing rule
 
 > Selection is complete only when every chosen file is valid, inside the active source root, accepted by project policy, unique, and ordered according to the current validation mode.
 

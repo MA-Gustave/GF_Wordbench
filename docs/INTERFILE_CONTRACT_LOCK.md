@@ -2,18 +2,17 @@
 
 **Document ID:** `GF-WB-ARCH-INTERFILE-LOCK`  
 **Status:** Normative  
-**Contract version:** `2.0.0`  
+**Contract version:** `2.1.0`  
 **Applies to:** GF Wordbench framework, its active-project boundary, its project template and its public artifact boundary  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Last reviewed:** `2026-07-24`  
-**Implementation note:** this file defines the accepted target contracts; `docs/architecture/IMPLEMENTATION_ALIGNMENT.md` must state which contracts are currently implemented and verified
+**Last reviewed:** `2026-07-24`
 
 ---
 
 ## 1. Purpose
 
-This file prevents drift between Wordbench components and repository files. It locks externally observable responsibilities, ownership and dependency direction without pretending that every target contract is already implemented.
+This file prevents drift between Wordbench components and repository files. It locks externally observable responsibilities, ownership and dependency direction.
 
 Internal code may change freely when every documented boundary remains compatible. A boundary change requires coordinated updates to its provider, consumers, schemas, tests, owner documentation and this lock.
 
@@ -46,10 +45,6 @@ Wordbench must start, validate, report and pass its tests without `gf-portfolio`
 - **CONSUMER**: component or file that relies on that behavior or artifact.
 - **OWNER**: sole authority allowed to define or mutate a contract.
 - **PUBLIC ARTIFACT**: versioned Wordbench output intended for external read-only consumption.
-- **TARGET CONTRACT**: accepted design that may still be unimplemented.
-- **IMPLEMENTED CONTRACT**: target contract supported by current source and reproducible evidence.
-
-An accepted ADR establishes a target contract. It does not prove implementation.
 
 ## 4. Architectural shape
 
@@ -208,7 +203,7 @@ Locked rules:
 - machine-readable output is versioned and deterministic;
 - human-readable reports derive from the same finalized results;
 - partial or interrupted runs are not represented as complete successes;
-- planned report fields are not emitted as if implemented;
+- report fields conform to their declared schema and are emitted only according to their defined semantics;
 - public artifacts identify schema version, run identity and active project identity.
 
 ### IFC-WB-008 — Run finalization to artifact bundle
@@ -267,7 +262,7 @@ Locked rules:
 
 ## 8. Project and template boundary
 
-Framework code and framework documentation must remain language-neutral. Language identifiers such as `Sqi`, Albanian module names or Albanian source paths belong only in the active project, explicit examples or historical migration fixtures.
+Framework code and framework documentation must remain language-neutral. Language identifiers such as `Sqi`, Albanian module names or Albanian source paths belong only in the active project, explicit examples or migration fixtures.
 
 The active-project lock governs real project relationships:
 
@@ -281,7 +276,7 @@ The template lock governs generic initialization structure:
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
-The template must not be treated as evidence that an active project implements every placeholder contract.
+Template placeholders do not define active-project facts. Initialization must replace every required placeholder or fail explicitly.
 
 ## 9. Change control
 
@@ -293,9 +288,8 @@ A contract-changing edit requires:
 4. update models, ports, adapters and entrypoints as applicable;
 5. update persisted schemas and migrations when applicable;
 6. update tests and reproducible evidence;
-7. update implementation alignment;
-8. update this lock and the documentation correction ledger;
-9. publish deprecation or migration notes for breaking changes.
+7. update this lock and the documentation correction ledger;
+8. publish deprecation or migration notes for breaking changes.
 
 A documentation-only edit is compatible only when it does not change normative meaning.
 
@@ -314,6 +308,5 @@ A documentation-only edit is compatible only when it does not change normative m
 [ ] project facts remain under project/
 [ ] template content remains generic
 [ ] Wordbench has no reverse dependency on gf-portfolio
-[ ] implementation claims have source or reproducible evidence
-[ ] ledger and implementation alignment are updated
+[ ] documentation correction ledger is updated when the change affects coordinated documentation work
 ```

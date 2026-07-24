@@ -3,12 +3,15 @@
 **Document ID:** `GF-WB-PROJECT-VALIDATION-SPEC`  
 **Status:** Normative  
 **Scope:** Active GF language project only  
-**Applies to:** Project configuration, GF source modules, checkpoints, entrypoints, native `.gfs` scenarios, validation inputs, reviewed gold files, generated GF artifacts, status records, known issues, release decisions, and project evidence  
+**Applies to:** Project configuration, GF source modules, checkpoints, entrypoints, native `.gfs` scenarios, validation inputs, reviewed gold files, generated GF artifacts, validation records, known issues, release decisions, and project evidence  
 **Authoritative project identity:** `project/project.toml`  
 **Project contract lock:** `project/docs/INTERFILE_CONTRACT_LOCK.md`  
+**Documentation alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Framework validation policy:** `docs/validation/VALIDATION_MODES.md`  
-**Last reviewed:** `2026-07-22`  
-**Specification version:** `1.0.0`
+**Scenario validation policy:** `docs/validation/SCENARIO_VALIDATION.md`  
+**Canonical path:** `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`  
+**Last reviewed:** `2026-07-24`  
+**Specification version:** `1.1.0`
 
 ---
 
@@ -31,9 +34,16 @@ project requirement
 
 This specification is authoritative for project-level validation intent.
 
+It applies to exactly one active GF project in one Wordbench workspace. Cross-workspace aggregation and multilingual readiness belong to the independent `gf-portfolio` product. Portfolio may consume completed public Wordbench artifacts, but it does not select, execute, mutate, or validate project assets through Wordbench's private runtime.
+
 It must agree with:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
+docs/PERSISTED_SCHEMA_LOCK.md
+docs/validation/SCENARIO_VALIDATION.md
+docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
 project/project.toml
 project/docs/INTERFILE_CONTRACT_LOCK.md
 project/docs/LANGUAGE_ARCHITECTURE.md
@@ -41,18 +51,18 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/validation/scenarios/
 project/validation/inputs/
 project/validation/gold/
 ```
 
-The project is not complete merely because individual GF files compile.
+Individual GF-file compilation proves only the corresponding source target.
 
-The project is complete only when every required contract has current, traceable, passing evidence.
+Checkpoint and release claims require current, traceable, passing evidence for every applicable required contract.
 
 ---
 
@@ -84,7 +94,7 @@ validation method
 expected result
 blocking policy
 evidence location
-last passing run
+current or most recent accepted evidence
 ```
 
 ---
@@ -131,7 +141,7 @@ Any difference between the configured inventory and the actual project files is 
 - **PROOF**: executable or manual evidence demonstrating a requirement.
 - **TARGET**: file, module, checkpoint, entrypoint, scenario, project, or regression selected for validation.
 - **CHECKPOINT**: configured subsystem boundary whose successful validation proves a development layer is coherent.
-- **ENTRYPOINT**: top-level GF module used for loading, final compilation, PGF construction, or external use.
+- **ENTRYPOINT**: top-level GF module used for loading, entrypoint compilation, PGF construction, or external use.
 - **SCENARIO**: project-owned native `.gfs` script executed by GF Wordbench.
 - **INPUT**: project-owned validation data consumed by a scenario.
 - **GOLD**: reviewed expected normalized scenario output.
@@ -205,6 +215,28 @@ The active project is authoritative for:
 - release criteria.
 
 No layer may silently replace another layer’s authority.
+
+## 5.4 Diagnostic-tool authority
+
+Executable diagnostic tools other than GF are permitted only through the static
+registry governed by `ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md`.
+
+Each registered tool has explicit argument, timeout, output, mutability, network,
+evidence, and failure contracts. Arbitrary commands and dynamically loaded
+executable plugins are prohibited. AI-assisted tools remain optional, visible,
+bounded, and non-normative.
+
+## 5.5 Portfolio boundary
+
+GF Wordbench validates one active project and emits public versioned artifacts.
+
+`gf-portfolio` may consume those completed artifacts. It does not:
+
+- provide Wordbench project identity;
+- launch GF or project scenarios through Wordbench;
+- mutate project evidence;
+- define Wordbench validation statuses;
+- require a reverse runtime dependency from Wordbench.
 
 ---
 
@@ -355,7 +387,7 @@ Deprecated
 Retired
 ```
 
-Implementation progress belongs in `STATUS_LEDGER.md`, not in the requirement lifecycle field.
+Requirement lifecycle records whether the contract is active, deprecated, or retired. Neither this field nor `STATUS_LEDGER__PROJECT_DOCS.md` records coding progress.
 
 ---
 
@@ -381,7 +413,7 @@ PGF construction
 artifact existence
 artifact hash
 manifest verification
-status-ledger review
+validation-ledger review
 known-issue review
 documentation review
 manual review
@@ -476,7 +508,7 @@ A checkpoint run includes:
 - checkpoint-specific artifacts;
 - status review applicable to the checkpoint.
 
-Checkpoint mode is development proof, not final release proof.
+Checkpoint mode is subsystem proof, not release proof.
 
 ---
 
@@ -706,7 +738,7 @@ Canonical project text uses:
 ```text
 UTF-8 without BOM
 LF
-final newline
+terminating newline
 ```
 
 Compatible legacy newline input may be accepted without changing semantic content.
@@ -955,7 +987,7 @@ owned module results
 entrypoint reachability
 scenario results
 gold results
-status-ledger blockers
+validation-ledger blockers
 overall checkpoint status
 ```
 
@@ -1025,7 +1057,7 @@ actual GF source
 **Applicable modes:** Checkpoint and release  
 **Blocking:** Yes for required categories
 
-Public categories defined by project architecture must be implemented by the required concrete layers.
+Public categories defined by project architecture must be covered by the required concrete layers.
 
 ---
 
@@ -1071,7 +1103,7 @@ Compile and generation evidence should cover material parameter branches.
 
 A public helper or operation must have one documented owner.
 
-Copied or conflicting helper implementations require correction or an explicit decision.
+Copied or conflicting helper definitions require correction or an explicit decision.
 
 ---
 
@@ -1344,7 +1376,7 @@ A missing or invalid marker is a scenario contract failure.
 
 A scenario must terminate GF explicitly according to the native scenario contract.
 
-Canonical final command:
+Canonical termination command:
 
 ```gf
 q
@@ -1370,7 +1402,7 @@ Potentially expansive commands have explicit command-level bounds.
 **Applicable modes:** All  
 **Blocking:** Yes
 
-Normal project scenarios must not invoke unrestricted operating-system commands, shell escapes, network clients, or unregistered external processes.
+Normal project scenarios must not invoke unrestricted operating-system commands, shell escapes, network clients, or external processes. Any auxiliary executable must be invoked by Wordbench through an ADR-0013 registry entry, never directly from project scenario text.
 
 ---
 
@@ -1409,7 +1441,7 @@ Proves that a configured entrypoint loads in a fresh GF process.
 
 ## 23.2 Missing linearizations
 
-Proves the accepted set of missing concrete implementations.
+Proves the accepted set of missing concrete linearizations.
 
 For a complete release, the accepted set should normally be empty unless project policy explicitly documents exceptions.
 
@@ -1811,15 +1843,31 @@ Every release criterion must map to an executable or explicit manual proof.
 
 ---
 
-# 30. Status-ledger validation
+# 30. Validation-ledger review
 
-## VAL-STATUS-001 — Registered temporary state
+`project/docs/STATUS_LEDGER__PROJECT_DOCS.md` records project-owned validation facts, release
+blockers, accepted exceptions, evidence references, and resolution history.
+
+It must not classify coding progress or require status updates after ordinary code
+changes.
+
+## VAL-STATUS-001 — Registered validation fact or blocker
 
 **Status:** Active  
 **Applicable modes:** Checkpoint and release  
 **Blocking:** According to entry
 
-Every temporary, fallback, incomplete, blocked, warning, or deprecated implementation that affects project behavior must have a ledger entry.
+A ledger entry is required when a project claim is affected by:
+
+- a reproducible validation failure;
+- a release blocker;
+- a time-bounded accepted exception;
+- missing or stale required evidence;
+- a contract contradiction;
+- a known limitation with explicit release impact.
+
+Each entry identifies the affected requirement, evidence, owner, blocking policy,
+and review trigger.
 
 ---
 
@@ -1839,25 +1887,29 @@ An unresolved release-blocking ledger entry prevents release.
 **Applicable modes:** Release review  
 **Blocking:** Evidence consistency requirement
 
-Resolved entries must retain:
+Resolved entries retain:
 
 ```text
 resolution
 date
-affected files
+affected requirements or assets
 validation evidence
 run ID when applicable
+reviewer or owner
 ```
+
+Resolution is based on evidence, not on a coding-progress label.
 
 ---
 
-## VAL-STATUS-004 — Source and ledger consistency
+## VAL-STATUS-004 — Evidence and ledger consistency
 
 **Status:** Active  
 **Applicable modes:** Checkpoint and release  
 **Blocking:** Project-defined
 
-Source comments, documentation, and ledger status must not contradict one another.
+Source comments, project documentation, validation evidence, known issues, release
+criteria, and ledger records must not contradict one another.
 
 ---
 
@@ -1974,7 +2026,7 @@ Another qualified reviewer must be able to repeat the manual procedure from the 
 
 # 33. Requirement-to-evidence registry
 
-The active project must maintain a current registry in this document or in `TEST_COVERAGE_MATRIX.md`.
+The active project must maintain a current registry in this document or in `TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`.
 
 Minimum columns:
 
@@ -2230,7 +2282,7 @@ Every required PGF target must build and verify.
 **Applicable modes:** Release  
 **Blocking:** Yes
 
-No unresolved blocking ledger entry or known issue may remain.
+No unresolved blocking validation-ledger entry or known issue may remain.
 
 ---
 
@@ -2240,7 +2292,7 @@ No unresolved blocking ledger entry or known issue may remain.
 **Applicable modes:** Release  
 **Blocking:** Yes
 
-Project architecture, dependency map, validation inventory, coverage matrix, status records, and release criteria must reflect current implementation.
+Project architecture, dependency map, validation inventory, coverage matrix, validation records, and release criteria must reflect current contracts, assets, and evidence.
 
 ---
 
@@ -2583,7 +2635,7 @@ artifacts/pgf/
 
 Exact paths belong to framework artifact contracts.
 
-Project documents reference evidence by run ID and run-relative path where practical.
+Project documents reference evidence by run ID and run-relative path.
 
 ---
 
@@ -2611,7 +2663,7 @@ docs/operations/CLEANUP_BACKUP_AND_RECOVERY.md
 
 # 49. Coverage matrix requirements
 
-`TEST_COVERAGE_MATRIX.md` must map every active requirement to evidence.
+`TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` must map every active requirement to evidence.
 
 It should include:
 
@@ -2630,13 +2682,13 @@ The following inventories must agree:
 
 ```text
 project.toml
-VALIDATION_SPEC.md
-TEST_COVERAGE_MATRIX.md
+VALIDATION_SPEC__PROJECT_DOCS.md
+TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 INTERFILE_CONTRACT_LOCK.md
 scenario directory
 input directory
 gold directory
-RELEASE_CRITERIA.md
+RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 Drift examples:
@@ -2648,7 +2700,10 @@ Drift examples:
 - checkpoint references an unknown module;
 - entrypoint is renamed only in one document;
 - release criteria require an artifact not configured;
-- coverage matrix points to stale evidence.
+- coverage matrix points to stale evidence;
+- a validation record uses coding-progress labels;
+- Wordbench evidence contains `gf-portfolio` registry or aggregation state;
+- a project scenario launches an unregistered executable.
 
 Every drift finding must be corrected or deliberately accepted through a coordinated contract change.
 
@@ -2660,7 +2715,7 @@ Prohibited:
 
 ```text
 declare project complete because all files individually compile
-skip required checkpoint because final entrypoint compiled once
+skip a required checkpoint because a top-level entrypoint compiled once
 accept zero scenario exit without marker and assertion evidence
 treat missing gold as first-run success
 update gold automatically
@@ -2673,6 +2728,9 @@ normalize away meaningful linguistic output
 run scenario through an undocumented shell wrapper
 accept undocumented local GF path
 allow project configuration to depend on generated output
+track coding progress in requirement or validation-ledger statuses
+let project text choose an executable or interpreter
+introduce a GF Wordbench runtime dependency on `gf-portfolio`
 ```
 
 ---
@@ -2700,17 +2758,20 @@ It should verify:
 11. input existence;
 12. required gold existence;
 13. scenario marker structure;
-14. final `q`;
+14. terminating `q`;
 15. forbidden scenario commands;
 16. PGF target declaration;
 17. documentation existence;
 18. coverage-matrix references;
-19. blocking status entries;
+19. blocking validation records;
 20. known-issue release flags;
 21. stale language identifiers;
 22. unresolved required placeholders;
 23. artifact-name consistency;
-24. release-criteria coverage.
+24. release-criteria coverage;
+25. absence of coding-progress labels in validation records;
+26. ADR-0013 registration for every optional executable;
+27. absence of `gf-portfolio` runtime or status fields.
 
 ---
 
@@ -2739,7 +2800,7 @@ ambiguous failure
 current-run artifact verification
 missing PGF
 manifest mismatch
-blocking status-ledger entry
+blocking validation-ledger entry
 blocking known issue
 manual criterion without evidence
 complete successful release
@@ -2762,12 +2823,12 @@ Baseline procedure:
 7. review initial normalized outputs;
 8. create gold only through explicit review;
 9. record known issues;
-10. record incomplete states;
+10. record validation failures, blockers, accepted exceptions, and missing evidence;
 11. run required checkpoints;
 12. run release when all release criteria are satisfied;
 13. protect the accepted baseline run.
 
-A failing baseline may be useful for migration planning.
+A failing baseline may be retained for diagnosis and comparison.
 
 It must not be labeled as release-ready.
 
@@ -2790,7 +2851,7 @@ gold-backed scenarios
 manual criteria
 PGF targets
 blocking known issues
-blocking status entries
+blocking validation records
 ```
 
 The registry must contain current real IDs and paths.
@@ -2810,7 +2871,7 @@ Review this specification:
 - after normalization changes;
 - after gold policy changes;
 - after a new blocking known issue;
-- after status-ledger policy changes;
+- after validation-ledger policy changes;
 - after GF or RGL compatibility changes;
 - after a significant drift incident.
 
@@ -2851,7 +2912,7 @@ Can release evidence be reproduced?
 [ ] Normalization impact reviewed
 [ ] Gold impact reviewed
 [ ] PGF impact reviewed
-[ ] Status-ledger impact reviewed
+[ ] Validation-ledger impact reviewed
 [ ] Known-issue impact reviewed
 [ ] Coverage matrix updated
 [ ] Interfile lock updated
@@ -2883,8 +2944,11 @@ Can release evidence be reproduced?
 [ ] Required gold comparisons match
 [ ] Required PGF builds pass
 [ ] PGF hashes recorded
-[ ] No blocking ledger entries
+[ ] No blocking validation-ledger entries
 [ ] No blocking known issues
+[ ] No coding-progress labels in validation records
+[ ] Every optional executable is registered under ADR-0013
+[ ] No Wordbench runtime dependency on `gf-portfolio`
 [ ] Manual criteria reviewed
 [ ] Documentation current
 [ ] Coverage matrix complete
@@ -2919,7 +2983,7 @@ all checkpoint-owned modules pass
 required reachability passes
 applicable required scenarios pass
 required gold matches
-no checkpoint-blocking status remains
+no checkpoint-blocking validation record remains
 ```
 
 The active project may claim release readiness only when:
@@ -2929,14 +2993,14 @@ a complete release-mode run passes
 all release gates pass
 all required artifacts exist
 manifest verification passes
-all blocking project records are resolved
+all blocking validation records and known issues are resolved
 ```
 
 ---
 
-# 61. Final validation contract
+# 61. Validation contract
 
-The final project validation relationship is:
+The project validation relationship is:
 
 ```text
 project architecture
@@ -2966,8 +3030,8 @@ gold files
 PGF validation
     proves the release artifact
 
-status and issue review
-    prevents hidden incompleteness
+validation-ledger and issue review
+    prevents hidden blockers and unsupported claims
 
 GF Wordbench
     captures and evaluates evidence

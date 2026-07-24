@@ -165,19 +165,19 @@ This document references those fields and operations; it does not redefine them 
 
 ```text
 project/project.toml
-project/docs/00_PROJECT_START_HERE.md
+project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 project/docs/LANGUAGE_OVERVIEW.md
 project/docs/LANGUAGE_ARCHITECTURE.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 project/validation/
 ```
@@ -192,10 +192,10 @@ project/validation/
 | How are lexical and inflectional forms produced? | `MORPHOLOGY_SPEC.md` |
 | How are values composed syntactically? | This document |
 | Which cross-file promises are locked? | `INTERFILE_CONTRACT_LOCK.md` |
-| Which rules are temporary or fallback-backed? | `STATUS_LEDGER.md` |
+| Which rules are temporary or fallback-backed? | `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` |
 | Why was a major syntax choice made? | `DECISION_LOG.md` |
-| Which evidence proves the rule? | `VALIDATION_SPEC.md` and coverage matrix |
-| Does the rule block release? | `RELEASE_CRITERIA.md` |
+| Which evidence proves the rule? | `VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md` and coverage matrix |
+| Does the rule block release? | `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` |
 
 ---
 
@@ -823,7 +823,7 @@ release treatment
 Every fallback constructor must be registered in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 The entry must identify:
@@ -2084,7 +2084,7 @@ A parse merely succeeding is not always sufficient.
 Update:
 
 ```text
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 ```
 
 Recommended row fields:

@@ -169,12 +169,12 @@ Detailed ownership remains:
 | Categories and lincats | `CATEGORY_AND_LINCAT_CONTRACT.md` |
 | Morphological implementation | `MORPHOLOGY_SPEC.md` |
 | Syntax and constructor rules | `SYNTAX_AND_CONSTRUCTOR_RULES.md` |
-| Executable validation | `VALIDATION_SPEC.md` |
-| Test mapping | `TEST_COVERAGE_MATRIX.md` |
-| Temporary implementation status | `STATUS_LEDGER.md` |
+| Executable validation | `VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md` |
+| Test mapping | `TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md` |
+| Temporary implementation status | `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` |
 | Architectural decisions | `DECISION_LOG.md` |
 | Known defects and limitations | `KNOWN_ISSUES.md` |
-| Release acceptance | `RELEASE_CRITERIA.md` |
+| Release acceptance | `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` |
 | Cross-file promises | `INTERFILE_CONTRACT_LOCK.md` |
 
 ---
@@ -236,7 +236,7 @@ Precedence by domain:
 | External linguistic description | reviewed source evidence in this register |
 | Project-selected convention | explicit approved project convention record |
 | Cross-file ownership | `INTERFILE_CONTRACT_LOCK.md` |
-| Release acceptance | `RELEASE_CRITERIA.md` and current release evidence |
+| Release acceptance | `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` and current release evidence |
 
 A source statement does not automatically become a project requirement.
 
@@ -2077,7 +2077,7 @@ A default or fallback must be classified.
 
 Do not describe an implementation fallback as a linguistic default.
 
-Implementation fallbacks require `STATUS_LEDGER.md` entries.
+Implementation fallbacks require `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` entries.
 
 ---
 

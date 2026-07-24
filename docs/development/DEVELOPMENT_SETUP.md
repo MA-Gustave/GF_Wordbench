@@ -1,12 +1,13 @@
 # GF Wordbench — Development Setup
 
 **Document ID:** `GF-WB-DEVELOPMENT-SETUP`  
-**Status:** Final developer guide  
+**Status:** Normative developer guide  
+**Canonical path:** `docs/development/DEVELOPMENT_SETUP.md`  
 **Applies to:** Framework contributors, maintainers, reviewers, CI maintainers, and integration-test authors  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\development\DEVELOPMENT_SETUP.md`  
-**Guide version:** `1.0.0`  
-**Last reviewed:** `2026-07-21`
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Guide version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -45,7 +46,7 @@ docs/usage/QUICK_START.md
 The development environment must preserve these rules:
 
 ```text
-one active language project per repository copy
+one active language project per workspace
 framework code remains language-neutral
 GF remains the execution engine
 tests do not depend on one developer's undocumented machine state
@@ -57,11 +58,30 @@ CLI and GUI use the same application contracts
 
 A local setup is acceptable only when another contributor can reproduce it from the repository and documented prerequisites.
 
+### 2.1 Product boundary
+
+Framework development preserves the product boundary:
+
+```text
+one Wordbench workspace
+→ one active GF language project
+→ one project identity per run
+```
+
+Cross-workspace and multilingual aggregation belongs to the independent `gf-portfolio` product.
+
+```text
+gf-portfolio → public versioned GF Wordbench artifacts
+GF Wordbench -X→ gf-portfolio runtime, storage, code or configuration
+```
+
+Wordbench tests, launchers, configuration and runtime code must not require Portfolio. Portfolio integration tests consume finalized public Wordbench artifacts through an external adapter.
+
 ---
 
 ## 3. Supported baseline
 
-The final baseline is:
+The supported baseline is:
 
 ```text
 Python 3.11 or newer supported version
@@ -89,24 +109,24 @@ Documentation may describe minimum capabilities, but package metadata owns insta
 
 ## 4. Repository root
 
-Examples use:
+Examples use the placeholder:
 
 ```text
-C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench
+<WORKSPACE_ROOT>
 ```
 
-Open a terminal in the repository root.
+Open a terminal in the workspace root.
 
 PowerShell:
 
 ```powershell
-Set-Location "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench"
+Set-Location "<WORKSPACE_ROOT>"
 ```
 
 POSIX shell:
 
 ```bash
-cd /path/to/GF_Wordbench/GF_Wordbench
+cd "<WORKSPACE_ROOT>"
 ```
 
 Verify the expected top-level structure:
@@ -127,28 +147,45 @@ Additional development and launcher files may exist.
 
 ## 5. Logical source layout
 
-The final framework is organized around these responsibilities:
+GF Wordbench is one deployable hexagonal modular monolith.
+
+Functional modules:
+
+```text
+projects
+runs
+validation
+diagnostics
+reporting
+```
+
+Dependency rings:
+
+```text
+domain
+application
+ports
+adapters
+entrypoints
+bootstrap
+```
+
+Conceptual source structure:
 
 ```text
 app/
-├── __init__.py
-├── bootstrap.py
-├── config.py
-├── models.py
-├── state.py
-├── main_cli.py
-├── main_gui.py
-├── audit/
-├── gui/
-├── reports/
-├── utils/
-└── schema or project-loading modules as finalized
+├── domain/
+├── application/
+├── ports/
+├── adapters/
+├── entrypoints/
+└── bootstrap/
 
 tests/
-├── unit or focused module tests
-├── contract tests
-├── integration tests
-└── fixtures
+├── unit/
+├── contracts/
+├── integration/
+└── fixtures/
 
 project/
 ├── project.toml
@@ -159,20 +196,23 @@ templates/
 └── project/
 ```
 
+The exact package tree follows `docs/architecture/COMPONENT_MAP.md` and `docs/architecture/DEPENDENCY_RULES.md`.
+
 Important boundaries:
 
 ```text
-CLI and GUI
-    → bootstrap
-        → audit orchestration
-            → validation stages
-                → process utilities
-                    → GF
+CLI and GUI entrypoints
+    → shared bootstrap
+        → application use cases
+            → domain services
+                → ports
+                    → adapters
+                        → GF and the filesystem
 ```
 
-Reports consume structured results.
+Adapters depend inward through ports. Domain and application code do not depend on CLI, GUI, report formatting, subprocess details or Portfolio.
 
-Reports must not invoke validation stages or GF.
+The reporting module consumes structured results and artifact references. It must not invoke validation stages or GF.
 
 ---
 
@@ -389,36 +429,24 @@ A missing development tool normally means the `dev` extra was not installed.
 
 ---
 
-## 13. Verify the package entrypoint
+## 13. Verify the package entrypoints
 
-Canonical final CLI:
+Canonical CLI:
 
 ```powershell
 gf-wordbench --version
 gf-wordbench --help
 ```
 
-Source-module fallback during development:
-
-```powershell
-python -m app.main_cli --help
-```
-
-GUI entry:
+Canonical GUI launch:
 
 ```powershell
 gf-wordbench gui
 ```
 
-Source-module fallback:
+The installed console commands are the public interfaces.
 
-```powershell
-python -m app.main_gui
-```
-
-The installed console command is the preferred public interface.
-
-The module entrypoint is useful for debugging package installation.
+Internal Python module paths are repository details owned by `docs/development/CODEBASE_GUIDE.md`; automation and user documentation must not depend on them.
 
 ---
 
@@ -433,19 +461,19 @@ Verify the selected executable directly.
 PowerShell:
 
 ```powershell
-& "C:\tools\gf\gf.exe" --version
+& "<GF_EXE>" --version
 ```
 
 Command Prompt:
 
 ```bat
-"C:\tools\gf\gf.exe" --version
+"<GF_EXE>" --version
 ```
 
 POSIX:
 
 ```bash
-/path/to/gf --version
+"<GF_EXE>" --version
 ```
 
 Record:
@@ -465,10 +493,10 @@ Do not assume that the first `gf` on `PATH` is the intended version.
 
 Real project tests normally require an RGL source root or equivalent GF library root.
 
-Example:
+The local path is represented as:
 
 ```text
-C:\work\gf-rgl\src
+<RGL_ROOT>
 ```
 
 Confirm that the expected source directories exist.
@@ -476,8 +504,8 @@ Confirm that the expected source directories exist.
 PowerShell example:
 
 ```powershell
-Test-Path "C:\work\gf-rgl\src"
-Get-ChildItem "C:\work\gf-rgl\src" | Select-Object -First 10
+Test-Path "<RGL_ROOT>"
+Get-ChildItem "<RGL_ROOT>" | Select-Object -First 10
 ```
 
 The active project supplies ordered GF path parts.
@@ -500,17 +528,17 @@ project/docs/
 project/validation/
 ```
 
-Run the configuration checker:
+Run the project checker:
 
 ```powershell
-gf-wordbench config check `
-  --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" `
-  --gf-executable "C:\tools\gf\gf.exe" `
-  --rgl-root "C:\work\gf-rgl\src" `
-  --output-root "C:\work\gf-wordbench-runs"
+gf-wordbench project check `
+  --strict `
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-exe "<GF_EXE>" `
+  --rgl-root "<RGL_ROOT>"
 ```
 
-Configuration checking should occur before real integration tests.
+Project checking occurs before real integration tests.
 
 Framework unit tests must not require the active language project unless the test is explicitly a project-integration test.
 
@@ -586,7 +614,7 @@ When an optional tool is unavailable, install the development extra rather than 
 
 ---
 
-## 19. Recommended local check sequence
+## 19. Local check sequence
 
 Fast edit loop:
 
@@ -766,11 +794,11 @@ Test controllers, validators and state mapping without requiring manual interact
 
 ---
 
-## 22. Recommended pytest markers
+## 22. Pytest markers
 
-The final test suite should use explicit markers for expensive or external tests.
+The test suite uses explicit markers for expensive or external tests.
 
-Recommended markers:
+Canonical markers:
 
 ```text
 integration
@@ -1048,7 +1076,7 @@ A schema test should not infer schema version from package version.
 
 ## 32. Scenario-runner tests
 
-The final scenario runner requires tests for:
+The scenario runner requires tests for:
 
 ```text
 fresh process per scenario
@@ -1186,7 +1214,7 @@ python -m mypy app tests
 Run on one module:
 
 ```powershell
-python -m mypy app/audit/scanner.py
+python -m mypy <CHANGED_MODULE.py>
 ```
 
 Expected project principles:
@@ -1269,28 +1297,22 @@ Prioritize tests for:
 
 ---
 
-## 39. Run the CLI from source
+## 39. Run the CLI from the checkout
 
-Use the installed entrypoint:
+Use the editable installed entrypoint:
 
 ```powershell
 gf-wordbench --help
 ```
 
-Or the source-module entrypoint:
+Run project validation:
 
 ```powershell
-python -m app.main_cli --help
-```
-
-Run configuration validation:
-
-```powershell
-gf-wordbench config check `
-  --project-root "<ROOT>" `
-  --gf-executable "<GF>" `
-  --rgl-root "<RGL>" `
-  --output-root "<OUT>"
+gf-wordbench project check `
+  --strict `
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-exe "<GF_EXE>" `
+  --rgl-root "<RGL_ROOT>"
 ```
 
 Run a focused development validation:
@@ -1298,29 +1320,23 @@ Run a focused development validation:
 ```powershell
 gf-wordbench validate `
   --mode quick `
-  --target "file:<PROJECT-RELATIVE-GF-FILE>" `
-  --project-root "<ROOT>" `
-  --gf-executable "<GF>" `
-  --rgl-root "<RGL>" `
-  --output-root "<OUT>"
+  --target "<PROJECT-RELATIVE-GF-FILE>" `
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-exe "<GF_EXE>" `
+  --rgl-root "<RGL_ROOT>" `
+  --out-root "<OUT_ROOT>"
 ```
 
-The exact public syntax is owned by `CLI_REFERENCE.md`.
+The public syntax is owned by `docs/usage/CLI_REFERENCE.md`.
 
 ---
 
-## 40. Run the GUI from source
+## 40. Run the GUI from the checkout
 
-Preferred:
+Canonical command:
 
 ```powershell
 gf-wordbench gui
-```
-
-Source fallback:
-
-```powershell
-python -m app.main_gui
 ```
 
 Windows launcher:
@@ -1329,9 +1345,9 @@ Windows launcher:
 .\launch_gui.bat
 ```
 
-For debugging GUI startup in a console, use the documented console mode of the launcher or run the Python module directly.
+The launcher invokes the same GUI application entrypoint.
 
-The GUI and CLI must resolve equivalent configuration through the same bootstrap path.
+The GUI and CLI resolve equivalent configuration through the same bootstrap and application services.
 
 ---
 
@@ -1358,11 +1374,11 @@ They must:
 When debugging launcher behavior, compare it with:
 
 ```powershell
-python -X utf8 -m app.main_cli --help
-python -X utf8 -m app.main_gui
+gf-wordbench --help
+gf-wordbench gui
 ```
 
-A launcher-only success indicates a packaging or environment problem that should be fixed.
+A launcher-only success indicates a packaging or environment problem that must be corrected.
 
 ---
 
@@ -1378,10 +1394,11 @@ final newline
 
 Readers may accept compatible legacy forms where documented.
 
-Run Python with UTF-8 mode where launcher behavior requires it:
+Enable Python UTF-8 mode where launcher behavior requires it:
 
 ```powershell
-python -X utf8 -m app.main_cli --help
+$env:PYTHONUTF8 = "1"
+gf-wordbench --help
 ```
 
 Do not depend on the active console code page for GF source, scenarios, gold files, JSON, TOML or reports.
@@ -1489,7 +1506,7 @@ Use the same interpreter for installation and launch:
 
 ```powershell
 python -m pip install -e ".[dev]"
-python -m app.main_gui
+gf-wordbench gui
 ```
 
 ---
@@ -1586,7 +1603,7 @@ gf-wordbench --help
 
 Remove the test environment after verification.
 
-Package build requirements and commands are finalized by the release process documentation.
+Package build requirements and commands are owned by the release process documentation.
 
 ---
 
@@ -1806,7 +1823,7 @@ GUI changes must preserve:
 same project loader
 same mode semantics
 same RunConfig
-same audit entrypoint
+same application run service
 same release restrictions
 same result interpretation
 ```
@@ -1838,7 +1855,7 @@ The CLI should convert input into a public application request.
 
 ## 61. Branch and commit hygiene
 
-Recommended practice:
+Practice:
 
 - one coherent contract change per branch or review unit;
 - separate generated evidence from source changes;
@@ -1939,7 +1956,7 @@ CI-specific wrappers must call the same public commands.
 
 ---
 
-## 65. Recommended CI job split
+## 65. CI job split
 
 ### 65.1 Static and unit job
 
@@ -2146,7 +2163,7 @@ A development environment is ready when:
 [ ] compileall passes
 [ ] GF executable is known for integration work
 [ ] RGL root is known for integration work
-[ ] config check can resolve the active project
+[ ] project check can resolve the active project
 [ ] generated output is outside source roots
 ```
 
@@ -2157,7 +2174,7 @@ A development environment is ready when:
 PowerShell:
 
 ```powershell
-Set-Location "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench"
+Set-Location "<WORKSPACE_ROOT>"
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -2177,17 +2194,17 @@ gf-wordbench --help
 Real GF verification:
 
 ```powershell
-& "C:\tools\gf\gf.exe" --version
+& "<GF_EXE>" --version
 ```
 
-Configuration verification:
+Project verification:
 
 ```powershell
-gf-wordbench config check `
-  --project-root "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench" `
-  --gf-executable "C:\tools\gf\gf.exe" `
-  --rgl-root "C:\work\gf-rgl\src" `
-  --output-root "C:\work\gf-wordbench-runs"
+gf-wordbench project check `
+  --strict `
+  --project-root "<WORKSPACE_ROOT>" `
+  --gf-exe "<GF_EXE>" `
+  --rgl-root "<RGL_ROOT>"
 ```
 
 ---
@@ -2195,24 +2212,32 @@ gf-wordbench config check `
 ## 75. Related documentation
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
+docs/decisions/ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 docs/development/CODEBASE_GUIDE.md
 docs/development/CODING_STANDARDS.md
 docs/development/TESTING_GF_WORDBENCH.md
 docs/development/EXTENDING_GF_WORDBENCH.md
 docs/development/DEBUGGING_THE_FRAMEWORK.md
+docs/architecture/COMPONENT_MAP.md
 docs/architecture/DEPENDENCY_RULES.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/configuration/CONFIGURATION_OVERVIEW.md
 docs/configuration/ENVIRONMENT_AND_PATHS.md
+docs/usage/CLI_REFERENCE.md
+docs/usage/GUI_REFERENCE.md
 docs/usage/QUICK_START.md
 docs/operations/AUTOMATION_AND_CI.md
 ```
 
 ---
 
-## 76. Final development rule
+## 76. Governing development rule
 
 The supported development loop is:
 

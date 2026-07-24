@@ -19,12 +19,12 @@
 **Normative counterparts:**
 - `project/project.toml`
 - `project/docs/INTERFILE_CONTRACT_LOCK.md`
-- `project/docs/VALIDATION_SPEC.md`
-- `project/docs/TEST_COVERAGE_MATRIX.md`
+- `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`
+- `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`
 - `project/docs/MODULE_DEPENDENCY_MAP.md`
-- `project/docs/STATUS_LEDGER.md`
+- `project/docs/STATUS_LEDGER__PROJECT_DOCS.md`
 - `project/docs/DECISION_LOG.md`
-- `project/docs/RELEASE_CRITERIA.md`
+- `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`
 - `project/validation/inputs/README.md`
 - `project/validation/gold/README.md`
 - `docs/scenarios/SCENARIO_FORMAT.md`
@@ -273,7 +273,7 @@ The active registry is defined by:
 
 ```text
 project/project.toml
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 

@@ -35,9 +35,9 @@ GF Wordbench does not replace GF. It organizes the work around GF, preserves evi
 
 ## 2. What GF Wordbench is
 
-GF Wordbench is a reusable development and validation framework for one active GF language project at a time.
+GF Wordbench is a reusable development and validation framework for one active GF language project per workspace.
 
-A GF Wordbench copy contains:
+A GF Wordbench workspace contains:
 
 1. a stable Python framework;
 2. one active language project;
@@ -58,7 +58,7 @@ clone GF Wordbench
 → satisfy release gates
 ```
 
-GF Wordbench is not intended to manage many active languages in parallel inside one project configuration.
+GF Wordbench does not orchestrate several active language projects inside one workspace. Multi-workspace portfolio aggregation belongs to the independent `gf-portfolio` product, which is not a runtime dependency of GF Wordbench.
 
 ---
 
@@ -136,7 +136,6 @@ The active language project owns:
 - morphology and syntax rules;
 - category and lincat contracts;
 - module dependency map;
-- status ledger;
 - project decision log;
 - release criteria.
 
@@ -210,33 +209,46 @@ Generated evidence may be archived, but it is not source configuration.
 
 When two documents appear to overlap, use this authority order:
 
-1. contract locks;
-2. persisted schema lock;
-3. architecture and validation specifications;
-4. configuration references;
-5. project specifications;
-6. usage guides;
-7. examples;
-8. historical notes and changelog entries.
+1. accepted ADRs;
+2. `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` for cross-document interpretation;
+3. specialized normative locks;
+4. the document that owns the specific fact or contract;
+5. overview, tutorial, quick-start, example and historical documents.
 
 A lower-authority document must not contradict a higher-authority document.
 
 If a contradiction is found:
 
 1. stop the affected change;
-2. identify the normative owner;
-3. update the correct source document;
-4. update dependent documents;
-5. update tests or migrations;
+2. identify the conflicting authorities and normative owner;
+3. record the conflict in `docs/DOCUMENTATION_CORRECTION_LEDGER.md`;
+4. update the correct source document and every affected dependent document together;
+5. update tests or migrations when required;
 6. record the decision when it changes architecture.
 
 ---
 
-## 7. Anti-drift lock files
+## 7. Anti-drift documents
 
-The lock files define the boundaries that must not change silently.
+Seven coordinated documents prevent silent contract and documentation drift.
 
-### 7.1 Framework interfile lock
+### 7.1 Documentation alignment lock
+
+```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+```
+
+Use it to preserve product identity, authority order, ownership boundaries and cross-document correction rules.
+
+### 7.2 Documentation correction ledger
+
+```text
+docs/DOCUMENTATION_CORRECTION_LEDGER.md
+```
+
+Use it to coordinate documentation corrections performed across branches and to record conflicts that require joint resolution.
+
+### 7.3 Framework interfile lock
 
 ```text
 docs/INTERFILE_CONTRACT_LOCK.md
@@ -262,7 +274,7 @@ which file calls
 → expecting which response
 ```
 
-### 7.2 External tool lock
+### 7.4 External tool lock
 
 ```text
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
@@ -281,7 +293,7 @@ Use it when changing:
 - supported GF versions;
 - platform-specific process handling.
 
-### 7.3 Persisted schema lock
+### 7.5 Persisted schema lock
 
 ```text
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -302,7 +314,7 @@ Use it when changing:
 - schema versions;
 - compatibility or migration behavior.
 
-### 7.4 Active project interfile lock
+### 7.6 Active project interfile lock
 
 ```text
 project/docs/INTERFILE_CONTRACT_LOCK.md
@@ -321,7 +333,7 @@ Use it when changing:
 - scenario-to-gold relationships;
 - expected `.gfo` or `.pgf` outputs.
 
-### 7.5 Template project lock
+### 7.7 Template project lock
 
 ```text
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
@@ -355,6 +367,7 @@ docs/validation/VALIDATION_MODES.md
 Read:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/architecture/ARCHITECTURE_OVERVIEW.md
 docs/architecture/COMPONENT_MAP.md
 docs/architecture/EXECUTION_FLOW.md
@@ -382,13 +395,13 @@ Read:
 
 ```text
 project/README.md
-project/docs/00_PROJECT_START_HERE.md
+project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 project/docs/LANGUAGE_ARCHITECTURE.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
@@ -427,9 +440,8 @@ docs/validation/RELEASE_GATES.md
 docs/release/VERSIONING_POLICY.md
 docs/release/RELEASE_PROCESS.md
 docs/release/MIGRATION_AND_DEPRECATION.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
-project/docs/STATUS_LEDGER.md
 ```
 
 ---
@@ -635,7 +647,7 @@ Use the following sources of truth.
 | What result is expected for a scenario? | reviewed `.gold` file |
 | What changed since the previous run? | structured diff entries |
 | Is the project releasable? | release run plus project release criteria |
-| What is still open or blocked? | project status ledger and known issues |
+| What limitations or blocking issues remain? | `project/docs/KNOWN_ISSUES.md` |
 
 Human-readable reports are views of structured results. They are not substitutes for canonical machine data.
 
@@ -938,7 +950,7 @@ An isolated edit is not complete when another file depends on the changed promis
 ## 20. Framework change checklist
 
 ```text
-[ ] Read the relevant lock
+[ ] Read the relevant lock and documentation alignment rules
 [ ] Identify provider and all consumers
 [ ] Update public models or schemas
 [ ] Update unit tests
@@ -964,7 +976,6 @@ An isolated edit is not complete when another file depends on the changed promis
 [ ] Update scenarios
 [ ] Update input fixtures
 [ ] Update gold only through explicit review
-[ ] Update status ledger
 [ ] Update project contract lock
 [ ] Run quick validation
 [ ] Run checkpoint validation
@@ -981,7 +992,6 @@ GF Wordbench framework release requires:
 - all contract tests pass;
 - all schema tests pass;
 - documentation links resolve;
-- no active contract remains unintentionally marked planned;
 - no canonical schema remains unversioned;
 - no language-specific path remains in framework defaults;
 - templates contain no active-language data;
@@ -998,7 +1008,6 @@ Active language release requires:
 - required entrypoints compile;
 - no unaccepted blocking issue remains;
 - project release criteria are satisfied;
-- the status ledger reflects the final state.
 
 ---
 
@@ -1045,7 +1054,6 @@ When GF Wordbench cannot safely infer intent:
 - do not update gold files;
 - do not overwrite project configuration;
 - do not delete prior runs;
-- do not reinterpret unknown statuses;
 - do not migrate in place without a backup;
 - do not treat missing evidence as success;
 - do not treat a zero external exit code as sufficient proof when expected markers or artifacts are missing;
@@ -1053,7 +1061,7 @@ When GF Wordbench cannot safely infer intent:
 
 ---
 
-## 25. Final navigation rule
+## 25. Navigation rule
 
 Use the smallest authoritative document that owns the question.
 
@@ -1081,8 +1089,8 @@ Which GF module provides a public helper?
 
 ```text
 What proves this language is complete?
-→ project/docs/VALIDATION_SPEC.md
-→ project/docs/RELEASE_CRITERIA.md
+→ project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+→ project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 ```text
@@ -1094,7 +1102,7 @@ What happened in this run?
 
 ---
 
-## 26. Final rule
+## 26. Governing rule
 
 GF Wordbench is correct only when its components agree across boundaries.
 

@@ -3,18 +3,19 @@
 **Document ID:** `GF-WB-REPORT-SUMMARY-MARKDOWN`  
 **Status:** Normative human-report reference  
 **Applies to:** `run_<run-id>/summary.md`  
+**Canonical path:** `docs/reports/SUMMARY_MARKDOWN_REFERENCE.md`  
 **Primary writer:** `app/reports/report_md.py`  
 **Primary input:** `RunResult`  
 **Machine source of truth:** `run_<run-id>/summary.json`  
 **Owner:** GF Wordbench maintainers  
 **Soft-schema version:** `1.0`  
-**Last structural review:** 2026-07-22  
+**Last structural review:** 2026-07-24  
 
 ---
 
 ## 1. Purpose
 
-`summary.md` is the primary human-readable report for one GF Wordbench run.
+`summary.md` is the primary human-readable report for one GF Wordbench run concerning exactly one active project.
 
 It provides a compact, navigable explanation of:
 
@@ -106,6 +107,19 @@ Their roles differ.
 
 `AI_READY.md` emphasizes bounded diagnostic context suitable for an AI handoff.
 
+## 3.1 Product boundary
+
+`summary.md` describes one Wordbench run and one active project.
+
+It must not contain:
+
+- a registry of Wordbench workspaces;
+- cross-project aggregate status;
+- multilingual portfolio readiness;
+- private `gf-portfolio` identifiers, configuration, storage paths, or internal state.
+
+The independent `gf-portfolio` product may consume or link to public versioned Wordbench artifacts. GF Wordbench does not read Portfolio state to generate `summary.md`.
+
 ---
 
 ## 4. Canonical identity
@@ -122,13 +136,13 @@ run_<run-id>/summary.md
 UTF-8
 ```
 
-Canonical repository-independent output should use:
+Canonical repository-independent output uses:
 
 ```text
 LF
 ```
 
-## 4.3 Final newline
+## 4.3 Terminating newline
 
 The file must end with exactly one newline.
 
@@ -146,7 +160,7 @@ Legacy:
 # GF Audit Summary
 ```
 
-may be read by humans but must not be emitted by the final canonical writer.
+may be read by humans but must not be emitted by the canonical writer.
 
 ## 4.5 Soft-schema version
 
@@ -192,7 +206,7 @@ This stable outline supports:
 - screenshot review;
 - issue templates;
 - simple non-authoritative text search;
-- future accessibility tooling.
+- accessibility tooling.
 
 Machine consumers must still use `summary.json`.
 
@@ -218,7 +232,7 @@ Rules:
 - a minor soft-schema revision may add an optional section;
 - removing or renaming a required heading requires a major soft-schema revision.
 
-Recommended final order:
+Canonical order:
 
 ```text
 # GF Wordbench Audit Summary
@@ -250,7 +264,7 @@ Canonical logical API:
 write_summary_md(run_result: RunResult) -> Path
 ```
 
-Recommended pure builder:
+Pure builder contract:
 
 ```python
 build_summary_md(run_result: RunResult) -> str
@@ -308,17 +322,33 @@ counts
 
 A writer failure:
 
-- must be recorded by orchestration;
-- must not destroy `summary.json`;
-- must not prevent independent report writers from being attempted;
-- may change the run to `ERROR` if the report is required by the active mode;
-- must preserve already written raw evidence.
+- is recorded by orchestration;
+- does not destroy `summary.json`;
+- does not prevent independent report writers from being attempted while the remaining budget permits;
+- makes the run `ERROR` when `summary.md` is required by the active mode;
+- preserves already written raw evidence;
+- never leaves a truncated canonical report in place.
+
+## 7.6 Finalization budget
+
+`summary.md` is written during run finalization under the budget contract defined by `docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md`.
+
+The writer receives a bounded finalization sub-budget and:
+
+- does not launch validation work;
+- does not consume normal stage budgets;
+- uses atomic or recoverable replacement;
+- stops cleanly when its sub-budget expires;
+- records incomplete publication explicitly;
+- never converts an incomplete run or incomplete finalization into `OK`.
+
+The protected finalization reserve is not available to compilation, scenarios, scanning, comparison, or report-time reconstruction.
 
 ---
 
 # 8. Source model
 
-The final report consumes these logical domains from `RunResult`:
+The report consumes these logical domains from `RunResult`:
 
 ```text
 run metadata
@@ -336,13 +366,13 @@ warnings
 report-generation results
 ```
 
-A field absent from the current implementation may be rendered as:
+An optional field that is unavailable may be rendered as:
 
 ```text
 Unknown
 ```
 
-only when the field is optional.
+only when the source schema explicitly marks the field optional.
 
 A missing required model field is a framework error, not an invitation to invent a value.
 
@@ -352,7 +382,7 @@ A missing required model field is a framework error, not an invitation to invent
 
 ## 9.1 Human-first
 
-The report should answer important questions near the top:
+The report answers important questions near the top:
 
 1. Did the run pass?
 2. What failed?
@@ -552,7 +582,7 @@ lib/src/french/GrammarFre.gf
 
 ## 11.2 Run artifacts
 
-Run artifact paths should be displayed run-relative whenever possible.
+Run artifact paths are displayed run-relative whenever possible.
 
 Examples:
 
@@ -573,11 +603,11 @@ project root
 output root
 ```
 
-The report should avoid repeating them in every row.
+The report avoids repeating them in every row.
 
 ## 11.4 Links
 
-Relative Markdown links are recommended for run-owned artifacts:
+Run-owned artifacts use relative Markdown links:
 
 ```markdown
 [Open JSON summary](summary.json)
@@ -625,7 +655,7 @@ The structured model retains:
 duration_ms
 ```
 
-Human display should include a readable duration:
+Human display includes a readable duration:
 
 ```text
 12.438 s
@@ -713,7 +743,7 @@ role order
 then normalized path
 ```
 
-Recommended role order:
+Canonical role order:
 
 ```text
 machine summary
@@ -771,7 +801,7 @@ Project configuration schema
 Run summary schema
 ```
 
-## 14.4 Recommended format
+## 14.4 Canonical format
 
 A compact two-column table:
 
@@ -837,7 +867,7 @@ State the result immediately and summarize important counts.
 
 ## 15.2 First line
 
-Recommended:
+Canonical:
 
 ```markdown
 **Overall status: `OK`**
@@ -899,9 +929,9 @@ Fields not applicable to an older model may display:
 Unknown
 ```
 
-during transition, but the final model should provide them.
+only when the field is explicitly optional in the source schema.
 
-## 15.5 Recommended format
+## 15.5 Canonical format
 
 ```markdown
 | Measure | Count |
@@ -952,7 +982,7 @@ Required in:
 release mode
 ```
 
-Recommended in other modes when release gates were explicitly evaluated.
+Included in other modes when release gates were explicitly evaluated.
 
 ## 16.2 Fields
 
@@ -1019,7 +1049,7 @@ Use in this order:
 
 A subsection may be omitted when empty, except that the section itself remains.
 
-Recommended concise empty behavior:
+Canonical empty behavior:
 
 ```text
 None.
@@ -1126,7 +1156,7 @@ status = ERROR
 
 when not already grouped clearly by causal class.
 
-The final writer should preferably group by causal class and label status explicitly, avoiding duplicate entries.
+The writer groups by causal class, labels status explicitly, and avoids duplicate entries.
 
 A file must appear once in the detailed file outcome groups.
 
@@ -1233,7 +1263,7 @@ Do not omit the section.
 
 ## 19.3 Summary table
 
-Recommended:
+Canonical:
 
 ```markdown
 | Scenario | Required | Status | Execution | Gold | Duration |
@@ -1299,7 +1329,7 @@ Clearly label optional scenarios.
 
 An optional scenario failure may coexist with overall `OK` only when project policy explicitly allows it.
 
-The report should state:
+The report states:
 
 ```text
 Optional diagnostic failure; does not affect overall required validation.
@@ -1323,7 +1353,7 @@ RunResult.top_errors
 
 Do not regroup raw logs in the Markdown writer.
 
-## 20.3 Recommended table
+## 20.3 Canonical table
 
 ```markdown
 | Count | Kind | Message |
@@ -1334,7 +1364,7 @@ Do not regroup raw logs in the Markdown writer.
 
 ## 20.4 Limit
 
-A bounded display is recommended:
+The display is bounded:
 
 ```text
 top 20
@@ -1378,7 +1408,7 @@ Compiler error
 
 ## 21.3 Grouping
 
-Recommended groups:
+Canonical groups:
 
 ```text
 failed files with scan findings
@@ -1466,7 +1496,7 @@ Empty low-priority groups may be omitted.
 
 ## 22.6 Diff entry format
 
-Generalized final model:
+Canonical generalized model:
 
 ```markdown
 - `file` `lib/src/french/GrammarFre.gf`: `FAIL` → `OK` — **improved**
@@ -1482,7 +1512,7 @@ Scenario example:
 
 ## 22.7 Unchanged entries
 
-The human report should normally omit unchanged entries without meaningful detail changes.
+The human report omits unchanged entries without meaningful detail changes.
 
 If included, place them last.
 
@@ -1497,7 +1527,7 @@ subject_kind = file
 subject_id = file_path
 ```
 
-The final writer should not emit the legacy shape into structured output.
+The canonical writer does not emit the legacy shape into structured output.
 
 ## 22.9 Baseline context
 
@@ -1543,7 +1573,7 @@ Output artifacts directory
 PGF artifacts directory
 ```
 
-## 23.3 Recommended format
+## 23.3 Canonical format
 
 ```markdown
 ## Artifacts
@@ -1583,7 +1613,7 @@ Do not create a fake link.
 
 The report may still show the canonical manifest path.
 
-The manifest writer later verifies final artifact bytes.
+The manifest writer later verifies stabilized artifact bytes.
 
 ---
 
@@ -1612,7 +1642,7 @@ Do not mine arbitrary lines from raw logs.
 
 ## 24.3 Severity
 
-Recommended labels:
+Canonical labels:
 
 ```text
 Info
@@ -1637,14 +1667,14 @@ Show report-writer failures in partial/error runs.
 - `summary.json`: `OK`
 - `summary.md`: `OK`
 - `AI_READY.md`: `ERROR` — permission denied
-- `manifest.json`: `SKIPPED` — run not finalized
+- `manifest.json`: `SKIPPED` — run finalization incomplete
 ```
 
 ## 25.3 Self-report limitation
 
-The Markdown writer cannot reliably report its own final write success inside the content before the write occurs.
+The Markdown writer cannot reliably report its own write success inside the content before the write occurs.
 
-The orchestration layer may update a separate finalization artifact or master log.
+The orchestration layer records the writer outcome in the finalization result or master log.
 
 Avoid recursive rewriting solely to record that `summary.md` was written.
 
@@ -1818,7 +1848,7 @@ Baseline: `run_20260721_161005`
 
 The example is illustrative.
 
-Actual language-specific values come from the active project.
+Language-specific values come from the active project.
 
 ---
 
@@ -1941,9 +1971,9 @@ No comparison was performed because the current run did not produce comparable s
 
 ---
 
-# 29. Current writer compatibility
+# 29. Legacy report compatibility
 
-The inherited writer currently emits:
+Compatibility readers may recognize historical `gf-audit` Markdown headings:
 
 ```text
 # GF Audit Summary
@@ -1959,58 +1989,37 @@ The inherited writer currently emits:
 ## Detail files
 ```
 
-It already has useful properties:
+Historical Markdown is human-readable compatibility evidence only. It is never parsed as the authoritative run schema.
 
-- derives content from `RunResult`;
-- separates direct, downstream, and ambiguous failures;
-- lists successful and skipped files;
-- displays scan findings separately;
-- renders regression entries;
-- lists evidence paths;
-- uses deterministic file sorting;
-- uses canonical regression severity order.
+Useful historical report behavior remains part of the Wordbench contract:
 
-The final writer must retain those useful behaviors while migrating to the final soft schema.
+- content derives from structured run results;
+- direct, downstream, and ambiguous failures remain distinct;
+- successful and skipped files remain visible;
+- scan findings remain separate from GF failures;
+- regression entries remain visible;
+- evidence paths remain navigable;
+- rendering order remains deterministic.
+
+Canonical Wordbench writers emit only the soft schema defined by this document.
 
 ---
 
-# 30. Current-to-final migration
+# 30. Legacy-to-canonical rendering map
 
-## 30.1 Heading changes
+## 30.1 Heading map
 
-```text
-# GF Audit Summary
-->
-# GF Wordbench Audit Summary
-```
+| Legacy heading | Canonical location |
+|---|---|
+| `# GF Audit Summary` | `# GF Wordbench Audit Summary` |
+| `## Run` | `## Run Summary` |
+| `## Totals` | count table under `## Outcome` |
+| `## Changes since previous run` | `## Regression Comparison` |
+| `## Detail files` | evidence links under `## File Results` and `## Artifacts` |
 
-```text
-## Run
-->
-## Run Summary
-```
+## 30.2 File-result headings
 
-```text
-## Totals
-->
-part of ## Outcome
-```
-
-```text
-## Changes since previous run
-->
-## Regression Comparison
-```
-
-```text
-## Detail files
-->
-integrated evidence links under File Results and Artifacts
-```
-
-## 30.2 Failure-section changes
-
-Current separate top-level headings:
+Legacy top-level headings:
 
 ```text
 Direct failures
@@ -2021,51 +2030,42 @@ Skipped files
 Excluded or noise files
 ```
 
-become subsections of:
+map to deterministic subsections of:
 
 ```text
 ## File Results
 ```
 
-## 30.3 Scenario section
+## 30.3 Required canonical sections
 
-Add required:
+Canonical reports always include:
 
 ```text
 ## Scenario Results
-```
-
-even when no scenarios ran.
-
-## 30.4 Artifact section
-
-Add required:
-
-```text
 ## Artifacts
 ```
 
-with run-relative navigation.
+even when their content is `None.`
 
-## 30.5 Overall status
+## 30.4 Overall status
 
-Add an explicit canonical overall status in:
+Canonical reports state the overall status explicitly in:
 
 ```text
 ## Outcome
 ```
 
-The final report must not force readers to infer success from counts.
+Readers never infer success from counts or prose.
 
-## 30.6 Top-error model
+## 30.5 Top-error compatibility
 
-The inherited writer expects a mapping:
+A legacy mapping:
 
 ```text
 message -> count
 ```
 
-The final model uses structured top-error entries:
+may be read through a compatibility adapter and is rendered as canonical structured entries:
 
 ```text
 error_kind
@@ -2073,38 +2073,38 @@ message
 count
 ```
 
-The writer must support migration input but render the canonical structured model.
+Canonical writers do not emit the legacy mapping.
 
-## 30.7 Diff model
+## 30.6 Regression compatibility
 
-The inherited writer uses:
+A legacy file-only entry using:
 
 ```text
 file_path
 ```
 
-The final model uses:
+is interpreted as:
 
 ```text
-subject_kind
-subject_id
+subject_kind = file
+subject_id = file_path
 ```
 
-The writer accepts legacy file entries during migration and renders generalized entries.
+Canonical writers emit generalized subject identity.
 
-## 30.8 Paths
+## 30.7 Path compatibility
 
-The inherited writer may show absolute paths.
-
-The final writer should prefer:
+Legacy absolute paths may be displayed when needed for local diagnosis. Canonical rendering uses:
 
 - project-relative source paths;
 - run-relative artifact paths;
-- absolute environment paths only in the run summary.
+- absolute environment paths only in the run summary or explicitly local technical details.
+
+Compatibility behavior is read-only and does not alter `RunResult`.
 
 ---
 
-# 31. Suggested final builder structure
+# 31. Canonical builder structure
 
 ```python
 def build_summary_md(run_result: RunResult) -> str:
@@ -2151,9 +2151,9 @@ Section identity, ordering, and source ownership are normative.
 
 ---
 
-# 32. Suggested rendering helpers
+# 32. Rendering helpers
 
-Recommended responsibilities:
+Rendering responsibilities:
 
 ```text
 build_title
@@ -2256,7 +2256,7 @@ bounded excerpt
 
 only when the report policy allows excerpts.
 
-The default summary report should normally link to raw evidence instead.
+The default summary report links to raw evidence instead.
 
 ## 34.3 Truncation
 
@@ -2276,7 +2276,7 @@ Do not include bounded raw excerpts if they may expose project secrets and no re
 
 ## 35.1 Existing path
 
-Create a Markdown link only when the target exists at writer time or is a canonical artifact expected to be written later in the same finalization sequence.
+Create a Markdown link only when the target exists at writer time or is a canonical artifact scheduled later in the same finalization sequence.
 
 ## 35.2 Missing target
 
@@ -2337,7 +2337,7 @@ Diagnostic runs may contain hundreds of files and scenarios.
 
 The report may bound low-priority lists.
 
-Recommended defaults:
+Canonical display limits:
 
 ```text
 direct failures: all
@@ -2398,7 +2398,7 @@ Do not include:
 
 # 38. Accessibility and readability
 
-The report should:
+The report:
 
 - use descriptive headings;
 - avoid heading-level jumps;
@@ -2424,13 +2424,13 @@ Reasons:
 - cross-team issue handling;
 - AI interoperability.
 
-A future localized report must:
+A localized report:
 
-- preserve canonical machine values;
-- identify locale;
-- have separate golden fixtures;
-- not alter `summary.json`;
-- not replace the canonical English report without explicit policy.
+- preserves canonical machine values;
+- identifies its locale;
+- uses separate golden fixtures;
+- does not alter `summary.json`;
+- does not replace the canonical English report without an explicit report policy.
 
 ---
 
@@ -2481,7 +2481,7 @@ Do not inline full raw logs merely for convenience.
 manifest.json
 ```
 
-Recommended manifest role:
+Canonical manifest role:
 
 ```text
 summary_markdown
@@ -2496,7 +2496,7 @@ The manifest records:
 - writer identity;
 - required flag.
 
-Recommended media type:
+Canonical media type:
 
 ```text
 text/markdown; charset=utf-8
@@ -2535,7 +2535,7 @@ It must clearly identify:
 
 # 43. Test requirements
 
-Recommended test structure:
+Canonical test structure:
 
 ```text
 tests/reports/
@@ -2565,7 +2565,7 @@ Verify:
 ```text
 path = summary.md
 UTF-8
-final newline
+terminating newline
 first heading = # GF Wordbench Audit Summary
 ```
 
@@ -2692,7 +2692,7 @@ Rules:
 - a generic report change must not silently update all goldens;
 - fixtures cover successful, failing, error, scenario, release, and legacy cases.
 
-Suggested fixtures:
+Canonical fixtures:
 
 ```text
 tests/fixtures/reports/summary_ok.md
@@ -2708,7 +2708,7 @@ tests/fixtures/reports/summary_legacy.md
 
 # 45. Contract checker
 
-Suggested command:
+Contract checker command:
 
 ```text
 gf-wordbench reports check <run-dir>
@@ -2765,7 +2765,11 @@ Probable drift exists when:
 - report writing mutates `RunResult`;
 - writer failure prevents unrelated report writers from running;
 - Markdown is parsed to migrate historical runs;
-- required heading changes without soft-schema review.
+- required heading changes without soft-schema review;
+- a single `summary.md` aggregates several active projects;
+- the writer reads or writes private `gf-portfolio` state;
+- report generation consumes the protected finalization reserve without a bounded sub-budget;
+- incomplete report publication is presented as a complete `OK` run.
 
 Any indicator requires coordinated review.
 
@@ -2794,6 +2798,8 @@ Tests:
 Required checklist:
 
 ```text
+[ ] documentation alignment lock reviewed
+[ ] ADR-0010 finalization impact reviewed
 [ ] report_md.py updated
 [ ] RunResult reviewed
 [ ] summary.json schema reviewed
@@ -2852,9 +2858,9 @@ Automation must use `summary.json` for actual run data.
 
 ---
 
-# 49. Implementation completion checklist
+# 49. Conformance checklist
 
-The final `summary.md` system is complete when:
+A conforming `summary.md` subsystem satisfies:
 
 ```text
 [ ] writer owns only summary.md
@@ -2885,7 +2891,7 @@ The final `summary.md` system is complete when:
 [ ] Markdown control characters are safe
 [ ] multiline diagnostic text is bounded
 [ ] large lists declare truncation
-[ ] output is UTF-8 with one final newline
+[ ] output is UTF-8 and ends with exactly one LF
 [ ] writing is atomic
 [ ] input models are not mutated
 [ ] report failure is isolated
@@ -2899,6 +2905,8 @@ The final `summary.md` system is complete when:
 # 50. Related documents
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 docs/architecture/EXECUTION_FLOW.md
 docs/architecture/DATA_MODEL.md
 docs/architecture/ARTIFACT_MODEL.md
@@ -2920,7 +2928,7 @@ SECURITY.md
 
 ---
 
-# 51. Final rule
+# 51. Governing rule
 
 `summary.md` is a stable human explanation of one completed or partial GF Wordbench run.
 

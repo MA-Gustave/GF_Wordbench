@@ -2,10 +2,13 @@
 
 **Document ID:** `GF-WB-REF-STATUS-VALUES`  
 **Status:** Normative reference  
-**Applies to:** GF Wordbench models, schemas, reports, CLI, GUI, validation stages, contract documents, migrations, and release gates  
-**Primary owners:** Shared models and persisted-schema layer  
+**Applies to:** GF Wordbench models, schemas, reports, CLI, GUI, validation stages, registered diagnostic tools, contract documents, migrations, and release gates  
+**Primary owners:** shared domain models, diagnostics, runs, reporting, and persisted-schema layer  
+**Canonical path:** `docs/reference/STATUS_VALUES.md`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Canonical schema line:** `1.x`  
-**Last structural review:** 2026-07-22  
+**Document version:** `1.1`  
+**Last reviewed:** `2026-07-24`  
 
 ---
 
@@ -39,6 +42,15 @@ A value from one vocabulary must not be copied into another merely because the w
 The governing principle is:
 
 > A status must answer one precise question, use one canonical value set, and remain separate from every other status dimension.
+
+Every run and every subject status belongs to one active Wordbench project.
+The independent `gf-portfolio` product may consume public completed artifacts,
+but it does not define, mutate, or extend Wordbench runtime status vocabularies.
+Portfolio aggregation state must not appear in Wordbench subject or process results.
+
+This reference does not define coding-progress labels. Documentation and project
+records must not classify capabilities as `implemented`, `partial`, `planned`,
+`proposed`, `historical`, or `unknown`.
 
 ---
 
@@ -121,7 +133,7 @@ Accepted
 Superseded
 ```
 
-When a governance status is serialized into a future JSON schema, that schema must define its own canonical case.
+When a governance status is serialized into JSON, the owning schema defines its canonical case.
 
 ### 3.4 No spelling variants
 
@@ -537,7 +549,7 @@ else:
     overall_status = "OK"
 ```
 
-Required `SKIPPED` subjects must be resolved before final aggregation.
+Required `SKIPPED` subjects must be resolved before terminal aggregation.
 
 Unexpected required skip normally becomes:
 
@@ -678,7 +690,7 @@ execution_state = cancelled
 error_kind = OTHER
 ```
 
-A future dedicated cancellation error kind requires a versioned enum change.
+A dedicated cancellation error kind requires a versioned enum change.
 
 `CANCELLED` is not a canonical validation status.
 
@@ -855,7 +867,7 @@ is_direct = false
 blocked_by = [one or more canonical subject identities]
 ```
 
-A final downstream result with an empty blocker list is invalid.
+A downstream result with an empty blocker list is invalid.
 
 ---
 
@@ -897,7 +909,7 @@ diagnostic_class = noise
 is_direct = false
 ```
 
-Many implementations may record noise only in selection counts rather than as a `FileResult`.
+Noise may be recorded only in selection counts rather than as a `FileResult`.
 
 ---
 
@@ -1511,7 +1523,7 @@ Recommended combinations:
 | Yes | `OK` | Gate passed |
 | Yes | `FAIL` | Release overall `FAIL` |
 | Yes | `ERROR` | Release overall `ERROR` |
-| Yes | `SKIPPED` | Invalid final state; resolve to `ERROR` |
+| Yes | `SKIPPED` | Invalid terminal state; resolve to `ERROR` |
 | No | `OK` | Optional gate passed |
 | No | `FAIL` | Warning or policy-defined failure |
 | No | `ERROR` | Warning or run `ERROR` if reliability affected |
@@ -1667,6 +1679,9 @@ compatibility_status
 
 This vocabulary describes a public surface’s compatibility guarantee.
 
+It changes only when the public compatibility guarantee changes. It must not be
+used to report coding progress or temporary development state.
+
 It never appears as a validation status.
 
 ---
@@ -1735,9 +1750,11 @@ Project contract documents may additionally use:
 Blocked
 ```
 
-when implementation cannot currently satisfy the documented project contract.
+when a required external dependency, unresolved contract contradiction, missing
+evidence, or failed release prerequisite prevents the contract from being
+satisfied.
 
-`Blocked` is project-governance metadata.
+`Blocked` is project-governance metadata. It does not describe coding progress.
 
 It is not a validation status.
 
@@ -1747,7 +1764,7 @@ It is not a validation status.
 
 The contract governs current supported behavior.
 
-For a final stable release, every required contract must be `Active`, `Deprecated`, or `Retired` as appropriate.
+For a stable release, every required contract must be `Active`, `Deprecated`, or `Retired` as appropriate.
 
 ---
 
@@ -1755,7 +1772,7 @@ For a final stable release, every required contract must be `Active`, `Deprecate
 
 The contract is opt-in and not part of ordinary stable guarantees.
 
-A final release may contain experimental optional contracts.
+A release may contain experimental optional contracts when release policy permits them.
 
 A required release path must not depend on an experimental contract unless the release policy explicitly permits it.
 
@@ -1782,8 +1799,11 @@ Its identifier must never be reused.
 Use when:
 
 - the intended contract is documented;
-- implementation or evidence is incomplete;
-- current release gates cannot claim satisfaction.
+- a named blocker prevents the required contract evidence from being established;
+- current release gates cannot claim satisfaction;
+- the blocker and its owning authority are recorded explicitly.
+
+Do not use `Blocked` for unfinished coding, planned work, or general progress tracking.
 
 A blocked required project contract prevents release readiness.
 
@@ -1854,9 +1874,7 @@ Decision is under review and not yet authoritative.
 
 ## 80. ADR `Accepted`
 
-Decision is approved and governs implementation.
-
-Implementation may still be incomplete and must be tracked separately.
+Decision is approved and governs architecture, code, tests, and documentation until it is deprecated or superseded.
 
 ---
 
@@ -1895,7 +1913,7 @@ Retired
 
 This vocabulary is document metadata only.
 
-Recommended final documents use:
+Canonical document roles include:
 
 ```text
 Normative reference
@@ -1936,27 +1954,39 @@ These are release-channel values, not validation statuses.
 
 # 86. Project status ledger
 
-The active project may track implementation states such as:
+`project/docs/STATUS_LEDGER__PROJECT_DOCS.md` records project-owned validation facts, known
+release blockers, accepted exceptions, evidence references, and resolution
+history.
+
+It uses the canonical runtime and release vocabularies defined by this reference,
+including:
+
+```text
+OK
+FAIL
+ERROR
+SKIPPED
+open
+resolved
+accepted_exception
+```
+
+The project ledger must not track coding progress with labels such as:
 
 ```text
 implemented
 partial
+planned
+proposed
 temporary
 fallback
-blocked
-deprecated
-retired
+historical
+unknown
 ```
 
-These values belong to:
-
-```text
-project/docs/STATUS_LEDGER.md
-```
-
-They do not become framework runtime enums automatically.
-
-The project status ledger must define its own exact vocabulary and transition rules.
+A project record changes only when its validation fact, blocker, exception, or
+resolution changes. Ordinary code edits do not require a documentation-status
+transition.
 
 ---
 
@@ -1964,7 +1994,7 @@ The project status ledger must define its own exact vocabulary and transition ru
 
 Warnings should not be represented through validation status alone.
 
-A future structured warning may use:
+A structured warning may use:
 
 ```text
 info
@@ -2201,7 +2231,7 @@ A tolerant reader may:
 
 It must not guess an unregistered value.
 
-## 94.3 Future newer schema
+## 94.3 Newer schema
 
 If a newer minor schema contains an unknown optional enum:
 
@@ -2248,7 +2278,7 @@ ERROR
 SKIPPED
 ```
 
-The final model separates it.
+The canonical model separates it.
 
 Canonical:
 
@@ -2275,7 +2305,7 @@ Some earlier persisted-schema drafts included:
 diagnostic_class = framework_error
 ```
 
-The final diagnostic vocabulary excludes it.
+The canonical diagnostic vocabulary excludes it.
 
 Canonical representation:
 
@@ -2300,7 +2330,7 @@ Some development documents use:
 execution_state = not_started
 ```
 
-The final persisted execution-state vocabulary uses:
+The canonical persisted execution-state vocabulary uses:
 
 ```text
 null
@@ -2678,7 +2708,9 @@ Probable status drift exists when:
 - one writer emits uppercase `DIRECT`;
 - report code derives statuses from error prose;
 - result counts disagree with serialized subjects;
-- a new enum value appears without schema/version review.
+- a new enum value appears without schema/version review;
+- a documentation or project record uses coding-progress labels;
+- a Wordbench status contains `gf-portfolio` registry or aggregation state.
 
 Any indicator requires correction or a versioned contract change.
 
@@ -2699,8 +2731,8 @@ Model impact:
 CLI impact:
 GUI impact:
 Report impact:
-Migration:
-Compatibility:
+Migration impact:
+Compatibility impact:
 Tests:
 ```
 
@@ -2729,7 +2761,9 @@ Removing or redefining a persisted enum value is a schema-major change.
 
 ---
 
-# 112. Implementation completion checklist
+# 112. Contract conformance checklist
+
+This checklist verifies observable contracts and serialized meaning. It does not track development progress.
 
 ```text
 [ ] validation status enum is centralized
@@ -2770,6 +2804,7 @@ Removing or redefining a persisted enum value is a schema-major change.
 # 113. Related documents
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/architecture/DATA_MODEL.md
 docs/architecture/ERROR_HANDLING_MODEL.md
 docs/architecture/PROCESS_EXECUTION_MODEL.md
@@ -2791,13 +2826,13 @@ docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 SECURITY.md
 ```
 
 ---
 
-# 114. Final rule
+# 114. Core rule
 
 Status values are compact architectural contracts.
 

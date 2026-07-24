@@ -4,7 +4,7 @@ Thank you for contributing to GF Wordbench.
 
 GF Wordbench is a validation and development workbench for one active Grammatical Framework language project at a time. Contributions must preserve three properties:
 
-1. **Correctness** — the implementation and its evidence agree.
+1. **Correctness** — code, contracts, behavior, and evidence agree.
 2. **Traceability** — every important result can be traced to source, command, output, artifact, or decision.
 3. **Contract integrity** — files, tools, persisted formats, and language-project components do not drift apart.
 
@@ -16,9 +16,10 @@ This document defines the contribution workflow for framework code, documentatio
 
 Before changing GF Wordbench, identify which normative document owns the affected behavior.
 
-The primary contract locks are:
+The normative anti-drift documents are:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -30,13 +31,16 @@ Their responsibilities are distinct:
 
 | Lock | Governs |
 |---|---|
+| `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` | Cross-document product identity, ownership, terminology, and correction rules |
 | `docs/INTERFILE_CONTRACT_LOCK.md` | Contracts between framework files and components |
 | `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md` | Contracts between GF Wordbench and external executables, runtimes, filesystems, and operating-system behavior |
 | `docs/PERSISTED_SCHEMA_LOCK.md` | Versioned formats, persistent paths, manifests, state, summaries, normalized outputs, and gold files |
 | `project/docs/INTERFILE_CONTRACT_LOCK.md` | Contracts inside the active language project |
 | `templates/project/docs/INTERFILE_CONTRACT_LOCK.md` | Generic project-contract template used when initializing another language |
 
-When documents disagree, do not choose one silently. Open a contract correction that identifies the conflict, establishes the authoritative rule, updates all affected documents, and adds validation that prevents recurrence.
+When documents disagree, follow the precedence defined by `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`. Do not choose one silently. Identify the conflict, apply the authoritative rule, update every affected owner document, and add validation that prevents recurrence.
+
+During the coordinated documentation correction program, assignment and integration state are tracked in `docs/DOCUMENTATION_CORRECTION_LEDGER.md`. The ledger is operational tracking, not a product contract.
 
 ---
 
@@ -87,7 +91,7 @@ LICENSE.md
 pyproject.toml
 ```
 
-Framework code must not contain active-language identifiers, paths, suffixes, module names, or linguistic assumptions except in clearly named migration fixtures or historical compatibility tests.
+Framework code must not contain active-language identifiers, paths, suffixes, module names, or linguistic assumptions except in clearly named migration fixtures or compatibility tests.
 
 Examples of project-specific content that must not appear in generic framework behavior:
 
@@ -134,7 +138,15 @@ It must remain language-neutral.
 
 A contribution that changes the structure or required documentation of `project/` must normally update `templates/project/` in the same change.
 
-### 3.4 Generated run output
+### 3.4 Independent Portfolio boundary
+
+Multi-workspace discovery, multilingual aggregation, cross-project comparison, and portfolio-wide readiness belong to the independent `gf-portfolio` product.
+
+GF Wordbench must not depend on `gf-portfolio` code, runtime, storage, configuration, or availability. The permitted direction is read-only consumption of public, versioned GF Wordbench artifacts by `gf-portfolio`.
+
+A contribution must not introduce Portfolio registries, multi-project selection, cross-workspace orchestration, or Portfolio-owned schemas into GF Wordbench.
+
+### 3.5 Generated run output
 
 Generated audit output must not be treated as source code.
 
@@ -167,7 +179,7 @@ Before editing:
 6. identify required tests;
 7. identify persisted-data or migration impact;
 8. identify active-project and template impact;
-9. identify documentation that must change;
+9. identify authoritative documentation affected by a contract, command, schema, workflow, or user-visible behavior change;
 10. determine whether an ADR or decision-log entry is required.
 
 Do not begin a broad refactor by editing files independently. Define the coordinated change unit first.
@@ -303,7 +315,7 @@ identify contract
 → identify provider
 → identify all consumers
 → update shared model/schema
-→ update implementation
+→ update code and adapters
 → update tests
 → update artifacts or fixtures
 → update lock
@@ -322,7 +334,7 @@ A consumer may depend only on documented provider behavior. It must not depend o
 - exception-message text;
 - GUI-only state;
 - report prose;
-- temporary implementation details.
+- undocumented private details.
 
 ---
 
@@ -410,7 +422,7 @@ project: update morphology provider contracts
 
 Avoid commits that mix unrelated framework, project, formatting, and generated-output changes.
 
-Do not rewrite gold files, schemas, and implementation in a large unexplained commit. Separate preparation, behavior, and expected-output changes when practical.
+Do not rewrite gold files, schemas, and code in a large unexplained commit. Separate preparation, behavior, and expected-output changes when practical.
 
 ---
 
@@ -452,7 +464,7 @@ For example, a report reader should use:
 run_result.run_paths.summary_json_path
 ```
 
-or its final canonical equivalent, rather than recomputing:
+or its canonical equivalent, rather than recomputing:
 
 ```text
 run_dir / "summary.json"
@@ -520,7 +532,7 @@ When a provider changes, validate:
 3. affected checkpoints;
 4. affected entrypoints;
 5. scenarios exercising the contract;
-6. final PGF construction when release-facing.
+6. release PGF construction when release-facing.
 
 A provider compile alone is insufficient evidence when consumers depend on its shape or semantics.
 
@@ -537,23 +549,11 @@ Any intentional representation change requires:
 - decision-log entry;
 - migration or release impact assessment.
 
-### 10.4 Temporary implementations
+### 10.4 Known issues and release blockers
 
-Temporary, fallback, blocked, warning, and incomplete implementations must be recorded in:
+Record an unresolved project issue only when it materially affects a language contract, validation result, release criterion, migration, or maintainer handoff. Use the project-owned issue or decision document appropriate to the subject.
 
-```text
-project/docs/STATUS_LEDGER.md
-```
-
-Every temporary entry must have:
-
-- owner;
-- reason;
-- affected module or symbol;
-- status;
-- next action;
-- exit condition;
-- validation impact.
+Do not use project documentation to track routine development progress, transient implementation states, or short-lived work sequencing.
 
 ---
 
@@ -912,17 +912,28 @@ When a file is renamed or moved:
 - update repository maps;
 - update scripts that locate the file.
 
-### 17.5 Final documentation standard
+### 17.5 Documentation quality standard
 
-A final document must:
+A maintained document must:
 
-- state scope;
+- state its scope;
 - identify its owner;
 - distinguish normative rules from guidance;
 - avoid unresolved placeholders unless it is explicitly a template;
 - use stable terminology;
-- agree with code and locks;
-- avoid speculative features presented as implemented.
+- agree with accepted ADRs, anti-drift locks, and public contracts;
+- describe the product directly, without implementation-progress labels or routine development-status tracking.
+
+### 17.6 Parallel documentation correction
+
+During coordinated documentation repair:
+
+- each branch edits one assigned target file;
+- every branch receives the unchanged documentation alignment lock and relevant specialized locks;
+- a branch does not reinterpret or edit the shared locks unless explicitly assigned a coordinated lock change;
+- contradictions are reported rather than resolved silently;
+- the complete corrected file is returned at its canonical repository path;
+- `docs/DOCUMENTATION_CORRECTION_LEDGER.md` is updated only during integration.
 
 ---
 
@@ -1046,7 +1057,7 @@ When a tool is unavailable, do not claim that its validation passed.
 
 Report it as not executed.
 
-When implemented, contract and schema validation should include:
+Contract and schema validation includes:
 
 ```powershell
 gf-wordbench contracts check --strict
@@ -1066,7 +1077,7 @@ diagnostic
 
 Run `release` for changes that affect:
 
-- final entrypoints;
+- release entrypoints;
 - required scenarios;
 - gold output;
 - PGF construction;
@@ -1164,7 +1175,7 @@ Documentation:
 [ ] Scenarios reviewed
 [ ] Inputs reviewed
 [ ] Gold files reviewed
-[ ] Status ledger updated
+[ ] Known issues or release blockers updated when materially affected
 [ ] Decision log updated when architectural
 [ ] Checkpoint validation passed
 [ ] Release validation passed when release-facing
@@ -1188,7 +1199,7 @@ A reviewer should confirm:
 - migrations are safe and tested;
 - active-language content did not leak into the framework;
 - template and active-project structure remain aligned;
-- documentation describes implemented behavior;
+- documentation describes accepted behavior and public contracts directly, without progress labels;
 - validation evidence supports the conclusion.
 
 For contract changes, reviewers should ask both:
@@ -1286,7 +1297,7 @@ The contribution description should disclose substantial AI assistance when it m
 
 A contribution is complete when:
 
-1. the implementation is correct;
+1. the behavior is correct;
 2. the change is properly classified;
 3. affected contracts are updated;
 4. all providers and consumers agree;
@@ -1294,7 +1305,7 @@ A contribution is complete when:
 6. external-tool behavior is validated;
 7. required tests pass;
 8. relevant GF validation passes;
-9. documentation is synchronized;
+9. authoritative documentation is updated when contracts, commands, schemas, workflows, or user-visible behavior change;
 10. templates remain reusable;
 11. raw evidence is preserved;
 12. no unintended gold or artifact changes remain;
@@ -1305,7 +1316,7 @@ Passing local unit tests alone is not sufficient for a contribution that changes
 
 ---
 
-## 26. Final contribution rule
+## 26. Contract integrity rule
 
 > Do not change one side of a contract and leave the other side to adapt implicitly.
 
@@ -1317,5 +1328,5 @@ Every accepted contribution must leave GF Wordbench in a state where:
 - active-project modules agree with consumers;
 - scenarios agree with entrypoints;
 - outputs agree with gold expectations;
-- documentation agrees with implementation;
+- documentation agrees with accepted contracts and observable behavior;
 - tests prove the agreement.

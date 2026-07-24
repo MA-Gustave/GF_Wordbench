@@ -2,14 +2,13 @@
 
 **Document ID:** `GF-WB-DIAG-GF-PARSING`  
 **Status:** Normative diagnostic specification  
-**Applies to:** GF compilation, PGF construction, GF shell scenarios, introspection and supported native GF operations  
+**Applies to:** GF compilation, PGF construction, native `.gfs` scenarios, introspection and supported GF operations for one active project and one run  
 **Owner:** GF Wordbench maintainers  
-**Primary implementation owner:** `app/audit/diagnostics.py` or its final designated equivalent  
-**Raw-evidence owners:** compiler, PGF builder and scenario runner  
-**Causal-classification owner:** `app/audit/classifier.py` or its final designated equivalent  
-**Related external contract:** `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`  
-**Related error model:** `docs/diagnostics/ERROR_CLASSIFICATION.md`  
-**Related pattern registry:** `docs/diagnostics/KNOWN_DIAGNOSTIC_PATTERNS.md`
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Diagnostic authority:** `docs/diagnostics/ERROR_CLASSIFICATION.md`, `docs/diagnostics/KNOWN_DIAGNOSTIC_PATTERNS.md`  
+**External-tool authority:** `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`  
+**Persisted-result authority:** `docs/PERSISTED_SCHEMA_LOCK.md`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -38,7 +37,7 @@ GF Wordbench must preserve this evidence while extracting enough structure to su
 - direct/downstream classification by a separate component;
 - GF-version compatibility analysis.
 
-This document defines the final diagnostic-parsing model.
+This document defines the canonical diagnostic-parsing model.
 
 The core rule is:
 
@@ -53,7 +52,7 @@ A parser match is evidence about diagnostic form. It is not proof of causal owne
 This specification governs parsing of diagnostics from:
 
 - per-file GF compilation;
-- final PGF construction;
+- PGF construction;
 - GF grammar import and load;
 - `.gfs` scenario execution;
 - parsing;
@@ -96,7 +95,22 @@ It does not govern:
 - release-gate decisions;
 - report formatting;
 - output normalization for gold comparison;
-- GF's internal diagnostic implementation.
+- GF's internal diagnostic machinery.
+
+---
+
+## Product and run boundary
+
+One GF Wordbench run parses diagnostics for exactly one active GF language project and one normative language target.
+
+Diagnostic parsing must not:
+
+- combine evidence from several active projects into one result;
+- discover projects through a Portfolio registry;
+- assign portfolio-wide readiness or cross-workspace status;
+- depend on `gf-portfolio` code, schemas, storage, configuration or runtime.
+
+`gf-portfolio` may consume finalized public Wordbench artifacts. It does not participate in raw evidence capture, diagnostic parsing, causal classification or result construction.
 
 ---
 
@@ -136,7 +150,7 @@ It does not govern:
 - warnings;
 - internal errors.
 
-## 4.2 Process layer is authoritative for
+## 4.2 External-tool adapter is authoritative for
 
 - whether the process launched;
 - executable and arguments;
@@ -150,7 +164,11 @@ It does not govern:
 - output truncation;
 - decoding metadata.
 
-## 4.3 Diagnostic parser is authoritative for
+The adapter preserves raw process evidence and does not assign linguistic meaning or causal class.
+
+## 4.3 Diagnostics module is authoritative for parsing
+
+The diagnostics parser owns:
 
 - splitting captured text into diagnostic units;
 - recognizing documented diagnostic forms;
@@ -161,7 +179,7 @@ It does not govern:
 - selecting a deterministic primary diagnostic;
 - recording parsing warnings.
 
-## 4.4 Classifier is authoritative for
+## 4.4 Diagnostics classifier is authoritative for causality
 
 ```text
 ok
@@ -172,16 +190,33 @@ noise
 skipped
 ```
 
-The parser MUST NOT assign these causal classes.
+The parser must not assign these causal classes.
 
-## 4.5 Result builder is authoritative for
+## 4.5 Validation module is authoritative for operation results
 
-- final validation status;
-- combining process facts and parsed diagnostics;
-- populating `CompileSummary`;
-- populating `ScenarioResult`;
-- count invariants;
-- persisted field values.
+Validation stages combine:
+
+- process facts;
+- parsed diagnostics;
+- artifact verification;
+- scenario marker results;
+- normalization and gold comparison where applicable.
+
+They produce typed file, scenario and PGF-stage results without altering raw evidence.
+
+## 4.6 Runs module is authoritative for run aggregation
+
+The runs module owns:
+
+- run-level status;
+- aggregate counts;
+- partial-run semantics;
+- regression comparison inputs;
+- run lifecycle and finalization.
+
+## 4.7 Reporting module is authoritative for serialization
+
+Reporting consumes completed structured results. It must not parse GF streams independently, reclassify diagnostics or introduce a competing pattern registry.
 
 ---
 
@@ -318,7 +353,7 @@ Examples:
 
 - missing required project setting;
 - invalid configured entrypoint;
-- unsupported configured profile;
+- unsupported parser, normalization or validation option;
 - invalid path configuration detected before execution.
 
 This is normally assigned outside the GF text parser.
@@ -378,20 +413,20 @@ Severity is distinct from validation status.
 | `fatal` | Internal or unrecoverable tool-level diagnostic |
 | `unknown` | Diagnostic-looking evidence without safe severity mapping |
 
-The persisted result may store only selected severity information initially.
-
-The parser model should retain it for future-compatible reporting.
+Persisted result fields follow the schema lock. The parser retains severity in its structured result so reporting and compatibility behavior remain stable.
 
 ---
 
 ## 8. Parser inputs
 
-The parser receives a structured request, conceptually:
+The parser receives a structured request equivalent to:
 
 ```text
-operation
+operation_kind
 gf_version
 platform
+project_id
+run_id
 source_target
 working_directory
 project_root
@@ -403,12 +438,21 @@ stdout_truncated
 stderr_truncated
 exit_code
 execution_state
+decoding_metadata
 strict
 ```
 
-The request MUST distinguish stdout and stderr.
+`operation_kind` uses the canonical GF operation vocabulary:
 
-The parser MUST NOT receive only a concatenated report.
+```text
+probe_version
+compile_module
+build_pgf
+run_scenario
+inspect_grammar
+```
+
+The request distinguishes stdout and stderr. The parser must not receive only a concatenated report or human-formatted command display.
 
 ---
 
@@ -524,7 +568,7 @@ When no cross-stream event sequence exists, canonical display ordering is:
 5. pattern ID;
 6. message.
 
-Recommended stream tie-breaker:
+Canonical stream tie-breaker:
 
 ```text
 stderr
@@ -537,7 +581,7 @@ This tie-breaker is deterministic, not chronological.
 
 ## 13. Diagnostic record model
 
-A canonical internal record should contain:
+A canonical internal record contains:
 
 ```text
 record_id
@@ -601,9 +645,9 @@ when failure-associated output requires preservation.
 
 ## 15. Record identity
 
-`record_id` should be deterministic within one parse result.
+`record_id` is deterministic within one parse result.
 
-Recommended construction inputs:
+Canonical construction inputs:
 
 ```text
 stream
@@ -627,7 +671,7 @@ Pattern IDs use:
 GF-DIAG-<DOMAIN>-<NUMBER>
 ```
 
-Recommended domains:
+Canonical domains:
 
 ```text
 SYNTAX
@@ -665,7 +709,7 @@ Every registered pattern must define:
 
 ```text
 pattern_id
-status
+lifecycle_state
 supported_operations
 supported_gf_versions
 supported_platforms
@@ -683,7 +727,7 @@ fixtures
 notes
 ```
 
-Pattern status:
+Pattern lifecycle state:
 
 ```text
 active
@@ -733,7 +777,7 @@ Confidence is not root-cause confidence.
 
 Patterns execute in explicit precedence order.
 
-Recommended order:
+Canonical precedence order:
 
 1. internal/fatal signatures;
 2. strongly located syntax/type signatures;
@@ -827,7 +871,7 @@ It MUST NOT:
 
 Every multiline pattern must have a finite maximum.
 
-Recommended controls:
+Required controls:
 
 ```text
 maximum continuation lines
@@ -1178,7 +1222,7 @@ Deduplication must not erase provenance.
 
 A `normalized_signature` supports grouping.
 
-Recommended inputs:
+Canonical inputs:
 
 ```text
 error_kind
@@ -1283,7 +1327,7 @@ The selected record should be:
 - specific rather than generic;
 - supported by raw evidence.
 
-## 43.2 Recommended ranking
+## 43.2 Canonical ranking
 
 1. fatal internal diagnostic;
 2. located syntax or type error;
@@ -1350,7 +1394,7 @@ Raw paths provide the complete evidence.
 
 ## 46. Parser result model
 
-A canonical parse result should contain:
+A canonical parse result contains:
 
 ```text
 parser_version
@@ -1533,18 +1577,14 @@ A non-zero exit and a referenced dependency do not automatically establish direc
 Patterns may be scoped to:
 
 ```text
-version_probe
-compile
-pgf_build
-scenario
-parse
-linearize
-generation
-morphology
-introspection
+probe_version
+compile_module
+build_pgf
+run_scenario
+inspect_grammar
 ```
 
-A pattern valid for compilation must not automatically parse scenario output.
+A pattern valid for `compile_module` must not automatically parse `run_scenario` output.
 
 Operation scoping reduces false positives.
 
@@ -1758,7 +1798,7 @@ Used in normal parsing.
 
 ### Experimental
 
-Collected for comparison or warning, but does not silently determine high-impact final classification.
+Collected for comparison or warning, but does not silently determine high-impact result interpretation.
 
 ### Deprecated
 
@@ -1791,7 +1831,7 @@ Raw evidence remains unchanged.
 
 ## 65. Fixture model
 
-Framework fixtures SHOULD be stored under:
+Framework fixtures are stored under:
 
 ```text
 tests/fixtures/gf_diagnostics/
@@ -1803,7 +1843,7 @@ tests/fixtures/gf_diagnostics/
 └── unknown/
 ```
 
-Each fixture should include metadata:
+Each fixture includes metadata:
 
 ```text
 gf_version
@@ -1823,7 +1863,7 @@ Fixtures must not depend on the active language unless explicitly marked as proj
 
 Every active pattern needs at least one positive fixture.
 
-High-impact patterns SHOULD have fixtures for:
+High-impact patterns have fixtures for:
 
 - stdout;
 - stderr;
@@ -1869,7 +1909,7 @@ Do not write a pattern from memory when actual GF evidence is available.
 
 ## 69. Unit tests
 
-Recommended file:
+Canonical test file:
 
 ```text
 tests/diagnostics/test_gf_diagnostic_parsing.py
@@ -1966,7 +2006,7 @@ Required test groups follow.
 
 ## 70. Real-GF integration tests
 
-A small fixture grammar SHOULD produce:
+A small fixture grammar produces:
 
 - successful compile;
 - syntax failure;
@@ -1975,7 +2015,7 @@ A small fixture grammar SHOULD produce:
 - scenario command failure;
 - warning when a stable supported warning can be induced safely.
 
-Integration tests should run against declared tested GF versions.
+Integration tests run against the declared supported GF versions.
 
 They must retain raw stdout and stderr on failure.
 
@@ -1983,7 +2023,7 @@ They must retain raw stdout and stderr on failure.
 
 ## 71. Differential parser tests
 
-When parser rules change, differential tests SHOULD compare:
+When parser rules change, differential tests compare:
 
 ```text
 old parser result
@@ -1992,7 +2032,7 @@ new parser result
 
 for the complete fixture corpus.
 
-The review should identify:
+The review identifies:
 
 - newly matched records;
 - no-longer-matched records;
@@ -2007,7 +2047,7 @@ Unexpected differences block the change.
 
 ## 72. Fuzz testing
 
-The parser SHOULD support bounded fuzz/property tests for:
+The parser test suite includes bounded fuzz/property tests for:
 
 - arbitrary Unicode lines;
 - arbitrary path punctuation;
@@ -2029,7 +2069,7 @@ Properties:
 
 ## 73. Parser observability
 
-Diagnostic parsing SHOULD expose debug metadata in diagnostic mode:
+Diagnostic parsing exposes bounded debug metadata in diagnostic mode:
 
 ```text
 parser_version
@@ -2072,72 +2112,74 @@ It must avoid exposing secrets beyond existing evidence policy.
 
 ## 75. Integration with compilation
 
-Compilation stage flow:
+Compilation-stage flow:
 
 ```text
-run GF
-    → capture stdout/stderr
-    → build process result
-    → parse diagnostics
-    → build compile summary
-    → classify causal ownership
-    → build file result
+validation builds typed GF request
+    → external-tool adapter executes GF
+    → adapter preserves stdout/stderr and process facts
+    → diagnostics parser structures GF evidence
+    → validation verifies expected compile artifacts
+    → diagnostics classifier assigns causal ownership
+    → validation builds FileResult
 ```
 
-Compiler responsibilities:
+Ownership:
 
-- process request;
-- raw capture;
-- expected artifact check;
-- parser invocation.
+- validation owns compile intent and expected artifacts;
+- the external-tool adapter owns process execution and raw capture;
+- diagnostics owns parsing and causal classification;
+- reporting consumes the completed result.
 
-Compiler MUST NOT:
+Compilation handling must not:
 
-- assign dependency cascades;
+- assign dependency cascades before cross-file evidence exists;
 - generate reports;
 - discard parser warnings;
-- rewrite raw output.
+- rewrite raw output;
+- reconstruct the GF command after execution.
 
 ---
 
 ## 76. Integration with scenarios
 
-Scenario stage flow:
+Scenario-stage flow:
 
 ```text
-run .gfs
-    → capture stdout/stderr
-    → validate process facts
-    → parse diagnostics
-    → validate markers
-    → normalize semantic sections
-    → compare gold
-    → build scenario result
+validation loads registered .gfs scenario
+    → validation builds typed run_scenario request
+    → external-tool adapter executes GF
+    → adapter preserves stdout/stderr and process facts
+    → diagnostics parser structures GF evidence
+    → validation verifies markers
+    → validation normalizes semantic sections
+    → validation compares reviewed gold
+    → diagnostics classifier assigns causal ownership
+    → validation builds ScenarioResult
 ```
 
-Diagnostic parsing and scenario output normalization are separate.
+Diagnostic parsing and scenario output normalization are separate derived views.
 
-A line may be relevant to both only through separate derived views.
-
-Neither component modifies raw evidence.
+A line may be relevant to both views, but neither component modifies raw evidence. The parser does not decide marker completion or gold success.
 
 ---
 
 ## 77. Integration with PGF build
 
-PGF build success requires more than diagnostic parsing:
+PGF-stage success requires:
 
 - process launched;
-- no timeout;
+- no timeout or cancellation;
 - exit policy passed;
 - no fatal diagnostic;
 - expected `.pgf` exists;
 - artifact is non-empty;
+- artifact belongs to the current request;
 - manifest registration succeeds.
 
-The parser identifies diagnostic evidence.
+The diagnostics parser identifies and ranks textual GF evidence.
 
-It does not verify the PGF artifact itself.
+The validation PGF stage verifies the artifact. A missing or invalid PGF remains a contract or artifact failure even when no textual diagnostic was emitted.
 
 ---
 
@@ -2216,19 +2258,7 @@ Parser-version changes may alter regression signatures and require migration not
 
 ## 81. Automated checks
 
-Recommended command:
-
-```text
-gf-wordbench diagnostics check
-```
-
-Strict mode:
-
-```text
-gf-wordbench diagnostics check --strict
-```
-
-The checker should verify:
+The diagnostic-contract checker verifies:
 
 1. pattern IDs are unique;
 2. every active pattern has fixtures;
@@ -2240,11 +2270,15 @@ The checker should verify:
 8. raw artifacts are never modified;
 9. regex safety tests pass;
 10. primary selection is deterministic;
-11. tested GF versions have fixture coverage;
+11. supported GF versions have fixture coverage;
 12. retired IDs are not reused;
 13. unknown output is retained;
 14. parser version is declared;
-15. report modules do not contain competing GF regex patterns.
+15. report modules do not contain competing GF regex patterns;
+16. no active-language identity appears in framework patterns;
+17. no Portfolio state participates in parsing.
+
+Exact command names and options are owned by `docs/usage/CLI_REFERENCE.md`.
 
 ---
 
@@ -2272,7 +2306,8 @@ Diagnostic-parsing drift exists when:
 - parser failure deletes raw evidence;
 - `first_error` is described as true cross-stream chronology;
 - active-language names appear in framework patterns;
-- top-error aggregation reparses human reports.
+- top-error aggregation reparses human reports;
+- diagnostic parsing reads a Portfolio registry or `gf-portfolio` state.
 
 Any drift indicator requires restoration or a coordinated contract change.
 
@@ -2382,8 +2417,10 @@ claim cross-stream chronology without capture evidence
 
 ## 86. Related documents
 
-### Diagnostic model
+### Alignment and diagnostic model
 
+- `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
+- `docs/architecture/PRODUCT_BOUNDARIES.md`
 - `docs/diagnostics/DIAGNOSTIC_OVERVIEW.md`
 - `docs/diagnostics/ERROR_CLASSIFICATION.md`
 - `docs/diagnostics/DIRECT_AND_DOWNSTREAM_FAILURES.md`
@@ -2393,6 +2430,7 @@ claim cross-stream chronology without capture evidence
 ### GF and process integration
 
 - `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`
+- `docs/gf/GF_COMMAND_CONSTRUCTION.md`
 - `docs/gf/GF_COMPILATION.md`
 - `docs/gf/GF_PGF_BUILD.md`
 - `docs/gf/GF_SCRIPT_EXECUTION.md`
@@ -2411,7 +2449,7 @@ claim cross-stream chronology without capture evidence
 
 ---
 
-## 87. Final enforcement rule
+## 87. Governing rule
 
 GF diagnostics are evidence produced by GF, not text owned by GF Wordbench.
 
@@ -2419,6 +2457,6 @@ GF Wordbench may recognize, structure, rank and reference that evidence, but it 
 
 Therefore:
 
-> No diagnostic pattern, error-kind mapping, primary-selection rule or unknown-output policy may change through an isolated regex edit.
+> No diagnostic pattern, error-kind mapping, primary-selection rule or unknown-output policy changes through an isolated regex edit.
 
 Every diagnostic-parsing change must be grounded in raw GF evidence, version-scoped, fixture-backed, false-positive-tested, deterministic, compatible with the result model and reviewable as one coordinated contract change.

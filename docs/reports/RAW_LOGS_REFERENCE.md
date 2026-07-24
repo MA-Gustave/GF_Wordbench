@@ -4,8 +4,10 @@
 **Status:** Normative reporting and evidence reference  
 **Applies to:** Every GF Wordbench validation run  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\reports\RAW_LOGS_REFERENCE.md`  
-**Document version:** `1.0.0`
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Canonical path:** `docs/reports/RAW_LOGS_REFERENCE.md`  
+**Document version:** `1.0.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -28,7 +30,7 @@ It specifies:
 - how encoding, timestamps, newlines, ordering, truncation, redaction, and atomic writes are handled;
 - how logs relate to `summary.json`, reports, detail files, and `manifest.json`;
 - how incomplete and failed runs remain diagnosable;
-- how the legacy GF Audit layout migrates to the final GF Wordbench layout.
+- how the legacy GF Audit layout migrates to the canonical GF Wordbench layout.
 
 The central rule is:
 
@@ -58,6 +60,7 @@ This document must be read with:
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/architecture/ARTIFACT_MODEL.md
 docs/architecture/PROCESS_EXECUTION_MODEL.md
 docs/architecture/ERROR_HANDLING_MODEL.md
@@ -161,7 +164,7 @@ It must not reconstruct raw output from a summary.
 
 ## 6. Canonical run layout
 
-The canonical final layout is:
+The canonical run layout is:
 
 ```text
 run_<run-id>/
@@ -574,7 +577,7 @@ The run-start section should identify:
 run_id
 mode
 project_id
-project_root
+workspace_root
 gf_executable
 output_root
 strict flag
@@ -611,8 +614,8 @@ Requirements:
 - each append must preserve prior content;
 - a failed append must not truncate the file;
 - messages should be flushed at meaningful boundaries;
-- fatal-error handling should attempt a final append;
-- after final manifest publication, the log becomes finalized.
+- fatal-error handling should attempt a completion append;
+- after manifest publication, the log becomes finalized.
 
 If finalization discovers a late failure:
 
@@ -620,7 +623,7 @@ If finalization discovers a late failure:
 2. update structured status;
 3. regenerate affected aggregate/report artifacts;
 4. regenerate the manifest;
-5. write final completion event.
+5. write the completion event.
 
 ---
 
@@ -628,7 +631,7 @@ If finalization discovers a late failure:
 
 The legacy implementation may prefix messages with local time at write time.
 
-Final GF Wordbench behavior uses UTC timestamps associated with event creation.
+GF Wordbench uses UTC timestamps associated with event creation.
 
 A report rewrite must not assign a new timestamp to an old event.
 
@@ -705,7 +708,7 @@ Recommended:
 <subject-key>--attempt-02.err.txt
 ```
 
-The final structured result identifies the authoritative attempt.
+The structured result identifies the authoritative attempt.
 
 Retries must be explicit.
 
@@ -964,7 +967,7 @@ raw/ALL_SCAN_LOGS.TXT
 Generate near finalization, after:
 
 - all selected scans have completed or been represented;
-- file-result ordering is final;
+- file-result ordering is fixed;
 - scan log paths are stable.
 
 ## 18.5 Header
@@ -1014,7 +1017,7 @@ When a selected result has no scan log:
 - do not invent one;
 - optionally include a metadata-only missing section;
 - record the missing evidence in the structured result;
-- required missing evidence affects final status.
+- required missing evidence affects run status.
 
 Recommended metadata-only section:
 
@@ -1066,9 +1069,9 @@ It must not be the only copy of any required raw stream.
 raw/ALL_LOGS.TXT
 ```
 
-## 19.4 Final optimized content
+## 19.4 Canonical content
 
-The canonical final aggregate includes, when available:
+The canonical aggregate includes, when available:
 
 1. `raw/master.log`;
 2. GF version stdout;
@@ -1115,7 +1118,7 @@ The legacy GF Audit implementation may concatenate:
 - detail logs;
 - per-file logs.
 
-GF Wordbench final behavior narrows `ALL_LOGS.TXT` to operational evidence.
+GF Wordbench narrows `ALL_LOGS.TXT` to operational evidence.
 
 Reports remain separate top-level artifacts.
 
@@ -1222,7 +1225,7 @@ Aggregate writers must copy source text without semantic rewriting.
 
 Allowed aggregate-only transformations:
 
-- normalize final newline;
+- normalize the terminal newline;
 - add section boundary markers;
 - render `<EMPTY STREAM>`;
 - render `<MISSING EVIDENCE>`;
@@ -1267,7 +1270,7 @@ A machine parser must not depend on aggregate sections unless the format becomes
 
 ## 22. Log writing sequence
 
-The final recommended sequence is:
+The canonical sequence is:
 
 ```text
 create empty lifecycle and aggregate placeholders
@@ -1285,7 +1288,7 @@ create empty lifecycle and aggregate placeholders
 → build ALL_LOGS.TXT
 → compute manifest hashes
 → verify manifest
-→ publish final completion state
+→ publish completion state
 ```
 
 No aggregate should be generated before its source list is stable unless it is explicitly marked provisional.
@@ -1355,7 +1358,7 @@ Aggregates must use atomic replacement where supported.
 
 Append semantics are acceptable during execution.
 
-Final canonicalization may copy the append file atomically to a finalized path only if no evidence is lost.
+Canonicalization may copy the append file atomically to a finalized path only if no evidence is lost.
 
 ### 24.4 Failure
 
@@ -1372,7 +1375,7 @@ Parallel operations require isolated log files.
 - each operation writes a unique pair;
 - shared aggregate files are not appended by worker processes;
 - workers emit lifecycle events through a synchronized channel;
-- final ordering is independent of completion order;
+- aggregate ordering is independent of completion order;
 - aggregate generation occurs after result ordering is known;
 - master-log event sequence remains coherent.
 
@@ -1423,9 +1426,7 @@ For deterministic archival builds, use:
 - run finalization timestamp; or
 - omit aggregate generation timestamp from hashed content.
 
-The final implementation must choose one documented policy.
-
-Recommended policy:
+Canonical policy:
 
 ```text
 Generated = run finished_at
@@ -1614,7 +1615,7 @@ same diagnostic observed in stdout and stderr
 
 ---
 
-## 32. Line endings and final newline
+## 32. Line endings and terminal newline
 
 ### 32.1 Primary raw streams
 
@@ -1735,7 +1736,7 @@ Recommended excerpt policy:
 
 ```text
 bounded first-error context
-bounded final context
+bounded trailing context
 explicit path to full log
 ```
 
@@ -1804,7 +1805,7 @@ This prevents recursive or stale evidence packets.
 
 `summary.md` is a human view.
 
-Neither belongs inside the canonical final `ALL_LOGS.TXT`.
+Neither belongs inside canonical `ALL_LOGS.TXT`.
 
 The aggregate header may reference their relative paths.
 
@@ -1892,7 +1893,7 @@ A repair operation must:
 Run retention policy is defined in:
 
 ```text
-docs/operations/CLEANUP_BACKUP_AND_RECOVERY.md
+docs/operations/RUN_DIRECTORY_LIFECYCLE.md
 ```
 
 Raw-log reference rules:
@@ -2005,7 +2006,7 @@ raw/artifacts/out/
 
 and may create aggregate files by copying reports and detail artifacts.
 
-The final layout is:
+The canonical layout is:
 
 ```text
 raw/compile/
@@ -2020,14 +2021,14 @@ artifacts/pgf/
 
 Legacy summary readers may retain old paths.
 
-Canonical new writers must use final paths.
+Canonical writers must use canonical paths.
 
 Migration may:
 
 - recognize old paths;
 - convert them to canonical run-relative references when files are moved;
 - leave historical runs unchanged;
-- avoid claiming that old aggregates are canonical final aggregates.
+- avoid claiming that old aggregates satisfy the canonical aggregate contract.
 
 ### 47.2 Legacy `master.log`
 
@@ -2049,9 +2050,9 @@ Legacy top-error content remains a report and is not promoted to raw evidence.
 
 ---
 
-## 48. Recommended implementation ownership
+## 48. Component ownership
 
-| Responsibility | Expected component |
+| Responsibility | Owner component |
 |---|---|
 | lifecycle event model | `app/audit/audit_core.py` or logging service |
 | process stream capture | `app/utils/process_utils.py` |
@@ -2069,7 +2070,7 @@ Legacy top-error content remains a report and is not promoted to raw evidence.
 
 ---
 
-## 49. Recommended writer APIs
+## 49. Conceptual writer APIs
 
 Conceptual APIs:
 
@@ -2149,7 +2150,7 @@ tests/reports/test_log_migration.py
 - scan aggregate referenced, not duplicated;
 - marker collision handling;
 - atomic replacement;
-- final newline;
+- terminal newline;
 - Windows and POSIX paths.
 
 ### 50.5 Manifest tests
@@ -2195,7 +2196,7 @@ Raw-log drift likely exists when:
 - redaction is invisible;
 - aggregate content differs from its source without explanation;
 - a report parser treats `ALL_LOGS.TXT` as the machine source;
-- manifest hashes are computed before final log writes.
+- manifest hashes are computed before all log writes complete.
 
 Any drift indicator requires contract and test review.
 
@@ -2317,7 +2318,7 @@ manifest.json
 
 ---
 
-## 54. Final rule
+## 54. Core rule
 
 Raw logs exist to preserve what actually happened.
 

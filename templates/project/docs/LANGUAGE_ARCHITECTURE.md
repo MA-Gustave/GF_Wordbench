@@ -59,7 +59,7 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 Actual implementation status belongs in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 ---
@@ -354,7 +354,7 @@ retired
 A temporary or fallback implementation must be recorded in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 ---
@@ -1971,12 +1971,12 @@ Add actual language-specific modules.
 | `CATEGORY_AND_LINCAT_CONTRACT.md` | exact lincats, fields, params, symbols |
 | `MORPHOLOGY_SPEC.md` | morphological behavior |
 | `SYNTAX_AND_CONSTRUCTOR_RULES.md` | composition and constructor semantics |
-| `VALIDATION_SPEC.md` | validation modes, checkpoints, scenarios, gates |
-| `TEST_COVERAGE_MATRIX.md` | feature-to-evidence coverage |
-| `STATUS_LEDGER.md` | incomplete/fallback status |
+| `VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md` | validation modes, checkpoints, scenarios, gates |
+| `TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md` | feature-to-evidence coverage |
+| `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` | incomplete/fallback status |
 | `DECISION_LOG.md` | deliberate architectural choices |
 | `KNOWN_ISSUES.md` | unresolved user-visible issues |
-| `RELEASE_CRITERIA.md` | project release gates |
+| `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` | project release gates |
 | `RESEARCH_EVIDENCE.md` | linguistic evidence and sources |
 | `INTERFILE_CONTRACT_LOCK.md` | cross-file public boundaries |
 
@@ -2157,7 +2157,7 @@ PGF status
 Store the baseline reference in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 or the project’s designated baseline record.
@@ -2801,7 +2801,7 @@ MODULE_DEPENDENCY_MAP.md
 Complete:
 
 ```text
-STATUS_LEDGER.md
+STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
 KNOWN_ISSUES.md
 ```
 
@@ -2810,8 +2810,8 @@ KNOWN_ISSUES.md
 Complete:
 
 ```text
-VALIDATION_SPEC.md
-TEST_COVERAGE_MATRIX.md
+VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
+TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md
 validation/scenarios/
 validation/inputs/
 validation/gold/
@@ -2961,18 +2961,18 @@ Exact machine-readable compatibility fields belong in the template/project schem
 ```text
 templates/project/README.md
 templates/project/project.toml
-templates/project/docs/00_PROJECT_START_HERE.md
+templates/project/docs/00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md
 templates/project/docs/LANGUAGE_OVERVIEW.md
 templates/project/docs/MODULE_DEPENDENCY_MAP.md
 templates/project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 templates/project/docs/MORPHOLOGY_SPEC.md
 templates/project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-templates/project/docs/VALIDATION_SPEC.md
-templates/project/docs/TEST_COVERAGE_MATRIX.md
-templates/project/docs/STATUS_LEDGER.md
+templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
+templates/project/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md
+templates/project/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
 templates/project/docs/DECISION_LOG.md
 templates/project/docs/KNOWN_ISSUES.md
-templates/project/docs/RELEASE_CRITERIA.md
+templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md
 templates/project/docs/RESEARCH_EVIDENCE.md
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 templates/project/validation/README.md

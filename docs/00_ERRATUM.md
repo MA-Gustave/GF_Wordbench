@@ -106,7 +106,7 @@ docs/VALIDATION_SPEC.md
 Correct:
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 ---
@@ -135,19 +135,19 @@ docs/RESEARCH_EVIDENCE.md
 must instead point to:
 
 ```text
-project/docs/00_PROJECT_START_HERE.md
+project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 project/docs/LANGUAGE_OVERVIEW.md
 project/docs/LANGUAGE_ARCHITECTURE.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 ```
 
@@ -203,7 +203,7 @@ docs/REPOSITORY_STRUCTURE.md
 
 ---
 
-### 5.6 `templates/project/docs/RELEASE_CRITERIA.md`
+### 5.6 `templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md`
 
 Incorrect:
 
@@ -288,7 +288,7 @@ project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/LANGUAGE_OVERVIEW.md
 project/docs/DECISION_LOG.md
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
 ```
 
@@ -379,7 +379,7 @@ roles of GrammarSqi, LangSqi and AllSqi
 final PGF name and contract
 ```
 
-### 6.6 `project/docs/STATUS_LEDGER.md`
+### 6.6 `project/docs/STATUS_LEDGER__PROJECT_DOCS.md`
 
 The ledger requires a real project review and current counts for:
 
@@ -429,14 +429,14 @@ The following files may be structurally complete but must be synchronized with t
 
 ```text
 project/README.md
-project/docs/00_PROJECT_START_HERE.md
+project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 project/docs/LANGUAGE_ARCHITECTURE.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/VALIDATION_SPEC.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/validation/README.md
 project/validation/gold/README.md
 project/validation/inputs/README.md

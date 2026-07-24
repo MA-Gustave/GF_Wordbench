@@ -24,11 +24,11 @@
 - `project/docs/CATEGORY_AND_LINCAT_CONTRACT.md`
 - `project/docs/MORPHOLOGY_SPEC.md`
 - `project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md`
-- `project/docs/VALIDATION_SPEC.md`
-- `project/docs/TEST_COVERAGE_MATRIX.md`
-- `project/docs/STATUS_LEDGER.md`
+- `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`
+- `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`
+- `project/docs/STATUS_LEDGER__PROJECT_DOCS.md`
 - `project/docs/DECISION_LOG.md`
-- `project/docs/RELEASE_CRITERIA.md`
+- `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`
 
 ---
 
@@ -851,7 +851,7 @@ A missing required feature dependency is not treated as an optional omission.
 Every blocked relationship must also appear in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 where applicable.
@@ -1159,7 +1159,7 @@ An unreachable selected active module requires review.
 |---|---|---|---|---|
 | `<MODULE>` | `<BEHAVIOR>` | `<SCENARIOS>` | `<yes/no>` | `<complete/gap/out-of-scope>` |
 
-This table must agree with `TEST_COVERAGE_MATRIX.md`.
+This table must agree with `TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md`.
 
 ---
 

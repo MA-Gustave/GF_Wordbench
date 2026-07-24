@@ -3,12 +3,13 @@
 **Document ID:** `GF-WB-REPORT-SUMMARY-JSON`  
 **Status:** Normative reference derived from the persisted schema lock  
 **Schema ID:** `gf-wordbench.run-summary`  
-**Current schema version:** `1.0`  
+**Schema version:** `1.0`  
 **Canonical path:** `run_<run-id>/summary.json`  
 **Writer:** `app/reports/report_json.py`  
 **Primary source model:** `RunResult`  
 **Owner:** GF Wordbench maintainers  
-**Last structural review:** 2026-07-22
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Last reviewed:** 2026-07-24
 
 ---
 
@@ -18,7 +19,7 @@
 
 It supports:
 
-- previous-run comparison;
+- previous-run comparison within the same active project;
 - automation and CI;
 - GUI result loading;
 - artifact verification;
@@ -43,6 +44,7 @@ docs/PERSISTED_SCHEMA_LOCK.md
 Related documents:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/architecture/DATA_MODEL.md
 docs/architecture/ARTIFACT_MODEL.md
@@ -52,13 +54,39 @@ docs/reports/ARTIFACT_MANIFEST.md
 docs/reference/STATUS_VALUES.md
 docs/reference/DIAGNOSTIC_KINDS.md
 docs/reference/SCHEMA_INDEX.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 ```
 
 When this reference and `PERSISTED_SCHEMA_LOCK.md` disagree, the schema lock is authoritative. Both documents must then be corrected in one coordinated change.
 
 ---
 
-## 3. Canonical identity
+## 3. Product and interoperability boundary
+
+Each `summary.json` records one completed GF Wordbench run for exactly one active project and one normative language target.
+
+The document must not contain:
+
+- a registry of other Wordbench workspaces;
+- several active project identities;
+- cross-project aggregation state;
+- portfolio readiness, comparison, or navigation state;
+- private `gf-portfolio` identifiers, storage paths, or configuration.
+
+`summary.json` is a public, versioned Wordbench artifact. The independent `gf-portfolio` product may consume a completed summary in read-only mode through the published schema contract.
+
+Portfolio consumption must not:
+
+- modify the Wordbench summary or its manifest;
+- require Wordbench to import, call, configure, or persist Portfolio state;
+- reinterpret private Wordbench application state as public schema;
+- add consumer-specific fields to this schema without a Wordbench schema change.
+
+---
+
+## 4. Canonical identity
+
 
 Every canonical file must contain:
 
@@ -80,7 +108,7 @@ Rules:
 
 ---
 
-## 4. Canonical location
+## 5. Canonical location
 
 ```text
 run_<run-id>/summary.json
@@ -96,7 +124,7 @@ The JSON report writer owns this file. Readers must not rewrite it.
 
 ---
 
-## 5. Encoding and serialization
+## 6. Encoding and serialization
 
 Canonical writers use:
 
@@ -107,7 +135,7 @@ one object at the root
 Unicode-preserving serialization
 stable indentation
 LF newlines
-final newline
+canonical newline
 ```
 
 Canonical JSON must not contain:
@@ -136,7 +164,7 @@ Conversions:
 
 ---
 
-## 6. Canonical root structure
+## 7. Canonical root structure
 
 ```json
 {
@@ -170,13 +198,13 @@ diff_entries
 top_errors
 ```
 
-`producer` is recommended.
+`producer` is optional in schema `1.0` and uses the canonical form below when present.
 
 Required arrays use `[]` when empty. Required objects must not be replaced by `null`.
 
 ---
 
-## 7. Root fields
+## 8. Root fields
 
 | Field | Type | Required | Purpose |
 |---|---|---:|---|
@@ -193,9 +221,9 @@ Required arrays use `[]` when empty. Required objects must not be replaced by `n
 
 ---
 
-## 8. `producer`
+## 9. `producer`
 
-Recommended form:
+Canonical optional form:
 
 ```json
 {
@@ -214,9 +242,9 @@ Rules:
 
 ---
 
-# 9. `metadata`
+## 10. `metadata`
 
-## 9.1 Fields
+### 10.1 Fields
 
 | Field | Type | Required |
 |---|---|---:|
@@ -245,7 +273,7 @@ Rules:
 | `keep_ok_details` | boolean | yes |
 | `diff_previous` | boolean | yes |
 
-## 9.2 Example
+### 10.2 Example
 
 ```json
 {
@@ -279,9 +307,9 @@ Rules:
 }
 ```
 
-## 9.3 `run_id`
+### 10.3 `run_id`
 
-Recommended form:
+Canonical optional form:
 
 ```text
 YYYYMMDD_HHMMSS
@@ -295,13 +323,13 @@ YYYYMMDD_HHMMSS_02
 
 The base timestamp represents UTC. The ID is stable within the run and agrees with the run directory.
 
-## 9.4 `run_dir`
+### 10.4 `run_dir`
 
-`run_dir` may be an absolute environment path because it identifies the actual local run directory.
+`run_dir` may be an absolute environment path because it identifies the actual local run directory. It is evidence for this run, not a portable project path or Portfolio workspace identity.
 
-Canonical writers should use `/` separators.
+Canonical writers use `/` separators.
 
-## 9.5 Timestamps
+### 10.5 Timestamps
 
 Canonical:
 
@@ -309,7 +337,7 @@ Canonical:
 2026-07-22T18:30:15Z
 ```
 
-Readers may accept:
+Readers accept:
 
 ```text
 2026-07-22T18:30:15+00:00
@@ -319,10 +347,10 @@ Rules:
 
 - timezone is explicit;
 - UTC is canonical;
-- naive timestamps should fail strict validation;
+- naive timestamps fail strict validation;
 - `finished_at` must not precede `started_at`.
 
-## 9.6 `duration_ms`
+### 10.6 `duration_ms`
 
 Rules:
 
@@ -331,13 +359,13 @@ Rules:
 - not encoded as text;
 - minor clock-resolution differences are acceptable.
 
-## 9.7 `gf_version`
+### 10.7 `gf_version`
 
 Contains the interpreted GF version used by the run.
 
 The value must not be invented from the executable filename. Raw version evidence remains in run artifacts.
 
-## 9.8 `mode`
+### 10.8 `mode`
 
 Canonical values:
 
@@ -357,7 +385,7 @@ all  -> diagnostic
 
 Canonical writers must not emit `file` or `all`.
 
-## 9.9 `target_file`
+### 10.9 `target_file`
 
 Rules:
 
@@ -368,7 +396,7 @@ Rules:
 - no drive letter;
 - no unresolved `..`.
 
-## 9.10 Path categories
+### 10.10 Path categories
 
 Project-owned paths include:
 
@@ -380,7 +408,7 @@ scenario_results[].script_path
 scenario_results[].gold_path
 ```
 
-Environment paths may be absolute:
+Environment evidence paths may be absolute and remain machine-local:
 
 ```text
 run_dir
@@ -394,7 +422,7 @@ scenario_results[].working_directory
 
 Run-owned artifact paths are relative to the run directory.
 
-## 9.11 `gf_path`
+### 10.11 `gf_path`
 
 Rules:
 
@@ -404,7 +432,7 @@ Rules:
 - recorded exactly as used;
 - shared by compilation and scenarios.
 
-## 9.12 Numeric and boolean configuration
+### 10.12 Numeric and boolean configuration
 
 Counts, sizes, durations, and timeout values are integers.
 
@@ -414,9 +442,9 @@ Booleans remain booleans, not strings.
 
 ---
 
-# 10. `totals`
+## 11. `totals`
 
-## 10.1 Fields
+### 11.1 Fields
 
 | Field | Type |
 |---|---|
@@ -441,7 +469,7 @@ Booleans remain booleans, not strings.
 
 All counts are required non-negative integers.
 
-## 10.2 Example
+### 11.2 Example
 
 ```json
 {
@@ -466,7 +494,7 @@ All counts are required non-negative integers.
 }
 ```
 
-## 10.3 Invariants
+### 11.3 Invariants
 
 ```text
 files_included =
@@ -478,7 +506,7 @@ scenarios_seen =
   scenarios_ok + scenarios_fail + scenarios_error + scenarios_skipped
 ```
 
-Recommended:
+Canonical invariant:
 
 ```text
 files_seen = files_included + files_excluded
@@ -486,7 +514,7 @@ files_seen = files_included + files_excluded
 
 Causal counts do not replace status counts.
 
-## 10.4 Overall status
+### 11.4 Overall status
 
 Canonical:
 
@@ -512,7 +540,7 @@ ERROR > FAIL > OK
 
 `SKIPPED` is not an overall status.
 
-## 10.5 `required_scenario_fail`
+### 11.5 `required_scenario_fail`
 
 This is a count.
 
@@ -520,9 +548,9 @@ Readers must still inspect individual scenario statuses, because a required scen
 
 ---
 
-# 11. `artifacts`
+## 12. `artifacts`
 
-## 11.1 Canonical object
+### 12.1 Canonical object
 
 ```json
 {
@@ -546,17 +574,17 @@ Readers must still inspect individual scenario statuses, because a required scen
 }
 ```
 
-## 11.2 Rules
+### 12.2 Rules
 
 - values are run-relative;
 - separators are `/`;
 - paths must not escape the run directory;
 - absent optional artifacts use `null`;
-- required artifacts must exist at finalization;
+- required artifacts must exist when the run is closed;
 - consumers must not reconstruct paths when fields exist;
 - the manifest stores hashes and sizes.
 
-## 11.3 Field roles
+### 12.3 Field roles
 
 | Field | Kind |
 |---|---|
@@ -578,7 +606,7 @@ Readers must still inspect individual scenario statuses, because a required scen
 | `out_dir` | generic output directory |
 | `pgf_dir` | `.pgf` directory |
 
-## 11.4 Manifest relationship
+### 12.4 Manifest relationship
 
 Every required file artifact listed here must appear in `manifest.json`.
 
@@ -586,9 +614,9 @@ Directories are not manifest artifact entries.
 
 ---
 
-# 12. `file_results`
+## 13. `file_results`
 
-## 12.1 Canonical element
+### 13.1 Canonical element
 
 ```json
 {
@@ -626,7 +654,7 @@ Directories are not manifest artifact entries.
 }
 ```
 
-## 12.2 Required fields
+### 13.2 Required fields
 
 ```text
 file_path
@@ -641,11 +669,11 @@ compile_summary
 scan_log_path
 ```
 
-## 12.3 Ordering
+### 13.3 Ordering
 
 `file_results` is ordered by normalized `file_path`.
 
-## 12.4 `file_path`
+### 13.4 `file_path`
 
 Rules:
 
@@ -655,7 +683,7 @@ Rules:
 - no drive letter;
 - no unresolved `..`.
 
-## 12.5 File status
+### 13.5 File status
 
 ```text
 OK
@@ -671,7 +699,7 @@ SKIPPED
 | `ERROR` | Validation could not run or be interpreted reliably |
 | `SKIPPED` | Validation was intentionally omitted |
 
-## 12.6 Diagnostic class
+### 13.6 Diagnostic class
 
 Schema `1.0` values:
 
@@ -689,7 +717,7 @@ framework_error
 
 Precise technical semantics still belong primarily to `status` and `error_kind`.
 
-## 12.7 `is_direct`
+### 13.7 `is_direct`
 
 Compatibility boolean.
 
@@ -697,7 +725,7 @@ Compatibility boolean.
 
 Consumers should prefer `diagnostic_class` for complete classification.
 
-## 12.8 `blocked_by`
+### 13.8 `blocked_by`
 
 Array of stable blocker identities.
 
@@ -708,7 +736,7 @@ Rules:
 - project-relative paths for file blockers;
 - no duplicates.
 
-## 12.9 `scan_counts`
+### 13.9 `scan_counts`
 
 Required fields:
 
@@ -725,7 +753,7 @@ Every value is a non-negative integer.
 
 Adding a persisted scan counter requires schema review.
 
-## 12.10 `fingerprint`
+### 13.10 `fingerprint`
 
 Fields:
 
@@ -743,9 +771,9 @@ hash_algorithm = sha256
 hash = full lowercase hexadecimal SHA-256
 ```
 
-Legacy `sha1_short` may be imported but must not be emitted by current writers.
+Legacy `sha1_short` may be imported but must not be emitted by canonical writers.
 
-## 12.11 `compile_summary`
+### 13.11 `compile_summary`
 
 Fields:
 
@@ -783,7 +811,7 @@ Rules:
 - zero exit does not override missing required artifacts;
 - a skipped compile must not be presented as a real successful invocation.
 
-## 12.12 `scan_log_path`
+### 13.12 `scan_log_path`
 
 Run-relative path to scan evidence.
 
@@ -795,9 +823,9 @@ raw/scan/GrammarEx.scan.txt
 
 ---
 
-# 13. `scenario_results`
+## 14. `scenario_results`
 
-## 13.1 Canonical element
+### 14.1 Canonical element
 
 ```json
 {
@@ -830,7 +858,7 @@ raw/scan/GrammarEx.scan.txt
 }
 ```
 
-## 13.2 Required fields
+### 14.2 Required fields
 
 ```text
 scenario_id
@@ -854,11 +882,11 @@ sections
 artifacts
 ```
 
-## 13.3 Ordering
+### 14.3 Ordering
 
 Scenario results follow configured execution order, not completion order.
 
-## 13.4 Identity and paths
+### 14.4 Identity and paths
 
 - `scenario_id` matches project configuration;
 - `script_path` is project-relative;
@@ -866,7 +894,7 @@ Scenario results follow configured execution order, not completion order.
 - raw and normalized output paths are run-relative;
 - `working_directory` may be absolute.
 
-## 13.5 Status
+### 14.5 Status
 
 ```text
 OK
@@ -885,13 +913,13 @@ Typical mappings:
 | Missing required gold | `ERROR` |
 | Scenario not selected | `SKIPPED` |
 
-## 13.6 `command`
+### 14.6 `command`
 
 Ordered string array.
 
 It preserves the executed request and must not be replaced by a shell command string.
 
-## 13.7 `gold_match`
+### 14.7 `gold_match`
 
 ```text
 true
@@ -905,7 +933,7 @@ null
 
 Missing required gold must not appear as successful `null`.
 
-## 13.8 `sections`
+### 14.8 `sections`
 
 Minimum section object:
 
@@ -923,7 +951,7 @@ Rules:
 - missing required markers produce incomplete validation;
 - process exit alone does not prove section completion.
 
-## 13.9 `artifacts`
+### 14.9 `artifacts`
 
 Array of scenario-produced artifact references.
 
@@ -933,9 +961,9 @@ Required retained artifacts must also appear in the manifest.
 
 ---
 
-# 14. `diff_entries`
+## 15. `diff_entries`
 
-## 14.1 Canonical element
+### 15.1 Canonical element
 
 ```json
 {
@@ -948,7 +976,7 @@ Required retained artifacts must also appear in the manifest.
 }
 ```
 
-## 14.2 Fields
+### 15.2 Fields
 
 ```text
 subject_kind
@@ -959,7 +987,7 @@ change_kind
 message
 ```
 
-## 14.3 Enums
+### 15.3 Enums
 
 `subject_kind`:
 
@@ -997,7 +1025,7 @@ subject_kind + subject_id
 
 A missing previous summary produces `diff_entries: []`.
 
-## 14.4 Legacy migration
+### 15.4 Legacy migration
 
 Legacy `file_path` maps to:
 
@@ -1008,7 +1036,7 @@ subject_id = file_path
 
 ---
 
-# 15. `top_errors`
+## 16. `top_errors`
 
 Canonical array:
 
@@ -1037,11 +1065,11 @@ Rules:
 - order is descending count, then case-insensitive message;
 - empty collection is `[]`;
 - legacy message-to-count mappings may be imported;
-- current writers must not emit the mapping form.
+- canonical writers must not emit the mapping form.
 
 ---
 
-# 16. Complete example
+## 17. Complete example
 
 ```json
 {
@@ -1206,7 +1234,7 @@ Rules:
 
 ---
 
-# 17. Writer requirements
+## 18. Writer requirements
 
 `app/reports/report_json.py` must:
 
@@ -1223,11 +1251,11 @@ Rules:
 11. write atomically;
 12. validate before replacement;
 13. return the owned `Path`;
-14. preserve the last valid file on failure.
+14. preserve the last valid summary on failure.
 
 Canonical writers must not emit legacy aliases.
 
-## 17.1 Atomic write sequence
+### 18.1 Atomic write sequence
 
 ```text
 build object
@@ -1239,7 +1267,7 @@ build object
 → verify destination
 ```
 
-## 17.2 Deterministic ordering
+### 18.2 Deterministic ordering
 
 ```text
 file_results:
@@ -1257,7 +1285,7 @@ top_errors:
 
 JSON object key order is not semantic, but writers should keep stable reviewable ordering.
 
-## 17.3 Prohibitions
+### 18.3 Prohibitions
 
 The writer must not:
 
@@ -1274,7 +1302,7 @@ The writer must not:
 
 ---
 
-# 18. Reader requirements
+## 19. Reader requirements
 
 Readers must:
 
@@ -1293,7 +1321,7 @@ Readers must:
 13. preserve migration warnings;
 14. never substitute Markdown parsing.
 
-## 18.1 Unknown fields
+### 19.1 Unknown fields
 
 For supported major version `1`:
 
@@ -1302,7 +1330,7 @@ For supported major version `1`:
 - do not reinterpret unknown enums;
 - do not copy unknown fields into canonical output unless migration policy explicitly permits it.
 
-## 18.2 Missing versus `null`
+### 19.2 Missing versus `null`
 
 Examples:
 
@@ -1315,9 +1343,9 @@ Missing and `null` are not automatically equivalent.
 
 ---
 
-# 19. Validation levels
+## 20. Validation levels
 
-Recommended levels:
+Validation levels:
 
 ```text
 syntax
@@ -1327,7 +1355,7 @@ artifacts
 strict
 ```
 
-## 19.1 Syntax
+### 20.1 Syntax
 
 ```text
 valid UTF-8
@@ -1335,7 +1363,7 @@ valid JSON
 one root object
 ```
 
-## 19.2 Schema
+### 20.2 Schema
 
 ```text
 schema identity
@@ -1346,7 +1374,7 @@ enums
 nullability
 ```
 
-## 19.3 Invariants
+### 20.3 Invariants
 
 ```text
 count equations
@@ -1358,7 +1386,7 @@ status relationships
 non-negative values
 ```
 
-## 19.4 Artifacts
+### 20.4 Artifacts
 
 ```text
 required paths exist
@@ -1369,7 +1397,7 @@ project paths stay in project
 run paths stay in run
 ```
 
-## 19.5 Strict
+### 20.5 Strict
 
 ```text
 reject naive timestamps
@@ -1381,7 +1409,7 @@ verify deterministic ordering
 verify full SHA-256
 ```
 
-Suggested commands:
+Schema validation commands:
 
 ```text
 gf-wordbench schemas check
@@ -1390,21 +1418,21 @@ gf-wordbench schemas check --strict
 
 ---
 
-# 20. Error handling
+## 21. Error handling
 
-## 20.1 Writer failure
+### 21.1 Writer failure
 
-Failure to write or validate required `summary.json` makes run finalization `ERROR`.
+Failure to write or validate required `summary.json` makes run closure `ERROR`.
 
 Captured raw evidence should remain available.
 
-The run must not be reported as fully finalized.
+The run must not be reported as complete.
 
-## 20.2 Reader failure
+### 21.2 Reader failure
 
 | Failure | Handling |
 |---|---|
-| File absent | Not a finalized readable run |
+| File absent | Not a completed readable run |
 | Invalid JSON | Read/schema error |
 | Wrong schema ID | Reject |
 | Unsupported major version | Reject |
@@ -1413,7 +1441,7 @@ The run must not be reported as fully finalized.
 | Invalid artifact path | Artifact validation failure |
 | Count mismatch | Invariant failure |
 
-## 20.3 Previous-run loading
+### 21.3 Previous-run loading
 
 A malformed previous summary must not relabel current run results.
 
@@ -1421,7 +1449,7 @@ It should produce an empty diff and warning unless strict historical comparison 
 
 ---
 
-# 21. Migration from current unversioned nested summaries
+## 22. Migration from unversioned nested summaries
 
 Legacy nested summaries may contain:
 
@@ -1455,7 +1483,7 @@ Migration to `1.0` must:
 
 ---
 
-# 22. Migration from legacy flat summaries
+## 23. Migration from legacy flat summaries
 
 Legacy flat summaries may contain:
 
@@ -1488,7 +1516,7 @@ Migration must:
 
 ---
 
-# 23. Migration safety
+## 24. Migration safety
 
 Migrations are:
 
@@ -1501,7 +1529,7 @@ non-destructive
 traceable
 ```
 
-Recommended flow:
+Migration flow:
 
 ```text
 read source
@@ -1516,21 +1544,21 @@ Losses must be reported.
 
 ---
 
-# 24. Compatibility policy
+## 25. Compatibility policy
 
-## 24.1 Major versions
+### 25.1 Major versions
 
 Unknown major versions are incompatible.
 
 A `1.x` reader must not guess `2.x`.
 
-## 24.2 Minor versions
+### 25.2 Minor versions
 
 Readers may accept unknown optional fields within major version `1`.
 
 They must still reject incompatible type changes, missing required fields, and unknown enum meanings.
 
-## 24.3 Field removal or rename
+### 25.3 Field removal or rename
 
 Removing or renaming a field requires:
 
@@ -1540,7 +1568,7 @@ Removing or renaming a field requires:
 - tests;
 - schema-lock update.
 
-## 24.4 Optional extension
+### 25.4 Optional extension
 
 Adding an optional field requires:
 
@@ -1554,9 +1582,9 @@ Adding an optional field requires:
 
 ---
 
-# 25. Consumer guidance
+## 26. Consumer guidance
 
-## 25.1 GUI
+### 26.1 GUI
 
 Use:
 
@@ -1571,9 +1599,9 @@ artifacts
 
 Do not parse `summary.md` for structured values.
 
-## 25.2 Automation
+### 26.2 Automation
 
-Automation should:
+Automation:
 
 - validate schema version;
 - use `overall_status`;
@@ -1582,9 +1610,9 @@ Automation should:
 - use project-relative identities;
 - ignore JSON object key order.
 
-## 25.3 Diff loader
+### 26.3 Diff loader
 
-The diff loader should:
+The diff loader:
 
 - read supported summaries;
 - migrate legacy summaries in memory;
@@ -1592,17 +1620,35 @@ The diff loader should:
 - preserve current-run meaning;
 - return empty diff when no previous run exists.
 
-## 25.4 AI workflows
+### 26.4 AI workflows
 
-AI workflows may use `AI_READY.md` for concise context and `summary.json` for exact structured facts.
+AI workflows may consume `AI_READY.md` for concise context and `summary.json` for exact structured facts.
 
 Missing evidence must not be inferred as success.
 
 ---
 
-# 26. Path-resolution examples
+### 26.5 `gf-portfolio`
 
-## 26.1 Run artifact
+`gf-portfolio` consumes only supported public schema versions.
+
+It must:
+
+- treat the summary and manifest as immutable source artifacts;
+- validate `schema_id` and `schema_version`;
+- use `metadata.project_id` as the Wordbench project identity;
+- preserve project-relative and run-relative path semantics;
+- keep portfolio aggregation, indexing, readiness, and storage in its own schemas;
+- reject or quarantine incompatible summaries without mutating them.
+
+Wordbench does not emit Portfolio-specific fields and does not depend on Portfolio availability.
+
+
+---
+
+## 27. Path-resolution examples
+
+### 27.1 Run artifact
 
 ```text
 run_dir:
@@ -1615,7 +1661,7 @@ resolved:
   C:/work/runs/run_20260722_143015/summary.md
 ```
 
-## 26.2 Compile log
+### 27.2 Compile log
 
 ```text
 file_results[0].compile_summary.stderr_path:
@@ -1624,7 +1670,7 @@ file_results[0].compile_summary.stderr_path:
 
 Resolve against the run directory.
 
-## 26.3 Project source
+### 27.3 Project source
 
 ```text
 file_results[0].file_path:
@@ -1633,7 +1679,7 @@ file_results[0].file_path:
 
 Resolve against the project root.
 
-## 26.4 Gold file
+### 27.4 Gold file
 
 ```text
 scenario_results[0].gold_path:
@@ -1646,7 +1692,7 @@ Not every path string has the same base.
 
 ---
 
-# 27. Invariant checklist
+## 28. Invariant checklist
 
 ```text
 [ ] schema_id is correct
@@ -1677,7 +1723,7 @@ Not every path string has the same base.
 
 ---
 
-# 28. Drift indicators
+## 29. Drift indicators
 
 Probable drift exists when:
 
@@ -1703,7 +1749,7 @@ Resolve drift by restoring `1.0` or introducing a versioned migration.
 
 ---
 
-# 29. Schema-change workflow
+## 30. Schema-change workflow
 
 Change description:
 
@@ -1728,29 +1774,29 @@ Checklist:
 ```text
 [ ] Schema ID confirmed
 [ ] Change classified
-[ ] Writer updated
-[ ] All readers updated
-[ ] Shared models updated
+[ ] Writer contract updated
+[ ] All reader contracts updated
+[ ] Shared model contract updated
 [ ] Defaults documented
 [ ] Null semantics documented
 [ ] Ordering documented
 [ ] Path semantics reviewed
 [ ] Enum impact reviewed
-[ ] Migration implemented
-[ ] Legacy fixtures updated
-[ ] Contract tests updated
-[ ] Schema tests updated
+[ ] Migration contract updated
+[ ] Legacy fixtures synchronized
+[ ] Contract tests synchronized
+[ ] Schema tests synchronized
 [ ] GUI loading tested
 [ ] Diff loading tested
 [ ] Automation impact reviewed
-[ ] Persisted schema lock updated
-[ ] This reference updated
+[ ] Persisted schema lock synchronized
+[ ] This reference synchronized
 [ ] Changelog or migration guide updated
 ```
 
 ---
 
-# 30. Recommended tests
+## 31. Required test coverage
 
 ```text
 tests/schemas/test_summary_schema.py
@@ -1793,9 +1839,9 @@ round-trip semantic equality
 
 ---
 
-# 31. Implementation guidance
+## 32. Writer design
 
-Recommended writer:
+Writer operation:
 
 ```python
 def write_summary_json(run_result: RunResult) -> Path:
@@ -1805,7 +1851,7 @@ def write_summary_json(run_result: RunResult) -> Path:
     return run_result.run_paths.summary_json_path
 ```
 
-Recommended separation:
+Required separation:
 
 ```text
 build canonical document
@@ -1820,7 +1866,7 @@ Internal dataclass refactors must not silently change persisted JSON.
 
 ---
 
-# 32. Final invariants
+## 33. Schema invariants
 
 `summary.json` must preserve:
 
@@ -1847,8 +1893,8 @@ Internal dataclass refactors must not silently change persisted JSON.
 
 ---
 
-# 33. Final rule
+## 34. Governing rule
 
 > `summary.json` records what the run proved—not what a report later inferred.
 
-Every field must be reproducible from completed structured evidence, interpretable by current and future readers, and protected by explicit schema-version rules.
+Every field must be reproducible from completed structured evidence, interpretable by supported readers, and protected by explicit schema-version rules.

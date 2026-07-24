@@ -25,8 +25,8 @@
 #   docs/INTERFILE_CONTRACT_LOCK.md
 #   docs/LANGUAGE_ARCHITECTURE.md
 #   docs/MODULE_DEPENDENCY_MAP.md
-#   docs/VALIDATION_SPEC.md
-#   docs/RELEASE_CRITERIA.md
+#   docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
+#   docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md
 
 schema_id = "gf-wordbench.project"
 schema_version = "1.0"

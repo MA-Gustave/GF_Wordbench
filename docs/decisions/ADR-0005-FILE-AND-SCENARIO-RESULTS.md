@@ -1,16 +1,13 @@
 # ADR-0005 — Separate File and Scenario Result Models
 
-**ADR ID:** `ADR-0005`  
+**Document ID:** `GF-WB-ADR-0005`  
 **Status:** Accepted  
-**Implementation status:** Partially implemented  
 **Decision date:** `2026-07-22`  
-**Last reviewed:** `2026-07-22`  
 **Owners:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\decisions\ADR-0005-FILE-AND-SCENARIO-RESULTS.md`  
-**Decision scope:** Runtime result models, result construction, classification, run aggregation, persisted run summaries, reports, diffs, tests, and migrations  
+**Affected domains:** runtime models, result construction, classification, run aggregation, persisted schemas, reports, diffs, tests, and migrations  
 **Related contracts:** `IFC-AUDIT-008`, `IFC-AUDIT-009`, `IFC-SCENARIO-001`, `IFC-REPORT-001`, `IFC-MODEL-001`  
 **Related schema:** `gf-wordbench.run-summary/1.0`  
-**Supersedes:** No earlier accepted ADR  
+**Supersedes:** None  
 **Superseded by:** None  
 
 ---
@@ -67,7 +64,7 @@ A selected `.gf` file may produce:
 - dependency-related diagnostics;
 - direct, downstream, or ambiguous failure classification.
 
-The inherited GF Audit implementation already represents these outcomes with:
+The inherited GF Audit model represents these outcomes with:
 
 ```text
 FileResult
@@ -99,7 +96,7 @@ A registered `.gfs` scenario may produce:
 - generated artifacts;
 - direct, downstream, or ambiguous failure classification.
 
-The final GF Wordbench architecture requires:
+GF Wordbench represents these outcomes with:
 
 ```text
 ScenarioResult
@@ -400,9 +397,9 @@ Accepted.
 
 ## 6. Decision
 
-GF Wordbench will implement Option D.
+GF Wordbench adopts Option D.
 
-The canonical runtime result model will contain:
+The canonical runtime result model contains:
 
 ```text
 FileResult
@@ -562,9 +559,9 @@ class FileResult:
         return self.compile_summary.first_error
 ```
 
-`artifacts` may remain absent from the initial runtime model when the manifest is the authoritative artifact inventory.
+`artifacts` is optional when the manifest is the authoritative artifact inventory.
 
-It must not be added redundantly without a defined ownership need.
+It must be present only when result-level artifact references have a defined ownership need; it must not duplicate the manifest.
 
 ### 8.3 File identity
 
@@ -905,9 +902,9 @@ class RunResult:
     totals: RunTotals
 ```
 
-The final implementation may keep individual count fields during migration.
+Compatibility adapters may expose individual count fields when reading legacy data.
 
-The authoritative values must remain derivable from result collections.
+Canonical values remain derivable from the result collections.
 
 ### 12.2 Separate collections
 
@@ -1190,16 +1187,14 @@ Scenario raw outputs and artifacts are run-relative.
 
 ### 15.5 `blocked_by` schema alignment
 
-The final scenario model requires `blocked_by`.
+The canonical scenario model requires `blocked_by`.
 
-Schema handling:
+Schema rules:
 
-- if run-summary `1.0` has not been published, include `blocked_by` in `ScenarioResult` before publication;
-- if `1.0` has already been published without it, introduce it as an optional field with default `[]` in `1.1`;
-- readers of the supported major must default missing `blocked_by` to `[]`;
+- `ScenarioResult` in run-summary `1.0` includes `blocked_by`;
+- its default value is `[]`;
+- compatibility readers default a missing legacy `blocked_by` field to `[]`;
 - `diagnostic_class = downstream` requires a non-empty `blocked_by` after migration and classification.
-
-This is a required coordinated follow-up to the current draft schema.
 
 ### 15.6 Enum alignment
 
@@ -1214,7 +1209,7 @@ noise
 skipped
 ```
 
-Draft-only values such as:
+Non-canonical values such as:
 
 ```text
 framework_error
@@ -1791,33 +1786,33 @@ test_file_and_scenario_status_vocabularies_match
 
 ---
 
-## 29. Acceptance criteria
+## 29. Conformance requirements
 
-This decision is fully implemented when:
+An implementation conforms to this ADR only when:
 
 ```text
-[ ] ScenarioResult exists as a typed shared model
-[ ] FileResult remains a distinct typed model
-[ ] no generic nullable result replaces them
-[ ] shared enums are centralized
-[ ] common diagnostic access is available
-[ ] FileResult error ownership remains coherent
-[ ] ScenarioResult records marker and gold evidence
-[ ] ScenarioResult records blocked_by
-[ ] RunResult stores separate result lists
-[ ] file and scenario totals are distinct
-[ ] overall status applies required-result policy
-[ ] DiffEntry is subject-aware
-[ ] summary.json contains both arrays
-[ ] legacy summaries migrate safely
-[ ] reports distinguish subject kinds
-[ ] raw evidence paths survive round trips
-[ ] scenario order is deterministic
-[ ] file order is deterministic
-[ ] report writers do not rerun stages
-[ ] normal runs do not update gold
-[ ] unit, schema, migration and contract tests pass
-[ ] relevant lock documents are harmonized
+ScenarioResult exists as a typed shared model
+FileResult remains a distinct typed model
+no generic nullable result replaces them
+shared enums are centralized
+common diagnostic access is available
+FileResult error ownership remains coherent
+ScenarioResult records marker and gold evidence
+ScenarioResult records blocked_by
+RunResult stores separate result lists
+file and scenario totals are distinct
+overall status applies required-result policy
+DiffEntry is subject-aware
+summary.json contains both arrays
+legacy summaries migrate safely
+reports distinguish subject kinds
+raw evidence paths survive round trips
+scenario order is deterministic
+file order is deterministic
+report writers do not rerun stages
+normal runs do not update gold
+unit, schema, migration and contract tests pass
+relevant lock documents are harmonized
 ```
 
 ---
@@ -1857,7 +1852,7 @@ This decision is fully implemented when:
 
 ## 31. Required coordinated updates
 
-Acceptance of this ADR requires alignment of:
+This ADR requires coordinated alignment of:
 
 ```text
 app/models.py
@@ -1880,7 +1875,7 @@ docs/reference/DIAGNOSTIC_KINDS.md
 docs/reference/SCHEMA_INDEX.md
 ```
 
-In particular, draft schema or lock values that still contain:
+Schema or lock values must not contain:
 
 ```text
 framework_error
@@ -1930,7 +1925,7 @@ A replacement decision must supersede this ADR explicitly.
 | Status values | `docs/reference/STATUS_VALUES.md` |
 | Diagnostic kinds | `docs/reference/DIAGNOSTIC_KINDS.md` |
 | Schema index | `docs/reference/SCHEMA_INDEX.md` |
-| ADR index | `docs/decisions/ADR_INDEX.md` |
+| ADR index and conventions | `docs/decisions/README.md` |
 
 ---
 

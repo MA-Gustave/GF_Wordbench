@@ -2,13 +2,14 @@
 
 **Document ID:** `GF-WB-CONFIG-PROJECT-TOML`  
 **Status:** Normative  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\configuration\PROJECT_TOML_REFERENCE.md`  
-**Applies to:** Active-language project identity, source selection, GF path parts, module targets, scenario requirements, and release policy  
+**Applies to:** Active-project identity, source selection, GF path parts, module targets, scenario requirements and release policy  
 **Owner:** GF Wordbench maintainers  
 **Schema ID:** `gf-wordbench.project`  
 **Current schema version:** `1.0`  
-**Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Document version:** `2.0.0`  
+**Last reviewed:** `2026-07-24`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Related locks:** `docs/PERSISTED_SCHEMA_LOCK.md`, `docs/INTERFILE_CONTRACT_LOCK.md`, `project/docs/INTERFILE_CONTRACT_LOCK.md`
 
 ---
 
@@ -51,6 +52,20 @@ It MUST NOT become a store for:
 The central rule is:
 
 > `project.toml` defines the active language project; environment and application state define the machine that runs it.
+
+### 1.1 Product boundary
+
+One `project.toml` describes exactly one active GF language project and one normative language target.
+
+It MUST NOT contain:
+
+- a registry of several Wordbench workspaces;
+- a list of active projects;
+- runtime-selectable language profiles;
+- cross-project readiness or comparison state;
+- `gf-portfolio` configuration, storage identifiers or private schema fields.
+
+Multi-workspace and multilingual aggregation belong to the independent `gf-portfolio` product, which may consume public versioned Wordbench artifacts without becoming a Wordbench dependency.
 
 ---
 
@@ -457,7 +472,7 @@ root = "."
 - MUST NOT escape the `project/` directory;
 - SHOULD remain `"."` in schema `1.0`.
 
-Non-dot roots require an explicit future layout contract and schema review.
+A non-dot root requires an explicit layout contract and schema review.
 
 ---
 
@@ -563,7 +578,7 @@ Recursive candidate-discovery pattern under `sources.directory`.
 ### Rules
 
 - MUST be non-empty;
-- MUST be a valid pattern for the selector implementation;
+- MUST be a valid pattern for the selector;
 - SHOULD select GF source candidates only;
 - MUST NOT be treated as a regex;
 - MUST NOT contain an absolute path;
@@ -926,7 +941,7 @@ Typical checkpoint order follows dependency order:
 
 ```text
 morphology/resources
-    → category implementations
+    → category modules
     → syntax/structural/extend
     → entrypoints
 ```
@@ -970,7 +985,7 @@ implies the documented suffix:
 Sqi
 ```
 
-A future explicit `module_suffix` field requires a compatible schema revision and coordinated project migration.
+An explicit `module_suffix` field requires a compatible schema revision and coordinated project migration.
 
 ---
 
@@ -1267,7 +1282,22 @@ run_id
 
 These belong to run summaries and manifests.
 
-## 14.5 Secrets
+## 14.5 Portfolio and multi-project state
+
+```text
+projects
+active_projects
+workspace_registry
+portfolio_id
+portfolio_database
+portfolio_readiness
+language_profiles
+cross_project_comparison
+```
+
+These concepts belong outside GF Wordbench project configuration. Public Wordbench artifacts may be consumed by `gf-portfolio`, but `project.toml` MUST NOT contain Portfolio-owned state or establish a reverse dependency.
+
+## 14.6 Secrets
 
 ```text
 token
@@ -1307,7 +1337,7 @@ required release scenarios
 release_requires_pgf
 ```
 
-A future explicit override mechanism for project facts must be visible, auditable, and prohibited in release mode unless documented.
+Any override mechanism for project facts must be visible, auditable and prohibited in release mode unless explicitly documented.
 
 ---
 
@@ -1721,11 +1751,7 @@ Allowed placeholders:
 <project-relative-path>
 ```
 
-Template status:
-
-```text
-not executable as an active project until initialized
-```
+A template is not a valid active-project configuration until every required placeholder has been replaced and the resulting file passes schema validation.
 
 ## 27.2 Active project
 
@@ -1855,9 +1881,7 @@ optional_scenarios = [
 release_requires_pgf = true
 ```
 
-The example does not assert that these exact modules exist in a particular implementation.
-
-The active project must use its actual module set.
+The active project must use its declared module set.
 
 ---
 
@@ -1880,9 +1904,8 @@ Such a change requires review of:
 ```text
 project/docs/INTERFILE_CONTRACT_LOCK.md
 project/docs/MODULE_DEPENDENCY_MAP.md
-project/docs/VALIDATION_SPEC.md
-project/docs/RELEASE_CRITERIA.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
 scenarios
 gold files
@@ -1934,7 +1957,7 @@ release notes
 
 ## 31.3 No silent extension
 
-A loader implementation MUST NOT depend on an undocumented field that this reference and schema lock do not define.
+The loader MUST NOT depend on an undocumented field that this reference and schema lock do not define.
 
 ---
 
@@ -2065,30 +2088,29 @@ These tests prevent field-name and semantic drift between provider and consumers
 
 ---
 
-# 36. Acceptance criteria
+# 36. Conformance checklist
 
-The `project.toml` subsystem is complete when:
+A canonical `project.toml` conforms to this reference when:
 
 ```text
-[ ] one canonical schema ID exists
-[ ] schema 1.0 is implemented
-[ ] every required table is validated
-[ ] machine paths are excluded
+[ ] schema_id is gf-wordbench.project
+[ ] schema_version is supported
+[ ] every required table and field is valid
+[ ] exactly one active project and language target are described
+[ ] no Portfolio or multi-project fields are present
+[ ] machine-specific paths are excluded
 [ ] project identity is authoritative
-[ ] source root is safe and deterministic
-[ ] regexes are validated
+[ ] source root resolution is safe and deterministic
+[ ] regexes are valid
 [ ] GF path order is preserved
-[ ] entrypoints are explicit and ordered
-[ ] checkpoints are explicit and ordered
-[ ] scenario IDs are unique
-[ ] required and optional scenarios are distinct
+[ ] entrypoints and checkpoints are explicit, unique and ordered
+[ ] required and optional scenario sets are disjoint
 [ ] release PGF policy is explicit
-[ ] CLI and GUI consume the same ProjectConfig
+[ ] CLI and GUI consume the same ProjectConfig semantics
 [ ] normal validation does not rewrite project.toml
 [ ] legacy migration is explicit
-[ ] template and active schema match
-[ ] schema tests pass
-[ ] contract tests pass
+[ ] template and active project use the same schema
+[ ] schema and contract tests pass
 [ ] lock files agree
 ```
 
@@ -2180,12 +2202,12 @@ this document
 | Scenario format | `docs/scenarios/SCENARIO_FORMAT.md` |
 | Project lifecycle | `docs/projects/PROJECT_MODEL.md` |
 | Module targets | `project/docs/MODULE_DEPENDENCY_MAP.md` |
-| Project validation | `project/docs/VALIDATION_SPEC.md` |
-| Release policy | `project/docs/RELEASE_CRITERIA.md` |
+| Project validation | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` |
+| Release policy | `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` |
 
 ---
 
-# 40. Final rule
+# 40. Governing rule
 
 > Every stable language-project fact belongs in `project.toml`; every machine-specific or run-specific fact belongs elsewhere.
 

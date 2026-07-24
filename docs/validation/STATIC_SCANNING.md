@@ -2,14 +2,15 @@
 
 **Document ID:** `GF-WB-VALIDATION-STATIC-SCANNING`  
 **Status:** Normative  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\validation\STATIC_SCANNING.md`  
-**Applies to:** Built-in heuristic inspection of selected GF source files  
+**Document version:** `2.0.0`  
+**Applies to:** Built-in language-neutral heuristic inspection of selected GF source files  
 **Owner:** GF Wordbench maintainers  
-**Primary implementation owner:** `app/audit/scanner.py`  
-**Public contract:** `IFC-AUDIT-004`  
-**Persisted fields:** `ScanCounts`, `file_results[].scan_counts`, `file_results[].scan_log_path`  
-**Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Functional owner:** `validation` module  
+**Supporting owners:** `projects` for resolved source identity, `runs` for run-scoped evidence ownership, `diagnostics` for interpretation, and `reporting` for persisted projections  
+**Public contract:** `StaticScanRequest → StaticScanResult`  
+**Persisted projections:** `ScanCounts`, `file_results[].scan_counts`, and the run-relative scan-evidence reference  
+**Last reviewed:** `2026-07-24`  
+**Target path:** `docs/validation/STATIC_SCANNING.md`
 
 ---
 
@@ -52,7 +53,7 @@ This document governs:
 - built-in scan-rule identities;
 - stable `ScanCounts` meanings;
 - source-location reporting;
-- per-file scan-log creation;
+- per-file run-evidence creation;
 - deterministic behavior;
 - error handling;
 - performance limits;
@@ -70,7 +71,7 @@ This document does not govern:
 - direct/downstream failure classification;
 - `.gfs` scenario execution;
 - gold comparison;
-- report layout beyond the scanner-owned log;
+- report layout beyond the validation-owned scan evidence;
 - project-specific morphology or syntax correctness;
 - arbitrary lint plugins;
 - source rewriting or automatic repair.
@@ -82,19 +83,21 @@ This document does not govern:
 Canonical stage relationship:
 
 ```text
-file selection
+projects resolves the active project and source identity
       ↓
-source fingerprint
+runs coordinates one validation run
       ↓
-static scan
+validation selects and fingerprints the source
       ↓
-GF compilation
+validation performs the static scan
       ↓
-diagnostic classification
+validation invokes GF compilation through the GF port
       ↓
-result aggregation
+diagnostics interprets preserved evidence
       ↓
-reports
+runs aggregates and finalizes the result
+      ↓
+reporting writes persisted projections
 ```
 
 Static scanning and compilation are separate stages.
@@ -133,7 +136,7 @@ A successful scan MUST NOT imply compilation success.
 - whether each built-in textual rule matched;
 - how many matching units were counted;
 - which source ranges were logged;
-- where the per-file scan log was written;
+- which run-owned evidence reference identifies the per-file scan artifact;
 - the stable meaning of each `ScanCounts` field.
 
 ### 4.3 The scanner is not authoritative for
@@ -147,70 +150,90 @@ A successful scan MUST NOT imply compilation success.
 
 ---
 
-## 5. Public interfile contract
+## 5. Architectural ownership and public contract
 
-The public scanner entry point is:
+Static scanning belongs to the `validation` module.
 
-```python
-scan_file(
-    file_path: Path,
-    run_config: RunConfig,
-    run_paths: RunPaths,
-) -> tuple[ScanCounts, Path]
-```
+Its responsibilities are separated by hexagonal ring:
+
+| Ring | Static-scanning responsibility |
+|---|---|
+| `domain` | Rule identities, count semantics, findings, invariants, and completion meaning |
+| `application` | One-file scan use case and coordination of source reading, rule evaluation, and evidence publication |
+| `ports` | Source reading, clock or limit inputs when required, and run-evidence writing |
+| `adapters` | Filesystem source reader and run-evidence writer |
+| `entrypoints` | Selection of validation mode and display of the completed result |
+| `bootstrap` | Construction and wiring of the scanner, source reader, and evidence writer |
+
+The scanner core remains deterministic and does not depend on CLI, GUI, bootstrap, filesystem implementations, report writers, GF adapters, or `gf-portfolio`.
 
 ### 5.1 Request
 
-The caller supplies:
+The public application contract accepts one `StaticScanRequest` containing:
 
 ```text
-one selected GF source file
-resolved run configuration
-resolved run paths
+resolved source identity
+project-relative source path
+approved source location
+rule-set identity
+encoding policy
+source-size limit
+run-owned evidence target
 ```
 
-The scanner MUST NOT perform file selection.
+The source is already selected. Static scanning MUST NOT discover files, choose validation targets, infer the active project, or inspect another workspace.
 
-### 5.2 Response
+### 5.2 Result
 
-The scanner returns:
+The public application contract returns one `StaticScanResult` containing:
 
 ```text
+completion state
 ScanCounts
-path to the per-file scan log
+ordered structured findings
+scanner diagnostics
+source fingerprint reference when supplied
+run-owned scan-evidence reference
+rule-set identity
+encoding outcome
 ```
 
-The returned log path MUST refer to a file created by the scanner when scanning completes successfully.
+A successful result with zero findings means that every enabled built-in rule completed and matched nothing.
 
-### 5.3 Side effects
+An incomplete result, source-read failure, rule failure, or evidence-write failure MUST remain distinguishable from a successful zero-finding result.
 
-Allowed:
+### 5.3 Allowed effects
+
+Through approved ports and adapters, the scan use case may:
 
 ```text
-create parent scan-log directory
-write one run-owned scan log
-read the source file
+read one selected source
+create the approved evidence parent
+write one run-owned per-file scan evidence artifact
 ```
 
-Prohibited:
+### 5.4 Prohibited effects
+
+Static scanning MUST NOT:
 
 ```text
-modify the source
+modify source
 invoke GF
+perform file selection
 write summary reports
 write compilation logs
 classify dependency cascades
+change run or release status directly
 update project configuration
-update gold files
+update scenarios, inputs, or gold files
+read or write gf-portfolio state
 ```
 
-### 5.4 Failure behavior
+### 5.5 Failure propagation
 
-A source-read or scan-log-write failure MUST be distinguishable from a completed scan with zero findings.
+The `runs` coordinator incorporates the `StaticScanResult` into the containing file and run result.
 
-The orchestrator decides how a scanner I/O failure enters the containing `FileResult`.
-
-The scanner MUST NOT silently return zero counts after an I/O failure.
+A scanner failure is represented as a scanner-stage failure. It is not converted to zero counts, a GF compile failure, or a report-generation failure.
 
 ---
 
@@ -325,7 +348,7 @@ A retired rule ID MUST NOT be reused for unrelated behavior.
 | `SCAN-PATTERN-002` | `untyped_table_str_pat` | matching brace-balanced `table` block | string concatenation pattern without explicit `: Str >` form |
 | `SCAN-STYLE-001` | `trailing_spaces` | source line ending in space or tab | formatting issue |
 
-These six rules form the final v1 scanner nucleus.
+These six rules form the canonical built-in scanner nucleus.
 
 No language-specific rule is part of the framework nucleus.
 
@@ -403,14 +426,14 @@ UTF-8 with BOM
 
 Decoding behavior MUST be explicit.
 
-Preferred final policy:
+Canonical policy:
 
 1. try UTF-8;
 2. accept UTF-8 BOM;
 3. on invalid bytes, return a scanner I/O/encoding error;
 4. preserve evidence about the decoding failure.
 
-Silently replacing invalid bytes can change pattern meaning and SHOULD NOT be the final strict behavior.
+Silently replacing invalid bytes can change pattern meaning and is prohibited in strict scanning.
 
 A non-strict diagnostic mode MAY use replacement decoding only when the result clearly records that source text was lossy.
 
@@ -421,8 +444,8 @@ The scanner MUST support:
 ```text
 LF
 CRLF
-final newline present
-final newline absent
+terminating newline present
+terminating newline absent
 ```
 
 Line numbers are one-based.
@@ -491,7 +514,7 @@ Block-comment state continues across physical lines.
 
 Comment content is replaced by spaces in derived views.
 
-The final implementation MUST document and test its behavior for nested block-comment markers before claiming nested-comment support.
+The scanner MUST document and test its behavior for nested block-comment markers before claiming nested-comment support.
 
 It MUST NOT accidentally treat comment text as executable source.
 
@@ -603,7 +626,7 @@ A nested `case` or `table` may be discovered as part of the containing block.
 
 The scanner MUST define whether a nested block is counted independently.
 
-Final v1 policy:
+Canonical policy:
 
 > Each traversal counts the outer block selected by the rule and advances past its balanced end; nested blocks are not additionally counted during that same traversal.
 
@@ -946,7 +969,7 @@ The file MUST NOT be serialized as a GF compilation failure solely because of th
 run_<run-id>/raw/scan/<safe-source-identity>.scan.txt
 ```
 
-The scanner uses `RunPaths.scan_logs_dir`.
+The application use case receives a run-owned evidence target from the `runs` module and publishes the artifact through the evidence-writer port.
 
 ### 20.2 Naming
 
@@ -956,7 +979,7 @@ It MUST be safe on supported filesystems.
 
 Two distinct selected source paths MUST NOT silently collide to the same log path.
 
-If sanitization can collide, the final implementation SHOULD append a short stable hash.
+When sanitization can collide, the evidence-path owner appends a short stable hash.
 
 Example:
 
@@ -1005,7 +1028,7 @@ The canonical log uses:
 ```text
 UTF-8 without BOM
 LF newlines
-final newline
+terminating newline
 ```
 
 ---
@@ -1018,7 +1041,7 @@ The report/log layer may create:
 raw/ALL_SCAN_LOGS.TXT
 ```
 
-The scanner does not own this aggregate.
+The `reporting` module owns this aggregate.
 
 The aggregate writer consumes existing per-file scan logs or structured results.
 
@@ -1055,7 +1078,7 @@ Timestamps SHOULD NOT appear in the per-file log unless they are clearly non-sem
 
 ## 23. Performance model
 
-### 23.1 Final target
+### 23.1 Complexity target
 
 For a source file of `n` characters, scanning SHOULD be approximately:
 
@@ -1131,7 +1154,7 @@ The caller MUST receive an error.
 
 One rule throwing an unexpected exception MUST NOT be represented as “no findings.”
 
-Preferred final behavior:
+Required behavior:
 
 - stop the file scan;
 - preserve any safe partial diagnostic;
@@ -1170,7 +1193,7 @@ The scanner does not execute GF or project code.
 
 ## 26. Configuration policy
 
-The final v1 scanner has one built-in framework rule set.
+The scanner has one canonical built-in framework rule set.
 
 Project configuration MAY control:
 
@@ -1214,12 +1237,26 @@ language-specific module path
 A project may document language-specific review rules in:
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
 ```
 
 Executable project-specific checks should normally use GF scenarios or dedicated project validation data.
+
+### 27.1 Portfolio boundary
+
+Static scanning is scoped to files selected from the one active Wordbench project.
+
+It MUST NOT:
+
+- discover other Wordbench workspaces;
+- aggregate scan counts across projects;
+- calculate portfolio maturity or readiness;
+- read a Portfolio registry;
+- write Portfolio schemas or state.
+
+`gf-portfolio` may consume finalized public Wordbench summaries through its own adapters. It does not call scanner internals or alter scan evidence.
 
 ---
 
@@ -1270,7 +1307,7 @@ The shared diagnostic-class field retains its defined causal meaning.
 
 ## 30. Integration with file results
 
-A canonical file result includes:
+The file-result projection includes:
 
 ```text
 file_path
@@ -1390,15 +1427,15 @@ Required change set:
 2. define the public count field or approved structured representation;
 3. define the count unit;
 4. define the source view;
-5. implement the detector in `scanner.py`;
+5. implement the detector in the scanner component owned by the `validation` module;
 6. add positive tests;
 7. add comment/string masking tests;
 8. add multiline and boundary tests;
 9. add false-positive tests;
-10. update `ScanCounts`;
-11. update result construction;
-12. update summary serialization;
-13. update report rendering;
+10. update `ScanCounts` and structured finding contracts;
+11. update validation result construction;
+12. update persisted projections through the reporting owner;
+13. update human and AI-readable rendering through the reporting owner;
 14. update `PERSISTED_SCHEMA_LOCK.md` when persisted shape changes;
 15. update `INTERFILE_CONTRACT_LOCK.md` when the public contract changes;
 16. update this registry;
@@ -1472,10 +1509,10 @@ The rule ID remains reserved.
 Recommended location:
 
 ```text
-tests/unit/audit/test_scanner.py
+tests/unit/validation/test_static_scanning.py
 ```
 
-Minimum v1 cases:
+Canonical rule cases:
 
 ```text
 single slash before `=>`
@@ -1495,7 +1532,7 @@ These cases reflect the current validated scanner nucleus.
 
 ### 36.1 Lexical masking tests
 
-Required additional final tests:
+Additional required tests:
 
 ```text
 line comment after code
@@ -1559,7 +1596,7 @@ log write failure
 Recommended location:
 
 ```text
-tests/contracts/test_scanner_contract.py
+tests/contracts/test_static_scanning_contract.py
 ```
 
 Contract tests MUST verify:
@@ -1651,7 +1688,7 @@ A zero count does not guarantee absence of the underlying architectural risk.
 
 ### 40.3 Suppression policy
 
-Inline source suppression comments are not part of v1.
+Inline source suppression comments are not part of the built-in scanner contract.
 
 Reasons:
 
@@ -1747,9 +1784,9 @@ Detected drift MUST be resolved by restoring the documented contract or changing
 
 ---
 
-## 44. Implementation checklist
+## 44. Conformance checklist
 
-A conforming v1 implementation satisfies:
+A conforming scanner satisfies:
 
 ```text
 [ ] one-file public scan operation
@@ -1776,7 +1813,7 @@ A conforming v1 implementation satisfies:
 
 ---
 
-## 45. Final enforcement rule
+## 45. Enforcement rule
 
 Static scanning is intentionally useful but intentionally limited.
 

@@ -2,94 +2,107 @@
 
 **Document ID:** `GF-WB-GF-COMPILATION`  
 **Status:** Normative  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\gf\GF_COMPILATION.md`  
-**Applies to:** GF source-module compilation, `.gfo` artifact validation, compile evidence, and compile result construction  
+**Applies to:** GF source-module compilation, `.gfo` artifact verification, compile evidence and structured compile results  
 **Owner:** GF Wordbench maintainers  
-**Contract references:** `EXT-GF-003`, `IFC-AUDIT-005`, `IFC-AUDIT-006`  
-**Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Document version:** `2.0.0`  
+**Last reviewed:** `2026-07-24`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Related locks:** `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`, `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`
 
 ---
 
 ## 1. Purpose
 
-This document defines how GF Wordbench compiles Grammatical Framework source modules and interprets the result.
+This document defines how GF Wordbench compiles Grammatical Framework source modules and interprets compilation evidence.
 
-It governs the validation path:
+It governs this path:
 
 ```text
 GF source target
-    → resolved GF command
+    → validated compile request
+    → resolved GF executable and search path
     → external GF process
     → raw stdout and stderr
-    → `.gfo` artifact evidence
-    → CompileSummary
-    → FileResult
+    → `.gfo` artifact verification
+    → structured compile result
+    → file result and diagnostics
 ```
 
-It establishes:
+It defines:
 
-- the difference between module compilation and PGF construction;
-- the canonical batch-compiler command;
-- input validation and path handling;
+- module compilation versus PGF construction;
+- canonical command construction;
+- target and path validation;
 - working-directory and output-directory rules;
-- timeout and process behavior;
+- timeout, cancellation and process behavior;
 - raw evidence requirements;
 - diagnostic parsing boundaries;
-- success, failure, error, and skipped semantics;
-- `.gfo` freshness and stale-artifact protections;
+- success, failure, error and skipped semantics;
+- stale-artifact protection;
 - mode-specific compilation behavior;
-- required tests and acceptance criteria.
+- testing and anti-drift requirements.
 
-This document does not define:
+It does not define:
 
-- static scanning rules;
-- dependency-cascade classification;
-- `.gfs` scenario execution;
+- static scan rules;
+- causal dependency classification;
+- native `.gfs` scenario execution;
 - PGF release construction;
 - report formatting;
 - project-specific module architecture.
 
-Those responsibilities are documented elsewhere.
+---
+
+## 2. Product boundary
+
+GF Wordbench compiles modules for one resolved active project and one normative project target per run.
+
+Compilation must not:
+
+- enumerate or execute several active projects;
+- use a Portfolio workspace registry;
+- depend on `gf-portfolio`;
+- import Portfolio code or private schemas;
+- report cross-workspace compilation readiness.
+
+`gf-portfolio` may consume public versioned Wordbench run artifacts. It does not participate in Wordbench compilation.
 
 ---
 
-## 2. Authority boundary
+## 3. Authority boundary
 
-### 2.1 GF is authoritative for
+### 3.1 GF authority
 
-GF is authoritative for:
+Grammatical Framework is authoritative for:
 
 - GF syntax;
-- name resolution;
+- name and module resolution;
 - type checking;
-- module dependency resolution;
 - source-to-object compilation;
-- production of `.gfo` object files;
+- `.gfo` production;
 - GF diagnostic text;
 - GF process exit behavior.
 
-### 2.2 GF Wordbench is authoritative for
+### 3.2 Wordbench authority
 
 GF Wordbench is authoritative for:
 
-- selecting the source target;
+- selecting the compilation target;
 - resolving the GF executable;
-- resolving the GF search path;
-- constructing the ordered argument list;
-- selecting the working directory;
-- preparing run-owned output directories;
-- applying a timeout;
+- resolving the ordered GF search path;
+- constructing the argument vector;
+- choosing the working directory;
+- preparing run-owned output paths;
+- applying timeout and cancellation policy;
 - capturing stdout and stderr separately;
 - recording process evidence;
 - verifying required artifacts;
-- mapping evidence into a structured compile result;
-- preserving skipped compilation as distinct from success;
-- passing results to the classifier and reporters.
+- mapping evidence into structured results;
+- passing results to diagnostics, comparison and reporting.
 
-### 2.3 Forbidden duplication
+### 3.3 Prohibited duplication
 
-GF Wordbench MUST NOT implement a competing:
+GF Wordbench must not implement a competing:
 
 - GF parser;
 - GF type checker;
@@ -98,63 +111,48 @@ GF Wordbench MUST NOT implement a competing:
 - `.gfo` serializer;
 - interpretation of GF source semantics.
 
-Static scans may identify suspicious source patterns, but scan findings are not compilation truth.
+Static findings are Wordbench prechecks. They are not compilation truth.
 
 ---
 
-## 3. Terminology
+## 4. Terminology
 
-### Compilation target
+**Compilation target**  
+The explicitly selected `.gf` source file for one compile operation.
 
-The `.gf` source file explicitly selected for one compile operation.
+**Dependency**  
+A GF module required directly or transitively by the target.
 
-### Dependency
-
-A GF module required directly or transitively by the compilation target.
-
-### Object artifact
-
-A compiled GF object file:
+**Object artifact**  
+A GF object file:
 
 ```text
 <ModuleName>.gfo
 ```
 
-### Compile evidence
+**Compile evidence**  
+The executable, arguments, working directory, GF version, process result, raw streams, artifact checks and source identity for one attempt.
 
-The command, working directory, GF version, process result, raw output streams, artifact checks, and source identity associated with one compilation attempt.
+**Compile result**  
+The structured result returned by the compilation component.
 
-### Compile summary
+**Module compilation**  
+Compilation of a `.gf` source module and required dependencies into `.gfo` files.
 
-The structured normalized result returned by the compiler component.
+**PGF construction**  
+Construction of a `.pgf` runtime grammar from configured release entrypoints.
 
-### Module compilation
+**Fatal diagnostic**  
+A GF diagnostic that establishes compilation failure even when process exit behavior is unusual.
 
-Compilation of a `.gf` source module and its required dependencies into `.gfo` object files.
-
-### PGF build
-
-Linking one abstract grammar and one or more compatible concrete syntaxes into a `.pgf` runtime grammar.
-
-Module compilation and PGF build are separate validation stages.
-
-### Fatal diagnostic
-
-A GF diagnostic recognized as proving that the requested compilation did not succeed, even when process behavior is unusual.
-
-### Artifact freshness
-
-Evidence that an object artifact corresponds to the current source state and current compile operation rather than an earlier run.
-
-### Transitional command
-
-A command retained temporarily for migration from the earlier GF Audit implementation but not accepted as the final canonical command.
+**Artifact freshness**  
+Evidence that an artifact belongs to the current compile operation and source state rather than an earlier run.
 
 ---
 
-## 4. Compilation versus PGF construction
+## 5. Compilation and PGF construction
 
-GF recognizes distinct compilation products:
+GF compilation products are distinct:
 
 ```text
 *.gf
@@ -162,14 +160,12 @@ GF recognizes distinct compilation products:
     → *.pgf
 ```
 
-GF Wordbench MUST preserve this distinction.
-
-### 4.1 Module compilation
+### 5.1 Module compilation
 
 Purpose:
 
 ```text
-validate a source module and produce or validate `.gfo` evidence
+validate one source module and produce current `.gfo` evidence
 ```
 
 Canonical command shape:
@@ -178,12 +174,12 @@ Canonical command shape:
 <gf> -batch -s <path-options> <artifact-options> <source-file>
 ```
 
-### 4.2 PGF construction
+### 5.2 PGF construction
 
 Purpose:
 
 ```text
-build the final runtime grammar from configured release entrypoints
+build the runtime grammar from configured release entrypoints
 ```
 
 Canonical command shape:
@@ -198,21 +194,21 @@ PGF construction is governed by:
 docs/gf/GF_PGF_BUILD.md
 ```
 
-### 4.3 Required separation
+### 5.3 Separation rule
 
-GF Wordbench MUST NOT:
+GF Wordbench must not:
 
-- treat `.gfo` compilation as proof that the final `.pgf` can be built;
-- run `-make` merely to validate every individual source file;
+- treat `.gfo` compilation as proof that a `.pgf` can be built;
+- use `-make` as the normal per-file compilation command;
 - classify a PGF-linking failure as an ordinary per-file compile result;
-- declare release readiness solely from successful file compilation;
-- overwrite release artifacts during ordinary per-file validation.
+- declare release readiness from file compilation alone;
+- overwrite release artifacts during ordinary module validation.
 
 ---
 
-## 5. Canonical module-compilation command
+## 6. Canonical module-compilation command
 
-## 5.1 Normative form
+### 6.1 Form
 
 ```text
 <gf-executable>
@@ -223,17 +219,17 @@ GF Wordbench MUST NOT:
     <source-file>
 ```
 
-Rendered as one line:
+Rendered:
 
 ```text
 <gf> -batch -s <path-options> <artifact-options> <source-file>
 ```
 
-The source-file argument MUST be last.
+The source-file argument is last.
 
-## 5.2 Argument representation
+### 6.2 Argument representation
 
-The executable and arguments MUST be represented separately:
+Executable and arguments are separate values:
 
 ```python
 executable: Path
@@ -254,229 +250,137 @@ args = [
 ]
 ```
 
-The rendered command is for logs and reports only.
-
-Normal process execution MUST use:
+Normal compilation uses no command shell.
 
 ```text
 shell = false
 ```
 
-GF Wordbench MUST NOT construct one shell command string for normal compilation.
+The rendered command is evidence for logs and reports. It is not re-executed as a shell string.
 
-## 5.3 `-batch`
+### 6.3 `-batch`
 
-`-batch` invokes GF without opening the interactive shell and compiles `.gf` sources to `.gfo`.
+`-batch` performs non-interactive source compilation.
 
-It is REQUIRED for canonical per-file compilation.
+It is required for canonical per-file compilation.
 
-## 5.4 `-s`
+### 6.4 `-s`
 
 `-s` suppresses non-error compiler chatter.
 
-Default policy:
-
-| Mode | `-s` |
-|---|---:|
+| Mode | Policy |
+|---|---|
 | `quick` | required |
 | `checkpoint` | required |
 | `release` | required for module-compilation stages |
-| `diagnostic` | optional |
+| `diagnostic` | may be omitted for intentionally verbose evidence |
 
-Diagnostic mode may omit `-s` when verbose compiler progress is intentionally required.
+The exact resolved argument vector is always recorded.
 
-The exact command MUST be recorded regardless of the verbosity choice.
+### 6.5 Search-path options
 
-## 5.5 Path options
+The compiler consumes the ordered path produced by the GF path resolver.
 
-GF Wordbench may provide a resolved GF search path using the option supported by the selected GF version.
-
-Conceptual form:
+Conceptual option:
 
 ```text
 --path=<resolved-gf-path>
 ```
 
-RGL or library-root options may also be supplied when supported and validated.
+Additional library-root options may be used only when the selected GF version supports them and the external-tool contract defines them.
 
-Conceptual form:
+The compiler does not reconstruct project architecture independently.
 
-```text
---gf-lib-path=<rgl-root>
-```
+### 6.6 Artifact options
 
-Detailed path construction belongs to:
-
-```text
-docs/gf/GF_PATH_RESOLUTION.md
-```
-
-The compiler MUST consume the resolved path as an ordered value. It MUST NOT independently rebuild project architecture.
-
-## 5.6 Artifact options
-
-GF Wordbench SHOULD route generated object artifacts into the current run:
+Object artifacts are written into the current run:
 
 ```text
 artifacts/gfo/
 ```
 
-Optional GF flags may include:
+Supported GF options may include:
 
 ```text
 --gfo-dir=<run-gfo-dir>
 --output-dir=<run-output-dir>
 ```
 
-These options may be used only when:
+An option is used only when:
 
-1. the selected GF version supports them;
-2. integration tests prove their behavior;
-3. the resolved command is recorded;
-4. the output directory is run-owned;
-5. artifact verification uses the actual resolved location.
+1. the selected GF version supports it;
+2. the command contract defines it;
+3. integration tests cover it;
+4. the destination is run-owned;
+5. artifact verification uses the resolved destination.
 
-Unsupported flags MUST NOT be passed optimistically.
+Unsupported flags are rejected rather than passed optimistically.
 
-## 5.7 CPU statistics
+### 6.7 Optional process metrics
 
-An optional CPU-statistics flag may be supplied only through explicit configuration.
+Optional CPU or timing flags require explicit run configuration.
 
-Conceptual form:
+They:
 
-```text
---cpu
-```
-
-CPU statistics:
-
-- MUST NOT be enabled silently;
-- MUST NOT change validation status;
-- MAY be preserved in raw output;
-- SHOULD be normalized out of deterministic comparisons when unstable.
-
-## 5.8 Final source argument
-
-The selected source path MUST be the final argument.
-
-This provides a stable command contract and makes command validation deterministic.
+- do not change validation semantics;
+- remain part of raw evidence;
+- may be removed from deterministic comparison material through documented normalization.
 
 ---
 
-## 6. Transitional behavior from GF Audit
+## 7. Compile request
 
-The earlier compiler currently builds arguments resembling:
-
-```text
---batch
---make
---gf-lib-path=<rgl-root>
---path=<gf-path>
---gfo-dir=<gfo-dir>
---output-dir=<out-dir>
-<source-file>
-```
-
-This behavior is transitional.
-
-The final GF Wordbench implementation MUST separate:
+Each request identifies:
 
 ```text
-module compilation
+source file
+active project identity
+project root
+resolved GF executable
+resolved GF version
+ordered GF search path
+working directory
+timeout
+run-owned stdout path
+run-owned stderr path
+run-owned artifact roots
+verbosity policy
+artifact-verification policy
 ```
 
-from:
-
-```text
-PGF construction
-```
-
-Therefore:
-
-- `--make` MUST be removed from canonical per-file compilation;
-- PGF creation MUST move to the dedicated PGF build stage;
-- compatibility behavior MAY remain behind an explicit migration flag;
-- compatibility execution MUST record the exact resolved command;
-- compatibility behavior MUST have a removal milestone;
-- no new test or document may treat the transitional command as canonical.
-
-Recommended migration sequence:
-
-```text
-1. retain current command behind compatibility mode;
-2. implement canonical `-batch -s` command builder;
-3. add real-GF integration tests;
-4. verify object-output routing;
-5. make canonical mode the default;
-6. remove compatibility mode after the documented deprecation period.
-```
+The request is typed and structured. It is not a shell command string.
 
 ---
 
-## 7. Compilation inputs
+## 8. Target validation
 
-Each compile request requires:
-
-```text
-source_file
-run_config
-run_paths
-```
-
-The resolved request must contain:
-
-- explicit GF executable;
-- active project root;
-- selected source file;
-- resolved GF path;
-- RGL root where applicable;
-- compile timeout;
-- run-owned raw log paths;
-- run-owned artifact paths;
-- explicit compile mode;
-- optional verbosity and CPU flags.
-
----
-
-## 8. Source-target validation
-
-Before launching GF, the compiler MUST validate the target.
-
-Required checks:
+Before GF is launched, the compiler verifies that the target:
 
 ```text
-[ ] target is present
-[ ] target is a regular file
-[ ] target has the `.gf` suffix
-[ ] target belongs to the active project or an explicitly permitted source root
-[ ] target is included by resolved selection policy
-[ ] target path contains no prohibited control characters
-[ ] target can be represented safely as one process argument
+[ ] exists
+[ ] is a regular file
+[ ] has the `.gf` suffix
+[ ] belongs to the active project or an explicitly approved source root
+[ ] is included by the resolved file-selection policy
+[ ] contains no prohibited control characters
+[ ] can be passed safely as one process argument
 ```
 
-The compiler MUST NOT:
+The compiler must not:
 
 - compile an excluded file accidentally;
-- follow an unreviewed path outside the active project;
-- silently replace a missing target with another same-named file;
-- derive the target from report text;
-- modify the target before or after compilation.
+- follow an unapproved path outside allowed roots;
+- replace a missing file with another file sharing its basename;
+- derive a target from report prose;
+- modify the source before or after compilation.
 
-A target-validation failure is normally:
-
-```text
-validation_status = ERROR
-error_kind = CONFIG or IO
-execution_state = launch_failed or not_started
-```
-
-If `not_started` is not a persisted execution-state value, the process result remains absent and the file result records the configuration error explicitly.
+A pre-launch target failure is a configuration or I/O error. No process success or artifact is fabricated.
 
 ---
 
 ## 9. Module identity
 
-GF module identity and filename SHOULD agree.
+GF module identity and filename should agree.
 
 Example:
 
@@ -485,176 +389,139 @@ file:   GrammarX.gf
 module: GrammarX
 ```
 
-The selector or module-name extractor owns module identity extraction.
+Module-name extraction has one owner.
 
 The compiler:
 
-- MAY receive the expected module name;
-- MUST NOT invent a different module name from diagnostic prose;
-- MUST preserve the selected file path;
-- SHOULD verify expected object-artifact naming when artifact checks are enabled.
+- may receive an expected module name;
+- preserves the selected path;
+- does not infer a replacement name from diagnostic prose;
+- verifies the expected `.gfo` name when artifact checks require it.
 
-A module-name mismatch is a project or compile validation failure, not a reason to rename artifacts silently.
+A mismatch is reported as project or compilation evidence. Artifacts are not renamed silently.
 
 ---
 
 ## 10. GF executable resolution
 
-The final run configuration MUST contain the GF executable actually used.
+The resolved run configuration contains the exact executable used.
 
-Resolution may begin from:
+Resolution precedence is defined by environment and configuration documentation. It may include:
 
-1. explicit CLI input;
-2. explicit GUI input;
-3. environment configuration;
-4. optional `PATH` lookup;
-5. failure.
+1. explicit CLI or GUI selection;
+2. environment configuration;
+3. validated application configuration;
+4. documented `PATH` lookup;
+5. explicit failure.
 
-Once the run configuration is finalized:
+After resolution:
 
-- GF Wordbench MUST NOT silently switch to another GF installation;
-- the executable MUST be recorded in run metadata;
-- paths containing spaces MUST be supported;
-- on Windows, a configured directory MUST NOT be accepted as the executable;
-- a missing or non-launchable executable produces a launch error.
+- the executable does not change silently;
+- the resolved path is recorded;
+- paths containing spaces are supported;
+- a directory is not accepted as an executable;
+- launchability errors remain distinct from GF source failures.
 
-A required compilation MUST normally be preceded by a GF version probe unless the probe was explicitly skipped.
+Compilation and version probing use the same resolved executable.
 
 ---
 
-## 11. GF version handling
+## 11. GF version evidence
 
-The version probe and compile operation are separate process calls.
-
-Version probe command:
+Version probing is a separate process request:
 
 ```text
 <gf-executable> --version
 ```
 
-Version evidence:
+Canonical evidence paths:
 
 ```text
 raw/gf_version.out.txt
 raw/gf_version.err.txt
 ```
 
-Compilation MUST use the same resolved executable recorded by the version probe.
+The probed version governs optional command capabilities.
 
-A version outside the tested range may:
-
-- fail configuration when a known incompatibility exists;
-- proceed with a warning when policy permits;
-- require capability detection before optional flags are used.
-
-The compile command MUST NOT be inferred solely from the application version.
+Unknown or incompatible output is reported explicitly. It is not silently treated as supported.
 
 ---
 
-## 12. GF path resolution
+## 12. GF search path
 
-The compiler receives a resolved GF path.
+The compiler receives an already resolved ordered search path.
 
-It does not own the complete path-resolution policy.
-
-The resolved path normally includes:
+The path may include:
 
 - active project source roots;
-- required framework or project resource paths;
-- configured RGL locations;
+- project resource roots;
+- configured RGL roots;
 - required RGL subdirectories;
-- documented compatibility paths.
+- documented external aliases.
 
-Required invariants:
+Invariants:
 
 - order is deterministic;
-- duplicates are removed without changing first occurrence;
-- all required project source roots are represented;
-- paths are normalized for the selected platform and GF version;
-- the exact resolved value is recorded;
-- CLI and GUI resolve equivalent configuration identically;
-- path resolution does not depend on the process launch directory.
+- duplicate effective paths are removed without changing first occurrence;
+- required project roots are present;
+- values are normalized for the selected platform and GF version;
+- the resolved value is recorded;
+- CLI and GUI resolve equivalent inputs identically;
+- resolution does not depend on process launch directory.
 
-The compiler MUST NOT guess missing module directories after GF reports a resolution failure.
+The compiler does not guess missing directories after GF reports a module-resolution failure.
 
 ---
 
 ## 13. Working directory
 
-Every compilation process MUST use an explicit working directory.
-
-Canonical working directory:
+Each process uses an explicit working directory:
 
 ```text
-resolved project root
+resolved active-project root
 ```
 
-The working directory MUST NOT depend on:
+The working directory does not depend on:
 
 - terminal location;
 - IDE defaults;
-- GUI launch directory;
-- launcher shortcut location;
-- Python package directory;
+- GUI launch location;
+- shortcut location;
+- package installation directory;
 - previous process execution.
 
-The working directory MUST be recorded as compile evidence.
+It is recorded as compile evidence.
 
 ---
 
 ## 14. Run-owned directories
 
-Before process launch, GF Wordbench MUST prepare the required directories.
-
-Canonical compile evidence directory:
+Canonical paths:
 
 ```text
 run_<run-id>/raw/compile/
-```
-
-Canonical object-artifact directory:
-
-```text
 run_<run-id>/artifacts/gfo/
-```
-
-Canonical auxiliary-output directory:
-
-```text
 run_<run-id>/artifacts/out/
 ```
 
-Required preparation:
+Required directories are prepared before launch.
 
-```text
-compile_logs_dir.mkdir(parents=True, exist_ok=True)
-gfo_dir.mkdir(parents=True, exist_ok=True)
-out_dir.mkdir(parents=True, exist_ok=True)
-```
+Failure to prepare them is an I/O error.
 
-Directory creation failure produces:
-
-```text
-validation_status = ERROR
-error_kind = IO
-```
-
-The compiler MUST NOT fall back silently to a source directory after run-owned output preparation fails.
+The compiler must not fall back to source directories or another run directory.
 
 ---
 
 ## 15. Evidence filenames
 
-Each source target receives deterministic raw output paths.
-
-Canonical pattern:
+Each target receives deterministic raw stream paths:
 
 ```text
 raw/compile/<safe-file-key>.out.txt
 raw/compile/<safe-file-key>.err.txt
 ```
 
-The safe file key SHOULD derive from the project-relative source path.
+The safe key derives from the project-relative path, not only the basename.
 
 Example:
 
@@ -662,31 +529,28 @@ Example:
 lib/src/example/GrammarX.gf
 ```
 
-may become:
+may map to:
 
 ```text
 lib__src__example__GrammarX.gf.out.txt
 lib__src__example__GrammarX.gf.err.txt
 ```
 
-Exact escaping belongs to shared path utilities.
-
-Required properties:
+The encoding algorithm is:
 
 - deterministic;
 - unique for distinct project-relative paths;
-- path-safe on Windows;
-- stable within one schema version;
-- not derived only from basename when duplicate basenames are possible;
+- safe on supported platforms;
+- stable for a schema version;
 - independent of localized report text.
 
 ---
 
 ## 16. Process execution
 
-Compilation MUST use the shared process runner.
+Compilation uses the common external-process port and adapter.
 
-Conceptual call:
+Conceptual request:
 
 ```python
 process_result = run_process_with_timeout(
@@ -699,32 +563,32 @@ process_result = run_process_with_timeout(
 )
 ```
 
-The process runner owns:
+The process adapter owns:
 
 - launch;
 - timeout enforcement;
-- process termination or containment;
+- cancellation and termination;
 - exit-code capture;
-- duration measurement;
+- duration;
 - stdout capture;
 - stderr capture;
 - launch-failure representation.
 
-The process runner MUST NOT:
+It does not:
 
 - parse GF diagnostics;
-- assign `direct` or `downstream`;
-- know project validation modes;
+- assign causal classes;
+- know validation-mode policy;
 - generate reports;
-- alter GF source files.
+- alter project sources.
 
 ---
 
 ## 17. Standard streams
 
-Stdout and stderr MUST be captured separately.
+Stdout and stderr are captured separately.
 
-Required raw evidence:
+Required evidence:
 
 ```text
 stdout_path
@@ -733,179 +597,136 @@ stderr_path
 
 Rules:
 
-- files are UTF-8-decoded according to documented process policy;
-- undecodable bytes MUST be handled deterministically;
-- both files SHOULD exist after a launched process, even when empty;
-- non-zero exit MUST NOT discard either stream;
-- timeout MUST preserve bytes captured before termination;
-- parsing MUST occur only after raw evidence has been written;
-- a parser error MUST NOT destroy or replace raw evidence.
+- both streams are retained after a launched process;
+- non-zero exit does not discard either stream;
+- timeout and cancellation preserve captured partial output;
+- parsing occurs only after raw evidence has been written;
+- parser failure does not replace or destroy raw evidence;
+- decoding behavior is deterministic and documented.
 
-A combined diagnostic view MAY be constructed in memory:
+A combined diagnostic view may be derived in memory, but it does not replace the separate raw files.
 
-```text
-stdout + newline + stderr
-```
-
-The combined view is derived evidence and MUST NOT replace the separate raw files.
-
-Because separate streams do not preserve a universal cross-stream ordering, diagnostic parsers MUST NOT claim exact interleaving unless the process runner explicitly captured it.
+Unless the process adapter captures an ordered combined stream, no component claims exact cross-stream interleaving.
 
 ---
 
-## 18. Timeout behavior
+## 18. Timeout
 
-Each compilation uses the configured per-file timeout.
+Every compilation has a positive timeout or an explicit run-budget allocation.
 
-Timeout rules:
-
-- timeout value is a positive integer;
-- the process runner enforces it;
-- a timeout stops or contains the process according to platform policy;
-- partial stdout and stderr are preserved;
-- `timed_out` is true in legacy-compatible summaries;
-- canonical execution state is `timed_out`;
-- error kind is `TIMEOUT`;
-- the result cannot be `OK`;
-- the next file may continue according to orchestrator policy.
-
-Recommended normalized result:
+On timeout:
 
 ```text
 validation_status = ERROR
 execution_state = timed_out
 error_kind = TIMEOUT
-first_error = TIMEOUT
 ```
 
-A timeout is not a downstream classification. Dependency classification occurs later.
+The process adapter attempts documented process-tree containment, preserves partial evidence and records cleanup failures separately.
+
+Timeout is an execution condition, not a direct or downstream causal class.
 
 ---
 
-## 19. Cancellation behavior
+## 19. Cancellation
 
 Cancellation is distinct from timeout.
 
-Recommended normalized result:
+The result records:
 
 ```text
-validation_status = ERROR or SKIPPED according to explicit cancellation policy
 execution_state = cancelled
-error_kind = TOOL or OTHER
 ```
 
-For a user-cancelled whole run, the run-level policy controls whether incomplete file checks are represented as `SKIPPED`.
+The run policy determines whether unstarted or interrupted validations are `ERROR` or `SKIPPED`.
 
-`CANCELLED` MUST NOT be introduced as a validation-status enum.
+Cancellation is not introduced as a separate validation-status value.
 
 ---
 
-## 20. Launch failures
+## 20. Launch failure
 
-A launch failure occurs when the operating system cannot start GF.
+Launch failures include:
 
-Examples:
-
-- executable missing;
+- executable not found;
 - permission denied;
 - executable path is a directory;
 - invalid working directory;
 - invalid process arguments;
-- platform launch error.
+- platform launch errors.
 
-Recommended normalized result:
+Typical result:
 
 ```text
 validation_status = ERROR
 execution_state = launch_failed
-error_kind = TOOL, CONFIG, or IO
+error_kind = TOOL, CONFIG or IO
 ```
 
-A launch failure MUST remain distinguishable from:
-
-- GF returning a non-zero exit code;
-- GF reporting a source compile failure;
-- timeout;
-- artifact verification failure.
+Launch failure remains distinct from GF returning a non-zero exit code.
 
 ---
 
-## 21. Exit-code interpretation
+## 21. Exit interpretation
 
-Exit code is necessary evidence but is not the only success condition.
+Exit code is necessary evidence, but not the only success condition.
 
 ### 21.1 Zero exit
 
 A zero exit permits success only when:
 
-- process launched;
-- process completed;
+- the process launched and completed;
 - no timeout or cancellation occurred;
 - no recognized fatal diagnostic exists;
-- required artifact checks pass.
+- required artifact verification passes.
 
 ### 21.2 Non-zero exit
 
-A non-zero exit normally produces:
+A non-zero exit produces `FAIL` when GF executed correctly and rejected the source or dependency graph.
 
-```text
-validation_status = FAIL
-```
-
-when GF ran correctly and rejected the source.
-
-It produces:
-
-```text
-validation_status = ERROR
-```
-
-when the non-zero result represents infrastructure, launch, unsupported-tool, or uninterpretability failure.
+It produces `ERROR` when the evidence indicates infrastructure, command-contract or interpretation failure.
 
 ### 21.3 Zero exit with fatal diagnostic
 
-If GF returns zero but a recognized fatal diagnostic proves failure:
+A recognized fatal diagnostic prevents `OK`, even if the exit code is zero.
 
-- status MUST NOT be `OK`;
-- raw evidence remains authoritative;
-- the diagnostic parser records an error kind;
-- artifact checks must not override the fatal diagnostic.
+### 21.4 Non-zero exit without usable diagnostic
 
-### 21.4 Exit code without diagnostic text
+The result remains a failure.
 
-A non-zero exit with no usable diagnostic remains a failure.
-
-Recommended summary:
+Example:
 
 ```text
 error_kind = OTHER
 first_error = "Non-zero exit with no recognized diagnostic"
 ```
 
-The exact exit code is preserved.
+The exact exit code remains preserved.
 
 ---
 
-## 22. Compile success criteria
+## 22. Result semantics
 
-A compile result is successful only when every applicable condition is true:
+### 22.1 Successful compilation
+
+Success requires:
 
 ```text
-[ ] source target passed validation
-[ ] GF executable resolved
-[ ] required directories were prepared
+[ ] target validation passed
+[ ] executable resolved
+[ ] run-owned directories prepared
 [ ] process launched
 [ ] process completed
-[ ] process did not time out
-[ ] process was not cancelled
-[ ] exit code indicates success
-[ ] no fatal diagnostic was recognized
-[ ] target artifact check passed when required
+[ ] no timeout
+[ ] no cancellation
+[ ] successful exit
+[ ] no fatal diagnostic
+[ ] required artifact verification passed
 [ ] evidence paths are valid
-[ ] structured result is internally coherent
+[ ] structured result is coherent
 ```
 
-Canonical status:
+Result:
 
 ```text
 validation_status = OK
@@ -913,320 +734,177 @@ diagnostic_class = ok
 error_kind = OK
 ```
 
-The compiler returns compile evidence. The classifier owns final causal classification after all file results exist.
+### 22.2 GF compilation failure
 
----
-
-## 23. Compile failure criteria
-
-A compile validation failure occurs when GF executes correctly but rejects the source or its dependency graph.
-
-Examples:
-
-- syntax error;
-- type error;
-- unresolved module;
-- incompatible interface or instance;
-- internal GF compilation diagnostic;
-- non-zero exit attributable to grammar compilation.
-
-Typical result:
+A GF source or dependency failure normally produces:
 
 ```text
 validation_status = FAIL
 execution_state = completed
-error_kind = SYNTAX, TYPE, INTERNAL, or OTHER
+error_kind = SYNTAX, TYPE, INTERNAL or OTHER
 ```
 
-The compiler MUST NOT decide whether the failure is:
+The compiler does not decide whether the failure is direct, downstream or ambiguous.
 
-```text
-direct
-downstream
-ambiguous
-```
-
-That decision belongs to the classifier.
-
----
-
-## 24. Compile error criteria
-
-A compile execution error occurs when GF Wordbench cannot perform or interpret the check reliably.
+### 22.3 Execution or contract error
 
 Examples:
 
 - launch failure;
 - timeout;
-- output directory failure;
-- unsupported command option;
-- diagnostic parser failure;
-- artifact contract failure where success cannot be trusted;
-- unreadable raw output;
+- output-directory failure;
+- unsupported option;
+- unreadable evidence;
+- artifact-contract failure;
 - invalid configuration.
 
-Typical result:
+Result:
 
 ```text
 validation_status = ERROR
 ```
 
-The appropriate error kind is selected from:
+### 22.4 Skipped compilation
 
-```text
-INTERNAL
-TIMEOUT
-CONFIG
-IO
-TOOL
-OTHER
-```
+Compilation is skipped only through explicit mode or run policy.
 
----
-
-## 25. Skipped compilation
-
-Compilation may be skipped only by explicit resolved configuration or mode policy.
-
-Legacy input:
-
-```text
-no_compile = true
-```
-
-Canonical result:
+Result:
 
 ```text
 validation_status = SKIPPED
 diagnostic_class = skipped
-execution_state = absent
 ```
 
-A skipped compile MUST NOT be represented as a successful GF invocation.
-
-Required evidence:
-
-- the reason for skipping;
-- target identity;
-- source fingerprint where available;
-- no fabricated process exit;
-- no fabricated `.gfo` artifact.
-
-Legacy `CompileSummary` compatibility may temporarily contain:
-
-```text
-exit_code = 0
-timed_out = false
-error_kind = OK
-error_detail = "compile skipped"
-```
-
-However, the enclosing `FileResult.status` MUST remain `SKIPPED`, and future models SHOULD represent skip state explicitly rather than overloading process success fields.
+A skipped operation has no fabricated process exit and no fabricated `.gfo`.
 
 ---
 
-## 26. Diagnostic parsing
+## 23. Diagnostic parsing
 
-Diagnostic parsing converts raw GF output into a compact structured summary.
+Diagnostic parsing transforms captured GF evidence into a compact structured summary.
 
-It may identify:
+It may assign error kinds such as:
 
 ```text
+OK
 TYPE
 SYNTAX
 INTERNAL
 TIMEOUT
-OTHER
-OK
-```
-
-Future integration may also use:
-
-```text
 CONFIG
 IO
 TOOL
-SCRIPT
+OTHER
 ```
 
-for non-GF execution failures.
+`SCRIPT` belongs to scenario execution, not ordinary module compilation.
 
-### 26.1 Parser input
-
-The parser receives:
-
-- stdout text;
-- stderr text;
-- timeout state;
-- exit code;
-- optional duration;
-- evidence paths.
-
-### 26.2 Parser output
-
-The parser returns or populates:
+Parser input includes:
 
 ```text
-error_kind
-first_error
-error_detail
+stdout
+stderr
+exit code
+execution state
+duration
+evidence paths
 ```
 
-### 26.3 Parser invariants
+Parser output includes:
 
-- parsing occurs after raw capture;
+```text
+error kind
+first error
+supplementary detail
+structured source location when available
+```
+
+Invariants:
+
+- raw evidence remains unchanged;
 - parsing is deterministic;
-- parsing does not rewrite raw files;
-- recognized messages retain useful GF wording;
-- parser patterns are tested against fixtures;
-- unrecognized non-zero output becomes `OTHER`;
-- parser failure never converts a failed process into `OK`;
-- the parser does not assign downstream causality;
-- report writers do not reparse raw GF output independently.
-
-### 26.4 Current recognized patterns
-
-The migrated implementation currently recognizes at least:
-
-- timeout;
-- internal `GeneratePMCFG` failures;
-- type diagnostics containing expected and inferred forms;
-- syntax diagnostics;
-- first meaningful line on other non-zero exits;
-- successful zero-exit fallback.
-
-These patterns are a starting implementation, not a complete model of every GF diagnostic.
-
-Pattern expansion MUST preserve backward-compatible meaning or be documented as a diagnostic-classification change.
+- specific rules precede fallbacks;
+- unmatched failure evidence remains visible;
+- parser failure cannot convert failure to success;
+- diagnostic parsing does not assign causal ownership;
+- reports do not maintain independent parser rules.
 
 ---
 
-## 27. `CompileSummary`
+## 24. Structured compile result
 
-The minimum locked compile-summary fields are:
+The compile result contains at least:
 
 ```text
-exit_code
-timed_out
-duration_ms
-error_kind
-first_error
-error_detail
-stdout_path
-stderr_path
+execution state
+exit code when available
+duration
+error kind
+first error
+supplementary detail
+stdout path
+stderr path
+command identity
+working directory
+GF version
+artifact-check result
 ```
 
-Conceptual Python model:
+Conceptual model:
 
 ```python
 @dataclass(frozen=True, slots=True)
-class CompileSummary:
-    exit_code: int
-    timed_out: bool
+class CompileResult:
+    execution_state: str
+    exit_code: int | None
     duration_ms: int
     error_kind: str
     first_error: str
     error_detail: str
     stdout_path: Path | None
     stderr_path: Path | None
+    artifact_check: ArtifactCheck
 ```
 
-### 27.1 Field semantics
+Coherence rules:
 
-#### `exit_code`
-
-The actual external process exit code when GF launched.
-
-Synthetic compatibility codes MUST be documented and SHOULD be removed from final canonical schemas in favor of explicit execution state.
-
-#### `timed_out`
-
-Legacy-compatible convenience field.
-
-It MUST be true when the process timed out.
-
-Canonical process modeling SHOULD also expose:
-
-```text
-execution_state = timed_out
-```
-
-#### `duration_ms`
-
-Non-negative measured process duration in milliseconds.
-
-#### `error_kind`
-
-Canonical error category.
-
-#### `first_error`
-
-The first useful normalized diagnostic selected by documented parser rules.
-
-It is not guaranteed to be the ultimate root cause.
-
-#### `error_detail`
-
-Compact structured or normalized supplementary detail.
-
-Raw multiline diagnostics belong in the raw logs.
-
-#### `stdout_path`
-
-Path to captured stdout.
-
-Canonical persisted representation is run-relative.
-
-#### `stderr_path`
-
-Path to captured stderr.
-
-Canonical persisted representation is run-relative.
-
-### 27.2 Coherence invariants
-
-- `duration_ms >= 0`;
-- timeout implies `timed_out = true`;
-- successful compile implies `exit_code == 0`;
-- `error_kind = OK` only when no compile error was detected;
-- `stdout_path` and `stderr_path` identify the actual captured files;
-- skipped compilation is identified by the enclosing status;
+- duration is non-negative;
+- timeout maps to `timed_out`;
+- launch failure has no fabricated exit code;
+- successful compilation has exit code zero;
+- `error_kind = OK` only on success;
+- persisted evidence paths are run-relative;
+- skip state is represented explicitly;
 - no field is populated from report prose.
+
+Exact serialization belongs to the persisted-schema reference.
 
 ---
 
-## 28. File result construction
+## 25. File result construction
 
-The audit orchestrator combines:
+The validation orchestrator combines:
 
 ```text
 source identity
-scan counts
 source fingerprint
-compile summary
-initial status
+scan findings
+compile result
+initial validation status
 ```
 
-into `FileResult`.
+into a file result.
 
-Initial compile-derived status:
+Initial mapping:
 
-| Evidence | Initial status |
-|---|---|
-| explicitly skipped | `SKIPPED` |
-| execution or framework error | `ERROR` |
-| GF compile failure | `FAIL` |
-| successful compile | `OK` |
+| Evidence | Status | Initial class |
+|---|---|---|
+| explicit skip | `SKIPPED` | `skipped` |
+| execution or contract error | `ERROR` | `ambiguous` |
+| GF compile failure | `FAIL` | `ambiguous` |
+| successful compile | `OK` | `ok` |
 
-Initial diagnostic class before global classification:
-
-| Evidence | Initial class |
-|---|---|
-| skipped | `skipped` |
-| success | `ok` |
-| failure not yet classified | `ambiguous` |
-
-After every file result exists, the classifier may change failure causality to:
+After all relevant results exist, the diagnostics module may assign:
 
 ```text
 direct
@@ -1234,346 +912,248 @@ downstream
 ambiguous
 ```
 
-The compiler MUST NOT perform this global classification.
+The compiler does not perform global causal classification.
 
 ---
 
-## 29. `.gfo` artifact expectations
+## 26. `.gfo` artifact verification
 
-GF source compilation normally produces `.gfo` object files.
-
-The expected target object name is normally derived from the GF module name:
+The expected object name normally derives from the GF module name:
 
 ```text
 <ModuleName>.gfo
 ```
 
-### 29.1 Artifact policies
+### 26.1 Required checks
 
-GF Wordbench defines three artifact-check policies.
+For checkpoint and release evidence, the expected target object:
 
-#### Required
+- exists;
+- is a regular file;
+- is non-empty;
+- belongs to the current run or an explicitly defined validated cache;
+- corresponds to the current source state;
+- is registered in the artifact manifest.
 
-The expected target artifact MUST:
+### 26.2 Existence is not enough
 
-- exist;
-- be a regular file;
-- be non-empty;
-- belong to the current run or validated cache;
-- correspond to the current source state.
+A pre-existing `.gfo` does not prove current compilation success.
 
-Used by:
-
-```text
-checkpoint
-release
-```
-
-#### Recommended
-
-Artifact verification SHOULD run, but an explicitly documented unsupported routing limitation may produce a warning rather than invalidating the compile.
-
-Used by:
-
-```text
-quick
-diagnostic
-```
-
-during migration only.
-
-#### Disabled
-
-Artifact existence is not checked.
-
-This policy is allowed only for an explicitly documented compatibility case and MUST NOT be used for release evidence.
-
-### 29.2 Artifact existence is not sufficient
-
-An existing `.gfo` does not prove current compilation success.
-
-Success additionally requires:
+Success also requires:
 
 - current process evidence;
 - successful exit;
 - no fatal diagnostic;
 - source identity;
-- current-run or validated-cache provenance.
+- current-run provenance.
 
-### 29.3 Stale artifact protection
+### 26.3 Stale-artifact protection
 
-GF Wordbench MUST prevent a stale `.gfo` from masking a current source failure.
+Compilation uses an isolated run-owned `.gfo` directory.
 
-Preferred strategy:
+Before launch:
 
-```text
-compile into an isolated run-owned `.gfo` directory
-```
+- previous run directories are not reused;
+- an unrelated artifact cannot satisfy the current request;
+- source-tree `.gfo` files do not count as current-run evidence.
 
-Before compilation:
+After launch:
 
-- the expected target path in the current run MUST not already contain an unrelated artifact;
-- a previous run directory MUST not be reused as the current output directory;
-- source-tree `.gfo` files MUST not count as current-run evidence unless an explicit validated-cache policy exists.
-
-After compilation:
-
-- artifact modification or creation MUST be attributable to the current run;
+- artifact production is attributable to the current run;
 - the expected target artifact is checked;
-- the manifest records the artifact;
-- release-significant evidence includes the source fingerprint and GF version.
+- source fingerprint and GF version remain associated with release-significant evidence.
 
 ---
 
-## 30. Dependency artifacts
+## 27. Dependency artifacts
 
-Compiling one target may compile or reuse dependencies.
-
-Dependency `.gfo` files MAY appear in the run artifact directory.
+Compiling one target may produce or reuse object files for dependencies.
 
 Rules:
 
-- dependency artifacts are allowed;
-- artifact inventory order is deterministic;
+- dependency `.gfo` files are allowed in the run artifact directory;
 - the target object remains separately identifiable;
-- dependency artifacts do not each create a new `FileResult` unless those files were independently selected;
-- a dependency compile failure remains part of the target compile evidence;
-- the later classifier may link the target failure to another selected file.
-
-GF Wordbench MUST NOT assume that every produced `.gfo` corresponds to a separately validated selected file.
-
----
-
-## 31. Cache policy
-
-The default final policy is:
-
-```text
-no shared cross-run compile cache
-```
-
-Each run uses isolated run-owned artifact directories.
-
-This policy favors:
-
-- reproducibility;
-- stale-artifact protection;
-- simpler evidence;
-- easier cleanup;
-- clearer manifests.
-
-A future shared cache may be introduced only through an explicit architecture decision and contract update.
-
-Any future cache key must account for at least:
-
-- GF version;
-- target module identity;
-- target source fingerprint;
-- dependency fingerprints or a safe dependency closure identity;
-- resolved GF path;
-- relevant compile options;
-- platform-sensitive object-format compatibility.
-
-Until that contract exists, previous-run `.gfo` files are evidence only, not compile inputs trusted by GF Wordbench.
+- artifact inventory order is deterministic;
+- a dependency object does not create a separate file result unless that source was independently selected;
+- dependency failures remain part of the target compile evidence;
+- causal links are assigned later by diagnostics.
 
 ---
 
-## 32. Mode-specific behavior
+## 28. Cache policy
 
-## 32.1 Quick mode
+The default compile contract uses isolated run-owned artifact directories.
 
-Purpose:
+Previous-run `.gfo` files are evidence, not trusted current compile inputs.
 
-```text
-fast local feedback
-```
+A shared cross-run cache requires a separate accepted contract defining:
 
-Compilation scope:
+- cache ownership;
+- cache key;
+- GF-version compatibility;
+- source and dependency fingerprints;
+- GF path identity;
+- command options;
+- platform compatibility;
+- invalidation;
+- corruption handling;
+- manifest provenance.
 
-- selected target file;
+---
+
+## 29. Mode-specific behavior
+
+### 29.1 Quick
+
+Scope:
+
+- one selected target;
 - dependencies resolved by GF;
-- optional minimal entrypoint check when configured elsewhere.
+- optional configured smoke validation elsewhere in the pipeline.
 
 Requirements:
 
-- use canonical module compilation;
-- preserve raw output;
-- apply timeout;
-- return one structured result;
-- do not run PGF construction automatically.
+- canonical module compilation;
+- raw evidence;
+- timeout;
+- one structured result;
+- no implicit PGF construction.
 
-## 32.2 Checkpoint mode
+### 29.2 Checkpoint
 
-Purpose:
-
-```text
-prove one development layer
-```
-
-Compilation scope:
+Scope:
 
 - configured checkpoint modules;
-- deterministic checkpoint order.
+- deterministic project-declared order.
 
 Requirements:
 
-- artifact verification is required;
-- a checkpoint failure is preserved independently;
-- later checkpoints may continue according to pipeline policy;
-- dependency-cascade classification occurs after compilation.
+- required `.gfo` verification;
+- independent result for each checkpoint;
+- causal classification after compilation.
 
-## 32.3 Release mode
+### 29.3 Release
 
-Purpose:
+Scope:
 
-```text
-prove release prerequisites
-```
-
-Module compilation scope:
-
-- required checkpoint modules;
+- required checkpoints;
 - configured entrypoints.
 
 Requirements:
 
-- isolated run-owned artifacts;
-- required `.gfo` verification;
-- no stale artifact acceptance;
-- exact GF version and commands recorded;
-- subsequent PGF build remains a separate stage.
+- isolated artifacts;
+- required object verification;
+- no stale-artifact acceptance;
+- recorded GF version and commands;
+- separate PGF construction stage.
 
-## 32.4 Diagnostic mode
+### 29.4 Diagnostic
 
-Purpose:
+Scope:
 
-```text
-maximize investigation evidence
-```
-
-Compilation scope:
-
-- broad selected source set;
-- optional verbose compiler output.
+- broad selected source coverage;
+- optional verbose compiler evidence.
 
 Requirements:
 
-- raw output is never truncated before storage;
-- report excerpts may be bounded;
-- CPU statistics may be enabled explicitly;
-- artifact and parser warnings remain visible;
-- diagnostic mode must not change source or gold files.
+- complete raw capture before report excerpt limits;
+- visible parser and artifact warnings;
+- no source or gold mutation.
 
 ---
 
-## 33. Deterministic ordering
+## 30. Deterministic ordering
 
-When multiple files are compiled:
+When compiling several files:
 
-- selector order is deterministic;
-- checkpoint order follows project configuration;
-- otherwise paths are ordered by normalized project-relative path;
-- compile results retain execution order;
-- artifact manifests sort by normalized run-relative path;
-- top-error aggregation does not change compile order.
+- project checkpoint order is preserved;
+- configured entrypoint order is preserved;
+- other targets use normalized project-relative ordering;
+- results retain execution order;
+- manifest entries use normalized run-relative ordering.
 
-Parallel compilation is not part of the default v1 contract.
+Parallel compilation requires a separate contract for:
 
-A future parallel mode requires explicit rules for:
-
-- output isolation;
 - process limits;
+- dependency contention;
+- output isolation;
+- cancellation;
 - deterministic result ordering;
 - log ownership;
-- cancellation;
-- dependency contention;
 - reproducible manifests.
 
 ---
 
-## 34. Failure continuation policy
+## 31. Continuation policy
 
-The orchestrator owns whether the run continues after a file failure.
+The run orchestrator decides whether processing continues.
 
-Default diagnostic-oriented policy:
+Stop when:
 
-```text
-continue with other selected files when safe
-```
-
-Stop immediately when:
-
-- run configuration is invalid;
-- GF executable cannot be launched for any file;
-- output root is unusable;
+- project or run configuration is invalid;
+- GF cannot be launched for any target;
+- the output root is unusable;
 - cancellation is requested;
-- continuing would corrupt or overwrite evidence.
+- continuing could corrupt evidence.
 
 Continue when safe after:
 
-- one GF source compile failure;
-- one timeout, subject to process containment;
-- one diagnostic parser fallback;
-- one expected artifact failure isolated to the current target.
+- one GF source failure;
+- one contained timeout;
+- one parser fallback;
+- one target-specific artifact failure.
 
-Every continuation decision must preserve the failed result.
+Every failure remains represented in the run result.
 
 ---
 
-## 35. Source immutability
+## 32. Source immutability
 
-Compilation MUST NOT modify:
+Compilation does not modify:
 
-- `.gf` source files;
+- `.gf` sources;
+- project configuration;
 - project documentation;
-- project scenarios;
-- project inputs;
-- gold files;
-- project configuration.
+- scenarios;
+- inputs;
+- gold files.
 
-Generated `.gfo`, `.pgf`, logs, reports, and temporary files must be written only to owned locations.
+Generated objects, logs and temporary files are written only to owned run locations.
 
-If a selected GF option may modify source-adjacent files, it must be prohibited or isolated until explicitly reviewed.
-
----
-
-## 36. Security rules
-
-Required rules:
-
-- use an argument list, not shell interpolation;
-- use `shell = false`;
-- validate executable and working directory separately;
-- preserve paths containing spaces as one argument;
-- reject embedded NUL characters;
-- reject untrusted newline or control characters in logged command fields;
-- do not execute source file text as shell content;
-- do not expose secrets in command logs;
-- do not allow a source-relative path to escape the project root after normalization;
-- do not follow unreviewed symlinks outside allowed roots in strict mode;
-- do not overwrite arbitrary paths supplied by project content.
-
-Human-readable command rendering must quote safely for display but is never re-executed.
+Options that may write beside source files are prohibited unless an explicit isolated contract defines their behavior.
 
 ---
 
-## 37. Windows requirements
+## 33. Security
 
-GF Wordbench must support Windows paths.
+Required controls:
 
-Required behavior:
+- executable and argument vector remain separate;
+- normal compilation uses no shell;
+- executable and working directory are validated independently;
+- spaces and Unicode remain within individual arguments;
+- NUL and prohibited control characters are rejected;
+- source text is never interpreted as a host command;
+- secrets are excluded from command evidence;
+- normalized paths cannot escape approved roots;
+- symlink resolution follows the security policy;
+- project data cannot select arbitrary output paths.
 
-- executable path may contain spaces;
-- project path may contain spaces;
-- RGL path may contain spaces;
-- output root may contain spaces;
-- arguments are passed without shell parsing;
-- path separator behavior is resolved by GF path policy;
-- drive letters are not split as GF path elements accidentally;
-- long paths produce a clear error when unsupported;
-- process termination after timeout follows Windows containment policy;
-- filenames use Windows-safe characters;
-- reserved device names are not used as generated safe keys.
+Rendered commands are display evidence only.
+
+---
+
+## 34. Windows support
+
+Wordbench supports:
+
+- executable paths containing spaces;
+- project and RGL paths containing spaces;
+- run output roots containing spaces;
+- native Windows process invocation;
+- drive-letter-safe GF path handling;
+- Windows-safe generated filenames;
+- process-tree containment on timeout.
 
 Example executable:
 
@@ -1581,40 +1161,38 @@ Example executable:
 C:\Program Files\GF\bin\gf.exe
 ```
 
-It must be passed as the executable field, not manually quoted inside an argument string.
+It is passed as the executable value, not manually quoted inside a command string.
 
 ---
 
-## 38. Unicode and encoding
+## 35. Unicode and encoding
 
-GF source paths and output may contain Unicode.
+Source paths and diagnostics may contain Unicode.
 
-Required policy:
+Rules:
 
-- project source is expected to use UTF-8 according to project rules;
-- process capture uses documented encoding handling;
-- raw bytes are not silently discarded;
-- replacement-decoding behavior, if used, is explicit;
-- persisted logs are UTF-8;
-- canonical text output uses LF;
-- diagnostic normalization preserves linguistic Unicode;
-- report escaping must not alter the raw log.
+- process bytes are preserved according to capture policy;
+- decoding is deterministic;
+- replacement decoding, when required, is explicit;
+- persisted logs use UTF-8;
+- canonical text artifacts use LF;
+- normalization preserves linguistically meaningful Unicode;
+- report escaping does not alter raw log files.
 
-Encoding failures produce structured evidence and never erase the captured process output.
+Encoding failures remain structured evidence.
 
 ---
 
-## 39. Logging requirements
+## 36. Logging
 
 The master log records at least:
 
 ```text
-compile target
+target
 resolved executable
-resolved argument list or command reference
+argument vector or command reference
 working directory
-start timestamp
-finish timestamp
+start and finish timestamps
 duration
 execution state
 exit code
@@ -1627,66 +1205,66 @@ artifact-check result
 
 Sensitive environment values are excluded.
 
-Per-file raw logs contain unmodified process streams.
+Per-target stdout and stderr files contain captured process streams.
 
-A report may provide excerpts but MUST link or point to the full evidence paths.
+Reports may show excerpts but retain references to complete evidence.
 
 ---
 
-## 40. Manifest requirements
+## 37. Manifest
 
-Every retained compile artifact should be registered in:
+Retained compile evidence and artifacts are registered in:
 
 ```text
 manifest.json
 ```
 
-Recommended roles:
+Typical roles:
 
 ```text
 compile_stdout
 compile_stderr
 gfo
-other
+compile_auxiliary
 ```
 
-Manifest entries include:
+Entries contain:
 
 - run-relative path;
 - role;
 - media type;
-- required flag;
+- required policy;
 - size;
 - SHA-256;
-- creating component.
+- producer.
 
-A required target `.gfo` missing from the manifest invalidates release-significant artifact evidence.
+A required target `.gfo` absent from the manifest cannot satisfy release-significant evidence.
 
 ---
 
-## 41. Reporting boundaries
+## 38. Reporting boundary
 
 The compiler returns structured evidence.
 
-It MUST NOT write:
+It does not write:
 
-- `summary.md`;
-- `summary.json`;
-- `AI_READY.md`;
-- `top_errors.txt`;
-- user-facing Markdown details.
+```text
+summary.json
+summary.md
+AI_READY.md
+top_errors.txt
+user-facing detail reports
+```
 
-Report writers consume `RunResult` and existing raw evidence.
+Reports consume structured results and retained evidence.
 
-They MUST NOT rerun compilation or independently reinterpret GF output with undocumented rules.
+They do not rerun compilation or maintain independent GF diagnostic semantics.
 
 ---
 
-## 42. Regression comparison
+## 39. Regression comparison
 
-Compilation comparison uses structured fields, not report prose.
-
-Comparable fields may include:
+Comparison consumes structured fields such as:
 
 - file identity;
 - source fingerprint;
@@ -1694,112 +1272,73 @@ Comparable fields may include:
 - diagnostic class;
 - error kind;
 - first error;
-- timeout state;
+- execution state;
 - artifact existence;
-- GF version;
-- duration where used only as non-gating information.
+- GF version.
 
-A changed source fingerprint with unchanged status is not automatically a regression.
+Typical interpretation:
 
-A current `FAIL` after previous `OK` is normally a regression.
+```text
+previous OK + current FAIL  → regressed
+previous FAIL + current OK  → improved
+```
 
-A current `OK` after previous `FAIL` is normally an improvement.
+A source change with unchanged outcome is not automatically a regression.
 
-Comparisons across incompatible schema or GF object-format versions must be marked incompatible rather than silently equated.
+Incompatible schema or GF environments are marked incompatible rather than silently equated.
 
 ---
 
-## 43. Compile contract API
+## 40. Public responsibilities
 
-Canonical public responsibility:
+Conceptual compilation use case:
 
 ```python
 def compile_file(
     file_path: Path,
     run_config: RunConfig,
     run_paths: RunPaths,
-) -> CompileSummary:
+) -> CompileResult:
     ...
 ```
 
-Related public responsibilities:
+Related responsibilities may include:
 
 ```python
-def build_gf_args(
-    file_path: Path,
-    run_config: RunConfig,
-    run_paths: RunPaths,
-) -> list[str]:
+def build_compile_request(...) -> CompileRequest:
     ...
 ```
 
 ```python
-def probe_gf_version(
-    run_config: RunConfig,
-    run_paths: RunPaths,
-) -> str:
+def build_compile_args(...) -> list[str]:
     ...
 ```
 
-Final implementation may introduce stronger typed request and result models, but it must preserve:
+```python
+def verify_compile_artifacts(...) -> ArtifactCheck:
+    ...
+```
 
-- explicit source target;
+```python
+def probe_gf_version(...) -> GFVersionResult:
+    ...
+```
+
+Observable contracts require:
+
+- explicit target;
 - explicit resolved configuration;
 - explicit run-owned paths;
 - structured result;
 - raw evidence;
 - no report generation;
-- no downstream classification.
+- no causal classification.
+
+Internal decomposition may vary while these contracts remain true.
 
 ---
 
-## 44. Recommended final internal decomposition
-
-A balanced final implementation may use:
-
-```text
-compiler.py
-    build_compile_request(...)
-    build_compile_args(...)
-    compile_file(...)
-    verify_compile_artifacts(...)
-
-gf_utils.py
-    parse_compile_summary(...)
-    normalize_gf_diagnostic(...)
-
-process_utils.py
-    run_process_with_timeout(...)
-
-path_utils.py
-    relative_to_project_root(...)
-    safe_name(...)
-
-models.py
-    CompileRequest
-    ProcessResult
-    CompileSummary
-    ArtifactCheck
-```
-
-This decomposition is recommended, not mandatory.
-
-The interfile contracts are mandatory.
-
-Avoid unnecessary abstractions such as:
-
-- one class per GF flag;
-- a plugin system for one compiler;
-- a custom GF parser;
-- a generic workflow engine;
-- an event bus for compile results;
-- a cross-run cache before reproducibility rules exist.
-
----
-
-## 45. Error-kind mapping
-
-Recommended mapping:
+## 41. Error-kind mapping
 
 | Condition | Error kind |
 |---|---|
@@ -1809,451 +1348,180 @@ Recommended mapping:
 | recognized GF internal failure | `INTERNAL` |
 | timeout | `TIMEOUT` |
 | invalid compile configuration | `CONFIG` |
-| output or source I/O failure | `IO` |
+| source or output I/O failure | `IO` |
 | executable or unsupported-option failure | `TOOL` |
-| scenario-only error | `SCRIPT` |
-| unrecognized compile failure | `OTHER` |
-
-`SCRIPT` is normally not produced by ordinary module compilation.
+| unrecognized compilation failure | `OTHER` |
 
 ---
 
-## 46. Failure-class mapping
+## 42. Failure categories
 
-External integration failure classes:
-
-```text
-launch_failure
-timeout
-gf_compile_failure
-artifact_failure
-diagnostic_parse_failure
-contract_failure
-```
-
-These are descriptive failure classes, not validation-status enum values.
-
-Recommended mapping:
-
-| Failure class | Status | Execution state |
+| Failure category | Validation status | Execution state |
 |---|---|---|
-| `launch_failure` | `ERROR` | `launch_failed` |
-| `timeout` | `ERROR` | `timed_out` |
-| `gf_compile_failure` | `FAIL` | `completed` |
-| `artifact_failure` | `FAIL` or `ERROR` by policy | `completed` |
-| `diagnostic_parse_failure` | `ERROR` | `completed` |
-| `contract_failure` | `ERROR` | context-dependent |
+| launch failure | `ERROR` | `launch_failed` |
+| timeout | `ERROR` | `timed_out` |
+| cancellation | run policy | `cancelled` |
+| GF compilation failure | `FAIL` | `completed` |
+| artifact failure | `FAIL` or `ERROR` by contract | `completed` |
+| diagnostic parsing failure | `ERROR` | `completed` |
+| request contract failure | `ERROR` | context-dependent |
+
+These categories do not replace validation status, error kind or diagnostic causal class.
 
 ---
 
-## 47. Required unit tests
+## 43. Test obligations
 
-Minimum unit-test set:
-
-```text
-test_build_args_uses_batch
-test_build_args_uses_silent_by_default
-test_build_args_omits_silent_in_verbose_diagnostic_mode
-test_source_argument_is_last
-test_arguments_are_ordered
-test_explicit_gf_path_is_preserved
-test_artifact_flags_require_capability
-test_cpu_flag_disabled_by_default
-test_cpu_flag_enabled_explicitly
-test_compile_creates_output_directories
-test_compile_uses_project_root_as_cwd
-test_compile_uses_configured_executable
-test_compile_uses_configured_timeout
-test_compile_captures_stdout_and_stderr_separately
-test_compile_returns_compile_summary
-test_nonzero_exit_is_not_ok
-test_zero_exit_with_fatal_diagnostic_is_not_ok
-test_timeout_is_error
-test_launch_failure_is_error
-test_no_compile_is_skipped
-test_parser_failure_preserves_raw_logs
-test_target_outside_project_is_rejected
-test_path_with_spaces_is_one_argument
-test_unicode_path_is_supported
-test_safe_file_key_is_deterministic
-test_duplicate_basenames_get_distinct_logs
-test_stale_gfo_does_not_count
-test_required_gfo_missing_fails_artifact_check
-test_current_gfo_is_manifested
-```
-
----
-
-## 48. Required diagnostic parser tests
-
-Minimum fixtures:
+Unit and contract tests cover at least:
 
 ```text
-successful silent compile
-successful verbose compile
-syntax error on stdout
-syntax error on stderr
-type error with expected/inferred detail
-internal GeneratePMCFG error
-unresolved module
-non-zero exit with generic message
-non-zero exit with no message
-zero exit with fatal text
-timeout with partial output
-Unicode diagnostic
-Windows path in diagnostic
-multiple diagnostics
-progress lines before first error
-```
-
-Assertions:
-
-- raw message remains available;
-- first error selection is deterministic;
-- error kind is correct;
-- non-zero exit never becomes `OK`;
-- fatal text is not ignored;
-- dependency paths remain parseable by the classifier;
-- parser does not rewrite evidence.
-
----
-
-## 49. Required integration tests
-
-Integration tests with a real supported GF installation SHOULD cover:
-
-```text
-minimal valid abstract module
-minimal valid concrete module
-resource module
-interface and instance pair
-module importing project dependency
-module importing RGL dependency
-syntax error
-type error
-missing import
-target path containing spaces
-project root containing spaces
-RGL path containing spaces
-isolated gfo output
-target gfo existence
-dependency gfo production
-repeat compile in a fresh run
-compile after source modification
-compile with stale source-tree gfo present
-version probe and compile use same executable
-```
-
-Release integration tests for `.pgf` belong to `GF_PGF_BUILD.md`.
-
----
-
-## 50. Fake-process testing
-
-Most unit tests SHOULD use a fake or injected process runner.
-
-A fake process result must be able to model:
-
-```text
-successful completion
-non-zero completion
-timeout
-cancellation
+batch command construction
+silent flag policy
+source argument last
+argument-vector ordering
+resolved GF path preservation
+version-gated optional flags
+run-owned directory creation
+explicit working directory
+configured executable and timeout
+separate stdout and stderr
+zero and non-zero exit handling
+fatal diagnostic with zero exit
+timeout and cancellation
 launch failure
-stdout-only output
-stderr-only output
-both streams
-empty streams
-duration
-artifact creation
-artifact omission
+explicit skip
+parser failure with preserved raw evidence
+target containment
+paths with spaces
+Unicode paths and diagnostics
+deterministic evidence filenames
+duplicate basenames
+stale `.gfo` rejection
+required artifact absence
+manifest registration
+prohibited report and process dependencies
 ```
 
-Tests must not depend on a developer’s global GF installation unless explicitly marked as integration tests.
+Real-GF integration tests cover:
+
+```text
+valid abstract and concrete modules
+resource modules
+interface and instance modules
+project and RGL imports
+syntax and type errors
+missing imports
+paths with spaces
+isolated `.gfo` output
+dependency artifact production
+fresh-run recompilation
+source modification
+stale source-tree artifacts
+version probe and compile using the same executable
+```
 
 ---
 
-## 51. Acceptance criteria
-
-The compilation subsystem is complete when:
+## 44. Conformance checklist
 
 ```text
-[ ] canonical per-file command uses batch compilation without PGF make mode
-[ ] PGF construction is implemented separately
-[ ] GF executable is explicit and recorded
-[ ] GF path is deterministic and recorded
+[ ] per-file compilation uses `-batch`
+[ ] PGF construction remains separate
+[ ] executable is explicit and recorded
+[ ] GF path is ordered and recorded
 [ ] working directory is explicit
-[ ] source argument is final
+[ ] source argument is last
 [ ] shell execution is disabled
 [ ] stdout and stderr are captured separately
-[ ] raw logs are written before diagnostic parsing
-[ ] timeout is enforced
-[ ] launch failure is distinct from GF failure
-[ ] skipped compile is distinct from success
-[ ] CompileSummary fields are coherent
-[ ] compiler does not classify downstream failures
+[ ] raw evidence precedes parsing
+[ ] timeout and cancellation are explicit
+[ ] launch failure differs from GF failure
+[ ] skipped compilation differs from success
+[ ] structured fields are coherent
+[ ] compiler does not assign causal ownership
 [ ] required `.gfo` artifacts are verified
-[ ] stale artifacts cannot satisfy current-run checks
-[ ] artifacts are registered in the manifest
-[ ] path-with-spaces tests pass on Windows
-[ ] diagnostic parser fixtures pass
-[ ] real-GF integration tests pass for supported versions
-[ ] documentation and lock files agree
+[ ] stale artifacts cannot satisfy current checks
+[ ] retained artifacts are manifested
+[ ] path, Unicode and Windows tests pass
+[ ] diagnostic fixtures pass
+[ ] supported GF integration tests pass
+[ ] locks and reference documents agree
+[ ] Wordbench remains independent from `gf-portfolio`
 ```
 
 ---
 
-## 52. Common failure examples
+## 45. Troubleshooting order
 
-## 52.1 Syntax error
-
-Evidence:
-
-```text
-process launched
-exit code non-zero
-syntax diagnostic present
-```
-
-Result:
-
-```text
-status = FAIL
-execution_state = completed
-error_kind = SYNTAX
-```
-
-## 52.2 Type error
-
-Evidence:
-
-```text
-expected/inferred diagnostic present
-```
-
-Result:
-
-```text
-status = FAIL
-execution_state = completed
-error_kind = TYPE
-```
-
-## 52.3 Missing dependency
-
-Evidence:
-
-```text
-GF cannot resolve imported module
-```
-
-Result before global classification:
-
-```text
-status = FAIL
-diagnostic_class = ambiguous
-error_kind = OTHER
-```
-
-The classifier may later assign:
-
-```text
-diagnostic_class = downstream
-blocked_by = [...]
-```
-
-## 52.4 Timeout
-
-Evidence:
-
-```text
-process exceeded configured timeout
-```
-
-Result:
-
-```text
-status = ERROR
-execution_state = timed_out
-error_kind = TIMEOUT
-```
-
-## 52.5 Missing executable
-
-Evidence:
-
-```text
-process did not launch
-```
-
-Result:
-
-```text
-status = ERROR
-execution_state = launch_failed
-error_kind = TOOL
-```
-
-## 52.6 Missing target `.gfo`
-
-Evidence:
-
-```text
-GF returned success
-required artifact not present
-```
-
-Result:
-
-```text
-status = FAIL or ERROR according to artifact policy
-failure_class = artifact_failure
-```
-
-Release-significant validation MUST NOT pass.
-
-## 52.7 Explicit compile skip
-
-Evidence:
-
-```text
-resolved configuration disables compilation
-```
-
-Result:
-
-```text
-status = SKIPPED
-diagnostic_class = skipped
-```
-
-No GF success is claimed.
-
----
-
-## 53. Troubleshooting order
-
-When compilation fails, inspect in this order:
+When compilation fails, inspect:
 
 1. resolved GF executable;
-2. recorded GF version;
+2. GF version evidence;
 3. selected source path;
 4. working directory;
-5. resolved GF path;
-6. exact ordered arguments;
-7. stdout log;
-8. stderr log;
+5. resolved GF search path;
+6. ordered argument vector;
+7. stdout;
+8. stderr;
 9. exit code and execution state;
 10. parsed error kind and first error;
 11. expected `.gfo` path;
-12. artifact manifest;
-13. dependency classification;
-14. previous-run comparison.
+12. artifact check and manifest;
+13. causal classification;
+14. previous compatible run.
 
-Do not begin by editing gold files or reports. They are not compilation inputs.
+Gold files and reports are not compilation inputs.
 
 ---
 
-## 54. Anti-drift rules
+## 46. Anti-drift rules
 
 Compilation drift exists when:
 
-- `compiler.py` builds arguments differently from this document;
-- CLI and GUI produce different GF paths for equivalent inputs;
-- `-make` reappears in per-file compilation;
-- source argument is no longer final;
-- stdout and stderr are merged before raw capture;
-- skipped compilation is reported as `OK`;
+- compiler arguments differ from this contract;
+- CLI and GUI resolve equivalent inputs differently;
+- `-make` appears in normal per-file compilation;
+- the source argument is no longer last;
+- stdout and stderr are merged before capture;
+- skipped compilation is reported as success;
 - report code reparses GF output independently;
-- artifact directories differ from `RunPaths`;
-- a stale `.gfo` counts as current evidence;
-- `CompileSummary` fields change without updating schemas and consumers;
-- compiler begins assigning `downstream`;
-- timeout behavior differs between compiler and scenario runner without documented reason;
-- a new GF flag is used without capability and integration testing.
+- artifact paths differ from their owner;
+- stale `.gfo` files satisfy current-run checks;
+- structured compile fields change without consumer and schema updates;
+- the compiler assigns downstream causality;
+- a GF flag is introduced without capability and integration tests;
+- Wordbench compilation depends on `gf-portfolio`.
 
-Any such change requires coordinated updates to:
-
-```text
-compiler
-process runner
-models
-configuration
-artifact paths
-diagnostic parser
-tests
-contract locks
-this document
-migration notes
-```
+Such changes require coordinated updates to the compiler, external-process boundary, models, artifact ownership, diagnostics, tests, locks and this document.
 
 ---
 
-## 55. Cross-references
+## 47. Cross-references
 
 | Topic | Document |
 |---|---|
-| External GF command contract | `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md` |
-| Python compiler boundaries | `docs/INTERFILE_CONTRACT_LOCK.md` |
+| Product boundary | `docs/architecture/PRODUCT_BOUNDARIES.md` |
+| External GF contract | `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md` |
+| Framework component contracts | `docs/INTERFILE_CONTRACT_LOCK.md` |
 | Persisted compile fields | `docs/PERSISTED_SCHEMA_LOCK.md` |
-| Toolchain overview | `docs/gf/GF_TOOLCHAIN_INTEGRATION.md` |
-| GF path construction | `docs/gf/GF_PATH_RESOLUTION.md` |
+| Toolchain integration | `docs/gf/GF_TOOLCHAIN_INTEGRATION.md` |
+| GF path resolution | `docs/gf/GF_PATH_RESOLUTION.md` |
 | PGF construction | `docs/gf/GF_PGF_BUILD.md` |
-| Version policy | `docs/gf/GF_VERSION_COMPATIBILITY.md` |
+| GF version policy | `docs/gf/GF_VERSION_COMPATIBILITY.md` |
 | File selection | `docs/validation/FILE_SELECTION.md` |
 | Compilation validation | `docs/validation/COMPILATION_VALIDATION.md` |
-| Error parsing | `docs/diagnostics/GF_DIAGNOSTIC_PARSING.md` |
-| Process failures | `docs/diagnostics/TIMEOUTS_AND_PROCESS_FAILURES.md` |
+| GF diagnostics | `docs/diagnostics/GF_DIAGNOSTIC_PARSING.md` |
+| Timeouts and process failures | `docs/diagnostics/TIMEOUTS_AND_PROCESS_FAILURES.md` |
 | Artifact model | `docs/architecture/ARTIFACT_MODEL.md` |
 | Status values | `docs/reference/STATUS_VALUES.md` |
-| Active-project modules | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
+| Active-project contracts | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
 
 ---
 
-## 56. Official GF basis
+## 48. Enforcement
 
-This document follows the official GF distinction between:
+> A GF module compilation succeeds only when GF executes the canonical batch-compilation request, raw process evidence is preserved, the result is interpreted coherently and every required current-run artifact check passes.
 
-```text
-gf -batch -s <source.gf>
-```
+Successful `.gfo` compilation is necessary evidence for many workflows.
 
-for batch source-to-object compilation, and:
-
-```text
-gf -make -optimize-pgf <concrete-entrypoints...>
-```
-
-for optimized PGF construction.
-
-It also follows the GF compilation model:
-
-```text
-.gf source modules
-    → .gfo object modules
-    → .pgf runtime grammar
-```
-
-Primary references:
-
-- [GF Shell Reference — The GF batch compiler](https://www.grammaticalframework.org/doc/gf-shell-reference.html)
-- [GF Language Reference Manual](https://www.grammaticalframework.org/doc/gf-refman.html)
-- [Grammatical Framework Tutorial](https://www.grammaticalframework.org/doc/tutorial/gf-tutorial.html)
-
-The selected GF executable’s own:
-
-```text
-gf -help
-```
-
-output remains authoritative for version-specific optional flags.
-
----
-
-## 57. Final rule
-
-> A GF module compile is successful only when GF executed the canonical batch-compilation contract, its raw evidence was preserved, its result was interpreted coherently, and every required current-run artifact check passed.
-
-A successful `.gfo` compilation is necessary evidence for many workflows.
-
-It is not, by itself, proof of scenario correctness or release readiness.
+It is not proof of scenario correctness, PGF construction or release readiness.

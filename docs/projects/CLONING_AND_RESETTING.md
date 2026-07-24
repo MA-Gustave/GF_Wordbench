@@ -2,39 +2,37 @@
 
 **Document ID:** `GF-WB-PROJECTS-CLONING-RESETTING`  
 **Status:** Normative  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\projects\CLONING_AND_RESETTING.md`  
-**Applies to:** Repository duplication, active-project replacement, generated-evidence cleanup and local-state reset  
+**Document version:** `2.0.0`  
+**Applies to:** workspace duplication, active-project replacement, generated-evidence cleanup, application-state reset, archival, rollback, and project initialization  
 **Owner:** GF Wordbench maintainers  
-**Primary implementation owners:** `app/project/initializer.py`, `app/project/reset.py`  
-**Maintenance entry points:** `scripts/init_project.py`, `scripts/reset_project.py`  
+**Functional owner:** `projects` module  
+**Related owners:** `runs` for run evidence, `reporting` for artifact manifests, and bootstrap for environment wiring  
 **Project schema:** `gf-wordbench.project/1.0`  
 **Application-state schema:** `gf-wordbench.app-state/1.0`  
-**Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Last reviewed:** `2026-07-24`  
+**Target path:** `docs/projects/CLONING_AND_RESETTING.md`
 
 ---
 
 ## 1. Purpose
 
-This document defines the safe lifecycle for creating another GF Wordbench working copy and replacing its active language project.
+This document defines the safe lifecycle for:
 
-It specifies:
-
-- what a clone contains;
-- why one working copy represents one active language project;
-- when to clone, reset, clean or migrate;
-- how the clean project template is used;
-- what must be archived before destructive replacement;
-- which paths may be removed;
-- which paths must always be preserved;
-- how external GF source trees are protected;
-- how a reset remains transactional;
-- how stale language identity is detected;
-- how the result is validated.
+- creating an isolated GF Wordbench workspace;
+- replacing the workspace's active GF language project;
+- copying the reusable project template;
+- archiving project-owned content before replacement;
+- cleaning run evidence and local application state;
+- initializing a new active project;
+- detecting stale project identity;
+- rolling back a failed replacement;
+- validating the workspace after each lifecycle operation.
 
 The central rule is:
 
-> Create a separate GF Wordbench working copy for a separate active language, and replace project-owned content only through a planned, reviewable and reversible lifecycle operation.
+> One GF Wordbench workspace contains one active GF language project, and project replacement occurs only through an explicit, reviewable, path-safe, and recoverable lifecycle operation.
+
+Cloning and resetting do not create portfolio behavior inside Wordbench. Managing several Wordbench workspaces, comparing them, or aggregating their results belongs to `gf-portfolio`.
 
 ---
 
@@ -42,43 +40,49 @@ The central rule is:
 
 This document governs:
 
-- Git cloning;
-- filesystem duplication;
-- Git worktree use;
-- clean-clone preparation;
-- active-project archival;
-- active-project reset from `templates/project/`;
-- local run-evidence removal during a new-language reset;
-- local application-state removal during a new-language reset;
-- project initialization after reset;
-- destructive confirmation;
-- transactional replacement;
+- Git clones;
+- Git worktrees;
+- controlled filesystem duplication;
+- workspace preflight;
+- project archival;
+- project reset from `templates/project/`;
+- project initialization;
+- generated run cleanup;
+- application-state reset;
+- destructive authorization;
+- dry-run planning;
+- staging and transactional swap;
 - rollback;
-- template-integrity checks;
-- old-language identifier checks;
-- repository and project validation after cloning or reset.
+- template validation;
+- stale-language identifier checks;
+- absolute-path checks;
+- external GF source protection;
+- post-operation validation.
 
 This document does not govern:
 
-- ordinary source-file editing;
-- migration of an existing language implementation;
-- framework upgrades;
-- release-archive publication;
-- source-control branching policy beyond working-copy isolation;
-- GF source semantics;
-- project configuration field definitions;
-- run-retention policy in general;
+- ordinary GF source editing;
+- migration of a valuable existing language implementation;
+- framework upgrade procedures;
+- release publication;
+- general Git branching policy;
+- GF language semantics;
+- exact project schema field definitions;
+- general run-retention policy;
 - application-state field definitions;
-- operating-system backup systems.
+- operating-system backup products;
+- multi-workspace inventory or aggregation.
 
 ---
 
 ## 3. Related normative documents
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/REPOSITORY_STRUCTURE.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
+docs/architecture/DEPENDENCY_RULES.md
 docs/configuration/PROJECT_TOML_REFERENCE.md
 docs/configuration/APPLICATION_STATE_REFERENCE.md
 docs/projects/PROJECT_MODEL.md
@@ -92,68 +96,66 @@ project/docs/INTERFILE_CONTRACT_LOCK.md
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
-`CLI_REFERENCE.md` owns exact command-line spelling.
+`CLI_REFERENCE.md` owns exact command names and options.
 
 This document owns lifecycle semantics and safety invariants.
 
 ---
 
-## 4. Normative terminology
+## 4. Terminology
 
-- **REPOSITORY COPY**: one filesystem working copy of GF Wordbench.
-- **ACTIVE PROJECT**: the language-specific content under `project/`.
-- **PROJECT TEMPLATE**: the generic reusable structure under `templates/project/`.
-- **CLONE**: creation of a separate repository working copy through Git, a Git worktree or controlled filesystem duplication.
-- **RESET**: replacement of the active project with a fresh copy of the project template.
-- **NEW-LANGUAGE RESET**: reset that also removes old run evidence and local application state from the new working copy.
-- **PROJECT-ONLY RESET**: reset of `project/` while intentionally retaining run evidence or local state.
-- **CLEANUP**: removal of generated artifacts without replacing the active project.
-- **STATE RESET**: removal of `.gf_wordbench_state.json` only.
-- **MIGRATION**: coordinated preservation and transformation of an existing language project.
-- **ARCHIVE**: verified copy of content preserved outside the reset destination before destructive replacement.
+- **WORKSPACE**: one isolated GF Wordbench working directory containing the framework, one active project, one reusable project template, local state, and generated runs.
+- **ACTIVE PROJECT**: the single GF language project under `project/`.
+- **PROJECT TEMPLATE**: the reusable language-neutral structure under `templates/project/`.
+- **CLONE**: creation of a separate workspace through Git clone, Git worktree, or controlled filesystem duplication.
+- **RESET**: replacement of `project/` with a clean copy of `templates/project/`.
+- **NEW-PROJECT RESET**: reset that also removes stale run evidence and local application state from the workspace.
+- **PROJECT-ONLY RESET**: reset of `project/` while intentionally retaining local run evidence or state.
+- **GENERATED-EVIDENCE CLEANUP**: removal of selected or all canonical `run_<run-id>/` directories without replacing `project/`.
+- **STATE RESET**: removal of `.gf_wordbench_state.json` without changing project or run evidence.
+- **MIGRATION**: coordinated preservation and transformation of an existing project.
+- **ARCHIVE**: verified copy retained outside the destructive replacement boundary.
 - **EXTERNAL SOURCE TREE**: GF source root referenced by the project but located outside `project/`.
-- **STAGED PROJECT**: temporary validated copy of `templates/project/` prepared before replacing `project/`.
-- **RESET PLAN**: deterministic description of every path to copy, preserve, archive, replace or delete.
-- **DRY RUN**: plan generation and validation without filesystem mutation.
+- **STAGED PROJECT**: temporary validated copy of the template prepared before the active-project swap.
+- **RESET PLAN**: deterministic description of paths to preserve, archive, stage, replace, remove, and validate.
+- **DRY RUN**: complete planning and non-mutating validation.
 - **DISCARD**: explicit authorization to replace project content without creating an archive.
-- **ROLLBACK**: restoration of the pre-reset active project after a failed replacement.
+- **ROLLBACK**: restoration of the previous active project after a failed replacement.
+- **LIFECYCLE LOCK**: temporary coordination mechanism preventing concurrent project-changing operations.
 
 ---
 
-## 5. Single-active-project rule
+## 5. Workspace and active-project rule
 
-One GF Wordbench repository copy represents one active language project.
-
-The copy contains:
+One workspace contains:
 
 ```text
 framework code
 framework tests
 framework documentation
-one active language project
-one clean project template
-local validation evidence
+one active GF language project
+one reusable generic project template
+zero or more generated run_<run-id>/ directories
+one optional local application-state file
 ```
 
 Canonical ownership:
 
 ```text
-app/                  framework runtime
-tests/                framework verification
-docs/                 framework documentation
-scripts/              maintenance entry points
-templates/project/    clean generic project model
-project/              active language project
-runs/                 generated local evidence
-.gf_wordbench_state.json
-                      disposable local state
+app/                        framework runtime
+tests/                      framework verification
+docs/                       framework documentation
+templates/project/          reusable project template
+project/                    active GF language project
+run_<run-id>/               generated evidence for one run
+.gf_wordbench_state.json    disposable local state
 ```
 
-### 5.1 Separate languages require separate working copies
+### 5.1 Independent projects require independent workspaces
 
-Two independently active language projects MUST NOT share one `project/` directory.
+Two independently active projects must not share one `project/` boundary.
 
-Supported isolation models:
+Supported workspace isolation models include:
 
 ```text
 separate Git clone
@@ -161,136 +163,148 @@ separate Git worktree
 controlled filesystem duplicate
 ```
 
-Each model creates a separate working directory with its own:
+Each workspace owns its own:
 
 ```text
 project/
-runs/
+run_<run-id>/
 .gf_wordbench_state.json
+environment binding
+lifecycle lock
 ```
 
-### 5.2 A Git branch is not sufficient by itself
+### 5.2 A branch alone is not workspace isolation
 
-A branch in one working directory does not provide simultaneous filesystem isolation.
+A Git branch in one working directory does not isolate:
 
-Switching branches in one working directory can replace project files while leaving:
+- untracked run directories;
+- local application state;
+- virtual environments;
+- temporary files;
+- editor state;
+- lifecycle locks;
+- external source bindings.
 
-```text
-untracked runs
-local state
-virtual environment state
-temporary files
-editor state
-```
+Use separate worktrees or clones when two projects must remain available concurrently.
 
-For concurrently maintained languages, use separate clones or worktrees.
+### 5.3 Framework identity remains stable
 
-### 5.3 Package identity does not change per language
-
-A cloned repository remains:
+A cloned workspace remains:
 
 ```text
 package: gf-wordbench
-CLI:     gf-wordbench
-framework name: GF Wordbench
+CLI: gf-wordbench
+product: GF Wordbench
 ```
 
-The active language identity belongs only to:
+The active language identity belongs to:
 
 ```text
 project/project.toml
 project/docs/
 project/validation/
-referenced GF source
+the configured GF source tree
 ```
 
-Do not rename the Python package, CLI or framework modules for each language.
+Do not rename the Python package or framework modules for each language.
+
+### 5.4 Portfolio boundary
+
+`gf-portfolio` may register and observe several completed Wordbench workspaces through public artifacts.
+
+GF Wordbench must not:
+
+- register itself in Portfolio as an implicit reset side effect;
+- require Portfolio to clone or reset a workspace;
+- read Portfolio private state;
+- place portfolio fields in `project.toml`;
+- use Portfolio identity as active-project authority.
 
 ---
 
 ## 6. Choose the correct operation
 
-| Goal | Correct operation |
+| Goal | Operation |
 |---|---|
-| Start a separate active language | Clone or create a worktree, then perform a new-language reset and initialize |
-| Replace the active project with a blank template | Project reset |
-| Preserve and transform the current language | Migration |
-| Remove old run directories | Generated-evidence cleanup |
-| Forget GUI/local preferences | State reset |
-| Update GF Wordbench framework code | Framework upgrade or Git merge/rebase |
-| Rename module suffixes while preserving implementation | Breaking project migration |
-| Rebuild validation evidence | New validation run |
-| Update expected scenario output | Explicit gold-update workflow |
-| Repair one project document | Normal project edit, not reset |
+| Start an independent active project | Create an isolated workspace, reset its project, then initialize |
+| Replace the active project with a clean scaffold | Project reset |
+| Preserve and transform an existing project | Migration |
+| Remove old generated runs | Generated-evidence cleanup |
+| Forget local UI or path preferences | State reset |
+| Update framework source | Framework upgrade or source-control integration |
+| Rename module families while preserving work | Breaking project migration |
+| Rebuild evidence | New validation run |
+| Update reviewed expected output | Explicit gold-update workflow |
+| Repair a project document | Normal project edit |
+| Observe several workspaces | `gf-portfolio`, outside Wordbench |
 
 ### 6.1 Reset is not migration
 
-Use migration when the existing language work remains valuable and must survive in transformed form.
+Use migration when existing work must survive in transformed form, including:
 
-Examples:
+- moving a source tree;
+- renaming a module suffix;
+- changing project schema versions;
+- restructuring project documentation;
+- adopting a new scenario registry;
+- changing entrypoints while retaining implementation.
 
-```text
-move existing source tree
-rename language module suffix
-convert project.toml schema
-adopt a new scenario registry
-restructure project documentation
-change entrypoints while preserving implementation
-```
-
-A reset intentionally creates a clean active-project scaffold.
+A reset intentionally creates a template-derived scaffold.
 
 ### 6.2 Reset is not cleanup
 
-Deleting `runs/` does not reset `project/`.
+Deleting `run_<run-id>/` directories does not reset `project/`.
 
 Deleting `.gf_wordbench_state.json` does not reset `project/`.
 
-Replacing `project/` does not automatically modify an external GF source tree.
+Replacing `project/` does not modify an external GF source tree.
 
 ---
 
-## 7. Canonical new-language workflow
+## 7. Canonical new-project workflow
 
 ```text
-source GF Wordbench repository
-             ↓
-separate clone or worktree
-             ↓
-repository preflight
-             ↓
-new-language reset
-             ↓
-clean project copied from template
-             ↓
+source workspace
+    ↓
+create isolated clone, worktree, or duplicate
+    ↓
+workspace preflight
+    ↓
+project reset
+    ↓
+template-derived staged project
+    ↓
+transactional project swap
+    ↓
 project initialization
-             ↓
-external or internal GF source configuration
-             ↓
+    ↓
+source and entrypoint configuration
+    ↓
 project contract population
-             ↓
-repository and project checks
-             ↓
+    ↓
+workspace and project checks
+    ↓
 first validation run
 ```
 
 Required phases:
 
-1. create an isolated working copy;
-2. verify the clone;
-3. preserve old active-project content when required;
-4. reset project-owned and local generated content;
-5. initialize the new project identity;
-6. configure source roots and entrypoints;
-7. populate project documentation and contracts;
-8. validate structure;
-9. begin implementation or migration.
+1. create an isolated workspace;
+2. verify repository boundaries;
+3. archive valuable project content or authorize discard;
+4. stage and validate a clean project;
+5. swap transactionally;
+6. remove stale generated state when requested;
+7. initialize project identity;
+8. configure source roots, entrypoints, checkpoints, and scenarios;
+9. validate structure and contracts;
+10. begin project development or migration.
 
 ---
 
-# Part I — Cloning
+# Part I — Creating an isolated workspace
 
-## 8. Preferred cloning methods
+## 8. Preferred methods
 
 Priority:
 
@@ -302,64 +316,58 @@ Priority:
 
 Git-based methods are preferred because they:
 
-- preserve tracked content accurately;
-- omit ignored local state by default;
-- preserve commit identity;
+- preserve tracked content;
+- normally exclude ignored local state;
+- preserve revision identity;
 - expose uncommitted changes;
-- make later framework updates manageable.
+- support later framework updates.
 
 ---
 
-## 9. Git clone workflow
+## 9. Git clone
 
-Conceptual command:
-
-```text
-git clone <gf-wordbench-repository> <destination>
-```
-
-Example:
+Conceptual operation:
 
 ```text
-git clone <repository-url> GF_Wordbench_NewLanguage
+git clone <repository> <destination>
 ```
 
 The exact remote and destination are user choices.
 
 ### 9.1 Destination requirements
 
-The destination MUST:
+The destination must:
 
-- differ from the source working directory;
-- not exist, or be an empty approved directory;
+- differ from the source workspace;
+- be absent or explicitly approved and empty;
 - not be inside `project/`;
-- not be inside `templates/`;
-- not be inside `runs/`;
+- not be inside `templates/project/`;
+- not be inside a run directory;
 - not overlap an external GF source tree;
-- reside on a filesystem that supports required path operations;
-- have enough space for source, tests and future run evidence.
+- provide required filesystem behavior;
+- have sufficient space.
 
-### 9.2 After clone
+### 9.2 Post-clone state
 
-A Git clone may contain the currently committed active project.
+A Git clone may contain the committed active project.
 
-Before assigning another language identity:
+Before assigning a different project identity:
 
 1. inspect `project/project.toml`;
-2. inspect `project/docs/INTERFILE_CONTRACT_LOCK.md`;
-3. run repository preflight;
-4. perform a new-language reset;
+2. inspect the active project lock;
+3. run workspace preflight;
+4. reset the project;
 5. initialize the new project.
 
-A clone is not automatically a clean language template.
+A clone is not automatically a clean project template.
 
-### 9.3 Ignored files
+### 9.3 Local files
 
-A normal Git clone should not contain:
+A clean Git clone should not contain:
 
 ```text
 .gf_wordbench_state.json
-runs/
+run_<run-id>/
 .venv/
 __pycache__/
 .pytest_cache/
@@ -367,57 +375,42 @@ build/
 dist/
 ```
 
-Their presence after cloning indicates they are tracked, copied separately or recreated locally and must be reviewed.
+Unexpected generated or local files must be reviewed before reset.
 
 ---
 
-## 10. Git worktree workflow
+## 10. Git worktrees
 
-A Git worktree is an acceptable separate GF Wordbench copy.
+A Git worktree is an independent Wordbench workspace.
 
-Conceptual command:
-
-```text
-git worktree add <destination> <branch-or-commit>
-```
-
-### 10.1 Worktree invariants
-
-Each worktree must have its own:
+Each worktree has its own:
 
 ```text
 project/
-runs/
-local state
-virtual environment or environment binding
+run_<run-id>/
+local application state
+environment binding
+temporary lifecycle artifacts
 ```
 
-### 10.2 Shared Git metadata
+Worktrees share Git history. Lifecycle operations must not assume `.git` is a directory.
 
-Worktrees share repository history.
-
-Lifecycle scripts MUST NOT assume `.git` is always a directory; in a worktree it may be a file that points to shared Git metadata.
-
-### 10.3 Destructive safety
-
-Reset operations must remain inside the selected worktree.
-
-They MUST NOT:
+A reset inside one worktree must not:
 
 - modify sibling worktrees;
 - remove shared Git metadata;
-- infer the repository root from the parent of the common Git directory;
-- clean untracked files globally across worktrees.
+- clean untracked files globally;
+- derive the workspace root from the parent of the common Git directory.
 
 ---
 
 ## 11. Controlled filesystem duplication
 
-Filesystem duplication is supported when Git is unavailable or the source includes uncommitted framework work that must be preserved.
+Filesystem duplication is appropriate when Git is unavailable or uncommitted framework work must be preserved.
 
-### 11.1 Required exclusions
+### 11.1 Exclude local and generated content
 
-A clean duplicate SHOULD exclude:
+A clean duplicate should exclude:
 
 ```text
 .venv/
@@ -430,15 +423,15 @@ build/
 dist/
 coverage/
 htmlcov/
-runs/
+run_<run-id>/
 .gf_wordbench_state.json
-temporary files
+temporary lifecycle paths
 editor caches
 ```
 
-### 11.2 Required inclusions
+### 11.2 Include repository-owned content
 
-The duplicate MUST include:
+The duplicate includes:
 
 ```text
 app/
@@ -446,224 +439,201 @@ tests/
 docs/
 project/
 templates/
-scripts/
 pyproject.toml
 README.md
 CHANGELOG.md
 CONTRIBUTING.md
 SECURITY.md
 LICENSE.md
-launchers when supported
-repository metadata when intentionally copied
+supported launchers
+maintenance code owned by the repository
 ```
 
-### 11.3 Symlinks and junctions
+### 11.3 Links and junctions
 
-Filesystem duplication must handle symlinks and Windows junctions deliberately.
-
-Default safe policy:
+The default policy is:
 
 ```text
-preserve link identity or reject
+preserve a known safe link
+or reject it
 do not recursively follow unknown links
 ```
 
-Following a link can copy or later delete content outside the intended repository.
+Unknown symlinks and Windows junctions can copy or later expose content outside the workspace.
 
-### 11.4 Post-copy validation
+### 11.4 Validation
 
-A filesystem duplicate requires:
+After duplication, verify:
 
-```text
-repository root validation
-template validation
-old-language identifier scan
-generated-file scan
-path-overlap check
-strict repository check
-```
+- repository root;
+- template structure;
+- active-project identity;
+- generated-file absence;
+- path non-overlap;
+- old-language identifiers;
+- environment-specific absolute paths.
 
 ---
 
-## 12. Clone identity
+## 12. Workspace identity
 
-The working-copy directory name is not the active project ID.
-
-Example:
+A directory name does not define:
 
 ```text
-C:\work\GF_Wordbench_French
-```
-
-does not define:
-
-```text
-project.id
+project ID
 language code
 module suffix
 entrypoint
+release artifact identity
 ```
 
-Those values come from `project/project.toml`.
+Those values come from `project/project.toml` and project-owned contracts.
 
-The clone destination may be renamed without changing project identity, provided local paths and tools are revalidated.
+Renaming the workspace directory does not change project identity, but local environment paths must be revalidated.
 
 ---
 
-## 13. Clone preflight
+## 13. Workspace preflight
 
-Before resetting or initializing a clone, verify:
+Before reset or initialization, verify:
 
 ```text
-repository root found
-pyproject.toml found
-app/ found
-docs/ found
-templates/project/ found
-template contract lock found
-project/ found or intentionally absent
-Git/worktree boundaries understood
+repository root resolved
+pyproject.toml present
+app/ present
+docs/ present
+templates/project/ present
+template lock present
+project/ present or intentionally absent
+Git or worktree boundary understood
 destination differs from source
-no active lifecycle operation
-no running audit owned by this copy
+no active lifecycle writer
+no active run in this workspace
 no unsafe path overlap
 ```
 
-Recommended structural check:
-
-```text
-gf-wordbench repository check --strict
-```
-
-Exact syntax belongs to `CLI_REFERENCE.md`.
+The exact validation command belongs to `CLI_REFERENCE.md`.
 
 ---
 
-## 14. Clone cleanliness check
+## 14. Workspace cleanliness
 
-A clone intended for a new language should be checked for:
+Check for:
 
-```text
-old `.gf_wordbench_state.json`
-old `runs/`
-old generated `.gfo`
-old generated `.pgf`
-old normalized `.out`
-old compile and scenario logs
-old absolute local paths
-old-language identifiers
-old project decisions
-old scenario IDs
-old gold files
-old project lock values
-```
+- stale application state;
+- old `run_<run-id>/` directories;
+- generated `.gfo` or `.pgf` files outside approved run roots;
+- generated normalized output outside approved run roots;
+- old compile and scenario logs;
+- local absolute paths;
+- old-language identifiers;
+- old scenario and gold mappings;
+- old project decisions;
+- old project-lock values;
+- stale staging or rollback directories.
 
-Tracked active-project content is expected before reset.
-
-Generated and local content should normally be absent.
+Tracked active-project content is expected before reset. Generated local content should be absent or intentionally handled.
 
 ---
 
-## 15. Virtual environment policy
+## 15. Virtual environments
 
-A Python virtual environment is local machine state.
+A Python virtual environment is local machine state and should be recreated.
 
-It SHOULD be recreated in the clone.
-
-Do not rely on copying:
-
-```text
-.venv/
-venv/
-```
-
-Reasons:
+Do not rely on copying `.venv/` or `venv/` because:
 
 - interpreter paths may be absolute;
 - platform binaries may differ;
-- editable-install paths may point to the source copy;
-- dependency state may be stale.
+- editable-install paths may reference the source workspace;
+- dependencies may be stale.
 
-The clone’s environment is validated independently.
+Each workspace validates its environment independently.
 
 ---
 
 # Part II — Reset scopes
 
-## 16. Canonical reset scopes
+## 16. New-project reset
 
-GF Wordbench distinguishes four independent operations.
-
-### 16.1 New-language reset
-
-Default scope for repurposing a clone:
+Default scope for repurposing a workspace:
 
 ```text
 replace project/
-remove local runs/
-remove local application state
-preserve framework and template
-preserve external GF source tree
+remove local run_<run-id>/ directories
+remove .gf_wordbench_state.json
+preserve framework
+preserve templates/project/
+preserve external GF source trees
 ```
-
-### 16.2 Project-only reset
-
-Scope:
-
-```text
-replace project/
-retain runs/ intentionally
-retain application state intentionally
-```
-
-This is exceptional.
-
-It requires explicit flags or equivalent confirmation because retained evidence may refer to the previous active project.
-
-### 16.3 Generated-evidence cleanup
-
-Scope:
-
-```text
-remove selected or all generated run directories
-preserve project/
-preserve state unless cleanup policy says otherwise
-```
-
-This is governed primarily by operations documentation.
-
-### 16.4 State reset
-
-Scope:
-
-```text
-remove `.gf_wordbench_state.json`
-preserve project/
-preserve runs/
-```
-
-This is governed by `APPLICATION_STATE_REFERENCE.md`.
 
 ---
 
-## 17. Canonical new-language reset boundary
+## 17. Project-only reset
 
-Paths replaced or removed:
+Scope:
+
+```text
+replace project/
+retain run_<run-id>/ directories intentionally
+retain local application state intentionally
+```
+
+This scope is exceptional because retained evidence and state may refer to the previous project.
+
+It requires explicit authorization and must prevent retained runs from becoming automatic regression baselines for the new project.
+
+---
+
+## 18. Generated-evidence cleanup
+
+Scope:
+
+```text
+remove selected or all canonical run_<run-id>/ directories
+preserve project/
+preserve application state unless separately reset
+```
+
+Cleanup follows `RUN_DIRECTORY_LIFECYCLE.md`.
+
+It must not search the repository broadly for extensions such as `.gfo`, `.pgf`, or `.out`.
+
+---
+
+## 19. State reset
+
+Scope:
+
+```text
+remove .gf_wordbench_state.json
+preserve project/
+preserve run_<run-id>/ directories
+```
+
+State reset follows `APPLICATION_STATE_REFERENCE.md`.
+
+A missing state file is a successful no-op.
+
+---
+
+## 20. Preserved and replaced paths
+
+### Replaced or removed during new-project reset
 
 ```text
 project/
-runs/
+run_<run-id>/ directories owned by this workspace
 .gf_wordbench_state.json
+temporary lifecycle artifacts created by the operation
 ```
 
-Paths preserved:
+### Preserved
 
 ```text
 app/
 tests/
 docs/
 templates/
-scripts/
 pyproject.toml
 README.md
 CHANGELOG.md
@@ -671,38 +641,19 @@ CONTRIBUTING.md
 SECURITY.md
 LICENSE.md
 Git metadata
-launchers
+supported launchers
 external GF source trees
 ```
 
-### 17.1 Optional absent paths
+A missing state file or missing run directories is normal.
 
-A missing:
-
-```text
-runs/
-.gf_wordbench_state.json
-```
-
-is normal.
-
-Reset remains idempotent for these paths.
-
-### 17.2 `project/` must be recreated
-
-After a successful reset:
-
-```text
-project/
-```
-
-exists and is structurally valid as a clean template copy.
+A successful reset recreates a structurally valid `project/`.
 
 ---
 
-## 18. Active project structure
+## 21. Active-project structure
 
-The reset target mirrors the required template structure:
+The reset target mirrors the reusable project template:
 
 ```text
 project/
@@ -719,7 +670,6 @@ project/
 │   ├── SYNTAX_AND_CONSTRUCTOR_RULES.md
 │   ├── VALIDATION_SPEC.md
 │   ├── TEST_COVERAGE_MATRIX.md
-│   ├── STATUS_LEDGER.md
 │   ├── DECISION_LOG.md
 │   ├── KNOWN_ISSUES.md
 │   ├── RELEASE_CRITERIA.md
@@ -734,87 +684,56 @@ project/
         └── README.md
 ```
 
-A reset copies the template structure.
-
-It does not invent language-specific scenario, gold or input content.
+The reset copies structure and generic guidance. It does not invent language-specific source, scenarios, inputs, golds, or release evidence.
 
 ---
 
-## 19. Template source
+## 22. Template invariants
 
-Canonical source:
+`templates/project/` contains:
 
-```text
-templates/project/
-```
-
-### 19.1 Template invariants
-
-The template must contain:
-
-- generic instructions;
-- placeholders;
-- empty registries;
+- language-neutral instructions;
+- explicit placeholders;
 - generic validation guidance;
+- empty or example-only registries;
 - no active-language identity;
-- no old-language identity;
 - no generated evidence;
 - no local absolute paths;
-- no completed project decisions presented as current;
+- no Portfolio configuration;
+- no completed project decisions presented as active facts;
 - no populated release evidence.
 
-### 19.2 Mirror invariants
+Required relative paths in `project/` and `templates/project/` match by role.
 
-Required relative paths in:
-
-```text
-project/
-templates/project/
-```
-
-must match.
-
-Content differs:
-
-```text
-template = generic
-active project = populated
-```
-
-### 19.3 Template immutability during reset
-
-A project reset reads from `templates/project/`.
-
-It MUST NOT modify the template.
-
-If template validation fails, reset stops before changing `project/`.
+The template is read-only during reset. If it fails validation, reset stops before changing `project/`.
 
 ---
 
 # Part III — Reset safety
 
-## 20. Reset preconditions
+## 23. Preconditions
 
-Before filesystem mutation, the reset operation MUST verify:
+Before mutation, the reset operation verifies:
 
 ```text
-repository root
-active project path
-template project path
+workspace root
+project path
+template path
 path containment
 path non-overlap
 template completeness
 template cleanliness
 active-operation state
 archive or discard policy
-destination write permissions
-temporary staging capability
+write permissions
+staging capability
 rollback capability
+external source protection
 ```
 
-### 20.1 Repository root proof
+### 23.1 Workspace-root proof
 
-The root SHOULD be verified through multiple stable markers, such as:
+The root is verified through several stable markers, for example:
 
 ```text
 pyproject.toml
@@ -826,83 +745,74 @@ templates/project/
 
 Current working directory alone is insufficient.
 
-### 20.2 Path containment
+### 23.2 Exact project path
 
-The resolved project path MUST be exactly:
+The resolved active-project path is:
 
 ```text
-<repository-root>/project
+<workspace-root>/project
 ```
 
-unless a future project model explicitly supports another canonical location.
+Reset rejects:
 
-The reset operation must reject:
+- the workspace root;
+- a parent of the workspace;
+- `templates/project/`;
+- `app/`;
+- `tests/`;
+- `docs/`;
+- filesystem or drive roots;
+- user home;
+- external source roots;
+- run directories.
 
-```text
-repository root itself
-repository parent
-templates/project/
-app/
-tests/
-docs/
-scripts/
-filesystem root
-drive root
-user home
-external source root
-```
+### 23.3 Non-overlap
 
-### 20.3 Path overlap
-
-After resolving symlinks or junction policy, these must be distinct:
+After link and junction resolution, the following are distinct:
 
 ```text
-repository root
-project path
-template path
+workspace root
+active project
+project template
 archive destination
 external source roots
-temporary staging path
+staging path
+rollback path
+run directories
 ```
 
-### 20.4 Active audit
+### 23.4 Active operations
 
-Reset MUST NOT begin while the same working copy has an active audit or lifecycle operation.
+Reset must not begin while the same workspace has:
 
-Runtime coordination may use a temporary lock.
+- an active validation run;
+- another reset;
+- project initialization;
+- migration;
+- generated-evidence cleanup affecting the same paths.
 
-A temporary lock is not a persisted project contract and must be removed after completion or safely recognized as stale.
+A temporary lifecycle lock coordinates writers.
 
 ---
 
-## 21. Git working-tree preflight
+## 24. Git preflight
 
-When Git metadata is available, the reset planner SHOULD identify:
+When Git metadata is available, planning identifies:
 
-```text
-modified tracked files
-untracked files
-ignored generated files
-current branch
-worktree root
-```
+- modified tracked files;
+- untracked files;
+- ignored generated files;
+- current branch;
+- worktree root.
 
-### 21.1 Uncommitted active-project changes
+If `project/` contains uncommitted changes, the operation requires:
 
-If `project/` contains uncommitted changes:
+- a verified archive; or
+- explicit discard authorization.
 
-- archive is required; or
-- explicit discard confirmation is required.
+Framework changes outside reset scope do not automatically block reset, but they appear in the plan.
 
-### 21.2 Framework changes
-
-Uncommitted changes outside reset scope do not need to block reset automatically.
-
-They MUST be listed in the plan so the user knows the working copy is not clean.
-
-### 21.3 No automatic Git commands
-
-Reset MUST NOT silently:
+Reset must not silently run:
 
 ```text
 git reset --hard
@@ -913,110 +823,78 @@ git stash
 git commit
 ```
 
-GF Wordbench owns only its explicit filesystem plan.
-
 ---
 
-## 22. Dry-run requirement
+## 25. Dry run
 
-A destructive reset must support an equivalent of:
+Every destructive reset supports a dry-run equivalent.
 
-```text
-gf-wordbench project reset --dry-run
-```
-
-The dry run performs all non-mutating validations and prints or returns a deterministic plan.
-
-### 22.1 Dry-run output
-
-The plan includes:
+The dry run performs all non-mutating checks and returns a deterministic reset plan containing:
 
 ```text
-repository root
+workspace root
 project path
 template path
 archive destination or discard mode
-paths to preserve
-paths to replace
-paths to delete
-external source roots detected
-run count and approximate size
+preserve set
+replace set
+removal set
+external source roots
+run directories and approximate size
 state-file presence
-Git-change summary when available
+Git summary when available
+staging and rollback strategy
 validation steps
-rollback strategy
 warnings
 ```
 
-### 22.2 Dry-run invariants
+Dry run must not:
 
-Dry run MUST NOT:
+- create a staged project;
+- create an archive;
+- delete files;
+- replace `project/`;
+- remove run directories;
+- remove application state;
+- write `project.toml`;
+- modify Git state.
 
-```text
-create the staged project
-create an archive
-delete files
-replace project/
-clear runs/
-clear state
-write project.toml
-modify Git state
-```
-
-A harmless temporary probe file MAY be used only when necessary to test write capability and must be removed immediately.
+A temporary write-capability probe may be used only when necessary and must be removed immediately.
 
 ---
 
-## 23. Destructive authorization
+## 26. Destructive authorization
 
-A reset that would replace non-template project content requires one of:
+Replacing non-template project content requires:
 
 ```text
-verified archive destination
-explicit discard authorization
+verified archive
+or explicit discard authorization
 ```
 
-### 23.1 Interactive confirmation
+### 26.1 Interactive authorization
 
-The confirmation SHOULD show:
+The confirmation shows:
 
-- repository root;
-- active project ID when readable;
+- workspace root;
+- current project ID when readable;
 - paths affected;
-- whether an archive will be created;
-- whether runs will be removed;
-- whether state will be removed;
-- external paths that will not be touched.
+- archive behavior;
+- run cleanup behavior;
+- state reset behavior;
+- external paths that remain untouched.
 
-The user SHOULD confirm with the current project ID or another specific token, not a generic accidental Enter.
+Confirmation should require a specific token such as the current project ID.
 
-### 23.2 Non-interactive confirmation
+### 26.2 Non-interactive authorization
 
-Automation requires explicit destructive flags equivalent to:
+Automation must provide explicit authorization for destruction and archive or discard behavior.
 
-```text
---yes
-```
+It must not prompt and must fail when authorization is incomplete.
 
-and either:
+### 26.3 Preservation by default
 
-```text
---archive <path>
-```
-
-or:
-
-```text
---discard
-```
-
-A non-interactive reset must not prompt and must fail when authorization is incomplete.
-
-### 23.3 Default behavior
-
-The default must favor preservation.
-
-Absence of archive and absence of explicit discard means:
+Without a verified archive or explicit discard:
 
 ```text
 do not reset
@@ -1026,115 +904,74 @@ do not reset
 
 # Part IV — Archival
 
-## 24. Archive purpose
+## 27. Archive content
 
-An archive preserves active-project work before reset.
-
-It is not a release package and does not make uncommitted work valid.
-
-### 24.1 Required archive content
-
-The project archive contains the complete current:
+The required archive contains the complete current:
 
 ```text
 project/
 ```
 
-including:
+including project configuration, documentation, scenarios, inputs, golds, project lock, and project README.
 
-```text
-project.toml
-project documentation
-scenario files
-gold files
-input files
-project README
-project contract lock
-```
+At explicit request, it may also contain:
 
-### 24.2 Optional archive content
+- selected release-significant run directories;
+- migration notes;
+- Git status text;
+- framework revision identity.
 
-At explicit request, an archive may also contain selected:
+Excluded by default:
 
-```text
-release-significant run directories
-migration notes
-Git status text
-framework commit identifier
-```
+- application state;
+- every local run;
+- virtual environments;
+- Python caches;
+- build output;
+- external source trees;
+- credentials;
+- complete environment dumps.
 
-### 24.3 Excluded by default
-
-Do not archive by default:
-
-```text
-.gf_wordbench_state.json
-all runs/
-virtual environments
-Python caches
-build output
-external GF source tree
-credentials
-environment dumps
-```
-
-### 24.4 External source warning
-
-If `project.toml` references an external GF source tree, archiving `project/` alone does not preserve that source.
-
-The reset plan must state this clearly.
-
-Backing up the external source is a separate explicit operation.
+If project configuration references an external source tree, the plan states that archiving `project/` does not preserve those sources.
 
 ---
 
-## 25. Archive destination
+## 28. Archive destination
 
-The archive destination SHOULD be outside the repository being reset.
+The destination should be outside the workspace being reset.
 
-Reasons:
-
-- it must survive repository cleanup;
-- it must not become active project content;
-- it must not be copied back from the template;
-- it must not become a generated run artifact;
-- it must not create a new permanent top-level repository boundary.
-
-Allowed forms:
+Allowed forms include:
 
 ```text
 external directory
 external ZIP archive
 approved backup location
-version-control commit outside the reset operation
+source-control preservation performed outside reset
 ```
 
-### 25.1 Destination restrictions
-
-Reject an archive destination that resolves inside:
+Reject destinations inside:
 
 ```text
 project/
 templates/project/
-runs/ scheduled for deletion
-temporary staging directory
+a run directory scheduled for removal
+staging path
+rollback path
 ```
 
-An archive inside the repository root is discouraged and must not overlap reset scope.
+An archive inside the workspace root is discouraged and must not overlap any reset scope.
 
 ---
 
-## 26. Archive verification
+## 29. Archive verification
 
-Before destructive replacement, archive creation MUST be verified.
-
-Verification includes:
+Before replacement, verify:
 
 ```text
-every required project path copied
-file count compared
-file sizes compared
-content hashes compared where practical
+all required project paths copied
+file count consistent
+file sizes consistent
+content hashes consistent where practical
 archive can be reopened
 destination differs from source
 no copy errors remain
@@ -1142,41 +979,29 @@ no copy errors remain
 
 A failed or incomplete archive blocks reset.
 
-### 26.1 Symlink behavior
+The archive follows the declared link policy and must not unexpectedly copy external trees.
 
-The archive operation follows the declared symlink policy.
-
-It must not unexpectedly copy linked external trees.
-
-### 26.2 Archive immutability
-
-After verification and before reset, the archive is treated as read-only evidence for the operation.
-
-GF Wordbench does not continue writing project changes into it.
+After verification, the archive is treated as read-only evidence for the operation.
 
 ---
 
-## 27. Discard mode
+## 30. Discard mode
 
-Discard mode replaces the active project without creating an archive.
+Discard mode is valid only when:
 
-It is valid only when:
-
-- the user explicitly authorizes it;
-- the plan identifies exactly what is lost;
-- no misleading “backup complete” status is shown;
+- explicitly authorized;
+- the plan identifies what will be lost;
+- no archive-complete claim is emitted;
 - external source trees remain untouched;
-- transactional replacement still protects against partial reset.
+- staging, validation, swap, and rollback protections remain active.
 
-Discard mode does not permit broad repository deletion.
+Discard never authorizes broad repository deletion.
 
 ---
 
 # Part V — Transactional replacement
 
-## 28. Reset phases
-
-Canonical reset phases:
+## 31. Reset phases
 
 ```text
 PLAN
@@ -1186,303 +1011,221 @@ STAGE
 VALIDATE_STAGE
 SWAP
 VALIDATE_ACTIVE_PROJECT
-CLEAN_LOCAL_GENERATED_STATE
-FINALIZE
+CLEAN_GENERATED_STATE
+COMPLETE
 ```
 
-Each phase has an explicit result.
+Each phase returns an explicit result.
 
 ---
 
-## 29. Phase 1 — Plan
+## 32. Plan and preflight
 
-The reset planner resolves:
+Planning resolves:
 
 ```text
-repository root
-active project
-template project
+workspace root
+active project path
+template path
 staging path
 rollback path
 archive path
-runs path
+run paths
 state path
 external source roots
 preserve set
 replace set
-delete set
+removal set
 ```
-
-No mutation occurs.
-
----
-
-## 30. Phase 2 — Preflight
 
 Preflight validates:
 
 - path safety;
 - template completeness;
 - write capability;
-- archive policy;
-- concurrency;
-- Git information when available;
+- archive or discard authorization;
+- lifecycle concurrency;
 - project structure;
 - source-tree protection.
 
-A preflight error produces no mutation.
+A planning or preflight failure causes no mutation.
 
 ---
 
-## 31. Phase 3 — Archive or discard authorization
+## 33. Stage
 
-When archive mode is selected:
-
-1. create archive;
-2. verify archive;
-3. record verification result.
-
-When discard mode is selected:
-
-1. verify explicit authorization;
-2. record discard mode in operation output.
-
-No project replacement begins before this phase succeeds.
-
----
-
-## 32. Phase 4 — Stage
-
-The reset operation copies:
+The operation copies:
 
 ```text
 templates/project/
 ```
 
-to a temporary sibling staging path.
+to a temporary sibling staging path on the same filesystem when atomic rename is required.
 
-Example conceptual path:
+The staged project:
 
-```text
-.<project-reset-stage>-<operation-id>/
-```
-
-The exact temporary name is private implementation detail.
-
-### 32.1 Staging rules
-
-The staged copy:
-
-- resides on the same filesystem when atomic rename is required;
 - does not overwrite `project/`;
-- preserves required file content and permissions where appropriate;
+- preserves required content and permissions;
 - contains no active-language additions;
 - contains no generated artifacts;
-- receives no project identity yet unless reset and initialization are one explicitly coordinated transaction.
+- contains no Portfolio state;
+- remains separate from initialization unless one explicit transaction combines them.
 
 ---
 
-## 33. Phase 5 — Validate staged project
+## 34. Validate the staged project
 
 Before swap, validate:
 
 ```text
-all required relative paths exist
-project.toml parses as the template form
-template contract lock exists
-no local absolute paths
-no known active-language identifiers
-no generated scenario output
-no run artifacts
-no invalid symlink escapes
+required relative paths
+template-form project.toml
+template contract lock
+absence of local absolute paths
+absence of active-language identifiers
+absence of generated evidence
+absence of invalid link escapes
 UTF-8 text where required
-project/template mirror rules
+project/template mirror contract
 ```
 
-A staged validation failure removes the stage and leaves `project/` unchanged.
+A validation failure removes or preserves the stage according to recovery policy and leaves `project/` unchanged.
 
 ---
 
-## 34. Phase 6 — Swap
+## 35. Swap
 
 Preferred same-filesystem sequence:
 
-1. rename existing `project/` to a temporary rollback path;
+1. rename current `project/` to a rollback path;
 2. rename staged project to `project/`;
-3. verify `project/` exists;
-4. retain rollback path until active-project validation succeeds.
+3. verify that the new `project/` exists;
+4. retain rollback material until active-project validation succeeds.
 
-### 34.1 No delete-first strategy
-
-The following is prohibited:
+The delete-first strategy is prohibited:
 
 ```text
 delete project/
 then copy template
 ```
 
-A copy failure would leave no active project.
+When atomic rename is unavailable, use the safest platform-supported equivalent and preserve rollback material until validation succeeds.
 
-### 34.2 Platform limitations
-
-When atomic directory rename is unavailable, the implementation must use the safest supported equivalent and retain rollback material until validation succeeds.
-
-The fallback must be documented and tested for Windows.
+Windows behavior must be tested explicitly.
 
 ---
 
-## 35. Phase 7 — Validate active project
+## 36. Validate the active project
 
-Validate the newly active:
-
-```text
-project/
-```
-
-Checks include:
+After swap, verify:
 
 ```text
 required structure
 project schema parseability
-template placeholder policy
-contract lock presence
+placeholder policy
+contract-lock presence
 path containment
-no old active-project files
-no generated evidence
-no template mutation
+absence of previous project-only files
+absence of generated evidence
+template unchanged
 ```
 
-The clean reset project may still contain required placeholders and therefore may not yet be runnable.
-
-That is valid before initialization.
+A clean reset scaffold may contain explicit placeholders and may not yet be executable. Initialization resolves required project identity and contracts.
 
 ---
 
-## 36. Phase 8 — Clean local generated state
+## 37. Clean generated state
 
-For a new-language reset, after project replacement succeeds:
+For a new-project reset, after project replacement succeeds:
 
 ```text
-remove runs/
-remove `.gf_wordbench_state.json`
+remove canonical run_<run-id>/ directories selected by the reset plan
+remove .gf_wordbench_state.json
 ```
 
-### 36.1 Ordering
+Cleanup occurs while rollback remains available.
 
-Generated cleanup occurs after the project swap has succeeded and rollback remains available.
-
-### 36.2 Run deletion
-
-Run removal follows run-cleanup path safety.
-
-Only the canonical run root for this repository copy is affected.
-
-### 36.3 State deletion
-
-State deletion follows the application-state reset contract.
+Only run directories owned by this workspace and identified through canonical run semantics may be removed.
 
 A missing state file is not an error.
 
-### 36.4 Cleanup failure
+If project replacement succeeds but cleanup fails:
 
-If project reset succeeds but generated cleanup fails:
-
-- report partial completion clearly;
-- do not claim a fully clean new-language reset;
-- preserve the valid new `project/`;
-- identify remaining stale paths;
-- permit explicit cleanup retry.
-
-Rollback of the new project is not automatically required for a failed non-authoritative cleanup unless policy defines a single all-or-nothing transaction.
+- report partial completion;
+- keep the valid new `project/`;
+- identify stale paths;
+- allow explicit cleanup retry;
+- do not claim a completely cleaned workspace.
 
 ---
 
-## 37. Phase 9 — Finalize
+## 38. Complete or roll back
 
-After all required validation succeeds:
+After successful validation and required cleanup:
 
-1. delete the temporary rollback directory;
-2. delete remaining staging artifacts;
-3. release lifecycle lock;
-4. emit operation summary;
-5. list next initialization steps;
-6. return success.
+1. remove the rollback directory;
+2. remove staging artifacts;
+3. release the lifecycle lock;
+4. emit an operation summary;
+5. list project initialization steps.
 
-If an external archive was created, it remains untouched.
+### 38.1 Failure before swap
 
----
+The active project remains unchanged.
 
-## 38. Rollback behavior
+### 38.2 Failure during swap
 
-### 38.1 Before swap
+Restore the rollback project.
 
-Failure leaves active project unchanged.
+### 38.3 Failure after swap but before validation
 
-### 38.2 During swap
-
-If the staged project cannot become active, restore the rollback directory to `project/`.
-
-### 38.3 After swap but before validation
-
-If active-project validation fails:
-
-1. move invalid new project aside or remove it safely;
-2. restore rollback project;
-3. verify restored project;
-4. report rollback success or failure;
-5. preserve diagnostic evidence.
+1. move the invalid new project aside or remove it safely;
+2. restore the rollback project;
+3. verify the restored project;
+4. preserve diagnostic evidence;
+5. report rollback outcome.
 
 ### 38.4 Rollback failure
 
 Rollback failure is a critical lifecycle error.
 
-The operation must report:
+Report:
 
 ```text
-current project path state
+current project-path state
 rollback path
 archive path
-manual recovery instructions
-paths not to delete
+manual recovery actions
+paths that must not be deleted
 ```
 
-It MUST NOT continue with run or state cleanup.
+Do not continue with run or state cleanup.
 
 ---
 
-## 39. Temporary artifact cleanup
+## 39. Temporary artifacts
 
-Temporary staging and rollback paths are private operation artifacts.
+Staging, rollback, and lifecycle-lock paths are private operation artifacts.
 
-They SHOULD be removed after success.
+They are removed after success.
 
-After failure, a path may be retained when required for recovery.
-
-The next lifecycle operation must detect stale temporary paths and refuse unsafe reuse until they are resolved.
+After failure, they may remain when required for recovery. The next lifecycle operation detects stale artifacts and refuses unsafe reuse until they are resolved.
 
 ---
 
 # Part VI — Project initialization
 
-## 40. Reset output versus initialized project
-
-A reset produces a clean template-derived project.
-
-An initialized project has populated identity and validated paths.
-
-These are separate states:
+## 40. Reset scaffold and initialized project
 
 ```text
-clean scaffold
-      ↓
-initialization
-      ↓
-active project
+template-derived scaffold
+    ↓
+project initialization
+    ↓
+configured active project
 ```
 
-### 40.1 Why separation matters
-
-Reset should not guess:
+Reset does not guess:
 
 ```text
 project ID
@@ -1491,242 +1234,181 @@ language code
 module suffix
 source root
 entrypoints
+checkpoints
 scenario IDs
+release entrypoint
 expected PGF
 ```
 
-Initialization receives those decisions explicitly.
+Initialization receives these decisions explicitly.
 
 ---
 
-## 41. Canonical initialization flow
+## 41. Initialization responsibilities
 
-Conceptual operation:
+The `projects` module:
 
-```text
-gf-wordbench project init
-```
+1. verifies the scaffold;
+2. accepts required project identity;
+3. writes `project/project.toml`;
+4. replaces required project-document placeholders;
+5. populates the active project lock;
+6. validates path relationships;
+7. preserves empty scenario, input, and gold registries until explicitly defined;
+8. rejects unresolved required placeholders;
+9. writes atomically;
+10. runs project checks.
 
-The exact CLI parameters belong to `CLI_REFERENCE.md`.
-
-The initializer must:
-
-1. verify a clean or explicitly allowed project scaffold;
-2. collect required project identity;
-3. populate `project/project.toml`;
-4. populate project documentation identity fields;
-5. populate the active project contract lock;
-6. validate paths;
-7. preserve empty scenario/gold registries until explicitly defined;
-8. reject unresolved required placeholders;
-9. write atomically;
-10. run project checks.
+Exact project fields belong to `PROJECT_TOML_REFERENCE.md`.
 
 ---
 
 ## 42. Initialization input
 
-Required identity normally includes:
+Required identity includes, as applicable:
 
 ```text
 project ID
 display name
 language name
 language code
-module suffix where used
+module suffix
 source-root relationship
 project owner
 ```
 
-Required validation configuration is added when known:
+Validation configuration includes:
 
 ```text
 source directory
-source glob
-GF path parts
+source selection
+GF path additions
 entrypoints
 checkpoints
 required scenarios
 optional scenarios
-release targets
+release entrypoint
 expected artifacts
 ```
 
-The project schema reference owns exact field names.
+Initialization does not create Portfolio identity.
 
 ---
 
 ## 43. Placeholder policy
 
-Placeholders are valid in:
+Placeholders are allowed in:
 
 ```text
 templates/project/
-fresh reset scaffold before initialization
+a fresh scaffold before initialization
 ```
 
-Placeholders are not valid in a fully initialized active project when they affect required contracts.
+Required placeholders are not allowed in a configured active project.
 
-Examples:
-
-```text
-<PROJECT_OWNER>
-<LANGUAGE_NAME>
-<LANGUAGE_CODE>
-<PROJECT_ROOT>
-<SOURCE_DIR>
-<ENTRYPOINT>
-<EXPECTED_PGF>
-```
-
-The initializer must report unresolved placeholders.
+The initializer reports every unresolved required placeholder.
 
 ---
 
-## 44. Scenario and gold initialization
+## 44. Scenarios, inputs, and golds
 
-Initialization MUST NOT invent linguistic expectations.
+Initialization must not invent linguistic expectations.
 
 It may create:
 
-```text
-empty scenario registry
-documented example disabled by default
-README guidance
-```
+- empty registries;
+- disabled examples;
+- README guidance;
+- placeholder-free directory structure.
 
-It MUST NOT create passing gold files without executed and reviewed scenario output.
+It must not create passing gold files without executed and reviewed scenario output.
 
-A required gold is added only through the explicit scenario and gold workflow.
+Golds are added only through the explicit gold workflow.
 
 ---
 
-## 45. External GF source tree
+## 45. External GF source trees
 
-The GF source tree may be external to GF Wordbench.
+A project may reference a source tree outside the workspace.
 
-Example relationship:
+Reset never deletes or rewrites that tree.
 
-```text
-GF Wordbench clone
-    project/project.toml
-        → external GF source root
-```
+Initialization records the source relationship through project configuration.
 
-### 45.1 Reset rule
-
-Project reset never deletes or rewrites the external source tree.
-
-### 45.2 Initialization rule
-
-Initialization stores or resolves the source relationship through project configuration.
-
-### 45.3 Validation rule
-
-Before use, GF Wordbench validates:
+Before validation, verify:
 
 ```text
 source root exists
-source root is approved
+source root is explicitly approved
 entrypoints exist
-path containment policy is satisfied
-GF path resolution is valid
+path policy is satisfied
+GF search paths resolve
 ```
 
-### 45.4 Source inside `project/`
-
-When language source is intentionally stored inside `project/`, it is project-owned and will be archived and replaced by reset.
-
-The reset plan must detect and state this consequence.
+When sources intentionally reside inside `project/`, they are project-owned and are included in archive and replacement scope. The reset plan states this consequence explicitly.
 
 ---
 
 # Part VII — Retained evidence and identity
 
-## 46. Runs from the previous active project
+## 46. Previous-project runs
 
-Old runs are evidence for the previous project identity.
+Runs from the previous active project must not become evidence for the new project.
 
-They must not become evidence for the new active language.
+A new-project reset removes local canonical run directories after archival decisions.
 
-Default new-language reset removes local:
-
-```text
-runs/
-```
-
-after archival decisions.
-
-### 46.1 Retaining runs
-
-Retaining old runs requires explicit project-only reset behavior.
-
-Retained runs:
+When runs are intentionally retained, they:
 
 - remain immutable;
-- must be labeled as previous-project evidence;
-- must not be selected as the new project’s regression baseline automatically;
-- must not define active language identity;
-- may contain absolute paths and old identifiers.
+- preserve their original project identity;
+- are not selected automatically as a regression baseline;
+- do not define the active project;
+- may contain previous local paths and language identifiers.
 
-### 46.2 Recommended preservation
-
-Release-significant old runs should be archived outside the new-language working copy before deletion.
+Release-significant runs should be archived outside the repurposed workspace.
 
 ---
 
-## 47. Application state from the previous project
+## 47. Previous application state
 
-Old application state may contain:
+Application state may contain:
 
 ```text
-old project root
-old target file
-old RGL path
-old GF executable path
+old project path
+old target
+old GF or RGL path
 old output root
-old last-run pointer
+old run pointer
 old mode preference
+UI preferences
 ```
 
-Default new-language reset removes:
+A new-project reset removes `.gf_wordbench_state.json`.
 
-```text
-.gf_wordbench_state.json
-```
-
-The new application session starts with safe defaults.
-
-State must never supply old language identity.
+Application state never supplies language identity, required entrypoints, scenarios, or release policy.
 
 ---
 
 ## 48. Git history
 
-A clone normally preserves repository history.
+Reset changes the working tree but does not erase Git history.
 
-Project reset changes the working tree; it does not erase history.
+Recommended sequence:
 
-Recommended workflow:
-
-1. commit or archive valuable active-project work;
-2. create the new working copy;
-3. perform reset;
+1. commit or archive valuable work;
+2. create the isolated workspace;
+3. reset;
 4. inspect changes;
-5. commit the clean new-language baseline;
-6. initialize and commit project identity separately when useful.
+5. commit the clean scaffold;
+6. initialize and commit project identity.
 
-Separating reset and initialization commits makes review easier.
-
-GF Wordbench MUST NOT create commits automatically.
+GF Wordbench does not create commits automatically.
 
 ---
 
-## 49. Old-language identifier removal
+## 49. Stale-language identifier removal
 
-After a new-language reset and initialization, active-project paths must contain no stale language identity from the previous project.
-
-Scan at least:
+After reset and initialization, inspect:
 
 ```text
 project/project.toml
@@ -1734,88 +1416,47 @@ project/README.md
 project/docs/
 project/validation/
 scenario filenames
-gold filenames
 input filenames
-active project lock
+gold filenames
+project lock
 ```
 
-Framework directories should also be checked for accidental language drift:
+Framework and template paths are also checked for accidental project-specific drift:
 
 ```text
 app/
 tests/
 docs/
 templates/
-scripts/
 ```
 
-Historical names may remain only in:
-
-```text
-documented legacy fixtures
-migration tests
-historical decision records where clearly historical
-external archives
-Git history
-```
+Previous language names may remain only in clearly identified migration fixtures, compatibility tests, archives, or Git history.
 
 ---
 
-## 50. Absolute path removal
+## 50. Absolute-path removal
 
-A new-language clone must not inherit local absolute paths in tracked project or template content.
+Tracked project and template content must not inherit:
 
-Check for:
+- Windows drive paths;
+- UNC paths;
+- POSIX home paths;
+- user-specific directories;
+- previous workspace roots;
+- local RGL roots;
+- local GF executable paths.
 
-```text
-Windows drive paths
-UNC paths
-POSIX home paths
-user-specific directories
-old repository roots
-old RGL roots
-old GF executable paths
-```
-
-Local paths belong in disposable application state or explicit local configuration policy, not the reusable template.
+Portable project paths remain project-relative. Environment-specific paths belong to approved local configuration or application state.
 
 ---
 
-# Part VIII — Project-only reset
+# Part VIII — Cleanup and state reset
 
-## 51. When project-only reset is valid
+## 51. Generated-evidence cleanup
 
-Project-only reset may be used when:
+Cleanup removes only approved run-owned content.
 
-- rebuilding the active project scaffold for the same working copy;
-- preserving old runs for forensic comparison;
-- preserving local environment selections intentionally;
-- testing initializer behavior;
-- operating in an isolated test fixture.
-
-### 51.1 Required warning
-
-The operation must warn that retained runs and state may refer to replaced project content.
-
-### 51.2 Regression baseline
-
-After project-only reset, previous runs are not eligible as regression baselines until project identity and compatibility are revalidated.
-
-### 51.3 State reconciliation
-
-At next startup, state values pass through normal validation.
-
-Invalid paths fall back safely.
-
----
-
-# Part IX — Cleanup and state reset
-
-## 52. Generated-evidence cleanup
-
-Generated cleanup removes only approved run-owned content.
-
-It MUST NOT remove:
+It must not remove:
 
 ```text
 project/
@@ -1824,249 +1465,185 @@ GF source
 gold files
 project inputs
 framework tests
-framework docs
+framework documentation
+public archives outside selected run roots
 ```
 
-Run cleanup uses the run directory lifecycle and retention contract.
-
-It is not implemented by broad filename searches for `.gfo`, `.pgf` or `.out` across the repository.
+Run cleanup uses canonical run identity and lifecycle rules, not broad extension or filename searches.
 
 ---
 
-## 53. Application-state reset
-
-Canonical artifact:
-
-```text
-.gf_wordbench_state.json
-```
+## 52. Application-state reset
 
 A state reset:
 
-- removes or replaces only application state;
+- removes only `.gf_wordbench_state.json`;
 - is idempotent;
-- does not remove runs;
-- does not replace the project;
-- does not change project configuration;
-- does not delete external source.
-
-Exact behavior is defined by `APPLICATION_STATE_REFERENCE.md`.
+- preserves project configuration;
+- preserves run evidence;
+- preserves external sources;
+- does not alter release policy.
 
 ---
 
-## 54. Template reset
+## 53. Template direction
 
-There is no normal user operation that resets `templates/project/` from `project/`.
-
-The direction is one-way:
+The supported copy direction is:
 
 ```text
 templates/project/
-        ↓
+    ↓
 project/
 ```
 
-Copying the active project back into the template is prohibited because it can introduce:
+Copying the active project back into the template as a reset mechanism is prohibited because it can introduce:
 
-```text
-active-language identity
-local paths
-scenarios
-gold expectations
-temporary decisions
-generated evidence
-```
+- active-language identity;
+- local paths;
+- project scenarios;
+- gold expectations;
+- project decisions;
+- generated evidence;
+- Portfolio identifiers.
 
 Template changes are framework-maintainer changes and require template review.
 
 ---
 
-# Part X — Command surface
+# Part IX — Command surface
 
-## 55. Logical lifecycle operations
+## 54. Lifecycle operations
 
-The final CLI should expose operations equivalent to:
-
-```text
-gf-wordbench repository check
-gf-wordbench project reset
-gf-wordbench project init
-gf-wordbench project check
-gf-wordbench state reset
-```
-
-Exact flags and spelling belong to `CLI_REFERENCE.md`.
-
-### 55.1 Reset capabilities
-
-The project reset operation must support logical equivalents of:
+The CLI provides operations for:
 
 ```text
-dry run
-archive destination
-explicit discard
-new-language cleanup
-project-only retention
-non-interactive confirmation
+workspace or repository check
+project reset
+project initialization
+project check
+generated-evidence cleanup
+application-state reset
 ```
 
-### 55.2 No clone wrapper required
+Exact spelling and options belong to `CLI_REFERENCE.md`.
 
-GF Wordbench does not need to implement a second Git client.
+The reset surface supports:
 
-Repository cloning remains a Git or filesystem operation.
+- dry run;
+- archive destination;
+- explicit discard;
+- generated-evidence cleanup;
+- project-only retention;
+- non-interactive authorization.
 
-GF Wordbench provides:
-
-```text
-clone preflight
-reset
-initialization
-validation
-```
-
-This avoids unnecessary source-control complexity.
+GF Wordbench does not implement a second Git client. Cloning remains a Git or filesystem operation.
 
 ---
 
-## 56. Conceptual command examples
+## 55. Command examples
 
-Safe archive flow:
-
-```text
-gf-wordbench project reset --dry-run --archive <external-path>
-gf-wordbench project reset --archive <external-path>
-gf-wordbench project init
-gf-wordbench project check
-```
-
-Explicit discard flow:
+Examples in this document are conceptual. `CLI_REFERENCE.md` owns executable syntax.
 
 ```text
-gf-wordbench project reset --dry-run --discard
-gf-wordbench project reset --discard --yes
+project reset --dry-run --archive <external-path>
+project reset --archive <external-path>
+project initialize
+project check
 ```
-
-State-only reset:
 
 ```text
-gf-wordbench state reset
+project reset --dry-run --discard
+project reset --discard --yes
 ```
 
-These examples define intent.
-
-`CLI_REFERENCE.md` owns final syntax.
+```text
+state reset
+```
 
 ---
 
-# Part XI — Validation after cloning and reset
+# Part X — Validation
 
-## 57. Post-clone validation
+## 56. Post-clone checks
 
-After creating the working copy, verify:
+Verify:
 
 ```text
-repository root valid
-framework imports valid
-template structure valid
-project/template mirror valid
+workspace root
+framework imports
+template structure
+project/template mirror
 state absent or valid
 runs absent or intentionally retained
-virtual environment recreated
+environment recreated
 GF executable resolved
 RGL path resolved
 ```
 
 ---
 
-## 58. Post-reset validation
+## 57. Post-reset checks
 
-A clean reset must prove:
+Verify:
 
 ```text
 project/ exists
-project/ derives from the current template
-required project paths exist
-old project-only files are absent
+project/ derives from current template
+required paths exist
+previous project-only files are absent
 template remains unchanged
-runs removed when requested
-state removed when requested
-external source untouched
-no stale staging path
-no stale rollback path
-archive verified when requested
+selected runs were removed
+state was removed when requested
+external sources remain untouched
+no stale staging or rollback path
+archive was verified when requested
 ```
 
 ---
 
-## 59. Post-initialization validation
+## 58. Post-initialization checks
 
-An initialized project must prove:
+Verify:
 
 ```text
-project schema valid
-project identity complete
-required placeholders resolved
-source root valid or explicitly pending
-entrypoints registered when required
-checkpoints registered when required
-scenario IDs unique
-gold mappings valid
-project contract lock populated
-documentation identity consistent
-no old-language identifiers
+project schema
+project identity
+required placeholders
+source-root relationship
+entrypoints and checkpoints
+scenario ID uniqueness
+input and gold mappings
+project lock
+documentation identity
+absence of stale-language identifiers
+absence of Portfolio fields
 ```
+
+A configured project may begin validation only after required project contracts are resolved.
 
 ---
 
-## 60. Repository checks
-
-Recommended strict checks:
-
-```text
-gf-wordbench repository check --strict
-gf-wordbench project check
-```
-
-The checks should detect:
-
-- missing required paths;
-- project/template structural mismatch;
-- active-language identifiers in the template;
-- old-language identifiers in the active project;
-- absolute paths in reusable files;
-- generated artifacts in source-owned directories;
-- unresolved required placeholders;
-- missing project lock;
-- invalid project schema;
-- missing scenario or gold mappings;
-- stale artifact names;
-- unexpected top-level directories.
-
----
-
-## 61. First validation run
-
-A freshly reset but uninitialized scaffold is not expected to compile.
+## 59. First validation run
 
 After initialization and source configuration:
 
 1. run project checks;
-2. run a quick validation;
-3. validate configured checkpoints;
-4. add required scenarios;
-5. review gold output explicitly;
-6. run release validation only after release criteria are defined.
+2. run quick validation;
+3. validate checkpoints;
+4. register required scenarios;
+5. execute and review scenario evidence;
+6. add golds through the explicit workflow;
+7. run release validation when release criteria are defined.
 
-Do not create empty passing evidence merely to satisfy the structure.
+Do not create empty passing evidence to satisfy structure.
 
 ---
 
-# Part XII — Error handling
+# Part XI — Errors and operation results
 
-## 62. Error categories
+## 60. Error categories
 
-Lifecycle operations should distinguish:
+Lifecycle operations distinguish:
 
 ```text
 configuration error
@@ -2082,144 +1659,113 @@ cleanup error
 validation error
 ```
 
-These are lifecycle errors, not GF language-validation failures.
+These are lifecycle errors, not GF linguistic validation failures.
 
 ---
 
-## 63. No-mutation failures
+## 61. Fail before mutation
 
-The following must fail before mutation:
+The operation fails without mutation when:
+
+- workspace root is uncertain;
+- project path is unsafe;
+- template is missing or invalid;
+- archive destination is unsafe;
+- archive verification fails;
+- destructive authorization is missing;
+- an active run or lifecycle writer exists;
+- link layout is unsupported;
+- required permissions are unavailable.
+
+---
+
+## 62. Structured operation result
+
+A lifecycle result reports:
 
 ```text
-repository root uncertain
-project path unsafe
-template missing
-template invalid
-archive destination unsafe
-archive creation failed
-explicit authorization missing
-active audit detected
-unsupported symlink layout
-insufficient permissions detected
+plan created
+archive completed or not requested
+project staged
+project replacement completed
+active-project validation completed
+rollback completed or not required
+run cleanup completed or not requested
+state reset completed or not requested
+remaining recovery or initialization actions
 ```
+
+Partial completion must not be represented as complete success.
+
+Exit codes remain owned by `docs/reference/EXIT_CODES.md`.
 
 ---
 
-## 64. Partial-completion reporting
+# Part XII — Security
 
-A lifecycle operation may partially complete only at well-defined boundaries.
+## 63. Filesystem security
 
-The final result must report:
-
-```text
-project replacement completed: yes/no
-rollback completed: yes/no/not-needed
-archive completed: yes/no/not-requested
-runs cleanup completed: yes/no/not-requested
-state reset completed: yes/no/not-requested
-post-validation completed: yes/no
-remaining manual actions
-```
-
-A partial result must not be labeled simply `success`.
-
----
-
-## 65. Exit behavior
-
-Recommended command result categories:
-
-```text
-0  operation completed
-1  operation refused or validation failed
-2  invalid arguments or unsafe plan
-3  filesystem or runtime error
-4  rollback required or failed
-```
-
-The definitive exit-code registry belongs to `docs/reference/EXIT_CODES.md`.
-
-This document does not create a competing global registry.
-
----
-
-# Part XIII — Security
-
-## 66. Filesystem security
-
-Reset code must treat every path as untrusted until resolved.
+Every path is untrusted until normalized and resolved.
 
 Required controls:
 
-- canonical root verification;
+- canonical workspace-root verification;
 - containment checks;
-- `..` rejection after normalization;
-- drive-root rejection;
-- filesystem-root rejection;
+- traversal rejection;
+- drive-root and filesystem-root rejection;
 - user-home rejection when unintended;
-- symlink/junction policy;
+- symlink and junction policy;
 - archive overlap rejection;
-- stage overlap rejection;
+- stage and rollback overlap rejection;
 - external-source protection;
-- no shell interpolation for copy/delete commands;
-- bounded error messages;
-- no credential capture.
+- no shell interpolation for copy or deletion;
+- bounded error reporting;
+- credential exclusion.
 
 ---
 
-## 67. Deletion policy
+## 64. Deletion policy
 
-Deletion is restricted to exact approved roots.
+Deletion is restricted to exact approved roots from the reset plan.
 
 Prohibited approaches:
 
 ```text
-recursive delete from current working directory
-glob-based deletion of every `project` directory
-recursive search and delete of `.gfo` or `.pgf`
-Git clean across the whole repository
-following arbitrary symlinks
-deleting a path because its name contains `run_`
+recursive deletion from current working directory
+searching for every directory named project
+deleting every .gfo, .pgf, or .out in the repository
+global Git clean
+following arbitrary links
+deleting a directory only because its name resembles run_*
 ```
 
-The reset plan provides the exact deletion set before execution.
+The operation determines canonical run ownership before deletion.
 
 ---
 
-## 68. Windows-specific safety
+## 65. Windows safety
 
-The implementation must handle:
+Lifecycle operations handle:
 
-```text
-drive-letter paths
-UNC paths
-junctions
-reparse points
-read-only files
-antivirus file locks
-open editor handles
-case-insensitive path comparison
-long paths
-atomic rename limitations
-```
+- drive-letter paths;
+- UNC paths;
+- case-insensitive comparisons;
+- junctions and reparse points;
+- read-only files;
+- antivirus locks;
+- open editor handles;
+- long paths;
+- atomic rename limitations.
 
-### 68.1 Case-insensitive comparison
+Paths differing only by case may identify the same location.
 
-On Windows, paths that differ only by case may identify the same location.
-
-Containment and overlap checks must account for this.
-
-### 68.2 Locked files
-
-A locked file blocks the affected phase.
-
-The operation must not continue by skipping the file silently.
+A locked file blocks the affected phase. The operation does not silently skip it.
 
 ---
 
-## 69. Secrets
+## 66. Secrets and private data
 
-Archives, plans and logs MUST NOT capture:
+Plans, archives, and logs must not capture:
 
 ```text
 passwords
@@ -2228,487 +1774,348 @@ private keys
 credential files
 complete environment dumps
 secret command arguments
+Portfolio private state
 ```
 
-Local absolute paths may be recorded because they are required for safety, but support exports may redact them.
+Local absolute paths may be required for safety reports, but support exports may redact them.
 
 ---
 
-# Part XIV — Concurrency
+# Part XIII — Concurrency
 
-## 70. One lifecycle writer
+## 67. One lifecycle writer
 
-Only one project lifecycle operation may modify a working copy at a time.
+Only one project-changing lifecycle operation may modify a workspace at a time.
 
-The operation may use a temporary lock containing bounded metadata such as:
+A lifecycle lock may contain bounded metadata:
 
 ```text
 operation ID
 process ID
 start time
-repository root
+workspace root
 operation type
 ```
 
-The lock must not contain secrets or project configuration.
+It contains no secrets or complete project configuration.
 
-### 70.1 Stale lock
+A stale lock is not removed blindly. Ownership and process state are checked first.
 
-A stale lock is not removed blindly.
-
-The implementation verifies that no owning process or operation remains before cleanup.
-
-### 70.2 Audit coordination
-
-A running audit blocks reset.
-
-A read-only repository check may run concurrently when it does not observe an intermediate swap state.
+An active validation run blocks reset. Read-only checks may run concurrently only when they cannot observe an intermediate swap state.
 
 ---
 
-# Part XV — Implementation boundaries
+# Part XIV — Functional ownership
 
-## 71. `app/project/initializer.py`
+## 68. `projects` module
 
-Owns:
-
-```text
-clean scaffold verification
-identity population
-project.toml creation or update
-project-document placeholder population
-project-lock initialization
-post-initialization validation
-```
-
-It does not clone Git repositories.
-
----
-
-## 72. `app/project/reset.py`
-
-Owns:
+The `projects` module owns:
 
 ```text
+workspace and project preflight
 reset planning
 path-safety validation
 archive coordination
-staging
-stage validation
+template staging
+staged-project validation
 transactional swap
 rollback
-new-language generated cleanup coordination
-operation result
+project initialization
+project schema population
+placeholder resolution
+post-initialization validation
+structured lifecycle result
 ```
 
 It does not:
 
-```text
-modify GF source semantics
-update gold expectations
-run Git reset/clean
-rewrite framework files
-modify template content
-delete external source trees
-```
+- clone Git repositories;
+- modify GF language semantics;
+- update golds;
+- run destructive Git commands;
+- rewrite framework files;
+- mutate the project template during reset;
+- delete external source trees;
+- publish Portfolio state.
 
 ---
 
-## 73. Maintenance scripts
+## 69. `runs` and `reporting`
 
-```text
-scripts/init_project.py
-scripts/reset_project.py
-```
+`runs` owns identification and lifecycle of canonical `run_<run-id>/` directories.
 
-are thin wrappers around reusable application services.
+The `projects` reset use case requests cleanup through the public run-lifecycle contract rather than reconstructing run semantics independently.
 
-They must not contain a second reset or initialization implementation.
+`reporting` may render a bounded lifecycle-operation summary, but lifecycle operations do not create:
 
-They:
+- fake `summary.json`;
+- release evidence;
+- GF diagnostics;
+- PGF artifacts;
+- normal validation manifests.
 
-- parse maintenance arguments;
-- call project services;
-- render plans and results;
-- preserve exit semantics.
+A validation run remains a separate operation.
 
 ---
 
-## 74. GUI integration
+## 70. CLI, GUI, and maintenance entrypoints
 
-A GUI may expose clone guidance, reset planning and initialization.
+CLI, GUI, and maintenance entrypoints call the same project lifecycle application services.
 
-The GUI must:
+They may:
 
-- call the same project services as the CLI;
-- show the exact plan;
-- require explicit confirmation;
-- remain responsive without hiding operation state;
+- collect input;
+- render the reset plan;
+- request confirmation;
 - display archive and rollback paths;
-- never delete by directly traversing widgets’ path text.
+- render the structured operation result.
 
-A GUI must not implement independent reset logic.
+They must not:
 
----
-
-## 75. Report and audit separation
-
-Project lifecycle operations do not create normal audit reports.
-
-They may create a bounded operation log.
-
-They MUST NOT:
-
-```text
-write fake summary.json
-write release evidence
-classify GF failures
-update gold files
-publish PGF artifacts
-```
-
-A first audit is a separate post-initialization operation.
+- traverse and delete paths directly;
+- implement independent reset algorithms;
+- bypass path safety;
+- create a second schema writer;
+- infer project identity from widget state.
 
 ---
 
-# Part XVI — Tests
+# Part XV — Tests
 
-## 76. Unit tests
+## 71. Planning and path-safety tests
 
-Recommended file:
-
-```text
-tests/unit/project/test_reset.py
-```
-
-Required cases:
+Required cases include:
 
 ```text
-valid repository root
-missing repository root markers
-project path equals repository root
+valid workspace root
+missing root markers
+project path equals workspace root
 template path equals project path
-archive path inside project
-archive path inside runs scheduled for deletion
+archive inside project
+archive inside selected run
 external source overlap
 missing template
 incomplete template
 template with active-language identity
 template with absolute path
-dry-run no mutation
+dry run performs no mutation
 archive required by default
 discard requires explicit authorization
 missing runs accepted
 missing state accepted
 project-only reset plan
-new-language reset plan
+new-project reset plan
 ```
 
 ---
 
-## 77. Staging and swap tests
+## 72. Staging, swap, and rollback tests
 
-Required cases:
+Required cases include:
 
 ```text
 stage copied completely
 stage validation failure leaves project unchanged
-existing project renamed to rollback
+current project moved to rollback
 staged project becomes active
 active validation succeeds
 active validation fails and restores rollback
 rename failure restores original state
 stale staging path detected
 stale rollback path detected
-temporary paths cleaned after success
-temporary recovery path preserved after failure
+temporary paths removed after success
+recovery paths preserved after failure
+Windows fallback behavior
 ```
 
 ---
 
-## 78. Archive tests
+## 73. Archive tests
 
-Required cases:
+Required cases include:
 
 ```text
-archive complete project
-archive preserves nested files
-archive verification detects missing file
-archive verification detects changed content
-ZIP archive can be reopened
-archive destination collision
-archive destination inside reset scope
-symlink policy
+complete project archived
+nested files preserved
+missing archive file detected
+changed archive content detected
+ZIP archive reopens
+destination collision
+destination inside reset scope
+link policy
 external source excluded by default
-optional selected runs included explicitly
-legacy/local state excluded by default
-failed archive blocks reset
+selected runs included only explicitly
+application state excluded by default
+archive failure blocks reset
 ```
 
 ---
 
-## 79. Cleanup tests
+## 74. Cleanup and initialization tests
 
-Required cases:
+Required cases include:
 
 ```text
-new-language reset removes runs
-new-language reset removes state
+new-project reset removes canonical runs
+new-project reset removes state
 project-only reset retains runs
 project-only reset retains state
 cleanup failure reported as partial
 external source unchanged
 template unchanged
-framework files unchanged
+framework unchanged
 Git metadata unchanged
-```
-
----
-
-## 80. Initialization tests
-
-Recommended file:
-
-```text
-tests/unit/project/test_initializer.py
-```
-
-Required cases:
-
-```text
 clean scaffold accepted
-non-clean scaffold rejected or explicitly handled
-project ID populated
-language identity populated
+project identity populated
 project.toml validates
 project lock populated
-required document placeholders populated
-unresolved required placeholders detected
-scenario gold not invented
-atomic project.toml write
-initialization rollback after write failure
+required placeholders resolved
+unresolved placeholders rejected
+gold evidence not invented
+atomic project write
+initialization rollback after failure
 ```
 
 ---
 
-## 81. Contract tests
+## 75. Contract and integration tests
 
-Recommended file:
+Contract tests verify:
 
-```text
-tests/contracts/test_project_lifecycle_contract.py
-```
-
-Contract tests MUST verify:
-
-- one active project per working copy;
+- one active project per workspace;
 - template-to-project copy direction;
-- project/template required path mirror;
-- reset preserves framework directories;
-- reset never writes template;
-- reset never deletes external source;
-- reset requires archive or explicit discard;
+- project/template role mirror;
+- framework directories preserved;
+- template never mutated by reset;
+- external source never deleted;
+- archive or discard required;
 - dry run performs no mutation;
-- project replacement is staged;
+- replacement is staged;
 - delete-first replacement is absent;
-- rollback exists;
-- CLI and GUI use the same service;
-- scripts are thin wrappers;
-- state and runs follow declared scope;
-- old-language identity scan runs;
+- rollback is available;
+- all entrypoints use the same application services;
+- run and state cleanup follow declared scope;
+- stale identity scanning occurs;
 - canonical project schema is used;
-- no Git destructive commands are invoked implicitly.
+- no destructive Git command is invoked implicitly;
+- no Portfolio dependency is introduced.
+
+Integration tests use temporary clones, worktrees, and filesystem duplicates.
+
+They must verify real filesystem behavior on Windows and a supported POSIX environment.
 
 ---
 
-## 82. Integration tests
+## 76. Property tests
 
-Use temporary repositories.
+Path-safety property tests should generate:
 
-Required cases:
+- relative and absolute paths;
+- `..` traversal;
+- case variants;
+- symlink and junction layouts;
+- workspace-prefix collisions;
+- archive and run overlaps;
+- drive and UNC paths where supported.
 
-```text
-Git clone then new-language reset
-Git worktree reset
-filesystem duplicate reset
-Windows path containing spaces
-Unicode repository path
-read-only project file
-open/locked file failure where testable
-external source outside repository
-source inside project
-uncommitted project changes
-archive and reset
-discard and reset
-rollback after injected swap failure
-post-reset strict repository check
-post-initialization project check
-```
-
-Integration tests must never target the developer’s real repository.
-
----
-
-## 83. Property tests
-
-Useful bounded properties:
+Required properties:
 
 ```text
-dry run never changes filesystem state
-preserve-set hashes remain unchanged
-template hashes remain unchanged
-external-source hashes remain unchanged
-successful reset project tree equals template tree before initialization
-failed preflight leaves all hashes unchanged
-failed stage validation leaves active project unchanged
-successful rollback restores active-project hashes
-delete set is always inside approved reset roots
-archive destination never overlaps delete set
+no approved deletion escapes its owner root
+no project swap targets templates/project/
+no archive destination overlaps replacement or cleanup scope
+no external source is selected for deletion
+dry run leaves the filesystem unchanged
 ```
 
 ---
 
-# Part XVII — Drift prevention
+# Part XVI — Change control
 
-## 84. Drift indicators
+## 77. Drift indicators
 
-Probable lifecycle drift exists when:
+Review is required when:
 
-- one repository copy contains several active project configurations;
-- project identity is inferred from the clone folder name;
-- a branch switch is treated as safe simultaneous project isolation;
-- the Python package is renamed per language;
-- the active project is copied back into the template;
-- reset modifies `templates/project/`;
-- reset deletes before staging succeeds;
-- reset deletes external GF source;
-- reset silently runs `git clean`;
-- reset proceeds without archive or explicit discard;
-- dry run creates or deletes files;
-- old runs become new-project regression evidence;
-- old state supplies new language identity;
-- project and template required paths differ;
-- the template contains absolute local paths;
-- the template contains a populated language lock;
-- old-language names remain in active project files;
-- reset invents scenario or gold content;
-- initialization guesses entrypoints;
-- archive verification is skipped;
-- rollback material is deleted before validation;
-- project replacement logic exists in both script and service;
-- GUI performs direct recursive deletion;
-- temporary reset artifacts remain after success;
-- a partial cleanup is reported as full success;
-- state reset deletes run evidence;
-- project reset is used instead of required migration.
+- reset code deletes before staging;
+- project identity comes from directory name or UI state;
+- run cleanup searches by extension;
+- template content is modified during reset;
+- a lifecycle entrypoint performs its own filesystem traversal;
+- reset uses broad Git cleanup;
+- archive verification is omitted;
+- rollback material is deleted before active-project validation;
+- external source paths overlap deletion scope;
+- project-only reset silently reuses old runs;
+- application state defines project identity;
+- active-language names appear in the template;
+- absolute machine paths appear in reusable project content;
+- lifecycle operations write validation reports;
+- concrete source paths are treated as permanent architectural contracts instead of functional-module ownership;
+- a competing run-root convention is introduced alongside `run_<run-id>/`;
+- Wordbench registers or mutates `gf-portfolio` state.
 
-Detected drift must be resolved through coordinated lifecycle, schema and documentation changes.
+Resolution restores the documented contract or adopts a new accepted architectural decision.
 
 ---
 
-## 85. Change workflow
+## 78. Change workflow
 
-A cloning or reset contract change is complete only when all applicable items are checked:
+A lifecycle-contract change updates together:
 
-```text
-[ ] operation scope reviewed
-[ ] repository-root proof reviewed
-[ ] project/template boundaries reviewed
-[ ] external-source protection reviewed
-[ ] archive policy reviewed
-[ ] discard policy reviewed
-[ ] dry-run behavior reviewed
-[ ] symlink/junction policy reviewed
-[ ] staging strategy reviewed
-[ ] atomic swap behavior reviewed
-[ ] rollback behavior reviewed
-[ ] run cleanup reviewed
-[ ] state reset reviewed
-[ ] Git/worktree behavior reviewed
-[ ] CLI integration reviewed
-[ ] GUI integration reviewed
-[ ] initializer integration reviewed
-[ ] reset service updated
-[ ] scripts updated
-[ ] repository structure updated when required
-[ ] project model updated when required
-[ ] schema locks reviewed
-[ ] unit tests updated
-[ ] contract tests updated
-[ ] integration tests updated
-[ ] migration guidance updated
-[ ] this document updated
-```
+1. `projects` module request and result contracts;
+2. project schema references;
+3. run cleanup integration;
+4. state reset integration;
+5. template and active-project locks;
+6. CLI and GUI surfaces;
+7. path-safety and rollback tests;
+8. security documentation;
+9. migration or compatibility guidance;
+10. this document and related owner documents.
 
 ---
 
-## 86. New-language checklist
+## 79. New-project checklist
 
 ```text
-[ ] separate clone or worktree created
-[ ] destination verified
-[ ] ignored local files absent or reviewed
-[ ] virtual environment recreated
-[ ] repository strict check completed
-[ ] old active project archived or explicitly discarded
-[ ] reset dry run reviewed
-[ ] project replaced from template
-[ ] runs cleared
-[ ] application state cleared
-[ ] external GF source confirmed untouched
-[ ] template confirmed unchanged
+[ ] isolated workspace created
+[ ] workspace preflight passes
+[ ] valuable project content archived or discard explicitly authorized
+[ ] template validates
+[ ] dry-run plan reviewed
+[ ] project staged
+[ ] staged project validates
+[ ] transactional swap succeeds
+[ ] active scaffold validates
+[ ] old runs removed or intentionally retained
+[ ] application state removed or intentionally retained
+[ ] external sources untouched
 [ ] project initialized
-[ ] project.toml valid
-[ ] project lock populated
 [ ] required placeholders resolved
-[ ] old-language identifier scan clean
-[ ] source root configured
-[ ] entrypoints configured
-[ ] checkpoints configured
-[ ] scenarios added deliberately
-[ ] gold files created only through review
-[ ] project check passes
-[ ] first validation evidence created
+[ ] source relationship configured
+[ ] entrypoints and checkpoints configured
+[ ] stale-language identifiers absent
+[ ] absolute reusable paths absent
+[ ] project lock and documentation agree
+[ ] project checks pass
+[ ] first validation run produces current evidence
 ```
 
 ---
 
-## 87. Reset implementation checklist
+## 80. Enforcement rule
+
+GF Wordbench project lifecycle operations preserve this boundary:
 
 ```text
-[ ] one reset service owns mutation
-[ ] exact repository root verified
-[ ] exact project path verified
-[ ] exact template path verified
-[ ] path overlaps rejected
-[ ] external source protected
-[ ] active audit blocked
-[ ] deterministic plan produced
-[ ] dry run supported
-[ ] archive or discard required
-[ ] archive verified
-[ ] stage created outside project
-[ ] stage validated
-[ ] existing project retained for rollback
-[ ] staged project swapped safely
-[ ] active project validated
-[ ] rollback tested
-[ ] runs removed only under declared scope
-[ ] state removed only under declared scope
-[ ] framework files preserved
-[ ] template preserved
-[ ] Git metadata preserved
-[ ] partial completion reported accurately
-[ ] temporary artifacts cleaned
-[ ] post-reset checks run
+isolated workspace
+    → one active project
+    → template-derived staged replacement
+    → validated transactional swap
+    → explicit initialization
+    → independent validation evidence
 ```
-
----
-
-## 88. Final enforcement rule
-
-Cloning and resetting are repository-lifecycle operations, not convenience copies and deletes.
 
 Therefore:
 
-> No active project may be replaced until the repository boundary, template source, archive or discard policy, external source protection, staged replacement, rollback path and post-reset validation have all been resolved as one explicit operation.
+> No reset may guess project identity, delete before staging, escape approved paths, modify external sources, mutate the reusable template, reuse stale evidence as current truth, or create a dependency on `gf-portfolio`.

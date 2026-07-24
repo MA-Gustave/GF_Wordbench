@@ -1,14 +1,12 @@
 # GF Wordbench — Known Diagnostic Patterns
 
 **Document ID:** `GF-WB-DIAG-KNOWN-PATTERNS`  
-**Status:** Normative diagnostic catalog  
 **Applies to:** GF compiler output, GF shell/scenario output, process failures, artifact checks, and GF Wordbench contract failures  
-**Primary implementation owner:** `app/audit/diagnostics.py`  
-**Legacy implementation source:** `app/utils/gf_utils.py`  
-**Causal classification owner:** `app/audit/classifier.py`  
-**Catalog version:** `1.0`  
-**Target product state:** Final architecture  
-**Last reviewed:** 2026-07-22  
+**Owner:** GF Wordbench diagnostics module  
+**Causal classification owner:** GF Wordbench diagnostics classifier  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Catalog version:** `1.1`  
+**Last reviewed:** 2026-07-24  
 
 ---
 
@@ -25,7 +23,6 @@ It exists to prevent three forms of drift:
 The catalog records:
 
 - stable pattern identifiers;
-- pattern status;
 - source stream policy;
 - matching evidence;
 - normalized error kind;
@@ -45,11 +42,11 @@ Unknown output must remain visible and must fall back safely.
 
 ## 2. Core rule
 
-> A diagnostic pattern is active only when its meaning is documented, its evidence is preserved, and its behavior is tested.
+> A diagnostic pattern is canonical only when its meaning is documented, its evidence is preserved, and its behavior is tested.
 
 A regular expression alone is not a diagnostic contract.
 
-Every active pattern must have:
+Every canonical pattern must have:
 
 - a stable ID;
 - a defined scope;
@@ -67,6 +64,7 @@ Every active pattern must have:
 The following documents govern related boundaries:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/diagnostics/DIAGNOSTIC_OVERVIEW.md
 docs/diagnostics/ERROR_CLASSIFICATION.md
 docs/diagnostics/DIRECT_AND_DOWNSTREAM_FAILURES.md
@@ -83,11 +81,14 @@ docs/reference/STATUS_VALUES.md
 
 Priority when rules overlap:
 
-1. persisted-schema lock for serialized enum values;
-2. process-execution model for launch, timeout, cancellation, and capture facts;
-3. error-handling model for framework error semantics;
-4. this catalog for pattern identity and normalized interpretation;
-5. classifier documentation for direct/downstream causality.
+1. accepted ADRs and `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`;
+2. persisted-schema lock for serialized enum values;
+3. process-execution model for launch, timeout, cancellation, and capture facts;
+4. error-handling model for framework error semantics;
+5. this catalog for pattern identity and normalized interpretation;
+6. classifier documentation for direct/downstream causality.
+
+Diagnostic interpretation belongs to one Wordbench run and one active project. `gf-portfolio` may consume finalized public diagnostic records but does not define, alter or execute Wordbench pattern matching.
 
 ---
 
@@ -154,7 +155,7 @@ scenario assertions
         ↓
 evidence segmentation
         ↓
-active pattern matching
+canonical pattern matching
         ↓
 field extraction
         ↓
@@ -202,42 +203,23 @@ Rules:
 
 ---
 
-## 8. Pattern status
+## 8. Catalog inclusion rule
 
-Canonical catalog statuses:
+The canonical pattern set is the set listed in the canonical pattern index of this document.
 
-```text
-active
-observed
-experimental
-deprecated
-retired
-reserved
-```
+A canonical pattern:
 
-### 8.1 Active
+- has one stable identifier;
+- has one normalized meaning;
+- has positive and relevant negative fixtures;
+- has deterministic precedence;
+- preserves raw evidence;
+- defines version and stream behavior;
+- may be used for automatic classification.
 
-Implemented, tested, and permitted for normal classification.
+Text not covered by the canonical pattern set remains visible and uses the generic fallback or an authoritative process, artifact, normalization or contract diagnosis.
 
-### 8.2 Observed
-
-Present in a captured fixture or historical evidence but not stable enough for automatic classification.
-
-### 8.3 Experimental
-
-Implemented behind explicit diagnostic or compatibility policy.
-
-### 8.4 Deprecated
-
-Still recognized for compatibility but scheduled for removal or replacement.
-
-### 8.5 Retired
-
-No longer matched. The ID remains reserved.
-
-### 8.6 Reserved
-
-Identity allocated for a semantic class whose exact GF text patterns are not yet approved.
+Examples of unsupported or insufficiently specific wording may be documented as evidence notes, but they do not receive a canonical pattern ID and do not create a specific automatic diagnosis.
 
 ---
 
@@ -318,7 +300,6 @@ Pattern IDs must never be reused for unrelated meanings.
 @dataclass(frozen=True, slots=True)
 class DiagnosticRecord:
     pattern_id: str
-    status: str
     error_kind: str
     severity: str
     confidence: str
@@ -340,7 +321,7 @@ Exact shared-model design is governed by `DATA_MODEL.md`.
 
 ## 12. Canonical severity
 
-Recommended diagnostic severity:
+Canonical diagnostic severity:
 
 ```text
 info
@@ -362,7 +343,7 @@ Examples:
 
 ## 13. Canonical error kinds
 
-The final centralized reference is authoritative.
+The centralized reference is authoritative.
 
 This catalog uses:
 
@@ -415,7 +396,7 @@ All matched secondary evidence may still be retained.
 
 One operation may produce several diagnostics.
 
-The parser should return:
+The parser returns:
 
 ```text
 primary diagnostic
@@ -450,11 +431,10 @@ The nested runtime message adds detail; it does not replace the internal-error c
 
 ---
 
-# 16. Active process patterns
+# 16. Process patterns
 
 ## DP-PROC-001 — Process timeout
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** process execution state  
 **Text matching:** prohibited as primary detection  
@@ -506,7 +486,6 @@ stderr path
 
 ## DP-PROC-002 — Process launch failure
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** process runner  
 **Error kind:** `TOOL` or centralized launch kind  
@@ -546,7 +525,6 @@ unknown
 
 ## DP-PROC-003 — Process cancellation
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** process runner/controller  
 **Error kind:** `CANCELLED`  
@@ -578,7 +556,6 @@ controller_policy
 
 ## DP-PROC-004 — Output limit exceeded
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** process runner  
 **Error kind:** `OUTPUT_LIMIT`  
@@ -607,7 +584,6 @@ External process exceeded its output limit.
 
 ## DP-PROC-005 — Output decoding failure
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** decoder  
 **Error kind:** `IO` or centralized encoding kind  
@@ -626,11 +602,10 @@ The configured decoder cannot produce the required diagnostic view while preserv
 
 ---
 
-# 17. Active GF internal patterns
+# 17. GF internal patterns
 
 ## DP-GFINT-001 — GeneratePMCFG internal error
 
-**Status:** active  
 **Confidence:** high  
 **Operation scope:** compile, PGF build, scenario  
 **Source:** stdout or stderr  
@@ -678,7 +653,7 @@ Observed nested text:
 Cannot find an inflection rule
 ```
 
-This nested text is cataloged separately as `DP-GFGEN-001`.
+This nested text is retained separately as non-canonical runtime evidence.
 
 ### False-positive controls
 
@@ -700,11 +675,10 @@ Do not match:
 
 ---
 
-# 18. Active GF type patterns
+# 18. GF type patterns
 
 ## DP-GFTYPE-001 — Expected/inferred type mismatch
 
-**Status:** active  
 **Confidence:** high  
 **Operation scope:** compile, PGF build, scenario load  
 **Source:** stdout and stderr combined for analysis, preserved separately  
@@ -780,9 +754,8 @@ expected: <value> | inferred: <value>
 
 ---
 
-## DP-GFTYPE-002 — Explicit unification wording
+## Explicit unification wording
 
-**Status:** observed  
 **Confidence:** medium  
 **Error kind:** `TYPE`  
 **Severity:** error  
@@ -796,9 +769,9 @@ cannot unify the information
 
 ### Current policy
 
-This wording may be preserved in `first_error`, but it must not be promoted to active automatic `TYPE` classification until representative raw GF fixtures are added.
+This wording may be preserved in `first_error`, but it does not create a canonical `TYPE` diagnosis by itself.
 
-### Promotion requirements
+### Conditions for defining a dedicated canonical pattern
 
 - captures from supported GF versions;
 - positive and negative fixtures;
@@ -808,11 +781,10 @@ This wording may be preserved in `first_error`, but it must not be promoted to a
 
 ---
 
-# 19. Active GF syntax patterns
+# 19. GF syntax patterns
 
 ## DP-GFSYN-001 — GF source syntax error
 
-**Status:** active  
 **Confidence:** medium  
 **Operation scope:** source compilation, PGF build, scenario script  
 **Source:** stdout or stderr  
@@ -864,24 +836,21 @@ Detail:
 
 ---
 
-## DP-GFSYN-002 — Scenario command syntax failure
+## Scenario command syntax evidence
 
-**Status:** reserved  
-**Confidence:** not assigned  
 **Error kind:** `SCRIPT` or `SYNTAX`  
 **Severity:** error  
 
-This ID is reserved for a scenario-specific command parser diagnostic when supported fixtures prove that it can be distinguished reliably from source-module syntax errors.
+No dedicated scenario-command syntax pattern is defined because the available evidence does not distinguish it reliably from source-module syntax errors.
 
-Until then, `DP-GFSYN-001` remains the text pattern and the operation context supplies scenario scope.
+`DP-GFSYN-001` remains the canonical text pattern and the operation context supplies scenario scope.
 
 ---
 
-# 20. Active generic fallback
+# 20. Generic fallback patterns
 
 ## DP-FALLBACK-001 — Non-zero exit with diagnostic line
 
-**Status:** active  
 **Confidence:** medium  
 **Operation scope:** any GF process  
 **Source:** both streams  
@@ -893,7 +862,7 @@ Until then, `DP-GFSYN-001` remains the text pattern and the operation context su
 ```text
 process completed
 exit_code != 0
-no higher-precedence active pattern matched
+no higher-precedence canonical pattern matched
 ```
 
 ### Line selection
@@ -926,7 +895,7 @@ Detail:
 - Do not claim a specific type, syntax, or internal class.
 - Progress-line filtering must remain narrow.
 - New progress exclusions require fixtures.
-- This pattern must not run before active specific patterns.
+- This pattern must not run before canonical specific patterns.
 
 ### Required tests
 
@@ -942,7 +911,6 @@ Detail:
 
 ## DP-FALLBACK-002 — Non-zero exit without matched message
 
-**Status:** active  
 **Confidence:** authoritative for the fallback fact  
 **Error kind:** `OTHER`  
 **Severity:** error  
@@ -967,13 +935,12 @@ Non-zero exit with no recognized diagnostic message.
 - Record the actual exit code.
 - Keep empty or progress-only raw logs.
 - Do not fabricate a GF explanation.
-- This condition should be included in compatibility investigation when new GF versions are introduced.
+- This condition is included in compatibility review when a new GF version is introduced.
 
 ---
 
 ## DP-FALLBACK-003 — Zero exit with no failure evidence
 
-**Status:** active  
 **Confidence:** authoritative only for process completion  
 **Error kind:** `OK`  
 **Severity:** info  
@@ -1001,16 +968,15 @@ The stage must also verify applicable:
 
 ---
 
-## DP-FALLBACK-004 — Unknown fatal-looking output
+## Fatal-looking unknown output
 
-**Status:** experimental  
 **Confidence:** low  
 **Error kind:** `OTHER`  
 **Severity:** warning or error by operation policy  
 
 ### Candidate generic anchors
 
-Observed evidence extractors have used:
+Evidence excerpt extraction may use:
 
 ```text
 Internal error
@@ -1029,19 +995,18 @@ These strings are useful for evidence excerpt selection but are too broad to def
 - do not assign a specific GF class from these anchors alone;
 - non-zero exit may still trigger `DP-FALLBACK-001`;
 - zero exit requires operation-specific review before failure;
-- add a dedicated pattern when a stable meaning is proven.
+- add a dedicated canonical pattern only through the catalog change policy.
 
 ---
 
 # 21. Observed generation/runtime patterns
 
-## DP-GFGEN-001 — Missing inflection rule runtime detail
+## Missing inflection rule runtime evidence
 
-**Status:** observed  
 **Confidence:** medium  
 **Operation scope:** compilation, PGF construction, generation, scenario runtime  
 **Source:** stdout or stderr  
-**Provisional error kind:** `INTERNAL` or `TOOL` depending on primary context  
+**Possible interpretation:** `INTERNAL` or `TOOL` depending on primary context  
 **Severity:** fatal when nested under a terminating GF error  
 
 ### Observed anchor
@@ -1058,11 +1023,11 @@ evalTerm (Predef.error "Cannot find an inflection rule")
 
 ### Current interpretation
 
-- If nested under `DP-GFINT-001`, retain as secondary runtime detail.
+- If nested under `DP-GFINT-001`, retain it as secondary runtime detail.
 - Do not replace the primary `GeneratePMCFG` internal diagnosis.
-- If observed without a higher-precedence pattern, retain as `OTHER` until fixtures establish stable semantics.
+- Without a higher-precedence canonical pattern, retain it under the generic `OTHER` fallback.
 
-### Promotion requirements
+### Conditions for defining a dedicated canonical pattern
 
 - successful reproduction;
 - supported-version captures;
@@ -1074,9 +1039,8 @@ evalTerm (Predef.error "Cannot find an inflection rule")
 
 # 22. Observed warning patterns
 
-## DP-GFWARN-001 — Missing linearization type warning
+## Missing linearization type warning evidence
 
-**Status:** observed  
 **Confidence:** medium  
 **Error kind:** `OTHER` or future warning kind  
 **Severity:** warning  
@@ -1095,7 +1059,7 @@ Warning: no linearization type for <category>, inserting default <type>
 - missing-linearization scenarios provide stronger project-level evidence;
 - do not assume the category or inserted type format is stable across GF versions.
 
-### Promotion requirements
+### Conditions for defining a dedicated canonical pattern
 
 - raw captures from supported GF versions;
 - category/type extraction tests;
@@ -1104,20 +1068,18 @@ Warning: no linearization type for <category>, inserting default <type>
 
 ---
 
-## DP-GFWARN-002 — Generic GF warning
+## Generic GF warning evidence
 
-**Status:** reserved  
-**Confidence:** not assigned  
 **Severity:** warning  
 
-A broad `Warning:` matcher is not active because:
+A broad `Warning:` matcher is not canonical because:
 
 - warning text may be version-dependent;
 - not every warning has the same consequence;
 - project policy may differ;
 - scenario output may intentionally contain the word.
 
-New warning families should receive dedicated IDs.
+A warning family receives a dedicated ID only through the catalog change policy and complete fixtures.
 
 ---
 
@@ -1125,7 +1087,6 @@ New warning families should receive dedicated IDs.
 
 ## DP-GFLOAD-001 — Referenced GF source path
 
-**Status:** active as extraction helper  
 **Confidence:** medium  
 **Error kind:** none by itself  
 **Severity:** none by itself  
@@ -1166,14 +1127,12 @@ The classifier must use project context and known results.
 
 ---
 
-## DP-GFLOAD-002 — Referenced GF module name
+## Referenced GF module-name evidence
 
-**Status:** reserved  
-**Confidence:** not assigned  
 
-Reserved for stable extraction of module identifiers not accompanied by `.gf` paths.
+No canonical module-name-only extractor is defined.
 
-No general module-name regex is active in this catalog because ordinary GF output may contain many capitalized identifiers.
+Ordinary GF output may contain many capitalized identifiers, so a general module-name regex is prohibited.
 
 ---
 
@@ -1185,7 +1144,6 @@ They must be labeled as framework or contract evidence.
 
 ## DP-SCEN-001 — Required scenario missing
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** scenario registry/preflight  
 **Error kind:** `CONFIG`  
@@ -1207,7 +1165,6 @@ No GF process is launched.
 
 ## DP-SCEN-002 — Required scenario section incomplete
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** marker parser  
 **Error kind:** `CONTRACT`  
@@ -1227,23 +1184,21 @@ A zero GF exit code does not override this result.
 
 ---
 
-## DP-SCEN-003 — Unsupported scenario command evidence
+## Unsupported scenario-command evidence
 
-**Status:** experimental  
 **Confidence:** medium  
 **Source:** GF output plus scenario context  
 **Error kind:** `SCRIPT`  
 **Severity:** error  
 
-This pattern becomes active only when supported GF fixtures define stable unsupported-command output.
+No dedicated canonical pattern is defined without stable supported-GF fixtures.
 
-Until then, such output falls through syntax or generic non-zero handling.
+Such output uses syntax handling or generic non-zero fallback according to the evidence.
 
 ---
 
 ## DP-ART-001 — Required artifact missing
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** filesystem observation  
 **Error kind:** `ARTIFACT`  
@@ -1270,7 +1225,6 @@ Required artifact was not produced.
 
 ## DP-ART-002 — Required artifact empty
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** filesystem observation  
 **Error kind:** `ARTIFACT`  
@@ -1282,7 +1236,6 @@ Applies when an artifact contract requires a positive minimum size.
 
 ## DP-NORM-001 — Normalization failed
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** normalizer  
 **Error kind:** `NORMALIZATION`  
@@ -1299,7 +1252,6 @@ Applies when an artifact contract requires a positive minimum size.
 
 ## DP-NORM-002 — Unsupported normalization version
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** normalizer/schema validation  
 **Error kind:** `NORMALIZATION`  
@@ -1309,7 +1261,6 @@ Applies when an artifact contract requires a positive minimum size.
 
 ## DP-GOLD-001 — Gold mismatch
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** gold comparator  
 **Error kind:** `GOLD`  
@@ -1329,7 +1280,6 @@ Canonical normalized actual output differs from validated expected gold output.
 
 ## DP-GOLD-002 — Required gold missing
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** gold preflight/comparator  
 **Error kind:** `CONFIG` or `GOLD` according to centralized policy  
@@ -1341,7 +1291,6 @@ Missing required gold is never an automatic pass.
 
 ## DP-GOLD-003 — Gold schema/version mismatch
 
-**Status:** active  
 **Confidence:** authoritative  
 **Source:** gold reader  
 **Error kind:** `GOLD`  
@@ -1376,7 +1325,7 @@ Classification:
 |---|---|
 | `blocked by failed dependency ...` | Wordbench/test-origin until real GF evidence proves otherwise |
 | `first error points to ...` | Test/report wording, not active GF pattern |
-| `cannot unify ...` | Observed candidate `DP-GFTYPE-002` |
+| `cannot unify ...` | non-canonical type evidence |
 | `.gf` path mention | extraction helper only |
 
 Synthetic fixtures should be labeled clearly to avoid accidental promotion.
@@ -1562,7 +1511,7 @@ Exception:
 Traceback
 ```
 
-These anchors may select excerpts without determining final error kind.
+These anchors may select excerpts without determining the error kind.
 
 Excerpt bounds must prevent oversized reports.
 
@@ -1570,13 +1519,12 @@ Excerpt bounds must prevent oversized reports.
 
 # 34. Pattern registry model
 
-Recommended implementation:
+Canonical registry model:
 
 ```python
 @dataclass(frozen=True, slots=True)
 class DiagnosticPattern:
     pattern_id: str
-    status: str
     operations: frozenset[str]
     streams: frozenset[str]
     priority: int
@@ -1598,41 +1546,33 @@ Registry requirements:
 
 ---
 
-# 35. Recommended implementation files
+# 35. Component ownership
 
-Final architecture:
-
-```text
-app/audit/diagnostics.py
-    diagnostic orchestration and public API
-
-app/audit/diagnostic_patterns.py
-    registry and active pattern definitions
-
-app/audit/diagnostic_extractors.py
-    paths, locations, expected/inferred fields, excerpts
-
-app/audit/classifier.py
-    direct/downstream/ambiguous classification
-```
-
-A smaller implementation may initially keep private pattern definitions inside `diagnostics.py`.
-
-Do not preserve `app/utils/gf_utils.py` as the permanent owner of both source scanning and diagnostic parsing.
-
-The final separation should be:
+The diagnostics module contains four separate responsibilities:
 
 ```text
-scanner/source helpers
-diagnostic output parsing
-causal classification
+diagnostic parser
+    consumes process, stream, artifact and contract evidence
+
+canonical pattern registry
+    owns pattern IDs, matching rules, precedence and fixtures
+
+diagnostic extractors
+    own bounded paths, locations, expected/inferred fields and excerpts
+
+causal classifier
+    owns direct, downstream and ambiguous classification
 ```
+
+Source scanning is outside the diagnostics module.
+
+Reports and user interfaces consume structured diagnostic records and do not own regular expressions, precedence or classification rules.
 
 ---
 
 # 36. Public API
 
-Recommended interface:
+Canonical interface:
 
 ```python
 def parse_diagnostics(
@@ -1675,7 +1615,7 @@ inspect authoritative process state
         ↓
 inspect framework contract facts
         ↓
-run active text patterns in priority order
+run canonical text patterns in priority order
         ↓
 collect all non-conflicting matches
         ↓
@@ -1698,7 +1638,7 @@ A warning must not replace a fatal primary diagnosis.
 
 Unknown output is expected.
 
-When no active text pattern matches:
+When no canonical text pattern matches:
 
 ### Non-zero exit
 
@@ -1796,9 +1736,9 @@ Requires:
 
 ---
 
-# 41. Promotion workflow
+# 41. Adding a canonical pattern
 
-To promote an observed pattern to active:
+To promote an non-canonical evidence form to active:
 
 ```text
 [ ] Raw stdout/stderr fixture captured
@@ -1818,33 +1758,36 @@ To promote an observed pattern to active:
 [ ] This catalog updated
 ```
 
-One anecdotal message is insufficient when the pattern is broad.
+One anecdotal message is insufficient evidence for a broad canonical pattern.
 
 ---
 
-# 42. Deprecation workflow
+# 42. Pattern replacement and removal
 
-A pattern may be deprecated when:
+A canonical pattern may be replaced or removed when:
 
-- GF no longer emits it in supported versions;
-- a more structured pattern replaces it;
+- supported GF versions no longer emit it;
+- a more structured canonical pattern replaces it;
 - it causes unacceptable false positives;
-- its semantic meaning was wrong.
+- its semantic meaning is incorrect.
 
-Deprecation requires:
+The change requires:
 
-- retained ID;
-- replacement ID when applicable;
-- compatibility window;
-- tests for legacy reading when persisted;
-- changelog entry;
-- removal date or release target.
+- preservation of the old ID in compatibility documentation when persisted records may contain it;
+- a replacement ID when applicable;
+- fixture review;
+- reader and report compatibility review;
+- changelog and migration notes;
+- complete tests;
+- catalog version update.
+
+Canonical writers emit only the current pattern set. Compatibility readers may interpret historical pattern IDs without reintroducing them into current matching.
 
 ---
 
 # 43. Fixture organization
 
-Recommended layout:
+Fixture layout:
 
 ```text
 tests/fixtures/diagnostics/
@@ -1862,7 +1805,7 @@ tests/fixtures/diagnostics/
 └── negative/
 ```
 
-Metadata should record:
+Fixture metadata records:
 
 ```text
 fixture ID
@@ -1883,7 +1826,7 @@ Raw fixture bytes should remain unchanged.
 
 # 44. Unit tests
 
-Recommended tests:
+Diagnostic tests:
 
 ```text
 tests/diagnostics/
@@ -1903,9 +1846,9 @@ tests/diagnostics/
 
 ---
 
-# 45. Required current-baseline tests
+# 45. Required compatibility tests
 
-The migration must preserve tests for:
+Compatibility tests cover:
 
 ```text
 timeout → TIMEOUT
@@ -1984,7 +1927,7 @@ They must not:
 - hide unknown output;
 - discard pattern IDs when available.
 
-Reports should show:
+Reports show:
 
 ```text
 error kind
@@ -2001,9 +1944,9 @@ Human-facing reports may omit low-level fields in concise mode.
 
 # 49. Top-error aggregation
 
-Top-error aggregation should use a stable normalized key.
+Top-error aggregation uses a stable normalized key.
 
-Recommended key:
+Canonical key:
 
 ```text
 error_kind + normalized primary message
@@ -2038,7 +1981,7 @@ is this file the root failure, downstream, ambiguous, noise, or skipped?
 Rules:
 
 - `TYPE` and `SYNTAX` are likely direct only after context review;
-- `INTERNAL`, `TIMEOUT`, and framework `SCRIPT` were historically treated as obvious direct file failures, but the final model must still respect operation and prerequisite context;
+- `INTERNAL`, `TIMEOUT`, and framework `SCRIPT` were historically treated as obvious direct file failures, but the causal model respects operation and prerequisite context;
 - `.gf` references are candidate dependency evidence;
 - a referenced failing provider may support downstream classification;
 - a self-reference may support direct classification;
@@ -2083,13 +2026,13 @@ Diagnostic parsing must:
 - never open arbitrary paths mentioned by output without containment checks;
 - redact secrets in commands and environment evidence.
 
-Regular expressions should be precompiled and reviewed.
+Regular expressions are precompiled and reviewed.
 
 ---
 
 # 53. Performance rules
 
-The parser should:
+The parser:
 
 - read bounded evidence where practical;
 - support large file-backed logs;
@@ -2108,7 +2051,6 @@ Output limits are enforced by the process layer.
 
 ```text
 [ ] Pattern ID is unique
-[ ] Status is explicit
 [ ] Operation scope is explicit
 [ ] Stream policy is explicit
 [ ] Priority is explicit
@@ -2153,58 +2095,54 @@ Any drift indicator requires catalog and contract review.
 
 ---
 
-# 56. Active-pattern index
+# 56. Canonical pattern index
 
-| Pattern ID | Meaning | Status | Kind | Confidence |
-|---|---|---|---|---|
-| `DP-PROC-001` | Process timeout | active | `TIMEOUT` | authoritative |
-| `DP-PROC-002` | Launch failure | active | `TOOL` | authoritative |
-| `DP-PROC-003` | Cancellation | active | `CANCELLED` | authoritative |
-| `DP-PROC-004` | Output limit | active | `OUTPUT_LIMIT` | authoritative |
-| `DP-PROC-005` | Decode failure | active | `IO` | authoritative |
-| `DP-GFINT-001` | GeneratePMCFG internal error | active | `INTERNAL` | high |
-| `DP-GFTYPE-001` | Expected/inferred mismatch | active | `TYPE` | high |
-| `DP-GFSYN-001` | Syntax/parse/unexpected token | active | `SYNTAX` | medium |
-| `DP-FALLBACK-001` | Non-zero with candidate line | active | `OTHER` | medium |
-| `DP-FALLBACK-002` | Non-zero without message | active | `OTHER` | authoritative |
-| `DP-FALLBACK-003` | Completed with no failure evidence | active | `OK` | authoritative |
-| `DP-GFLOAD-001` | `.gf` reference extraction | active helper | none | medium |
-| `DP-SCEN-001` | Required scenario missing | active | `CONFIG` | authoritative |
-| `DP-SCEN-002` | Scenario section incomplete | active | `CONTRACT` | authoritative |
-| `DP-ART-001` | Required artifact missing | active | `ARTIFACT` | authoritative |
-| `DP-ART-002` | Required artifact empty | active | `ARTIFACT` | authoritative |
-| `DP-NORM-001` | Normalization failed | active | `NORMALIZATION` | authoritative |
-| `DP-NORM-002` | Unsupported normalization version | active | `NORMALIZATION` | authoritative |
-| `DP-GOLD-001` | Gold mismatch | active | `GOLD` | authoritative |
-| `DP-GOLD-002` | Required gold missing | active | `CONFIG`/`GOLD` | authoritative |
-| `DP-GOLD-003` | Gold schema/version mismatch | active | `GOLD` | authoritative |
-
----
-
-# 57. Observed and reserved index
-
-| Pattern ID | Meaning | Status | Promotion blocker |
+| Pattern ID | Meaning | Kind | Confidence |
 |---|---|---|---|
-| `DP-GFTYPE-002` | Explicit unification wording | observed | representative GF fixtures |
-| `DP-GFSYN-002` | Scenario command syntax subtype | reserved | stable distinguishing output |
-| `DP-GFGEN-001` | Missing inflection rule detail | observed | standalone semantic evidence |
-| `DP-GFWARN-001` | Missing lincat warning | observed | supported-version captures |
-| `DP-GFWARN-002` | Generic warning | reserved | too broad |
-| `DP-GFLOAD-002` | Module-name extraction | reserved | false-positive-safe grammar |
-| `DP-SCEN-003` | Unsupported scenario command | experimental | stable GF fixtures |
-| `DP-FALLBACK-004` | Fatal-looking unknown output | experimental | intentionally generic |
+| `DP-PROC-001` | Process timeout | `TIMEOUT` | authoritative |
+| `DP-PROC-002` | Launch failure | `TOOL` | authoritative |
+| `DP-PROC-003` | Cancellation | `CANCELLED` | authoritative |
+| `DP-PROC-004` | Output limit | `OUTPUT_LIMIT` | authoritative |
+| `DP-PROC-005` | Decode failure | `IO` | authoritative |
+| `DP-GFINT-001` | GeneratePMCFG internal error | `INTERNAL` | high |
+| `DP-GFTYPE-001` | Expected/inferred mismatch | `TYPE` | high |
+| `DP-GFSYN-001` | Syntax/parse/unexpected token | `SYNTAX` | medium |
+| `DP-FALLBACK-001` | Non-zero with candidate line | `OTHER` | medium |
+| `DP-FALLBACK-002` | Non-zero without message | `OTHER` | authoritative |
+| `DP-FALLBACK-003` | Completed with no failure evidence | `OK` | authoritative |
+| `DP-GFLOAD-001` | `.gf` reference extraction | none | medium |
+| `DP-SCEN-001` | Required scenario missing | `CONFIG` | authoritative |
+| `DP-SCEN-002` | Scenario section incomplete | `CONTRACT` | authoritative |
+| `DP-ART-001` | Required artifact missing | `ARTIFACT` | authoritative |
+| `DP-ART-002` | Required artifact empty | `ARTIFACT` | authoritative |
+| `DP-NORM-001` | Normalization failed | `NORMALIZATION` | authoritative |
+| `DP-NORM-002` | Unsupported normalization version | `NORMALIZATION` | authoritative |
+| `DP-GOLD-001` | Gold mismatch | `GOLD` | authoritative |
+| `DP-GOLD-002` | Required gold missing | `CONFIG`/`GOLD` | authoritative |
+| `DP-GOLD-003` | Gold schema/version mismatch | `GOLD` | authoritative |
 
 ---
 
-# 58. Baseline migration
+# 57. Non-canonical evidence index
 
-The inherited parser currently lives in:
+| Evidence wording or family | Treatment |
+|---|---|
+| explicit `cannot unify` wording | preserve as evidence; no dedicated canonical pattern |
+| scenario-command syntax subtype | use `DP-GFSYN-001` plus operation context |
+| `Cannot find an inflection rule` | secondary detail under the primary pattern or generic fallback |
+| missing-linearization warning wording | preserve as warning evidence; project release policy decides consequence |
+| generic `Warning:` | no broad matcher |
+| module name without `.gf` path | no general extractor |
+| unsupported scenario-command wording | syntax or generic fallback |
+| fatal-looking generic anchors | excerpt selection only; no specific diagnosis |
 
-```text
-app/utils/gf_utils.py
-```
+These evidence forms do not have canonical pattern IDs.
 
-It recognizes:
+---
+
+# 58. Legacy parser compatibility
+
+The predecessor parser recognizes:
 
 ```text
 timeout state
@@ -2217,15 +2155,7 @@ generic non-zero output
 zero-exit OK
 ```
 
-Migration target:
-
-```text
-app/audit/diagnostics.py
-app/audit/diagnostic_patterns.py
-app/audit/diagnostic_extractors.py
-```
-
-Migration rules:
+Compatibility rules:
 
 1. preserve existing tested meanings;
 2. preserve raw stdout and stderr paths;
@@ -2240,9 +2170,9 @@ Migration rules:
 
 ---
 
-# 59. Compatibility adapter
+# 59. Legacy result adapter
 
-During migration, `parse_compile_summary(...)` may remain as a wrapper.
+`parse_compile_summary(...)` is a compatibility wrapper for predecessor callers.
 
 The wrapper may:
 
@@ -2260,10 +2190,10 @@ It must not:
 
 ---
 
-# 60. Final invariants
+# 60. Diagnostic invariants
 
-1. Every active pattern has a stable ID.
-2. Every active text pattern has fixtures.
+1. Every canonical pattern has a stable ID.
+2. Every canonical text pattern has fixtures.
 3. Process facts outrank text inference.
 4. Both stdout and stderr are considered.
 5. Raw streams remain separate and immutable.
@@ -2276,7 +2206,7 @@ It must not:
 12. Unknown non-zero output falls back to `OTHER`.
 13. Unknown output is never discarded.
 14. Warnings do not silently become failures.
-15. Observed patterns are not active without proof.
+15. Non-canonical evidence does not create a specific diagnosis.
 16. `.gf` references are evidence, not automatic blockers.
 17. Diagnostic parsing and causal classification remain separate.
 18. Static scan findings remain separate from GF diagnostics.
@@ -2289,7 +2219,7 @@ It must not:
 
 ---
 
-# 61. Final rule
+# 61. Governing rule
 
 GF Wordbench must prefer an honest generic diagnosis over a specific unsupported diagnosis.
 
@@ -2297,7 +2227,7 @@ The permitted evidence chain is:
 
 ```text
 raw process facts and streams
-        → documented active pattern
+        → documented canonical pattern
         → bounded field extraction
         → normalized diagnostic record
         → stage result

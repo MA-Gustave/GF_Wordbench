@@ -1,32 +1,34 @@
 # GF Wordbench — Release Gates
 
 **Document ID:** `GF-WB-RELEASE-GATES`  
-**Status:** Final normative specification  
+**Status:** Normative specification  
 **Applies to:** GF Wordbench `release` mode and active-language release decisions  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Gate policy version:** `1.0.0`  
+**Gate policy version:** `1.1.0`  
 **Primary project authorities:**
 - `project/project.toml`
-- `project/docs/VALIDATION_SPEC.md`
-- `project/docs/RELEASE_CRITERIA.md`
-- `project/docs/STATUS_LEDGER.md`
+- `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`
+- `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`
 - `project/docs/KNOWN_ISSUES.md`
 - `project/docs/INTERFILE_CONTRACT_LOCK.md`
 
 **Framework authorities:**
+- `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
 - `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`
 - `docs/INTERFILE_CONTRACT_LOCK.md`
 - `docs/PERSISTED_SCHEMA_LOCK.md`
 - `docs/gf/GF_VERSION_COMPATIBILITY.md`
 - `docs/validation/VALIDATION_MODES.md`
 
-**Document version:** `1.0.0`
+**Document version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
 ## 1. Purpose
 
-This document defines the final conditions under which GF Wordbench may declare an active GF language project ready for release.
+This document defines the conditions under which GF Wordbench may declare an active GF language project ready for release.
 
 A release decision must not depend on:
 
@@ -49,7 +51,7 @@ The release run must prove the state of the current project, current toolchain, 
 
 ## 2. Release decision
 
-GF Wordbench produces one final release decision:
+GF Wordbench produces one release decision:
 
 ```text
 READY
@@ -97,7 +99,7 @@ Examples:
 
 ### 2.4 Decision precedence
 
-Final precedence is:
+Decision precedence is:
 
 ```text
 ERROR > NOT_READY > READY
@@ -105,10 +107,10 @@ ERROR > NOT_READY > READY
 
 Rules:
 
-- any required gate with `ERROR` makes the final decision `ERROR`;
-- otherwise, any required gate with `FAIL` makes the final decision `NOT_READY`;
-- otherwise, any required gate with `SKIPPED` makes the final decision `ERROR`;
-- otherwise, the final decision is `READY`.
+- any required gate with `ERROR` makes the release decision `ERROR`;
+- otherwise, any required gate with `FAIL` makes the release decision `NOT_READY`;
+- otherwise, any required gate with `SKIPPED` makes the release decision `ERROR`;
+- otherwise, the release decision is `READY`.
 
 ---
 
@@ -239,6 +241,18 @@ Normal release validation MUST NOT modify:
 - contract locks;
 - project configuration.
 
+### 4.8 Portfolio independence
+
+`gf-portfolio` may consume completed public release artifacts after the Wordbench run is published.
+
+Portfolio availability, ingestion, indexing, comparison, or aggregation MUST NOT:
+
+- participate in release-gate evaluation;
+- change a Wordbench release decision;
+- become required for Wordbench execution;
+- write into the Wordbench run directory;
+- introduce Portfolio state into Wordbench schemas.
+
 ---
 
 ## 5. Gate ordering
@@ -257,10 +271,10 @@ RG-07 Required grammar-load and runtime scenarios
 RG-08 Golden regression validation
 RG-09 Missing-function and completeness policy
 RG-10 PGF release build
-RG-11 Regression and unresolved-status review
+RG-11 Regression and known-issue review
 RG-12 Framework contract and schema integrity
 RG-13 Evidence, reports, and manifest integrity
-RG-14 Final release decision
+RG-14 Release decision
 ```
 
 A later gate SHOULD NOT execute when a prior failure makes its result meaningless.
@@ -491,7 +505,7 @@ Verify that the files and relationships intended for release are completely decl
 - module ownership contracts are complete;
 - dependency map does not contradict actual imports;
 - lincat/category contracts match the active design;
-- no required contract is `blocked`, `experimental`, or unresolved for release;
+- no required contract is missing, contradictory, ambiguous, or unresolved for release;
 - required project documents exist.
 
 ## 9.3 Required document set
@@ -505,10 +519,9 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 A project may declare additional required documents.
@@ -577,7 +590,7 @@ A heuristic finding does not replace GF compilation evidence.
 
 - malformed source encoding;
 - unresolved conflict marker;
-- prohibited temporary implementation marker;
+- prohibited unresolved placeholder or conflict marker;
 - project-specific forbidden construct;
 - duplicate source identity;
 - required file excluded by filtering;
@@ -609,7 +622,7 @@ blocking scan summary
 
 ## 11.1 Purpose
 
-Prove that the project layers required before final entrypoints compile from current source in a clean artifact context.
+Prove that the project layers required before release entrypoints compile from current source in a clean artifact context.
 
 ## 11.2 Required criteria
 
@@ -716,7 +729,7 @@ raw compile evidence
 
 ## 13.1 Purpose
 
-Prove that the final grammar behaves through GF, not only that individual files compile.
+Prove that the release grammar behaves through GF, not only that individual files compile.
 
 ## 13.2 Required scenario classes
 
@@ -869,14 +882,14 @@ The project MUST define how it evaluates:
 - incomplete concrete functions;
 - placeholders;
 - fallbacks;
-- temporary implementations;
+- incomplete or fallback release behavior;
 - incomplete lexical categories;
 - unsupported constructors;
 - intentional omissions.
 
 ## 15.3 Default release policy
 
-Default final policy:
+Default release policy:
 
 ```text
 unapproved missing function      -> FAIL
@@ -896,9 +909,9 @@ An approved omission requires:
 - release impact;
 - validation evidence;
 - explicit non-blocking classification;
-- record in `STATUS_LEDGER.md` or `KNOWN_ISSUES.md`.
+- record in `KNOWN_ISSUES.md` when the omission affects correctness, validation, compatibility, or release.
 
-Absence of a ledger entry is not approval.
+Absence of an explicit project-policy decision is not approval.
 
 ## 15.5 Zero-missing policy
 
@@ -917,7 +930,7 @@ missing-function scenario result
 missing inventory
 approved omission registry
 placeholder scan
-status-ledger cross-check
+known-issue and release-policy cross-check
 ```
 
 ---
@@ -929,7 +942,7 @@ status-ledger cross-check
 
 ## 16.1 Purpose
 
-Build the final Portable Grammar Format artifact from the configured current release entrypoints.
+Build the Portable Grammar Format release artifact from the configured current release entrypoints.
 
 ## 16.2 Required criteria
 
@@ -992,14 +1005,14 @@ optional PGF smoke result
 
 ---
 
-# 17. RG-11 — Regression and unresolved-status review
+# 17. RG-11 — Regression and known-issue review
 
 **Applicability:** Required  
 **Owner:** Diff engine and project release policy
 
 ## 17.1 Purpose
 
-Prevent release while known regressions, temporary states, or blocking issues remain unresolved.
+Prevent release while known regressions or release-blocking issues remain unresolved.
 
 ## 17.2 Run-to-run regression criteria
 
@@ -1038,22 +1051,9 @@ Baseline absence is not automatically a failure when:
 - the release result records `previous_baseline = none`;
 - project release policy permits first-release certification.
 
-## 17.5 Status ledger
+## 17.5 Known issues
 
-Every active status entry MUST be classified:
-
-```text
-non_blocking
-blocking
-resolved
-deferred_to_future_release
-```
-
-A `deferred_to_future_release` item is non-blocking only when project release policy explicitly permits it.
-
-## 17.6 Known issues
-
-Every open known issue MUST declare:
+Every open known issue that affects correctness, validation, compatibility, performance thresholds, security, or release MUST declare:
 
 ```text
 issue ID
@@ -1061,22 +1061,25 @@ severity
 release impact
 owner
 workaround, if any
+resolution criteria
 decision
 ```
 
 Any issue marked release-blocking causes `FAIL`.
 
-## 17.7 Decision log
+An issue may be non-blocking only when `RELEASE_CRITERIA.md` explicitly permits the affected limitation and the release run contains evidence for that decision.
+
+## 17.6 Decision log
 
 Significant accepted changes since the previous release SHOULD have corresponding decision records.
 
-## 17.8 Evidence
+## 17.7 Evidence
 
 ```text
 diff entries
 regression summary
-status-ledger validation
 known-issues release review
+release-criteria review
 decision-log review
 ```
 
@@ -1175,7 +1178,7 @@ Must:
 - record source fingerprints;
 - contain all file and scenario results;
 - contain gate results;
-- contain final release decision;
+- contain the release decision;
 - reference required artifacts using run-relative paths.
 
 ## 19.4 Human reports
@@ -1186,7 +1189,7 @@ They must not contradict `summary.json`.
 
 ## 19.5 Manifest
 
-The final manifest MUST:
+The manifest MUST:
 
 - use the supported manifest schema;
 - list every required release artifact;
@@ -1216,7 +1219,7 @@ Recommended finalization order:
 9. finalize release decision
 ```
 
-When the final decision is embedded in `summary.json`, implementation must avoid circular hashing/rewriting. The artifact model must define one stable finalization strategy.
+When the release decision is embedded in `summary.json`, serialization must avoid circular hashing or rewriting. The artifact model must define one stable finalization strategy.
 
 ## 19.8 Evidence failure
 
@@ -1224,7 +1227,7 @@ Missing or invalid release evidence is an `ERROR`, even when underlying project 
 
 ---
 
-# 20. RG-14 — Final release decision
+# 20. RG-14 — Release decision
 
 **Applicability:** Required  
 **Owner:** Release decision engine
@@ -1308,7 +1311,7 @@ The following cannot be waived for a certified release:
 - absence of unapproved release blockers;
 - complete release evidence;
 - valid manifest;
-- successful final decision computation.
+- successful release-decision computation.
 
 ### 21.2 Project-configurable gates
 
@@ -1366,7 +1369,7 @@ A project limitation is not a waiver when it is part of the approved release def
 It must be:
 
 - explicitly documented in `RELEASE_CRITERIA.md`;
-- represented in `STATUS_LEDGER.md` or `KNOWN_ISSUES.md`;
+- represented in `KNOWN_ISSUES.md` when it affects correctness, validation, compatibility, or release;
 - covered by validation;
 - classified non-blocking before the release run;
 - consistent with product scope.
@@ -1436,7 +1439,7 @@ A dirty project working tree may be blocked by release policy.
 
 ### 23.4 Archive
 
-A final release evidence bundle SHOULD include or reference:
+A release evidence bundle SHOULD include or reference:
 
 ```text
 summary.json
@@ -1513,7 +1516,7 @@ class ReleaseGateResult:
     duration_ms: int = 0
 ```
 
-Final result:
+Release decision model:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1644,7 +1647,7 @@ ERROR      -> runtime/configuration error exit
 
 The GUI SHOULD display:
 
-- final release decision;
+- release decision;
 - gate list in canonical order;
 - status per gate;
 - first blocker;
@@ -1679,7 +1682,7 @@ A CI release job SHOULD:
 
 ### 30.1 Artifact publication
 
-CI MUST NOT publish the release PGF as final when the release decision is not `READY`.
+CI MUST NOT publish the PGF as a release artifact when the release decision is not `READY`.
 
 Diagnostic artifacts may still be published for investigation.
 
@@ -1720,7 +1723,7 @@ tests/integration/test_release_fixture_project.py
 - missing required gold;
 - stale language identifier;
 - missing entrypoint;
-- blocked project contract.
+- missing, contradictory, or unresolved required project contract.
 
 ### 31.3 Toolchain gate tests
 
@@ -1786,12 +1789,12 @@ A minimal language-neutral GF fixture SHOULD exercise:
 - gold comparison;
 - missing-function policy;
 - PGF build;
-- final manifest;
+- verified manifest;
 - `READY` decision.
 
 ---
 
-## 32. Implementation ownership
+## 32. Release-gate component ownership
 
 Recommended modules:
 
@@ -1872,18 +1875,18 @@ The following checklist is a human review aid and MUST NOT replace machine resul
 [ ] Missing-function policy passes
 [ ] Required PGF is current and verified
 [ ] No blocking regression remains
-[ ] Status ledger has no blocker
+[ ] No release-blocking known issue remains
 [ ] Known issues have release decisions
 [ ] Contract checks pass
 [ ] Schema checks pass
 [ ] Reports are complete
 [ ] Manifest verifies
-[ ] Final decision is READY
+[ ] Release decision is READY
 ```
 
 ---
 
-## 35. Final enforcement rule
+## 35. Enforcement rule
 
 A release is not ready because most checks passed.
 

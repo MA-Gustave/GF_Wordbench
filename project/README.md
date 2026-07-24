@@ -28,7 +28,7 @@ One Wordbench workspace contains exactly one active project. Language-specific p
 ## Start here
 
 1. Review `project.toml`.
-2. Read `docs/00_PROJECT_START_HERE.md` and `docs/INTERFILE_CONTRACT_LOCK.md`.
+2. Read `docs/00_PROJECT_START_HERE__PROJECT_DOCS.md` and `docs/INTERFILE_CONTRACT_LOCK.md`.
 3. Resolve local GF and RGL paths.
 4. Run configuration checks.
 5. Run a focused `quick` validation.

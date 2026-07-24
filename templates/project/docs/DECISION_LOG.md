@@ -104,18 +104,18 @@ The active project:
 
 ```text
 project/project.toml
-project/docs/00_PROJECT_START_HERE.md
+project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 project/docs/LANGUAGE_OVERVIEW.md
 project/docs/LANGUAGE_ARCHITECTURE.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
@@ -148,10 +148,10 @@ Other documents remain authoritative for current state.
 | What is the current module architecture? | `LANGUAGE_ARCHITECTURE.md` |
 | What imports what? | `MODULE_DEPENDENCY_MAP.md` |
 | What is the current lincat contract? | `CATEGORY_AND_LINCAT_CONTRACT.md` |
-| What is temporarily incomplete? | `STATUS_LEDGER.md` |
+| What is temporarily incomplete? | `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` |
 | What is currently wrong or risky? | `KNOWN_ISSUES.md` |
-| What evidence is required? | `VALIDATION_SPEC.md` |
-| What blocks release? | `RELEASE_CRITERIA.md` |
+| What evidence is required? | `VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md` |
+| What blocks release? | `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` |
 | What cross-file promise is locked? | `INTERFILE_CONTRACT_LOCK.md` |
 | What changed between releases? | project changelog or release notes |
 
@@ -510,7 +510,7 @@ An accepted decision must identify:
 
 Accepted does not mean fully implemented.
 
-Implementation state remains in `STATUS_LEDGER.md`.
+Implementation state remains in `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md`.
 
 ---
 

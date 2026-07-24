@@ -4,9 +4,10 @@
 **Status:** Normative  
 **Applies to:** CLI, GUI, bootstrap, audit orchestration, project configuration, reports, automation, and release gates  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\validation\VALIDATION_MODES.md`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Canonical path:** `docs/validation/VALIDATION_MODES.md`  
 **Contract version:** `1.0.0`  
-**Last reviewed:** `2026-07-21`
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -14,7 +15,7 @@
 
 This document defines the canonical validation modes of GF Wordbench.
 
-The final supported modes are:
+The canonical supported modes are:
 
 ```text
 quick
@@ -70,6 +71,20 @@ In particular, `release` must never be reduced to a faster workflow by:
 
 A missing required capability is a mode failure, not permission to skip it.
 
+### 2.1 Workspace and product boundary
+
+One GF Wordbench workspace contains exactly one active GF language project at `project/`.
+Every validation run resolves exactly one active project and one normative language target.
+
+Validation modes do not provide:
+
+- a multi-project registry;
+- simultaneous validation of several active projects in one run;
+- cross-workspace orchestration;
+- multilingual portfolio aggregation.
+
+Those capabilities belong to the independent `gf-portfolio` product. Portfolio may consume public, versioned Wordbench artifacts, but GF Wordbench does not require or read Portfolio runtime state.
+
 ---
 
 ## 3. Scope
@@ -118,7 +133,7 @@ Those belong to their dedicated documents and locks.
 - **STAGE**: bounded validation operation.
 - **TARGET**: file, module, checkpoint, entrypoint, scenario, or subsystem explicitly selected for validation.
 - **CHECKPOINT**: configured module or subsystem boundary whose successful validation proves a development layer is coherent.
-- **ENTRYPOINT**: top-level GF module used for final loading, compilation, or PGF construction.
+- **ENTRYPOINT**: top-level GF module used for loading, compilation, or PGF construction.
 - **REQUIRED SCENARIO**: scenario that must pass for the applicable mode.
 - **OPTIONAL SCENARIO**: scenario whose result remains visible but does not block mode success unless promoted.
 - **RELEASE GATE**: condition that must pass before a run is release-eligible.
@@ -174,7 +189,7 @@ Typical use:
 
 It validates a project-defined layer through configured checkpoints, relevant dependencies, entrypoint reachability, and applicable scenarios.
 
-It is development evidence, not final release evidence.
+It is development evidence, not release evidence.
 
 ---
 
@@ -186,7 +201,7 @@ Purpose:
 
 Typical use:
 
-- final project validation;
+- complete project release validation;
 - pre-tag or pre-publication check;
 - release candidate verification;
 - CI release gate;
@@ -247,7 +262,7 @@ It may cover more files than `release`, but it is not automatically release evid
 
 # 7. Validation stages
 
-The final pipeline may contain the following canonical stages:
+The canonical pipeline contains the following semantic stages:
 
 ```text
 configuration
@@ -311,7 +326,7 @@ At minimum, the run must resolve:
 
 The run must resolve:
 
-- project root;
+- workspace root;
 - GF executable;
 - RGL root or equivalent library path;
 - output root;
@@ -712,10 +727,10 @@ Release requirements are defined by:
 
 ```text
 project/project.toml
-project/docs/VALIDATION_SPEC.md
-project/docs/RELEASE_CRITERIA.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
+project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Machine-enforced requirements must have a structured representation.
@@ -733,10 +748,9 @@ Release mode includes the complete configured release scope:
 - all required gold comparisons;
 - all required PGF targets;
 - all required artifact checks;
-- all release-blocking status-ledger checks;
 - all required schemas;
 - all required reports;
-- final manifest verification.
+- manifest verification.
 
 A target-file override cannot reduce this scope.
 
@@ -799,7 +813,7 @@ Every required checkpoint and entrypoint must compile.
 
 A release run must not rely solely on stale `.gfo` artifacts.
 
-Required compilation must occur in the current run or through a future verified cache contract that proves source-equivalent freshness.
+Required compilation must occur in the current run or through a verified cache contract that proves source-equivalent freshness.
 
 No such cache may be assumed implicitly.
 
@@ -861,17 +875,17 @@ Absence of previous history does not automatically fail the first release, but i
 
 ## 11.12 Known-issue policy
 
-Every known issue affecting release must have explicit status.
+Every known issue affecting release must have an explicit release disposition.
 
 Release fails when:
 
-- a blocking issue remains open;
-- a required function is marked blocked;
+- a release-blocking issue remains unresolved;
+- a required function remains unavailable;
 - an undocumented warning appears where project policy requires registration;
 - a temporary fallback violates release criteria;
 - a disabled required capability remains.
 
-Accepted nonblocking issues must be listed in release evidence.
+Accepted nonblocking issues and their dispositions must be listed in release evidence.
 
 ## 11.13 Schema and manifest policy
 
@@ -953,7 +967,7 @@ A release exception may exist only when:
 - reports include the exception;
 - release status distinguishes normal pass from pass-with-exception.
 
-The default final policy should treat release exceptions as failures unless a deliberate project governance decision enables them.
+The default policy treats release exceptions as failures unless a deliberate project governance decision enables them.
 
 ---
 
@@ -1944,7 +1958,7 @@ Focus on:
 - known issues;
 - regressions;
 - manifest verification;
-- final eligibility.
+- release eligibility.
 
 ## 33.4 Diagnostic report
 
@@ -2191,9 +2205,9 @@ a partial exploratory profile is required
 
 ---
 
-# 40. Final mode contract
+# 40. Mode contract
 
-The canonical final mode set is:
+The canonical mode set is:
 
 ```text
 quick
@@ -2211,7 +2225,7 @@ release     = complete release proof
 diagnostic  = expanded failure investigation
 ```
 
-The final invariants are:
+The mode invariants are:
 
 ```text
 mode semantics are shared by CLI, GUI, and automation

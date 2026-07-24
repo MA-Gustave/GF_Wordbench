@@ -13,7 +13,7 @@
 **Project identity:** Defined by `project/project.toml`  
 **Gold schema:** `gf-wordbench.scenario-gold/1.0`  
 **Scenario-output schema:** `gf-wordbench.scenario-output/1.0`  
-**Validation authority:** `project/docs/VALIDATION_SPEC.md`  
+**Validation authority:** `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`  
 **Project contract lock:** `project/docs/INTERFILE_CONTRACT_LOCK.md`  
 **Target template path:** `templates/project/validation/gold/README.md`  
 **Last reviewed:** `<YYYY-MM-DD OR PROJECT RELEASE>`
@@ -2230,13 +2230,13 @@ An initialized project should remove or rename the example according to its actu
 ```text
 project/README.md
 project/project.toml
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
 project/docs/DECISION_LOG.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/validation/README.md
 project/validation/scenarios/README.md
 project/validation/inputs/README.md

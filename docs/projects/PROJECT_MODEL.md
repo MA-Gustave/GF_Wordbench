@@ -1,8 +1,8 @@
 # GF Wordbench — Project Model
 
 **Document ID:** `GF-WB-PROJECT-MODEL`  
-**Status:** Final normative specification  
-**Applies to:** One active GF language project managed by one GF Wordbench copy  
+**Status:** Normative specification  
+**Applies to:** One active GF language project managed by one GF Wordbench workspace  
 **Owner:** GF Wordbench maintainers and active-project maintainers  
 **Project schema:** `gf-wordbench.project/1.0`  
 **Normative counterparts:**
@@ -11,6 +11,7 @@
 - `docs/REPOSITORY_STRUCTURE.md`
 - `docs/PERSISTED_SCHEMA_LOCK.md`
 - `docs/INTERFILE_CONTRACT_LOCK.md`
+- `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
 - `docs/projects/CREATING_A_PROJECT.md`
 - `docs/projects/CLONING_AND_RESETTING.md`
 - `docs/projects/MIGRATING_AN_EXISTING_LANGUAGE.md`
@@ -38,15 +39,15 @@ It is a controlled unit containing:
 - required and optional validation scenarios;
 - reviewed scenario inputs and gold expectations;
 - architecture and contract documentation;
-- status, issue, and decision records;
+- issue and decision records;
 - release requirements;
 - evidence produced by GF Wordbench runs.
 
 The project model exists to make all of those parts refer to the same language implementation and the same intended release surface.
 
-> One GF Wordbench copy represents one active language project.
+> One GF Wordbench workspace contains exactly one active GF language project.
 
-A different active language is represented by a different clone, reset project, or archived project replacement—not by selecting a second simultaneous profile inside the same copy.
+A different active language is represented by another isolated Wordbench workspace or by an explicit reset, migration, or replacement of the active project—not by selecting a second simultaneous profile inside the same workspace.
 
 ---
 
@@ -107,7 +108,7 @@ The environment provides machine-local values:
 - GF executable;
 - RGL root;
 - output root;
-- local project location;
+- local workspace location;
 - platform;
 - optional local execution preferences.
 
@@ -116,6 +117,16 @@ The environment provides machine-local values:
 A run records what happened for one resolved project and environment state.
 
 Run evidence is output, not project identity.
+
+### 2.5 Portfolio boundary
+
+Multi-workspace discovery, multilingual aggregation, cross-project comparison, and portfolio readiness belong to the independent `gf-portfolio` product.
+
+```text
+gf-portfolio -> public versioned GF Wordbench artifacts
+```
+
+GF Wordbench does not read Portfolio configuration, persist Portfolio state, or require Portfolio to load, validate, report, or release the active project.
 
 ---
 
@@ -148,9 +159,10 @@ Neither file replaces the other.
 - **SHOULD**: expected unless a documented exception exists.
 - **SHOULD NOT**: normally prohibited.
 - **MAY**: optional.
-- **PROJECT ROOT**: root resolved from the active `project.toml`.
+- **WORKSPACE ROOT**: root containing the framework and the canonical `project/` boundary.
+- **PROJECT CONFIGURATION ROOT**: workspace root used to resolve portable paths declared by `project/project.toml`.
 - **SOURCE ROOT**: configured directory containing active-language GF sources.
-- **ACTIVE PROJECT**: the single language project loaded by one GF Wordbench copy.
+- **ACTIVE PROJECT**: the single language project loaded from one GF Wordbench workspace.
 - **ENTRYPOINT**: top-level GF module used for loading, public use, PGF construction, or release validation.
 - **CHECKPOINT**: GF module whose successful validation proves a defined project layer.
 - **SCENARIO**: registered `.gfs` validation script.
@@ -163,7 +175,7 @@ Neither file replaces the other.
 - **INITIALIZED**: project identity and minimum structure exist.
 - **VALIDATABLE**: the framework can resolve and execute the configured project scope.
 - **RELEASABLE**: all applicable required release gates can be evaluated.
-- **COMPLETE**: the active project satisfies its documented final release criteria.
+- **COMPLETE**: the active project satisfies its documented release criteria.
 
 ---
 
@@ -174,16 +186,15 @@ This document governs:
 - the single-active-language constraint;
 - project identity;
 - project ownership boundaries;
-- project root semantics;
+- workspace and project-configuration root semantics;
 - source layout;
 - module entrypoints;
 - checkpoints;
 - GF path requirements;
 - scenario and gold registries;
 - project documentation;
-- project status and decision records;
+- project issue and decision records;
 - release requirements;
-- project lifecycle states;
 - project portability;
 - active project replacement;
 - project cloning and reset semantics;
@@ -212,7 +223,7 @@ Those topics belong to their dedicated documents.
 
 ### 6.1 Invariant
 
-One project configuration represents one active language.
+One workspace contains one active project configuration representing one language.
 
 ### 6.2 Consequences
 
@@ -237,7 +248,6 @@ The constraint provides:
 - one scenario registry;
 - one gold registry;
 - one run history context;
-- one status ledger;
 - one release decision surface;
 - reduced state leakage;
 - simpler AI handoff;
@@ -339,7 +349,6 @@ project/
 │   ├── SYNTAX_AND_CONSTRUCTOR_RULES.md
 │   ├── VALIDATION_SPEC.md
 │   ├── TEST_COVERAGE_MATRIX.md
-│   ├── STATUS_LEDGER.md
 │   ├── DECISION_LOG.md
 │   ├── KNOWN_ISSUES.md
 │   ├── RELEASE_CRITERIA.md
@@ -363,7 +372,7 @@ directory = "..."
 
 ### 8.1 Exactness
 
-The structure above is the product target.
+The structure above is canonical.
 
 A project may add language-specific subdirectories and files.
 
@@ -562,11 +571,11 @@ directory = "..."
 
 The source root MUST:
 
-- resolve beneath the project root;
+- resolve from a portable path declared relative to the workspace root;
+- remain within an approved source boundary;
 - exist for GF-backed validation;
 - contain active-language source files selected by project rules;
-- remain portable;
-- avoid machine-local absolute paths;
+- avoid machine-local absolute paths in project-owned configuration;
 - agree with project documentation.
 
 ### 12.3 File selection
@@ -580,7 +589,7 @@ include_regex
 exclude_regex
 ```
 
-The final selected inventory must be deterministic.
+The selected inventory must be deterministic.
 
 ### 12.4 Required files
 
@@ -668,7 +677,7 @@ They are not interchangeable.
 
 An entrypoint is a top-level GF module used for one or more of:
 
-- final compilation;
+- release compilation;
 - grammar loading;
 - syntax/API exposure;
 - scenario execution;
@@ -727,7 +736,7 @@ noun phrase
 verb phrase
 extensions
 structural words
-final concrete grammar
+top-level concrete grammar
 ```
 
 ### 16.2 Purpose
@@ -754,7 +763,7 @@ It should follow dependency direction from lower to higher layers.
 
 ### 16.5 Release relationship
 
-A final entrypoint passing does not permit omission of required lower checkpoints when project release policy requires them.
+A release entrypoint passing does not permit omission of required lower checkpoints when project release policy requires them.
 
 ---
 
@@ -857,7 +866,7 @@ A contract-changing edit must update:
 - golds;
 - configuration;
 - dependency map;
-- status/decision records;
+- issue and decision records;
 - contract lock;
 - validation evidence.
 
@@ -906,7 +915,7 @@ An optional scenario:
 
 ### 19.5 Scenario order
 
-Scenario execution order follows deterministic project declaration or a future structured scenario registry.
+Scenario execution order follows the deterministic project declaration or its structured scenario registry.
 
 ### 19.6 Native GF scripts
 
@@ -1005,13 +1014,13 @@ release gates
 ### 22.1 Required specification
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 ### 22.2 Coverage
 
 ```text
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 ```
 
 ### 22.3 Executable evidence
@@ -1074,9 +1083,8 @@ Project contribution:
 ### 24.1 Project release authorities
 
 ```text
-project/docs/RELEASE_CRITERIA.md
-project/docs/VALIDATION_SPEC.md
-project/docs/STATUS_LEDGER.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
@@ -1103,7 +1111,6 @@ Examples:
 - required scenario failure;
 - gold mismatch;
 - unapproved missing function;
-- release-blocking status entry;
 - release-blocking known issue;
 - missing required PGF;
 - stale language identity;
@@ -1111,7 +1118,7 @@ Examples:
 
 ### 24.5 Project limitation
 
-A documented project limitation may be non-blocking only when the final project scope explicitly permits it and the release criteria classify it accordingly.
+A documented project limitation may be non-blocking only when the declared project scope explicitly permits it and the release criteria classify it accordingly.
 
 ---
 
@@ -1124,10 +1131,10 @@ It defines design intent consumed by maintainers, validators, and AI-assisted wo
 ### 25.1 Start document
 
 ```text
-project/docs/00_PROJECT_START_HERE.md
+project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 ```
 
-Navigation and current project status.
+Navigation, project identity, and authoritative document map.
 
 ### 25.2 Language overview
 
@@ -1180,7 +1187,7 @@ Construction rules, agreement behavior, complement structure, and public syntax 
 ### 25.8 Validation specification
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 Required scenarios, assertions, golds, completeness checks, and mode mapping.
@@ -1188,18 +1195,11 @@ Required scenarios, assertions, golds, completeness checks, and mode mapping.
 ### 25.9 Coverage matrix
 
 ```text
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 ```
 
 Maps features/contracts to validation proof.
 
-### 25.10 Status ledger
-
-```text
-project/docs/STATUS_LEDGER.md
-```
-
-Tracks temporary, fallback, warning, blocked, and resolved states.
 
 ### 25.11 Decision log
 
@@ -1215,15 +1215,15 @@ Records significant architectural and behavioral decisions.
 project/docs/KNOWN_ISSUES.md
 ```
 
-Tracks current defects, limitations, severity, ownership, and release impact.
+Records defects and limitations that affect behavior, validation, or release scope.
 
 ### 25.13 Release criteria
 
 ```text
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
-Defines project-specific final acceptance.
+Defines project-specific release acceptance.
 
 ### 25.14 Research evidence
 
@@ -1235,57 +1235,7 @@ Records linguistic sources, evidence, uncertainties, and traceability.
 
 ---
 
-## 26. Status model
-
-Project status records describe implementation readiness, not process execution status.
-
-Recommended project statuses:
-
-```text
-planned
-active
-temporary
-fallback
-warning
-blocked
-deprecated
-resolved
-retired
-```
-
-### 26.1 Status ledger authority
-
-`STATUS_LEDGER.md` owns active project implementation statuses.
-
-### 26.2 Required fields
-
-Each status entry SHOULD define:
-
-```text
-stable ID
-affected files/modules
-status
-description
-reason
-owner
-next action
-exit condition
-release impact
-validation evidence
-last reviewed
-```
-
-### 26.3 No hidden temporary state
-
-Temporary or fallback code without a ledger entry indicates drift.
-
-### 26.4 Resolved history
-
-Resolved entries SHOULD retain a resolution record.
-
----
-
-## 27. Issue model
+## 26. Issue model
 
 `KNOWN_ISSUES.md` tracks defects and limitations.
 
@@ -1305,11 +1255,11 @@ target
 decision
 ```
 
-### 27.1 Release blocker
+### 26.1 Release blocker
 
 A release-blocking issue cannot be ignored silently.
 
-### 27.2 Duplicate tracking
+### 26.2 Duplicate tracking
 
 One issue should have one authoritative entry.
 
@@ -1317,7 +1267,7 @@ Source comments may reference the issue ID but should not replace the issue reco
 
 ---
 
-## 28. Decision model
+## 27. Decision model
 
 Significant project changes require a decision record.
 
@@ -1333,7 +1283,7 @@ Examples:
 - changing expected PGF name;
 - migrating GF/RGL baseline.
 
-### 28.1 Decision record
+### 27.1 Decision record
 
 Recommended fields:
 
@@ -1350,13 +1300,13 @@ affected validation
 migration
 ```
 
-### 28.2 Immutable history
+### 27.2 Immutable history
 
 Superseded decisions remain recorded and link to the replacement decision.
 
 ---
 
-## 29. Research evidence model
+## 28. Research evidence model
 
 Linguistic decisions should be traceable.
 
@@ -1370,13 +1320,13 @@ Research evidence may include:
 - native-speaker review;
 - project-specific test observations.
 
-### 29.1 Separation
+### 28.1 Separation
 
 Research evidence supports design decisions.
 
 It does not automatically define executable behavior until translated into project specification and validation.
 
-### 29.2 Uncertainty
+### 28.2 Uncertainty
 
 Conflicting or incomplete evidence should remain visible.
 
@@ -1384,119 +1334,7 @@ The project must not present an unresolved hypothesis as settled release behavio
 
 ---
 
-## 30. Project model states
-
-A project moves through defined lifecycle states.
-
-```text
-template
-initialized
-baselined
-developing
-checkpointed
-stabilizing
-release_candidate
-released
-archived
-reset
-migration_required
-invalid
-```
-
-### 30.1 `template`
-
-Generic, language-neutral content with placeholders.
-
-Not an active releasable project.
-
-### 30.2 `initialized`
-
-Identity and minimum structure have been created.
-
-Some modules/scenarios may not yet exist.
-
-### 30.3 `baselined`
-
-A trustworthy first diagnostic run exists.
-
-The project may still fail.
-
-### 30.4 `developing`
-
-Implementation is actively changing.
-
-Quick and diagnostic validation dominate.
-
-### 30.5 `checkpointed`
-
-One or more declared architecture layers have passed their checkpoint criteria.
-
-### 30.6 `stabilizing`
-
-Core implementation exists; temporary states, coverage gaps, regressions, and documentation drift are being resolved.
-
-### 30.7 `release_candidate`
-
-The project intends to pass all release gates from current source.
-
-### 30.8 `released`
-
-A `READY` release run and its evidence have been preserved.
-
-### 30.9 `archived`
-
-Project is retained but not active for modification.
-
-### 30.10 `reset`
-
-Old active identity has been removed and the project is ready for initialization.
-
-### 30.11 `migration_required`
-
-The project cannot be loaded canonically without an explicit migration.
-
-### 30.12 `invalid`
-
-Required identity or structural semantics cannot be interpreted safely.
-
----
-
-## 31. Lifecycle transitions
-
-Recommended transitions:
-
-```text
-template → initialized
-initialized → baselined
-baselined → developing
-developing → checkpointed
-checkpointed → stabilizing
-stabilizing → release_candidate
-release_candidate → released
-released → developing
-released → archived
-archived → restored
-active state → migration_required
-migration_required → active state
-active state → reset
-reset → initialized
-```
-
-### 31.1 No automatic release transition
-
-A project cannot enter `released` from a documentation edit or manual label alone.
-
-A valid release run is required.
-
-### 31.2 Reopened release
-
-A released project may return to development.
-
-Previous release evidence remains immutable.
-
----
-
-## 32. Initialization
+## 29. Initialization
 
 Initialization creates a new active project from the language-neutral template.
 
@@ -1512,13 +1350,13 @@ It should create or resolve:
 - initial scenario registry;
 - release requirement.
 
-### 32.1 Placeholder handling
+### 29.1 Placeholder handling
 
 Template placeholders are permitted before initialization.
 
 They are prohibited in a release candidate.
 
-### 32.2 Initial validity
+### 29.2 Initial validity
 
 An initialized project may have:
 
@@ -1533,11 +1371,11 @@ It is not complete merely because configuration parses.
 
 ---
 
-## 33. Cloning
+## 30. Cloning
 
 Cloning creates another independent GF Wordbench copy.
 
-### 33.1 Preserved framework assets
+### 30.1 Preserved framework assets
 
 Clone:
 
@@ -1550,7 +1388,7 @@ package metadata
 generic launchers
 ```
 
-### 33.2 Active project options
+### 30.2 Active project options
 
 A clone may:
 
@@ -1558,21 +1396,21 @@ A clone may:
 - replace it with a new initialized project;
 - archive it and reset.
 
-### 33.3 Run history
+### 30.3 Run history
 
 Run directories should not be copied into a clean language template unless archival purpose is explicit.
 
-### 33.4 Machine-local state
+### 30.4 Machine-local state
 
 Application state should not be treated as portable project identity.
 
 ---
 
-## 34. Resetting
+## 31. Resetting
 
 Reset removes active-language content while preserving the framework.
 
-### 34.1 Reset targets
+### 31.1 Reset targets
 
 Reset should replace or remove:
 
@@ -1585,7 +1423,7 @@ Reset should replace or remove:
 - stale GUI language state;
 - stale run pointers.
 
-### 34.2 Preserved assets
+### 31.2 Preserved assets
 
 Preserve:
 
@@ -1596,7 +1434,7 @@ Preserve:
 - migration fixtures;
 - archived project package when requested.
 
-### 34.3 Old-language scan
+### 31.3 Old-language scan
 
 A reset should detect stale identifiers in:
 
@@ -1609,17 +1447,17 @@ scenario/gold filenames
 documentation
 ```
 
-### 34.4 No partial identity
+### 31.4 No partial identity
 
 A reset must not leave a new project configuration pointing to old-language modules.
 
 ---
 
-## 35. Migration
+## 32. Migration
 
 Migration converts an existing language or legacy GF Audit setup into the canonical project model.
 
-### 35.1 Migration inputs
+### 32.1 Migration inputs
 
 May include:
 
@@ -1632,7 +1470,7 @@ May include:
 - informal test scripts;
 - legacy language documentation.
 
-### 35.2 Migration output
+### 32.2 Migration output
 
 Must produce:
 
@@ -1644,23 +1482,23 @@ Must produce:
 - project documentation baseline;
 - migration warnings and losses.
 
-### 35.3 No silent rewrite
+### 32.3 No silent rewrite
 
 Opening a project may propose migration.
 
 Normal validation MUST NOT silently rewrite project configuration.
 
-### 35.4 Legacy runs
+### 32.4 Legacy runs
 
 Historical GF Audit summaries may be imported for comparison but cannot retroactively prove missing scenario or release evidence.
 
 ---
 
-## 36. Portability
+## 33. Portability
 
 A portable project can move to another machine without editing language-specific facts solely because filesystem roots differ.
 
-### 36.1 Portable project values
+### 33.1 Portable project values
 
 Use project-relative paths for:
 
@@ -1673,7 +1511,7 @@ module paths
 project documents
 ```
 
-### 36.2 Non-portable environment values
+### 33.2 Non-portable environment values
 
 Keep outside the project:
 
@@ -1686,23 +1524,23 @@ temporary directories
 IDE paths
 ```
 
-### 36.3 New machine procedure
+### 33.3 New machine procedure
 
 A new environment should only need to supply:
 
-- local project location;
+- local workspace location;
 - GF executable;
 - RGL root;
 - output root;
 - approved local execution settings.
 
-### 36.4 Portability test
+### 33.4 Portability test
 
 Project validation should include a path check that rejects accidental absolute machine-specific values in project-owned files where prohibited.
 
 ---
 
-## 37. Application state relationship
+## 34. Application state relationship
 
 Canonical state file:
 
@@ -1710,7 +1548,7 @@ Canonical state file:
 .gf_wordbench_state.json
 ```
 
-### 37.1 State purpose
+### 34.1 State purpose
 
 State stores disposable local preferences:
 
@@ -1720,21 +1558,21 @@ State stores disposable local preferences:
 - UI selection;
 - last-run pointers.
 
-### 37.2 State non-authority
+### 34.2 State non-authority
 
 Deleting state must not damage project definition.
 
-### 37.3 Project precedence
+### 34.3 Project precedence
 
 Project-owned facts come from `project.toml`, not state.
 
-### 37.4 UI overrides
+### 34.4 UI overrides
 
 CLI or GUI may override permitted execution settings.
 
 They MUST NOT silently bypass required project release constraints.
 
-### 37.5 No language duplication
+### 34.5 No language duplication
 
 State must not become a second store for:
 
@@ -1747,20 +1585,20 @@ State must not become a second store for:
 
 ---
 
-## 38. Run relationship
+## 35. Run relationship
 
 A project may have many runs.
 
 A run belongs to exactly one resolved project identity.
 
-### 38.1 Run metadata
+### 35.1 Run metadata
 
 Each run records:
 
 ```text
 project ID
 project name
-project root
+project-configuration root
 source root
 mode
 GF toolchain
@@ -1770,23 +1608,23 @@ artifacts
 outcome
 ```
 
-### 38.2 Run immutability
+### 35.2 Run immutability
 
 A finalized run is evidence of historical project state.
 
 Changing the active project does not rewrite old runs.
 
-### 38.3 Compatibility for diff
+### 35.3 Compatibility for diff
 
 Run-to-run comparison requires compatible project identity and result semantics.
 
-### 38.4 Cross-project comparison
+### 35.4 Cross-project comparison
 
 Comparing different project IDs as if they were one timeline is prohibited by default.
 
 ---
 
-## 39. Project loading pipeline
+## 36. Project loading pipeline
 
 Recommended loading pipeline:
 
@@ -1796,20 +1634,20 @@ locate project.toml
 → validate schema identity/version
 → validate required fields
 → normalize portable paths
-→ resolve project root
+→ resolve workspace and project-configuration roots
 → resolve source model
 → preserve ordered modules/scenarios
 → validate registries
 → build immutable ProjectModel
 → merge permitted environment configuration
-→ construct final RunConfig
+→ construct resolved RunConfig
 ```
 
-### 39.1 No partial object leakage
+### 36.1 No partial object leakage
 
 Invalid configuration should not produce a partially trusted active project object.
 
-### 39.2 Validation phases
+### 36.2 Validation phases
 
 Separate:
 
@@ -1818,11 +1656,11 @@ schema validation
 semantic validation
 filesystem validation
 contract validation
-execution readiness
-release readiness
+execution prerequisites
+release-gate prerequisites
 ```
 
-### 39.3 Diagnostics
+### 36.3 Diagnostics
 
 Project-load diagnostics must identify:
 
@@ -1836,7 +1674,7 @@ suggested correction
 
 ---
 
-## 40. Recommended in-memory model
+## 37. Recommended in-memory model
 
 The persisted schema remains authoritative.
 
@@ -1895,21 +1733,21 @@ class ProjectModel:
     validation: ProjectValidation
 ```
 
-### 40.1 No undocumented fields
+### 37.1 No undocumented fields
 
 Runtime consumers must not attach dynamic project properties.
 
 Future fields require typed and schema-coordinated extension.
 
-### 40.2 Immutability
+### 37.2 Immutability
 
 After successful loading, `ProjectModel` SHOULD be immutable for a run.
 
 ---
 
-## 41. Model invariants
+## 38. Model invariants
 
-The final project model enforces:
+The project model enforces:
 
 1. one project configuration;
 2. one active project ID;
@@ -1934,7 +1772,7 @@ The final project model enforces:
 
 ---
 
-## 42. Semantic validation
+## 39. Semantic validation
 
 Beyond schema parsing, the loader/checker SHOULD validate:
 
@@ -1955,7 +1793,7 @@ Beyond schema parsing, the loader/checker SHOULD validate:
 - contradictory PGF requirement;
 - missing project documents.
 
-### 42.1 Timing
+### 39.1 Timing
 
 Some filesystem checks may be deferred during initialization.
 
@@ -1963,51 +1801,7 @@ They become mandatory for relevant validation and release modes.
 
 ---
 
-## 43. Project readiness levels
-
-### 43.1 Configuration-ready
-
-- schema valid;
-- identity valid;
-- paths syntactically valid.
-
-### 43.2 Source-ready
-
-- source directory exists;
-- source inventory can be selected;
-- entrypoint/checkpoint paths resolve.
-
-### 43.3 Tool-ready
-
-- GF/RGL environment compatible;
-- GF path resolves.
-
-### 43.4 Validation-ready
-
-- required scenario files exist;
-- inputs resolve;
-- validation specification exists.
-
-### 43.5 Regression-ready
-
-- required golds exist;
-- normalization contracts valid.
-
-### 43.6 Release-ready-to-evaluate
-
-- release criteria defined;
-- project blockers classified;
-- PGF requirement resolvable;
-- all release gates can execute.
-
-### 43.7 Released
-
-- final decision `READY`;
-- reports and manifest preserved.
-
----
-
-## 44. Project completeness
+## 40. Project completeness
 
 A complete project is not defined solely by module count.
 
@@ -2016,20 +1810,19 @@ Completion requires:
 - intended language scope documented;
 - architecture coherent;
 - public cross-file contracts documented;
-- required modules implemented;
+- required modules present and valid;
 - required checkpoints passing;
 - release entrypoints passing;
 - required scenarios passing;
 - gold expectations reviewed and matching;
 - completeness/missing policy passing;
-- blocking status entries resolved;
 - blocking known issues resolved;
 - required documentation current;
 - required PGF built when applicable;
 - release manifest verified;
 - release decision `READY`.
 
-### 44.1 Partial projects
+### 40.1 Partial projects
 
 GF Wordbench may manage an intentionally partial language project.
 
@@ -2039,7 +1832,7 @@ It must not describe partial coverage as complete full-language support.
 
 ---
 
-## 45. Project versioning
+## 41. Project versioning
 
 Schema `1.0` does not require a project release-version field.
 
@@ -2049,9 +1842,9 @@ Project versioning may be tracked through:
 - release records;
 - changelog;
 - release artifact metadata;
-- future project schema extension.
+- a versioned project schema extension.
 
-### 45.1 Schema vs project version
+### 41.1 Schema vs project version
 
 Do not confuse:
 
@@ -2066,35 +1859,35 @@ normalization version
 
 Each has separate meaning.
 
-### 45.2 Future field
+### 41.2 Future field
 
 Adding a canonical project release-version field requires a project-schema minor or major revision according to compatibility impact.
 
 ---
 
-## 46. Framework compatibility
+## 42. Framework compatibility
 
 An active project depends on a compatible GF Wordbench framework contract.
 
-### 46.1 Minimum project-schema support
+### 42.1 Minimum project-schema support
 
 The framework must support the project's schema major version or require migration.
 
-### 46.2 Feature requirements
+### 42.2 Feature requirements
 
 A project must not declare a validation feature the installed framework cannot interpret.
 
-### 46.3 No silent downgrade
+### 42.3 No silent downgrade
 
 Unsupported project semantics cannot be silently ignored during release validation.
 
-### 46.4 Template compatibility
+### 42.4 Template compatibility
 
 The bundled template version should match the current framework's canonical project schema.
 
 ---
 
-## 47. Template model
+## 43. Template model
 
 Canonical template root:
 
@@ -2104,7 +1897,7 @@ templates/project/
 
 The template mirrors the active-project structure.
 
-### 47.1 Template properties
+### 43.1 Template properties
 
 The template MUST be:
 
@@ -2114,13 +1907,13 @@ The template MUST be:
 - complete enough to initialize every required project document;
 - aligned with the current project schema.
 
-### 47.2 Template placeholders
+### 43.2 Template placeholders
 
 Placeholders are allowed in template documents.
 
 They must be replaced or explicitly removed during initialization.
 
-### 47.3 Active project copy
+### 43.3 Active project copy
 
 Initialization copies or renders template assets into:
 
@@ -2134,7 +1927,7 @@ Template updates must not overwrite an active project automatically.
 
 ---
 
-## 48. Project identity migration
+## 44. Project identity migration
 
 Changing any of the following requires coordinated migration:
 
@@ -2149,7 +1942,7 @@ gold filenames
 expected PGF name
 ```
 
-### 48.1 Migration review
+### 44.1 Migration review
 
 Review:
 
@@ -2164,7 +1957,7 @@ Review:
 - external consumers;
 - release artifacts.
 
-### 48.2 Historical identity
+### 44.2 Historical identity
 
 Old runs retain old identity.
 
@@ -2172,9 +1965,9 @@ A migration may define predecessor linkage, but must not rewrite historical summ
 
 ---
 
-## 49. Project deletion and archival
+## 45. Project deletion and archival
 
-### 49.1 Archive
+### 45.1 Archive
 
 An archive should preserve:
 
@@ -2186,23 +1979,23 @@ An archive should preserve:
 - toolchain identity;
 - manifest.
 
-### 49.2 Delete
+### 45.2 Delete
 
 Deleting an active project should require deliberate action.
 
 Framework assets must remain intact unless the user is deleting the complete repository.
 
-### 49.3 Restore
+### 45.3 Restore
 
 A restored project must be schema-validated and environment-resolved before execution.
 
 ---
 
-## 50. Security and trust
+## 46. Security and trust
 
 A project may contain executable or semi-executable inputs.
 
-### 50.1 Untrusted assets
+### 46.1 Untrusted assets
 
 Treat as untrusted until reviewed:
 
@@ -2213,25 +2006,25 @@ Treat as untrusted until reviewed:
 - external helper scripts;
 - symlinks.
 
-### 50.2 Path containment
+### 46.2 Path containment
 
 Project-relative paths must remain beneath permitted roots after resolution.
 
-### 50.3 Scenario shell escapes
+### 46.3 Scenario shell escapes
 
 Operating-system shell commands inside scenarios are prohibited in normal policy unless explicitly authorized.
 
-### 50.4 Secrets
+### 46.4 Secrets
 
 Project configuration and project documentation must not store secrets.
 
-### 50.5 External source trees
+### 46.5 External source trees
 
-A project source directory outside the project root requires a separate explicit contract and is not supported by the default project model.
+A source directory outside the workspace root requires an explicit approved external-source contract and is not supported by the default project model.
 
 ---
 
-## 51. Project diagnostics
+## 47. Project diagnostics
 
 Recommended project diagnostic codes:
 
@@ -2262,7 +2055,7 @@ PROJECT_RELEASE_REQUIREMENT_INCOMPLETE
 PROJECT_MIGRATION_REQUIRED
 ```
 
-### 51.1 Error categories
+### 47.1 Error categories
 
 Project model errors normally use:
 
@@ -2276,7 +2069,7 @@ A project that cannot be interpreted safely produces `ERROR`.
 
 ---
 
-## 52. CLI behavior
+## 48. CLI behavior
 
 Recommended commands:
 
@@ -2290,7 +2083,7 @@ gf-wordbench project migrate
 gf-wordbench project archive
 ```
 
-### 52.1 `project show`
+### 48.1 `project show`
 
 Displays:
 
@@ -2304,7 +2097,7 @@ Displays:
 - PGF requirement;
 - readiness level.
 
-### 52.2 `project check`
+### 48.2 `project check`
 
 Validates:
 
@@ -2315,7 +2108,7 @@ Validates:
 - required documents;
 - contract consistency.
 
-### 52.3 Write commands
+### 48.3 Write commands
 
 `init`, `reset`, and `migrate` are explicit write operations.
 
@@ -2325,7 +2118,7 @@ Exact CLI syntax becomes normative in `CLI_REFERENCE.md`.
 
 ---
 
-## 53. GUI behavior
+## 49. GUI behavior
 
 The GUI SHOULD show:
 
@@ -2333,7 +2126,7 @@ The GUI SHOULD show:
 - source root;
 - entrypoints/checkpoints;
 - required/optional scenarios;
-- project readiness;
+- validation and release-gate results;
 - project-validation problems;
 - links to project documents.
 
@@ -2348,7 +2141,7 @@ The GUI MUST NOT:
 
 ---
 
-## 54. CI behavior
+## 50. CI behavior
 
 A project CI job SHOULD:
 
@@ -2360,21 +2153,21 @@ A project CI job SHOULD:
 6. run configured validation mode;
 7. preserve run evidence.
 
-### 54.1 Clean environment
+### 50.1 Clean environment
 
 CI should not depend on developer-local GUI state.
 
-### 54.2 Explicit toolchain
+### 50.2 Explicit toolchain
 
 GF executable and RGL root should be supplied explicitly.
 
-### 54.3 Release CI
+### 50.3 Release CI
 
 Release CI must use the same project model and release requirements as local release mode.
 
 ---
 
-## 55. Testing strategy
+## 51. Testing strategy
 
 Recommended tests:
 
@@ -2390,7 +2183,7 @@ tests/schemas/test_project_schema.py
 tests/integration/test_project_fixture.py
 ```
 
-### 55.1 Schema tests
+### 51.1 Schema tests
 
 - canonical project;
 - missing schema ID;
@@ -2401,7 +2194,7 @@ tests/integration/test_project_fixture.py
 - unknown optional field;
 - deterministic list order.
 
-### 55.2 Identity tests
+### 51.2 Identity tests
 
 - valid project ID;
 - invalid path characters;
@@ -2410,7 +2203,7 @@ tests/integration/test_project_fixture.py
 - project-ID migration;
 - stale identity detection.
 
-### 55.3 Source tests
+### 51.3 Source tests
 
 - valid relative source root;
 - missing source root;
@@ -2419,7 +2212,7 @@ tests/integration/test_project_fixture.py
 - invalid regex;
 - required module excluded accidentally.
 
-### 55.4 Module tests
+### 51.4 Module tests
 
 - one entrypoint;
 - multiple entrypoints;
@@ -2429,7 +2222,7 @@ tests/integration/test_project_fixture.py
 - duplicate checkpoint;
 - checkpoint dependency order review.
 
-### 55.5 Scenario tests
+### 51.5 Scenario tests
 
 - unique required scenarios;
 - required/optional overlap;
@@ -2438,7 +2231,7 @@ tests/integration/test_project_fixture.py
 - stale scenario suffix;
 - deterministic order.
 
-### 55.6 Lifecycle tests
+### 51.6 Lifecycle tests
 
 - template initialization;
 - baseline state;
@@ -2447,14 +2240,14 @@ tests/integration/test_project_fixture.py
 - migration warning;
 - unsupported schema requires migration.
 
-### 55.7 Boundary tests
+### 51.7 Boundary tests
 
 - project facts do not come from GUI state;
 - framework defaults contain no active-language identity;
 - normal validation does not rewrite project files;
 - historical runs are not rewritten after migration.
 
-### 55.8 Integration fixture
+### 51.8 Integration fixture
 
 A language-neutral fixture should prove:
 
@@ -2470,9 +2263,9 @@ A language-neutral fixture should prove:
 
 ---
 
-## 56. Project-model checker
+## 52. Project-model checker
 
-Recommended future command:
+Canonical command:
 
 ```text
 gf-wordbench project check
@@ -2503,24 +2296,24 @@ Strict mode may additionally check:
 unexplained files
 undocumented public module ownership
 dependency-map mismatch
-temporary code without ledger entry
+undocumented temporary or fallback behavior
 project-relative path portability
 research evidence references
 ```
 
 ---
 
-## 57. Change classification
+## 53. Change classification
 
-### 57.1 Internal source change
+### 53.1 Internal source change
 
 No project-model change when:
 
-- private implementation changes;
+- private source changes;
 - project identity and public contracts remain stable;
 - existing validation remains applicable.
 
-### 57.2 Compatible project extension
+### 53.2 Compatible project extension
 
 Examples:
 
@@ -2536,7 +2329,7 @@ Required:
 - contract update where consumed;
 - schema minor change only if persisted structure changes.
 
-### 57.3 Breaking project change
+### 53.3 Breaking project change
 
 Examples:
 
@@ -2565,7 +2358,7 @@ Required:
 
 ---
 
-## 58. Drift indicators
+## 54. Drift indicators
 
 Project-model drift is likely when:
 
@@ -2577,7 +2370,7 @@ Project-model drift is likely when:
 - a scenario loads an undocumented entrypoint;
 - an entrypoint exists but is absent from architecture docs;
 - the dependency map contradicts imports;
-- a temporary fallback has no status entry;
+- temporary or fallback behavior is undocumented;
 - the expected PGF name differs across files;
 - old-language identifiers remain after reset;
 - project paths are absolute and machine-specific;
@@ -2591,7 +2384,7 @@ Every drift indicator requires restoring the existing contract or performing a c
 
 ---
 
-## 59. Required project review checklist
+## 55. Required project review checklist
 
 ```text
 [ ] One active project is defined
@@ -2613,7 +2406,6 @@ Every drift indicator requires restoring the existing contract or performing a c
 [ ] Architecture matches source layout
 [ ] Dependency map matches imports
 [ ] Category/lincat contracts match consumers
-[ ] Temporary/fallback states are registered
 [ ] Known issues have release impact
 [ ] Significant changes have decision records
 [ ] Release criteria are explicit
@@ -2627,7 +2419,7 @@ Every drift indicator requires restoring the existing contract or performing a c
 
 ---
 
-## 60. Final enforcement rule
+## 56. Enforcement rule
 
 A GF Wordbench project is one portable, active language definition—not a collection of loosely related paths and files.
 

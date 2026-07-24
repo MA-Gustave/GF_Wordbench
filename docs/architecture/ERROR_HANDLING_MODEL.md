@@ -4,8 +4,7 @@
 **Status:** Normative architecture reference  
 **Applies to:** Framework code, CLI, GUI, GF execution, validation stages, reports, persistence, migrations, and the active project boundary  
 **Owner:** GF Wordbench maintainers  
-**Target architecture:** Final GF Wordbench architecture  
-**Last structural review:** 2026-07-22
+**Last structural review:** 2026-07-24
 
 ---
 
@@ -66,6 +65,7 @@ GF Wordbench remains authoritative for:
 This model must remain consistent with:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -73,6 +73,7 @@ docs/architecture/COMPONENT_MAP.md
 docs/reference/STATUS_VALUES.md
 docs/reference/DIAGNOSTIC_KINDS.md
 docs/reference/EXIT_CODES.md
+docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
@@ -84,6 +85,7 @@ Ownership boundaries:
 | External process and GF failure semantics | `EXTERNAL_TOOL_CONTRACT_LOCK.md` |
 | Persisted fields, enums, and migrations | `PERSISTED_SCHEMA_LOCK.md` |
 | Component responsibilities | `COMPONENT_MAP.md` |
+| Run budgets and finalization reserve | `ADR-0010-RUN-BUDGET-AND-FINALIZATION.md` |
 | Active-language module failures | project contract lock |
 | Human explanation and architectural rationale | this document |
 
@@ -224,7 +226,7 @@ A skipped stage must record a reason.
 
 Execution facts describe control flow.
 
-Recommended final facts:
+Canonical execution facts:
 
 ```text
 launched
@@ -301,10 +303,10 @@ Rules:
 - error kind must describe the recognized technical category;
 - it must not encode direct/downstream causality;
 - it must not encode severity;
-- `OTHER` is allowed but should not become the default for avoidable parser gaps;
+- `OTHER` is allowed but must not become the default for avoidable parser gaps;
 - adding or redefining an error kind is a model and schema contract change when serialized.
 
-Recommended internal failure reasons may be more specific:
+Canonical internal failure reasons may be more specific:
 
 ```text
 launch_failure
@@ -322,7 +324,7 @@ migration_failure
 
 These internal reasons must map deterministically to the locked persisted `error_kind`.
 
-Recommended mapping:
+Canonical mapping:
 
 | Internal failure reason | Persisted error kind |
 |---|---|
@@ -367,7 +369,7 @@ The available evidence identifies the current project subject as a root cause or
 
 The current subject failed because one or more other known project subjects failed first.
 
-`blocked_by` should identify the root blockers.
+`blocked_by` identifies the root blockers.
 
 ### `ambiguous`
 
@@ -388,13 +390,13 @@ Rules:
 - report writers must not recompute it;
 - framework failures must not invent a fake project causal class;
 - an `ERROR` may remain `ambiguous` when no valid project causality exists;
-- a dedicated framework error should be represented through status and error kind, not by expanding causal semantics silently.
+- a dedicated framework error is represented through status and error kind, not by silently expanding causal semantics.
 
 ---
 
 ## 4.5 Log severity
 
-Recommended log severities:
+Canonical log severities:
 
 ```text
 DEBUG
@@ -419,9 +421,9 @@ Examples:
 
 # 5. Result envelope
 
-Every stage result should carry enough structured context to be understood without parsing a human report.
+Every stage result carries enough structured context to be understood without parsing a human report.
 
-Recommended shared error envelope:
+Canonical shared error envelope:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -440,7 +442,7 @@ class ErrorInfo:
 
 This is an architectural model.
 
-Its exact implementation and persisted form require coordination with `app/models.py` and the persisted schema.
+Its persisted form is governed by `app/models.py` and the persisted schema.
 
 Minimum semantic fields:
 
@@ -469,13 +471,13 @@ Rules:
 
 # 6. Error-code namespace
 
-Stable error codes should use:
+Stable error codes use:
 
 ```text
 GF-WB-<DOMAIN>-<NUMBER>
 ```
 
-Recommended domains:
+Canonical domains:
 
 ```text
 CONFIG
@@ -522,9 +524,9 @@ Error-code rules:
 
 # 7. Exception hierarchy
 
-GF Wordbench should expose one small, deliberate exception hierarchy.
+GF Wordbench exposes one small, deliberate exception hierarchy.
 
-Recommended hierarchy:
+Canonical hierarchy:
 
 ```python
 GFWordbenchError
@@ -564,7 +566,7 @@ ContractViolationError
 GFWordbenchError
 ```
 
-Internal third-party or standard-library exceptions should normally be wrapped with preserved cause:
+Internal third-party or standard-library exceptions are wrapped with their cause preserved:
 
 ```python
 raise EvidenceIOError("Could not write compile stderr") from exc
@@ -785,11 +787,11 @@ Continuation depends on:
 
 ## 11.1 Default policy
 
-GF Wordbench should collect as much independent evidence as safely possible.
+GF Wordbench collects as much independent evidence as safely possible.
 
-It should not stop after the first ordinary language failure.
+It does not stop after the first ordinary language failure.
 
-It should stop or skip dependent work when:
+It stops or skips dependent work when:
 
 - prerequisites are unavailable;
 - process execution is unsafe;
@@ -831,7 +833,40 @@ It must not change the meaning of completed results.
 
 Unexecuted remaining subjects become `SKIPPED` with an explicit fail-fast reason.
 
-Release validation should normally prefer complete evidence over fail-fast unless execution safety requires stopping.
+Release validation prefers complete evidence over fail-fast unless execution safety requires stopping.
+
+## 11.6 Run budget and finalization reserve
+
+Every run has:
+
+```text
+one global run budget
+explicit stage budgets
+one protected finalization reserve
+```
+
+The orchestrator computes each stage budget from the remaining global budget without allocating the protected finalization reserve to normal stage execution.
+
+When the usable execution budget is exhausted, insufficient, or cancelled:
+
+1. no new validation work starts;
+2. active child processes receive controlled termination;
+3. partial stdout, stderr, timing, and artifact evidence are preserved;
+4. not-started dependent work becomes `SKIPPED` with an explicit reason;
+5. interrupted required work becomes `ERROR`;
+6. the run enters finalization using the protected reserve.
+
+Finalization is idempotent and writes terminal results atomically or through a recoverable replacement protocol.
+
+A run cannot be `OK` or release-ready when:
+
+- required work is incomplete;
+- required evidence is missing;
+- child-process termination remains unresolved;
+- required summary or manifest publication fails;
+- finalization cannot establish a coherent terminal state.
+
+These rules are governed by `docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md`.
 
 ---
 
@@ -855,7 +890,7 @@ Examples:
 - compile `FAIL` plus optional documentation warning gives subject `FAIL`;
 - compile intentionally skipped plus scan `OK` gives the file result defined by mode policy, usually `SKIPPED` for compile validation rather than false `OK`.
 
-A subject result should preserve stage sub-results rather than discarding them into one status when the final model supports them.
+A subject result preserves stage sub-results rather than discarding them into one aggregate status.
 
 ---
 
@@ -876,7 +911,7 @@ Rules:
 - every required criterion passed;
 - no required stage is `ERROR`;
 - no required stage is incomplete;
-- required final artifacts exist.
+- required run artifacts exist.
 
 ### `FAIL`
 
@@ -888,8 +923,8 @@ Rules:
 
 - at least one required stage could not execute or be interpreted;
 - required evidence is incomplete;
-- required final artifacts could not be produced;
-- final result cannot support a reliable validation claim.
+- required run artifacts could not be produced;
+- the run result cannot support a reliable validation claim.
 
 When both `FAIL` and `ERROR` exist, overall status is `ERROR`.
 
@@ -903,13 +938,13 @@ Reports must show both.
 
 Cancellation is a control outcome, not a validation result.
 
-Recommended behavior:
+Cancellation behavior:
 
 1. record cancellation request;
 2. stop launching new external processes;
 3. attempt controlled termination of the owned active process;
 4. preserve partial stdout and stderr;
-5. mark the interrupted operation `ERROR` or a future explicitly versioned cancellation representation;
+5. mark the interrupted operation `ERROR` and record cancellation explicitly in execution evidence;
 6. mark not-started operations `SKIPPED` with reason `cancelled`;
 7. finalize partial evidence when safe;
 8. return a distinct CLI cancellation exit code;
@@ -917,7 +952,7 @@ Recommended behavior:
 
 Until cancellation has a dedicated persisted schema field, it must be recorded explicitly in available execution evidence and must not be inferred from `FAIL`.
 
-Recommended CLI exit code:
+CLI cancellation exit code:
 
 ```text
 130
@@ -1031,7 +1066,7 @@ Possible outcomes:
 | probe command failed | requiredness depends on mode and strictness |
 | version output unparseable | `ERROR` when version gating is required |
 
-Release mode should require a valid interpretable version unless a documented release policy explicitly permits otherwise.
+Release mode requires a valid interpretable version unless the release policy explicitly permits otherwise.
 
 Quick or diagnostic mode may continue after a probe warning only when:
 
@@ -1072,7 +1107,7 @@ Continue with other independent files when safe.
 
 A configured exclusion is not an error.
 
-It should be recorded as noise/excluded evidence, not `FAIL`.
+It is recorded as noise/excluded evidence, not `FAIL`.
 
 ---
 
@@ -1110,7 +1145,7 @@ The orchestrator may still attempt compilation when:
 - the scanner failure does not make execution unsafe;
 - mode policy allows partial evidence.
 
-The final subject remains `ERROR` because required scanner evidence is incomplete.
+The aggregated subject remains `ERROR` because required scanner evidence is incomplete.
 
 ---
 
@@ -1173,7 +1208,7 @@ Preserve:
 
 An internal GF failure normally means the requested validation could not be completed reliably.
 
-Recommended representation:
+Canonical representation:
 
 ```text
 status: ERROR
@@ -1461,7 +1496,7 @@ They must not repair missing validation evidence by rerunning stages.
 
 ## 26.1 Critical reports
 
-Critical final artifacts:
+Critical run artifacts:
 
 ```text
 summary.json
@@ -1469,7 +1504,7 @@ manifest.json
 master evidence required by policy
 ```
 
-Failure to produce a critical artifact makes final outcome `ERROR`.
+Failure to produce a critical artifact makes the overall outcome `ERROR`.
 
 ## 26.2 Standard human reports
 
@@ -1485,7 +1520,7 @@ details/
 
 Their requiredness is defined by the report and release policy.
 
-Recommended defaults:
+Default artifact requirements:
 
 - `summary.md`: required for a normal finalized run;
 - `AI_READY.md`: required when AI packet generation is enabled;
@@ -1573,7 +1608,7 @@ On failure:
 
 A partial run directory must be identifiable as incomplete.
 
-Recommended mechanisms:
+Canonical mechanisms:
 
 ```text
 finalization state in manifest or summary
@@ -1633,7 +1668,7 @@ Do not accept arbitrary unknown fields as equivalent to canonical ones.
 
 # 29. Configuration errors
 
-Configuration validation should happen as early as possible.
+Configuration validation occurs before dependent work begins.
 
 Categories:
 
@@ -1701,7 +1736,7 @@ stdout → normal result and artifact locations
 stderr → warnings, configuration failures, runtime errors
 ```
 
-Recommended exit codes:
+Canonical exit codes:
 
 ```text
 0   completed; required criteria passed
@@ -1777,7 +1812,7 @@ Raw stdout and stderr must remain separate.
 
 The master log records orchestration events.
 
-Recommended fields:
+Canonical fields:
 
 ```text
 timestamp
@@ -1800,7 +1835,7 @@ A human-readable rendering may be generated.
 
 Tracebacks are useful for framework debugging.
 
-They should be:
+They are:
 
 - retained for unexpected errors;
 - written to a debug/error evidence artifact;
@@ -1812,7 +1847,7 @@ They should be:
 
 User-facing error messages must be bounded.
 
-Raw evidence may be large but should be protected by output-size limits.
+Raw evidence may be large and is protected by output-size limits.
 
 Truncation must record:
 
@@ -1836,7 +1871,7 @@ Retry is allowed only when:
 - failure is classified as transient;
 - retry count is bounded;
 - each attempt is recorded;
-- final evidence identifies all attempts;
+- complete evidence identifies all attempts;
 - timeout budget remains bounded.
 
 Potential retryable operations:
@@ -1866,7 +1901,7 @@ A retry must not hide the original failure.
 
 Warnings do not automatically change validation status.
 
-Recommended warning record:
+Canonical warning record:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1878,7 +1913,7 @@ class WarningInfo:
     evidence_paths: tuple[str, ...]
 ```
 
-Warnings should cover:
+Warnings cover:
 
 - deprecated configuration;
 - untested newer GF version;
@@ -1895,7 +1930,7 @@ Warnings must be visible in:
 - Markdown summary;
 - AI-ready packet when relevant;
 - GUI warning area;
-- CLI stderr or final warning count.
+- CLI stderr or the closing warning count.
 
 Do not store warnings only in transient console text.
 
@@ -1975,9 +2010,9 @@ Do not combine `FAIL` and `ERROR` into one count.
 
 ## 37.2 Top errors
 
-Top-error aggregation should include actionable failures.
+Top-error aggregation includes actionable failures.
 
-Recommended ordering:
+Canonical ordering:
 
 ```text
 descending count
@@ -2003,7 +2038,7 @@ They must not be used as substitutes for `files_error`.
 
 # 38. Public API behavior
 
-Public service functions should document:
+Public service functions document:
 
 - accepted exceptions;
 - structured failure returns;
@@ -2113,53 +2148,51 @@ Use error codes, types, and structured fields.
 
 ---
 
-# 40. Legacy migration from `gf-audit`
+# 40. Legacy compatibility with `gf-audit`
 
-The existing implementation provides useful evidence but requires several final-model corrections.
+Legacy `gf-audit` summaries and evidence remain readable through the persisted-schema compatibility policy. Canonical Wordbench writers emit only the error semantics defined by this document.
 
-## 40.1 Current broad per-file catch
+## 40.1 Broad per-file exception catch
 
-Legacy behavior catches broad exceptions around scanning, fingerprinting, and compilation and constructs a `FAIL` result with `SCRIPT`.
+A legacy broad catch around scanning, fingerprinting, or compilation may construct a `FAIL` result with `SCRIPT`.
 
-Final behavior must:
+Compatibility readers may ingest that representation, but Wordbench processing must:
 
 - identify the failing stage;
-- distinguish `ERROR` from language `FAIL`;
-- preserve the original cause;
-- retain any completed scan or compile evidence;
+- distinguish framework `ERROR` from language `FAIL`;
+- preserve the original cause when available;
+- retain completed scan or compile evidence;
 - avoid assigning project causality before classification.
 
-## 40.2 Current fallback fingerprint
+## 40.2 Empty fallback fingerprints
 
-Legacy behavior may create an empty fingerprint after exception.
+A legacy record may contain an empty fallback fingerprint after an exception.
 
-Final behavior must represent invalid fingerprint evidence explicitly and prevent release success.
+Such a fingerprint is invalid evidence. It must be represented explicitly as unavailable or invalid and cannot satisfy a release criterion.
 
-## 40.3 Current timeout sentinel
+## 40.3 Timeout sentinels
 
-Legacy process execution uses a synthetic timeout exit code.
+A legacy process result may use a synthetic timeout exit code.
 
-Final behavior keeps legacy reading compatibility but uses `timed_out` or execution state as authoritative.
+Compatibility readers may recognize the sentinel, but explicit `timed_out` or execution-state data is authoritative whenever present. Canonical writers persist explicit timeout facts.
 
-## 40.4 Current report warning swallow
+## 40.4 Report-writer failures
 
-Legacy finalization may continue after report writer exceptions and may suppress a final master-log exception.
+A legacy run may continue after a report writer exception or suppress a master-log exception.
 
-Final behavior must classify each report as required or optional.
+Wordbench classifies every report as required or optional. Failure to produce a required report makes the run outcome `ERROR`; optional report failure remains visible as a warning or non-gating artifact error.
 
-Required report failure produces run `ERROR`.
+## 40.5 Version-probe failures
 
-## 40.5 Current version-probe warning
+A legacy run may continue after a version-probe exception.
 
-Legacy behavior may continue after any version-probe exception.
+Wordbench applies the configured mode, strictness, minimum version, and command-compatibility rules. Continuing is allowed only when the requested operation remains safe and the uncertainty is recorded.
 
-Final behavior uses mode, strictness, minimum version, and command compatibility to decide whether continuing is safe.
+## 40.6 Exit-code-derived status
 
-## 40.6 Current status derivation
+A legacy record may derive file status directly from the compile exit code.
 
-Legacy behavior may derive file status directly from compile exit code.
-
-Final behavior evaluates:
+Canonical interpretation evaluates all available evidence:
 
 ```text
 launch
@@ -2170,17 +2203,15 @@ artifact contract
 interpretation success
 ```
 
-## 40.7 Compatibility
+## 40.7 Write policy
 
-Legacy summaries remain readable according to the persisted schema migration policy.
-
-Canonical new writers must emit only final semantics.
+Legacy summaries remain readable according to `docs/PERSISTED_SCHEMA_LOCK.md`. Canonical writers do not emit deprecated aliases or ambiguous legacy representations.
 
 ---
 
 # 41. Testing requirements
 
-Recommended test structure:
+Test structure:
 
 ```text
 tests/error_handling/
@@ -2196,7 +2227,7 @@ tests/error_handling/
 └── test_error_redaction.py
 ```
 
-Existing contract and integration suites should also cover error behavior.
+Contract and integration suites also cover error behavior.
 
 ## 41.1 Status tests
 
@@ -2329,7 +2360,7 @@ Changing status meaning or a serialized enum is a breaking contract change unles
 
 # 43. Review checklist
 
-Reviewers should ask:
+Reviewers verify:
 
 ```text
 Is this a validation failure or a framework error?
@@ -2352,7 +2383,7 @@ Are tests proving the mapping?
 
 ---
 
-# 44. Final invariants
+# 44. Normative invariants
 
 GF Wordbench error handling must always preserve these invariants:
 
@@ -2379,7 +2410,7 @@ GF Wordbench error handling must always preserve these invariants:
 
 ---
 
-# 45. Final rule
+# 45. Governing rule
 
 > GF Wordbench must report what failed, where it failed, whether the attempted operation actually ran, what evidence exists, and whether the failure belongs to the language project, the external tool, the environment, or the framework.
 

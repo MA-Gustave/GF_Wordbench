@@ -1,14 +1,15 @@
 # GF Wordbench Project — Start Here
 
 **Document ID:** `GF-WB-PROJECT-START-HERE`  
-**Status:** Active project entry point  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\project\docs\00_PROJECT_START_HERE.md`  
-**Applies to:** The single active GF language project in this GF Wordbench working copy  
+**Status:** Normative project entry point  
+**Canonical path:** `project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md`  
+**Applies to:** The single active GF language project in one GF Wordbench workspace  
 **Project identity authority:** `project/project.toml`  
 **Project contract authority:** `project/docs/INTERFILE_CONTRACT_LOCK.md`  
+**Documentation alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Document owner:** Active project maintainers  
 **Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -20,13 +21,12 @@ It provides:
 
 - the project documentation map;
 - the authority of each project file;
-- the recommended reading order;
-- the standard development workflow;
+- the reading order;
+- the standard source-change workflow;
 - the validation workflow;
 - the rules for changing GF module contracts;
 - the rules for scenarios and gold files;
-- the current-status workflow;
-- the release-readiness workflow;
+- the release workflow;
 - the minimum handoff information required when work changes owners.
 
 This page is a navigation and operating guide.
@@ -39,19 +39,19 @@ project/docs/INTERFILE_CONTRACT_LOCK.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 The central rule is:
 
-> Begin with the authoritative project configuration and contract documents, then change providers, consumers, validation evidence and project status as one coordinated unit.
+> Begin with the authoritative project configuration and contracts, then change providers, consumers, validation evidence and release obligations as one coordinated unit.
 
 ---
 
 ## 2. Project boundary
 
-This GF Wordbench working copy represents one active language project.
+One GF Wordbench workspace contains exactly one active GF language project.
 
 Project-owned content belongs in:
 
@@ -73,11 +73,7 @@ templates/
 scripts/
 ```
 
-Generated evidence belongs in:
-
-```text
-runs/
-```
+Generated run evidence belongs under the configured run-output root.
 
 ### 2.1 Project-specific information
 
@@ -112,15 +108,25 @@ templates/
 scripts/
 ```
 
-except in explicitly identified migration fixtures or historical examples.
+except in explicitly identified migration fixtures or documentation examples.
 
 ### 2.3 Generated evidence
 
 Do not edit generated run evidence as project source.
 
-A run directory records what happened.
+A run directory records what happened for one resolved project and target. It does not define what the project is.
 
-It does not define what the project is.
+### 2.4 Portfolio boundary
+
+Cross-workspace discovery, multilingual aggregation, portfolio dashboards and comparison across project identities belong to the independent `gf-portfolio` product.
+
+The allowed dependency direction is:
+
+```text
+gf-portfolio -> public versioned GF Wordbench artifacts
+```
+
+GF Wordbench does not read Portfolio configuration, persist Portfolio registry state, or require Portfolio to validate or release the active project.
 
 ---
 
@@ -135,7 +141,7 @@ project/project.toml
 Do not infer identity from:
 
 ```text
-repository folder name
+workspace folder name
 old run directories
 application state
 GUI selections
@@ -151,25 +157,28 @@ Before beginning project work, verify that `project.toml` defines or resolves:
 ```text
 project ID
 project display name
-language name
 language code
 source root
 source glob
-module suffix when applicable
 GF path parts
 entrypoints
 checkpoints
 required scenarios
 optional scenarios
-release entrypoints
+release requirements
 expected artifacts
+```
+
+Exact field names and schema semantics belong to:
+
+```text
+docs/configuration/PROJECT_TOML_REFERENCE.md
+docs/PERSISTED_SCHEMA_LOCK.md
 ```
 
 ### 3.2 No duplicated identity table
 
-This page intentionally does not repeat current identity values.
-
-That prevents drift.
+This page intentionally does not repeat project-specific identity values.
 
 Use:
 
@@ -183,20 +192,20 @@ for machine-readable identity and:
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
-for the reviewed project-level interpretation of that identity.
+for reviewed project-level relationships.
 
 ---
 
-## 4. First reading order
+## 4. Reading order
 
 Read these files in order when joining or resuming the project.
 
-### 4.1 Project identity and orientation
+### 4.1 Identity and orientation
 
 ```text
 project/project.toml
 project/README.md
-project/docs/00_PROJECT_START_HERE.md
+project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 project/docs/LANGUAGE_OVERVIEW.md
 ```
 
@@ -204,9 +213,9 @@ Purpose:
 
 ```text
 identify the project
-understand the language scope
+understand the declared language scope
 locate the source tree
-understand current project goals
+identify the public release surface
 ```
 
 ### 4.2 Architecture and dependency boundaries
@@ -241,14 +250,14 @@ understand category shapes
 understand public lincat fields
 understand morphology providers
 understand syntax and constructor guarantees
-avoid accidental flattening or incompatible field changes
+avoid incompatible cross-module changes
 ```
 
 ### 4.4 Validation and evidence
 
 ```text
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 project/validation/README.md
 ```
 
@@ -261,10 +270,9 @@ understand gold ownership
 understand release-blocking evidence
 ```
 
-### 4.5 Current status and decisions
+### 4.5 Decisions, limitations and research
 
 ```text
-project/docs/STATUS_LEDGER.md
 project/docs/KNOWN_ISSUES.md
 project/docs/DECISION_LOG.md
 project/docs/RESEARCH_EVIDENCE.md
@@ -273,19 +281,19 @@ project/docs/RESEARCH_EVIDENCE.md
 Purpose:
 
 ```text
-distinguish completed work from placeholders
-identify fallbacks and blocked work
-understand accepted decisions
-review external linguistic evidence
+identify confirmed defects and limitations
+understand retained project decisions
+review supporting linguistic evidence
 ```
 
-### 4.6 Release readiness
+### 4.6 Release acceptance
 
 ```text
-project/docs/RELEASE_CRITERIA.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
+project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Purpose:
@@ -303,31 +311,24 @@ confirm artifact expectations
 
 | File | Primary responsibility |
 |---|---|
-| `00_PROJECT_START_HERE.md` | Project navigation and operating workflow |
+| `00_PROJECT_START_HERE__PROJECT_DOCS.md` | Project navigation and operating workflow |
 | `INTERFILE_CONTRACT_LOCK.md` | Normative relationships between project files |
 | `LANGUAGE_OVERVIEW.md` | Language scope, goals and supported coverage |
-| `LANGUAGE_ARCHITECTURE.md` | High-level GF architecture and layering |
+| `LANGUAGE_ARCHITECTURE.md` | GF architecture and layering |
 | `MODULE_DEPENDENCY_MAP.md` | Provider, consumer and import relationships |
 | `CATEGORY_AND_LINCAT_CONTRACT.md` | Public category and lincat shapes |
 | `MORPHOLOGY_SPEC.md` | Morphological system and paradigm guarantees |
 | `SYNTAX_AND_CONSTRUCTOR_RULES.md` | Syntax, constructor and composition rules |
-| `VALIDATION_SPEC.md` | Required validation stages and scenario policy |
-| `TEST_COVERAGE_MATRIX.md` | Requirement-to-evidence mapping |
-| `STATUS_LEDGER.md` | Current implementation status, fallbacks and blockers |
+| `VALIDATION_SPEC__PROJECT_DOCS.md` | Required validation stages and scenario policy |
+| `TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` | Requirement-to-evidence mapping |
 | `DECISION_LOG.md` | Project-level decisions and rationale |
 | `KNOWN_ISSUES.md` | Confirmed defects, limitations and workarounds |
-| `RELEASE_CRITERIA.md` | Conditions required for project release |
+| `RELEASE_CRITERIA__PROJECT_DOCS.md` | Conditions required for project release |
 | `RESEARCH_EVIDENCE.md` | Sources supporting linguistic decisions |
 
 ### 5.1 One owner per rule
 
-Each rule must have one normative owner.
-
-Other documents link to the owner.
-
-They do not restate the complete rule independently.
-
-Examples:
+Each rule has one normative owner. Other documents link to that owner and do not redefine the contract independently.
 
 ```text
 project identity
@@ -349,13 +350,13 @@ syntax construction
     → SYNTAX_AND_CONSTRUCTOR_RULES.md
 
 required scenario behavior
-    → VALIDATION_SPEC.md
+    → VALIDATION_SPEC__PROJECT_DOCS.md
 
-current completeness
-    → STATUS_LEDGER.md
+evidence coverage
+    → TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 
 release acceptance
-    → RELEASE_CRITERIA.md
+    → RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 ---
@@ -369,7 +370,7 @@ project/
 ├── README.md
 ├── project.toml
 ├── docs/
-│   ├── 00_PROJECT_START_HERE.md
+│   ├── 00_PROJECT_START_HERE__PROJECT_DOCS.md
 │   ├── INTERFILE_CONTRACT_LOCK.md
 │   ├── LANGUAGE_OVERVIEW.md
 │   ├── LANGUAGE_ARCHITECTURE.md
@@ -377,12 +378,11 @@ project/
 │   ├── CATEGORY_AND_LINCAT_CONTRACT.md
 │   ├── MORPHOLOGY_SPEC.md
 │   ├── SYNTAX_AND_CONSTRUCTOR_RULES.md
-│   ├── VALIDATION_SPEC.md
-│   ├── TEST_COVERAGE_MATRIX.md
-│   ├── STATUS_LEDGER.md
+│   ├── VALIDATION_SPEC__PROJECT_DOCS.md
+│   ├── TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 │   ├── DECISION_LOG.md
 │   ├── KNOWN_ISSUES.md
-│   ├── RELEASE_CRITERIA.md
+│   ├── RELEASE_CRITERIA__PROJECT_DOCS.md
 │   └── RESEARCH_EVIDENCE.md
 └── validation/
     ├── README.md
@@ -391,9 +391,7 @@ project/
     └── inputs/
 ```
 
-The GF source tree may be inside or outside `project/`.
-
-Its location is defined by `project.toml`.
+The GF source tree may be inside or outside `project/` according to the approved path contract. Its portable location is declared by `project.toml`.
 
 ---
 
@@ -434,8 +432,6 @@ A provider and all consumers form one coordinated change unit.
 
 ### 7.2 Hidden dependencies
 
-A dependency is not safe merely because GF currently compiles it.
-
 Document cross-file assumptions involving:
 
 ```text
@@ -449,6 +445,8 @@ entrypoint imports
 scenario-loaded modules
 artifact names
 ```
+
+GF compilation proves GF syntax and type correctness. It does not replace explicit ownership of cross-file contracts.
 
 ---
 
@@ -470,23 +468,22 @@ resource provider → syntax consumer
 scenario → grammar entrypoint
 scenario → validation input
 scenario → gold file
-entrypoint → `.gfo`
-entrypoint → `.pgf`
-project document → source implementation
+entrypoint → .gfo
+entrypoint → .pgf
+project document → source contract
 ```
 
 ### 8.1 Contract entry requirements
 
-Every active cross-file contract should identify:
+Every active cross-file contract identifies the fields required by the project lock, including:
 
 ```text
 stable contract ID
-status
 provider
 consumers
 public surface
-request
-response
+request or input
+response or output
 type or shape
 ordering
 side effects
@@ -495,18 +492,12 @@ locked invariants
 forbidden behavior
 validation evidence
 documentation links
-last review
+review date
 ```
 
-### 8.2 Contract statuses
+### 8.2 Contract changes
 
-Use the status vocabulary defined by the project lock.
-
-Final active-project entries must not remain generic placeholders.
-
-### 8.3 Contract changes
-
-A contract-changing edit is incomplete until all of these are reviewed:
+A contract-changing edit is complete only when all affected elements are reviewed:
 
 ```text
 provider
@@ -516,10 +507,11 @@ project.toml
 validation scenarios
 gold expectations
 dependency map
-status ledger
 contract lock
 release evidence when applicable
 ```
+
+A contradiction that cannot be resolved from retained decisions or evidence must be marked `BLOCKED` or `REVIEW_REQUIRED` in the owning contract or issue record.
 
 ---
 
@@ -534,15 +526,15 @@ Before changing a category or lincat:
 5. identify constructors that build the value;
 6. identify syntax modules that consume the value;
 7. identify scenarios proving the behavior;
-8. determine whether the change is compatible;
-9. update the contract before or with the source change;
+8. determine compatibility impact;
+9. update the contract with the source change;
 10. validate downstream entrypoints.
 
 ### 9.1 No silent flattening
 
-Do not replace a structured value with `Str` merely to satisfy one local implementation.
+Do not replace a structured value with `Str` merely to satisfy one local consumer.
 
-Examples of structured values that require deliberate contract treatment include:
+Examples of structured values requiring deliberate contract treatment include:
 
 ```text
 NP
@@ -559,9 +551,7 @@ agreement records
 
 ### 9.2 Field additions
 
-A new field is not automatically compatible.
-
-Review:
+A new field requires review of:
 
 ```text
 all constructors
@@ -575,9 +565,7 @@ all gold files
 
 ### 9.3 Field removals or renames
 
-Removing or renaming a consumed field is a breaking project contract change.
-
-It requires coordinated migration.
+Removing or renaming a consumed field is a breaking project contract change and requires coordinated migration.
 
 ---
 
@@ -589,7 +577,7 @@ Before changing morphology:
 2. identify the owning paradigm or resource;
 3. identify categories and lexicons using it;
 4. identify irregular or fallback behavior;
-5. review `STATUS_LEDGER.md`;
+5. review relevant known issues;
 6. review relevant research evidence;
 7. add or update bounded tests;
 8. compile the provider;
@@ -597,8 +585,6 @@ Before changing morphology:
 10. validate relevant entrypoints;
 11. run scenarios;
 12. review gold changes explicitly.
-
-### 10.1 Morphology evidence
 
 Useful evidence includes:
 
@@ -613,25 +599,7 @@ gold comparison
 research citation
 ```
 
-### 10.2 Fallbacks
-
-Any temporary morphological fallback belongs in:
-
-```text
-STATUS_LEDGER.md
-```
-
-with:
-
-```text
-status
-scope
-risk
-replacement plan
-validation impact
-```
-
-A fallback must not be described as complete support.
+A fallback must be documented in the owning specification or issue record with its scope, risk, validation impact and release disposition. It must not be described as broader support than the declared project scope.
 
 ---
 
@@ -645,12 +613,12 @@ Before changing syntax or constructors:
 4. identify lower-level providers;
 5. identify extension and structural consumers;
 6. check import direction;
-7. review current scenarios;
+7. review relevant scenarios;
 8. add a focused scenario when behavior changes;
 9. compile the narrowest provider;
 10. compile downstream checkpoints;
 11. compare expected output;
-12. update contracts and status.
+12. update contracts and specifications.
 
 ### 11.1 Smallest coherent change
 
@@ -660,7 +628,7 @@ Do not duplicate a provider merely to avoid updating a consumer.
 
 ### 11.2 Constructor compatibility
 
-A constructor change is potentially breaking when it changes:
+A constructor change may be breaking when it changes:
 
 ```text
 GF type
@@ -683,14 +651,14 @@ linearization output relied on by consumers
 The project validation contract is defined by:
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/project.toml
 project/validation/
 ```
 
-GF Wordbench provides the framework.
+GF Wordbench provides language-neutral orchestration.
 
-The project defines what proves that this language implementation is acceptable.
+The project defines what proves that its declared language scope is acceptable.
 
 ### 12.1 Validation layers
 
@@ -711,11 +679,11 @@ release-gate evaluation
 
 GF compilation is authoritative for GF syntax and type correctness.
 
-Static scanning is supplementary evidence.
+Static scanning remains separate supplementary evidence.
 
 ### 12.3 Runtime authority
 
-Scenarios are authoritative for the explicitly tested runtime behavior.
+Scenarios are authoritative for the runtime behavior they explicitly test.
 
 A compiled grammar is not automatically behaviorally complete.
 
@@ -732,17 +700,15 @@ diagnostic
 release
 ```
 
-Project policy defines how they apply to the active language.
+Project policy supplies project-owned content without redefining the framework meaning of these modes.
 
 ### 13.1 Quick
 
-Use for a narrow local change.
-
-Expected focus:
+Use for a bounded local change.
 
 ```text
 one target
-immediate dependencies
+required local context
 fast feedback
 ```
 
@@ -750,19 +716,16 @@ fast feedback
 
 Use to validate one declared architectural layer.
 
-Expected focus:
-
 ```text
-provider layer
-consumer layer
-configured checkpoint module
+checkpoint provider layer
+prerequisite layers
+configured consumers
+applicable scenarios
 ```
 
 ### 13.3 Diagnostic
 
 Use for broad evidence and root-cause analysis.
-
-Expected focus:
 
 ```text
 selected source set
@@ -774,25 +737,23 @@ previous-run comparison
 
 ### 13.4 Release
 
-Use only when release criteria are defined and expected to pass.
-
-Expected focus:
+Use to evaluate the complete declared release contract.
 
 ```text
 all required checkpoints
 release entrypoints
 required scenarios
 gold comparison
-PGF artifact
+PGF artifact when required
 manifest
-known-issue review
+known-issue disposition
 ```
 
-Exact CLI syntax belongs to the framework CLI reference.
+Exact CLI syntax belongs to `docs/usage/CLI_REFERENCE.md`.
 
 ---
 
-## 14. Recommended local development loop
+## 14. Local development loop
 
 For a focused change:
 
@@ -800,7 +761,7 @@ For a focused change:
 1. identify the owning specification
 2. identify the contract entry
 3. identify provider and consumers
-4. inspect current status and known issues
+4. inspect known issues and retained decisions
 5. make the smallest coherent source change
 6. compile the changed provider
 7. compile direct consumers
@@ -809,18 +770,10 @@ For a focused change:
 10. inspect normalized output
 11. update gold only through explicit review
 12. update project documentation
-13. run broader diagnostic validation
+13. run broader diagnostic validation when needed
 ```
 
-### 14.1 Do not start with release mode
-
-Release mode is not the fastest debugging tool.
-
-Use focused evidence first.
-
-### 14.2 Do not rely on one successful file
-
-A successful provider compilation does not prove all consumers remain compatible.
+A successful provider compilation does not prove that all consumers remain compatible.
 
 ---
 
@@ -858,9 +811,7 @@ Its configured identity, filename, markers and gold mapping must agree.
 
 ### 15.2 Scenario purpose
 
-Every scenario should state or imply one bounded purpose.
-
-Examples:
+Every scenario has one bounded purpose, such as:
 
 ```text
 load one entrypoint
@@ -879,7 +830,7 @@ test PGF loading
 
 Use the marker contract documented by GF Wordbench.
 
-Do not create ad hoc output parsing rules inside the project.
+Do not create ad hoc output-parsing rules inside the project.
 
 ### 15.4 Determinism
 
@@ -902,9 +853,7 @@ Gold files belong in:
 project/validation/gold/
 ```
 
-They are reviewed source artifacts.
-
-They are not disposable generated output.
+They are reviewed source assets, not disposable run output.
 
 ### 16.1 Normal validation
 
@@ -912,9 +861,9 @@ Normal validation must not modify gold files.
 
 ### 16.2 Updating gold
 
-Update gold only through the explicit gold-update workflow.
+Gold creation or update is a separate reviewed operation.
 
-Required review:
+Review:
 
 ```text
 why output changed
@@ -928,18 +877,7 @@ whether unrelated output changed
 
 ### 16.3 Gold mismatch
 
-A mismatch is evidence.
-
-Do not automatically assume:
-
-```text
-the grammar is wrong
-the gold is wrong
-normalization is wrong
-GF changed
-```
-
-Review all relevant causes.
+A mismatch is evidence. Review the grammar, specification, scenario, normalization, GF version and gold expectation before deciding what must change.
 
 ---
 
@@ -948,35 +886,33 @@ Review all relevant causes.
 The coverage matrix is:
 
 ```text
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 ```
 
-It should map requirements to evidence.
+It maps requirements to evidence.
 
 Recommended columns:
 
 ```text
 requirement ID
-feature
+feature or contract
 provider
 consumer
 checkpoint
 scenario
 gold
-status
+required evidence
 release relevance
-known gap
+known gap or limitation
 ```
 
 ### 17.1 Coverage rule
 
-A documented feature is not complete merely because source code exists.
-
-It requires defined evidence.
+A documented feature requires defined evidence.
 
 ### 17.2 Release coverage
 
-Every release-critical contract must map to at least one proof such as:
+Every release-critical contract maps to at least one proof such as:
 
 ```text
 direct compile
@@ -990,57 +926,7 @@ documented manual inspection when automation is impossible
 
 ---
 
-## 18. Status ledger
-
-Current project implementation status belongs in:
-
-```text
-project/docs/STATUS_LEDGER.md
-```
-
-The ledger distinguishes:
-
-```text
-active
-experimental
-temporary
-fallback
-warning
-blocked
-deprecated
-retired
-```
-
-Use the exact vocabulary defined by the project contract and status policy.
-
-### 18.1 Record items when
-
-- a feature is incomplete;
-- a fallback is active;
-- a module compiles but is not linguistically complete;
-- a scenario is missing;
-- a gold file is provisional;
-- an external blocker exists;
-- a known workaround is required;
-- a deprecated provider remains in use.
-
-### 18.2 Do not hide debt
-
-An implementation that compiles through a fallback is not automatically complete.
-
-### 18.3 Completion update
-
-When an item is completed:
-
-1. add evidence;
-2. update the ledger;
-3. update the coverage matrix;
-4. update known issues;
-5. update the contract status when applicable.
-
----
-
-## 19. Known issues
+## 18. Known issues
 
 Confirmed defects and limitations belong in:
 
@@ -1056,38 +942,20 @@ summary
 affected modules
 affected behavior
 severity
-status
+release disposition
 workaround
 validation evidence
-release impact
 owner
-next action
+resolution condition
 ```
 
-### 19.1 Known issue versus status item
+Every issue affecting release must be fixed, explicitly accepted within the declared scope, deferred by a retained decision, or treated as release-blocking.
 
-Use `STATUS_LEDGER.md` for implementation maturity.
-
-Use `KNOWN_ISSUES.md` for confirmed defects or limitations.
-
-An item may be referenced in both without duplicating its full authority.
-
-### 19.2 Release handling
-
-Every open issue must be:
-
-```text
-fixed
-accepted explicitly
-deferred explicitly
-release-blocking
-```
-
-before release approval.
+One issue has one authoritative record. Source comments and other documents may reference its ID without duplicating the full record.
 
 ---
 
-## 20. Decision log
+## 19. Decision log
 
 Project-level decisions belong in:
 
@@ -1106,20 +974,18 @@ syntax strategy
 word order
 case system
 agreement model
-fallback acceptance
+accepted limitation
 entrypoint structure
 scenario strategy
 release scope
 ```
-
-### 20.1 Decision entry
 
 A useful decision entry includes:
 
 ```text
 decision ID
 date
-status
+decision state
 context
 decision
 alternatives
@@ -1127,9 +993,8 @@ consequences
 affected contracts
 affected source files
 validation
+migration
 ```
-
-### 20.2 Framework decisions
 
 Framework architecture decisions belong in:
 
@@ -1141,7 +1006,7 @@ Do not place Python framework architecture in the project decision log.
 
 ---
 
-## 21. Research evidence
+## 20. Research evidence
 
 Linguistic evidence belongs in:
 
@@ -1165,19 +1030,15 @@ orthographic rules
 dialect or register scope
 ```
 
-### 21.1 Evidence rule
-
 Distinguish:
 
 ```text
-documented linguistic fact
-project design decision
-implementation convenience
-temporary fallback
-hypothesis requiring validation
+documented linguistic evidence
+retained project decision
+source representation
+accepted limitation
+hypothesis requiring review
 ```
-
-### 21.2 Traceability
 
 A source-backed project rule should link:
 
@@ -1191,7 +1052,7 @@ research evidence
 
 ---
 
-## 22. Project README
+## 21. Project README
 
 `project/README.md` is the short project entry point.
 
@@ -1199,23 +1060,18 @@ It should provide:
 
 ```text
 project name
-language
-current status
+language scope
 source-root overview
 primary entrypoints
 basic validation commands
 links to this document
 ```
 
-This file owns the deeper operating workflow.
-
-Do not duplicate every section of this document in the README.
+This document owns the deeper operating workflow.
 
 ---
 
-## 23. Before editing any GF source
-
-Use this checklist.
+## 22. Before editing GF source
 
 ```text
 [ ] authoritative specification identified
@@ -1225,17 +1081,17 @@ Use this checklist.
 [ ] dependency map reviewed
 [ ] lincat contract reviewed when relevant
 [ ] morphology or syntax specification reviewed
-[ ] current status reviewed
 [ ] known issues reviewed
+[ ] retained decisions reviewed
 [ ] existing validation evidence identified
 [ ] compatibility impact classified
 ```
 
-If no contract exists for a cross-file dependency, document it before relying on it further.
+If no contract exists for a cross-file dependency, document the contract before relying on it further.
 
 ---
 
-## 24. During implementation
+## 23. During a source change
 
 ```text
 [ ] change remains inside project scope
@@ -1244,7 +1100,7 @@ If no contract exists for a cross-file dependency, document it before relying on
 [ ] no public field changed silently
 [ ] no duplicated provider introduced
 [ ] no structured value flattened without decision
-[ ] no hidden fallback introduced
+[ ] no undocumented fallback introduced
 [ ] source remains UTF-8
 [ ] file naming matches project conventions
 [ ] focused validation remains available
@@ -1252,7 +1108,7 @@ If no contract exists for a cross-file dependency, document it before relying on
 
 ---
 
-## 25. After implementation
+## 24. After a source change
 
 ```text
 [ ] changed provider compiles
@@ -1266,19 +1122,18 @@ If no contract exists for a cross-file dependency, document it before relying on
 [ ] dependency map updated
 [ ] specification updated
 [ ] coverage matrix updated
-[ ] status ledger updated
-[ ] known issues updated
-[ ] decision log updated when needed
-[ ] research evidence updated when needed
+[ ] known issues updated when applicable
+[ ] decision log updated when applicable
+[ ] research evidence updated when applicable
 ```
 
 ---
 
-## 26. Compatibility classification
+## 25. Compatibility classification
 
 Classify the change before merging or releasing.
 
-### 26.1 Internal compatible change
+### 25.1 Internal compatible change
 
 Examples:
 
@@ -1286,7 +1141,7 @@ Examples:
 private helper refactor
 performance improvement
 local naming cleanup
-implementation change preserving all public behavior
+source change preserving all public behavior
 ```
 
 Required:
@@ -1296,7 +1151,7 @@ focused tests
 no public contract change
 ```
 
-### 26.2 Compatible project extension
+### 25.2 Compatible project extension
 
 Examples:
 
@@ -1314,11 +1169,10 @@ Required:
 contract review
 consumer review
 new evidence
-status update
 release-impact review
 ```
 
-### 26.3 Breaking project change
+### 25.3 Breaking project change
 
 Examples:
 
@@ -1348,7 +1202,7 @@ release version impact assessed
 
 ---
 
-## 27. Entry points and checkpoints
+## 26. Entrypoints and checkpoints
 
 The authoritative ordered lists are in:
 
@@ -1361,22 +1215,22 @@ Their project-level meaning is documented in:
 ```text
 project/docs/INTERFILE_CONTRACT_LOCK.md
 project/docs/LANGUAGE_ARCHITECTURE.md
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
-### 27.1 Entrypoint
+### 26.1 Entrypoint
 
 An entrypoint is a top-level GF module used for:
 
 ```text
-final compilation
+release compilation
 grammar loading
 scenario execution
 PGF construction
 external runtime use
 ```
 
-### 27.2 Checkpoint
+### 26.2 Checkpoint
 
 A checkpoint proves one architectural layer is coherent.
 
@@ -1392,7 +1246,7 @@ language module
 API module
 ```
 
-### 27.3 Ordering
+### 26.3 Ordering
 
 Entrypoints and checkpoints are deterministic ordered lists.
 
@@ -1400,52 +1254,50 @@ Do not depend on filesystem discovery order.
 
 ---
 
-## 28. PGF and release artifacts
+## 27. PGF and release artifacts
 
 Expected release artifacts are declared by:
 
 ```text
 project/project.toml
 project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
-A PGF build proves final linking.
-
-It does not by itself prove:
+A PGF build proves linking of the declared target. It does not by itself prove:
 
 ```text
 scenario correctness
 gold stability
 coverage completeness
-linguistic completeness
-release readiness
+linguistic scope
+release acceptance
 ```
 
-### 28.1 Artifact identity
+### 27.1 Artifact identity
 
 Do not accept an arbitrary `.pgf` found in the source tree.
 
 The expected artifact name and release entrypoints must be explicit.
 
-### 28.2 Current-run evidence
+### 27.2 Current-run evidence
 
-Release artifacts must come from the current validated run.
+Release artifacts must be attributable to the validated run, source fingerprints, command and toolchain.
 
-Old artifacts do not satisfy current release criteria.
+Stale artifacts do not satisfy release criteria.
 
 ---
 
-## 29. Release-readiness workflow
+## 28. Release workflow
 
-Before declaring the project release-ready:
+Before declaring the project releasable:
 
-1. read `RELEASE_CRITERIA.md`;
+1. read `RELEASE_CRITERIA__PROJECT_DOCS.md`;
 2. verify `project.toml`;
 3. review all active contracts;
 4. review all release-critical coverage rows;
-5. close or accept all blockers;
-6. review all fallbacks;
+5. resolve or explicitly disposition all release blockers;
+6. review accepted limitations;
 7. run required checkpoints;
 8. build required entrypoints;
 9. build the expected PGF when required;
@@ -1457,38 +1309,31 @@ Before declaring the project release-ready:
 15. record accepted known issues;
 16. preserve release evidence.
 
-### 29.1 No undocumented waiver
-
-A failed required gate remains failed.
-
-A project decision may defer release.
-
-It must not relabel failure as success.
+A failed required gate remains failed. A retained decision may defer release; it must not relabel failure as success.
 
 ---
 
-## 30. Standard sources of truth
+## 29. Standard sources of truth
 
 | Question | Read this |
 |---|---|
 | What project is active? | `project/project.toml` |
-| What modules are entrypoints? | `project.toml` and project contract lock |
+| What modules are entrypoints? | `project/project.toml` and `INTERFILE_CONTRACT_LOCK.md` |
 | What imports what? | `MODULE_DEPENDENCY_MAP.md` |
 | What does this public field mean? | `CATEGORY_AND_LINCAT_CONTRACT.md` |
 | How should this form inflect? | `MORPHOLOGY_SPEC.md` |
 | How should this constructor behave? | `SYNTAX_AND_CONSTRUCTOR_RULES.md` |
-| What must be validated? | `VALIDATION_SPEC.md` |
-| Which evidence proves it? | `TEST_COVERAGE_MATRIX.md` |
-| Is the feature complete? | `STATUS_LEDGER.md` |
+| What must be validated? | `VALIDATION_SPEC__PROJECT_DOCS.md` |
+| Which evidence proves it? | `TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` |
 | Is the limitation known? | `KNOWN_ISSUES.md` |
 | Why was this design chosen? | `DECISION_LOG.md` |
 | Which linguistic source supports it? | `RESEARCH_EVIDENCE.md` |
-| Can it be released? | `RELEASE_CRITERIA.md` |
+| Can it be released? | `RELEASE_CRITERIA__PROJECT_DOCS.md` |
 | Which cross-file promises are locked? | `INTERFILE_CONTRACT_LOCK.md` |
 
 ---
 
-## 31. What not to do
+## 30. Prohibited practices
 
 Do not:
 
@@ -1499,23 +1344,24 @@ edit the template to change the active project
 use old run output as current configuration
 modify gold during a normal validation run
 accept a matching filename as proof of artifact freshness
-hide a fallback
+hide a fallback or limitation
 change a public field without updating consumers
 add a circular import
 duplicate a provider to avoid a contract change
 treat scan success as compile success
 treat compile success as scenario success
-treat scenario success as release readiness
+treat scenario success as release acceptance
 treat documentation as proof without validation
 parse human reports as machine configuration
 leave project placeholders unresolved
+store Portfolio registry state in Wordbench
 ```
 
 ---
 
-## 32. Working with generated reports
+## 31. Working with generated reports
 
-A normal run may produce:
+A run may produce:
 
 ```text
 summary.json
@@ -1528,8 +1374,6 @@ detail artifacts
 compiled artifacts
 ```
 
-### 32.1 Machine truth
-
 Use:
 
 ```text
@@ -1537,25 +1381,16 @@ summary.json
 manifest.json
 ```
 
-for machine-readable run facts.
-
-### 32.2 Human overview
+for machine-readable run facts and integrity.
 
 Use:
 
 ```text
 summary.md
-```
-
-### 32.3 Diagnostic handoff
-
-Use:
-
-```text
 AI_READY.md
 ```
 
-### 32.4 Complete evidence
+for human and diagnostic handoff.
 
 Use:
 
@@ -1565,42 +1400,40 @@ details/
 artifacts/
 ```
 
+for detailed evidence.
+
 Generated reports do not replace project documentation.
 
 ---
 
-## 33. Resuming work after interruption
+## 32. Resuming work after interruption
 
 Use this sequence:
 
 1. open `project/project.toml`;
 2. open this file;
-3. open `STATUS_LEDGER.md`;
+3. open the relevant specifications and contract entries;
 4. open `KNOWN_ISSUES.md`;
 5. inspect the latest relevant decision;
-6. identify the contract under change;
-7. inspect the most recent run evidence;
-8. verify that the source tree matches the documented status;
-9. run a focused checkpoint before continuing.
+6. inspect the most recent compatible run evidence;
+7. verify that source, configuration and documentation agree;
+8. run a focused checkpoint before continuing.
 
-Do not rely only on an old chat transcript or task description.
-
-The repository must contain the current truth.
+Do not rely only on a chat transcript or task description. The repository contains the governing truth.
 
 ---
 
-## 34. Handoff between maintainers
+## 33. Handoff between maintainers
 
 A project handoff should include:
 
 ```text
 project ID
-current branch or commit
-current task
+branch or commit
+task
 affected provider
 affected consumers
 contract IDs
-current status
 known blockers
 last validation run
 failing checkpoints
@@ -1610,23 +1443,21 @@ uncommitted changes
 next smallest action
 ```
 
-### 34.1 Required repository updates
-
 Before handoff, update when applicable:
 
 ```text
-STATUS_LEDGER.md
 KNOWN_ISSUES.md
 DECISION_LOG.md
-TEST_COVERAGE_MATRIX.md
+TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 INTERFILE_CONTRACT_LOCK.md
+the owning specification
 ```
 
 A handoff message is not a substitute for repository updates.
 
 ---
 
-## 35. Review workflow
+## 34. Review workflow
 
 A project review should ask:
 
@@ -1635,28 +1466,19 @@ Does project.toml match the source tree?
 Does the dependency map match imports?
 Do contract providers exist?
 Do listed consumers still depend on the provider?
-Do public lincat fields match implementation?
+Do public lincat fields match source behavior?
 Do specifications match source?
 Do scenarios load the intended entrypoints?
 Do gold files map to the intended scenarios?
-Does the status ledger match actual completeness?
-Are known issues still current?
+Are known issues still accurate?
 Do release criteria map to evidence?
 ```
 
 ---
 
-## 36. Anti-drift checks
+## 35. Anti-drift checks
 
-The project should support checks equivalent to:
-
-```text
-gf-wordbench project check
-gf-wordbench contracts check
-gf-wordbench repository check --strict
-```
-
-Exact command spelling belongs to the framework CLI reference.
+The framework contract may expose checks equivalent to project, contract and repository validation. Exact command spelling belongs to `docs/usage/CLI_REFERENCE.md`.
 
 Expected checks include:
 
@@ -1673,20 +1495,20 @@ contract providers exist
 contract consumers exist
 dependency map is current
 no unresolved required placeholders
-no old-language identifiers
+no stale language identifiers
 no absolute local paths in reusable files
 no generated files in project source areas
 ```
 
 ---
 
-## 37. Project placeholders
+## 36. Project placeholders
 
 The reusable template may contain placeholders.
 
 The active project must not retain unresolved placeholders in required identity or contract fields.
 
-Examples to reject after initialization:
+Examples:
 
 ```text
 <PROJECT_OWNER>
@@ -1699,11 +1521,11 @@ Examples to reject after initialization:
 <YYYY-MM-DD>
 ```
 
-A placeholder in an explanatory example must be clearly marked as an example.
+A placeholder in an explanatory example must be clearly identified as an example.
 
 ---
 
-## 38. Document maintenance
+## 37. Document maintenance
 
 Update this page when:
 
@@ -1716,13 +1538,11 @@ the standard handoff changes
 release navigation changes
 ```
 
-Do not update this page merely to repeat a detailed rule changed elsewhere.
-
-Link to the authority.
+Do not repeat a detailed rule owned elsewhere. Link to its authority.
 
 ---
 
-## 39. New maintainer checklist
+## 38. New maintainer checklist
 
 ```text
 [ ] project.toml read
@@ -1736,7 +1556,6 @@ Link to the authority.
 [ ] syntax rules read
 [ ] validation spec read
 [ ] coverage matrix reviewed
-[ ] status ledger reviewed
 [ ] known issues reviewed
 [ ] decision log reviewed
 [ ] release criteria reviewed
@@ -1744,12 +1563,12 @@ Link to the authority.
 [ ] entrypoints located
 [ ] checkpoints located
 [ ] scenarios located
-[ ] latest run inspected
+[ ] latest compatible run inspected
 ```
 
 ---
 
-## 40. New feature checklist
+## 39. New feature checklist
 
 ```text
 [ ] feature scope documented
@@ -1766,13 +1585,12 @@ Link to the authority.
 [ ] scenario added or updated
 [ ] gold reviewed
 [ ] coverage matrix updated
-[ ] status ledger updated
 [ ] release impact assessed
 ```
 
 ---
 
-## 41. Bug-fix checklist
+## 40. Bug-fix checklist
 
 ```text
 [ ] defect reproduced
@@ -1786,16 +1604,16 @@ Link to the authority.
 [ ] provider compiles
 [ ] consumers compile
 [ ] checkpoint passes
-[ ] status and known issue updated
+[ ] known issue updated
 ```
 
 ---
 
-## 42. Breaking-change checklist
+## 41. Breaking-change checklist
 
 ```text
 [ ] breaking surface identified
-[ ] project contract major impact reviewed
+[ ] project contract impact reviewed
 [ ] all consumers enumerated
 [ ] migration plan written
 [ ] project.toml updated
@@ -1807,13 +1625,13 @@ Link to the authority.
 [ ] project release version impact assessed
 [ ] compatibility notes written
 [ ] old identifiers removed
-[ ] full diagnostic validation completed
+[ ] diagnostic validation completed
 [ ] release criteria re-evaluated
 ```
 
 ---
 
-## 43. Scenario-change checklist
+## 42. Scenario-change checklist
 
 ```text
 [ ] scenario purpose remains bounded
@@ -1832,21 +1650,20 @@ Link to the authority.
 
 ---
 
-## 44. Release candidate checklist
+## 43. Release checklist
 
 ```text
 [ ] project identity valid
 [ ] no required placeholders
-[ ] no old-language identifiers
-[ ] no untracked project decisions
+[ ] no stale language identifiers
+[ ] no undocumented project decisions
 [ ] active contracts reviewed
 [ ] dependency map reviewed
-[ ] status ledger reviewed
 [ ] known issues reviewed
 [ ] release criteria reviewed
 [ ] all release checkpoints pass
 [ ] all release entrypoints pass
-[ ] expected PGF built
+[ ] expected PGF built when required
 [ ] all required scenarios pass
 [ ] all required gold comparisons pass
 [ ] no unexplained regression
@@ -1858,14 +1675,15 @@ Link to the authority.
 
 ---
 
-## 45. Minimum project invariants
+## 44. Minimum project invariants
 
-The active project must always satisfy:
+The active project always satisfies:
 
 ```text
 [ ] one authoritative project identity
 [ ] one active language
 [ ] one documented source root
+[ ] one normative language target per run
 [ ] deterministic entrypoint order
 [ ] deterministic checkpoint order
 [ ] explicit module ownership
@@ -1879,17 +1697,17 @@ The active project must always satisfy:
 [ ] normal validation never modifies gold
 [ ] release targets are explicit
 [ ] every release-critical contract has evidence
-[ ] current status is not overstated
+[ ] no dependency on gf-portfolio runtime or private state
 ```
 
 ---
 
-## 46. Final navigation rule
+## 45. Navigation rule
 
 When unsure where to record information:
 
 ```text
-identity or machine policy
+identity or project policy
     → project.toml
 
 cross-file promise
@@ -1911,33 +1729,28 @@ syntax or constructor behavior
     → SYNTAX_AND_CONSTRUCTOR_RULES.md
 
 validation requirement
-    → VALIDATION_SPEC.md
+    → VALIDATION_SPEC__PROJECT_DOCS.md
 
 evidence coverage
-    → TEST_COVERAGE_MATRIX.md
+    → TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 
-current implementation maturity
-    → STATUS_LEDGER.md
-
-confirmed limitation
+confirmed defect or limitation
     → KNOWN_ISSUES.md
 
-design rationale
+retained design rationale
     → DECISION_LOG.md
 
 linguistic source
     → RESEARCH_EVIDENCE.md
 
 release acceptance
-    → RELEASE_CRITERIA.md
+    → RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 ---
 
-## 47. Final enforcement rule
+## 46. Enforcement rule
 
-This page starts the workflow but does not replace the project’s authorities.
+This page starts the workflow but does not replace the project authorities.
 
-Therefore:
-
-> No project change is complete until the authoritative configuration, provider and consumer contracts, validation evidence, current status and release impact agree with the implemented GF source.
+> No project change is complete until authoritative configuration, provider and consumer contracts, validation evidence, known limitations and release impact agree with the GF source.

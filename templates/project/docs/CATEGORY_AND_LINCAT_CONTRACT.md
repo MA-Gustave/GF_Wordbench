@@ -14,7 +14,7 @@
 **Source root:** `<SOURCE_ROOT>`  
 **Project configuration:** `project/project.toml`  
 **Project contract lock:** `project/docs/INTERFILE_CONTRACT_LOCK.md`  
-**Validation specification:** `project/docs/VALIDATION_SPEC.md`  
+**Validation specification:** `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`  
 **Target template path:** `templates/project/docs/CATEGORY_AND_LINCAT_CONTRACT.md`  
 **Contract version:** `1.0.0`  
 **Last reviewed:** `<YYYY-MM-DD OR PROJECT RELEASE>`
@@ -38,7 +38,7 @@ When initializing an active GF project:
 4. add every public or cross-module category contract used by the project;
 5. verify every provider and consumer against actual GF source;
 6. link every contract to validation evidence;
-7. record temporary or incomplete structures in `STATUS_LEDGER.md`;
+7. record temporary or incomplete structures in `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md`;
 8. run project contract checks;
 9. remove this initialization section from the active-project document when no longer useful.
 
@@ -151,11 +151,11 @@ validation evidence
 | Direct import relationships | `project/docs/MODULE_DEPENDENCY_MAP.md` |
 | Morphological paradigms | `project/docs/MORPHOLOGY_SPEC.md` |
 | Constructor behavior and syntax rules | `project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md` |
-| Validation requirements | `project/docs/VALIDATION_SPEC.md` |
-| Temporary or incomplete structures | `project/docs/STATUS_LEDGER.md` |
+| Validation requirements | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` |
+| Temporary or incomplete structures | `project/docs/STATUS_LEDGER__PROJECT_DOCS.md` |
 | Significant project decisions | `project/docs/DECISION_LOG.md` |
 | Cross-file contract registry | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
-| Release acceptance | `project/docs/RELEASE_CRITERIA.md` |
+| Release acceptance | `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` |
 
 This document may summarize those topics only where needed to define a category boundary.
 
@@ -223,7 +223,7 @@ Deprecated
 Retired
 ```
 
-Implementation readiness is tracked separately in `STATUS_LEDGER.md`.
+Implementation readiness is tracked separately in `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md`.
 
 Examples of implementation states:
 
@@ -1296,7 +1296,7 @@ Structural entries such as pronouns, determiners, conjunctions, and prepositions
 
 Do not reconstruct structural records independently in consumer modules when an authoritative provider exists.
 
-Temporary structural entries must link to `STATUS_LEDGER.md`.
+Temporary structural entries must link to `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md`.
 
 ---
 
@@ -2006,7 +2006,7 @@ Deprecated identifiers must not be reused.
 
 # 71. Temporary and fallback structures
 
-Every temporary or fallback category implementation must link to `STATUS_LEDGER.md`.
+Every temporary or fallback category implementation must link to `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md`.
 
 Record:
 
@@ -2280,7 +2280,7 @@ When creating an active project from this template:
 14. create scenario coverage;
 15. create gold coverage where appropriate;
 16. update `INTERFILE_CONTRACT_LOCK.md`;
-17. update `VALIDATION_SPEC.md`;
+17. update `VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md`;
 18. run baseline validation;
 19. remove non-applicable template rows;
 20. verify no required placeholder remains.
@@ -2409,18 +2409,18 @@ Replace this registry with current project entries.
 ```text
 project/README.md
 project/project.toml
-project/docs/00_PROJECT_START_HERE.md
+project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 project/docs/LANGUAGE_OVERVIEW.md
 project/docs/LANGUAGE_ARCHITECTURE.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 

@@ -2,15 +2,16 @@
 
 **Document ID:** `GF-WB-SQI-TEST-COVERAGE-MATRIX`  
 **Status:** Normative  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\project\docs\TEST_COVERAGE_MATRIX.md`  
+**Canonical path:** `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`  
 **Project ID:** `sqi`  
 **Language:** Albanian  
 **Language code:** `sqi`  
 **Module suffix:** `Sqi`  
 **Project configuration:** `project/project.toml`  
 **Owner:** Albanian project maintainers  
-**Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Document version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -66,7 +67,7 @@ It does not store:
 - gold diffs;
 - local GF or RGL paths;
 - accepted warnings;
-- temporary implementation status.
+- unsupported implementation status.
 
 Variable execution state belongs in:
 
@@ -75,7 +76,6 @@ run_<run-id>/summary.json
 run_<run-id>/manifest.json
 run_<run-id>/summary.md
 run_<run-id>/AI_READY.md
-project/docs/STATUS_LEDGER.md
 project/docs/KNOWN_ISSUES.md
 ```
 
@@ -95,8 +95,8 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 When these documents disagree:
@@ -107,6 +107,8 @@ When these documents disagree:
 4. update affected scenarios and gold;
 5. rerun the required proof set;
 6. update this matrix when the obligation changed.
+
+This matrix belongs to the active Albanian Wordbench project only. It does not define cross-workspace or multilingual portfolio coverage. `gf-portfolio` may consume finalized public Wordbench artifacts but does not alter these project proof obligations.
 
 ---
 
@@ -152,7 +154,7 @@ means required in checkpoint and release modes.
 | `GENERATE` | Bounded generation |
 | `MORPHOLOGY` | Inflection or morphological analysis |
 | `GOLD` | Normalized output comparison |
-| `PGF` | Final `.pgf` construction and verification |
+| `PGF` | `.pgf` construction and verification |
 | `CONTRACT` | Automated interfile or schema contract check |
 | `MANUAL` | Reviewed evidence with owner and record |
 
@@ -179,26 +181,18 @@ PGF build success does not replace checkpoint compilation evidence.
 
 ---
 
-## 4.4 Automation state
+## 4.4 Coverage proof rule
 
-Automation readiness is tracked outside this matrix in:
+This matrix defines stable proof obligations, not implementation progress or recent execution state.
 
-```text
-project/docs/STATUS_LEDGER.md
-```
+A proof obligation is satisfied only by the evidence defined in its row. Documentation, configuration or the existence of a scenario file does not by itself prove successful validation.
 
-Allowed ledger states include:
+Execution results remain in run artifacts. Known project defects, limitations and release blockers remain in:
 
 ```text
-active
-temporary
-fallback
-warning
-blocked
-retired
+project/docs/KNOWN_ISSUES.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
-
-This matrix MUST NOT mark a proof as successful merely because the requirement has been documented.
 
 ---
 
@@ -265,10 +259,10 @@ Release MUST fail when:
 - a required scenario is `FAIL`, `ERROR`, or unjustifiably `SKIPPED`;
 - required normalized output differs from reviewed gold;
 - the required PGF is absent, empty, stale, or unmanifested;
-- a release-blocking ledger or known-issue item remains unresolved;
+- a release-blocking known issue remains unresolved;
 - a required manual review lacks an owner or evidence record.
 
-Optional scenario failures remain visible but affect release only according to `RELEASE_CRITERIA.md`.
+Optional scenario failures remain visible but affect release only according to `RELEASE_CRITERIA__PROJECT_DOCS.md`.
 
 ---
 
@@ -336,7 +330,7 @@ Every source selected in diagnostic mode must receive the following baseline pro
 
 Checkpoint order is a dependency-oriented release contract.
 
-Every checkpoint must compile from clean run-owned artifact directories before final entrypoint validation.
+Every checkpoint must compile from clean run-owned artifact directories before entrypoint validation.
 
 ## 10.1 `MorphoSqi.gf`
 
@@ -379,7 +373,7 @@ Coverage notes:
 | `TC-VERB-003` | Tense/person/number coverage | R | LINEARIZE/GOLD | E5 | Representative finite forms cover configured agreement dimensions |
 | `TC-VERB-004` | Complement behavior | R | LINEARIZE/PARSE | E4/E5 | Transitive/intransitive and other required complement patterns behave as specified |
 | `TC-VERB-005` | Negation or polarity | X/R | LINEARIZE/GOLD | E5 | Required polarity constructions preserve intended placement and agreement |
-| `TC-VERB-006` | Irregular or fallback visibility | R | MORPHOLOGY/LEDGER | E4 | Known fallback behavior is explicit and not presented as complete |
+| `TC-VERB-006` | Irregular behavior coverage | R | MORPHOLOGY/CONTRACT | E4 | Documented irregular forms are exercised by explicit assertions |
 
 ---
 
@@ -392,7 +386,7 @@ Coverage notes:
 | `TC-EXTEND-003` | Override compatibility | R | COMPILE/LINEARIZE | E4 | Local overrides preserve abstract signatures and required output |
 | `TC-EXTEND-004` | No duplicate upstream behavior | R/M | CONTRACT/MANUAL | E2 | Override rationale is recorded where behavior already exists upstream |
 | `TC-EXTEND-005` | Downstream entrypoint coverage | R | COMPILE/LOAD | E4 | Both configured entrypoints remain compatible |
-| `TC-EXTEND-006` | Temporary override tracking | R | CONTRACT | E2 | Every temporary override has a ledger entry and exit condition |
+| `TC-EXTEND-006` | Override ownership | R | CONTRACT | E2 | Every local override has one documented owner, rationale and consumer contract |
 
 ---
 
@@ -406,7 +400,7 @@ Coverage notes:
 | `TC-STRUCT-004` | Pronouns | R | LINEARIZE/PARSE/GOLD | E5 | Person, number, gender and agreement dimensions are represented |
 | `TC-STRUCT-005` | Determiners | R | LINEARIZE/GOLD | E5 | Definiteness and agreement follow project policy |
 | `TC-STRUCT-006` | Conjunctions | R | LINEARIZE/GOLD | E5 | Coordination structure is preserved |
-| `TC-STRUCT-007` | Placeholder visibility | R | SCAN/LEDGER | E2 | Placeholder entries are explicit and release impact is recorded |
+| `TC-STRUCT-007` | Structural entry completeness | R | SCAN/CONTRACT | E2 | Required structural entries contain no placeholder or fallback implementation |
 | `TC-STRUCT-008` | No consumer reconstruction | R/M | CONTRACT/MANUAL | E2 | Consumers do not duplicate structural entries independently |
 
 ---
@@ -423,7 +417,7 @@ Coverage notes:
 | `TC-GRAMMAR-004` | Missing linearizations | R | MISSING/GOLD | E5 | Missing-function output satisfies project release threshold |
 | `TC-GRAMMAR-005` | Representative linearization | C/R | LINEARIZE/GOLD | E5 | Required trees produce reviewed non-empty Albanian output |
 | `TC-GRAMMAR-006` | Representative parse | R | PARSE/GOLD | E5 | Required positive and negative cases satisfy declared ambiguity policy |
-| `TC-GRAMMAR-007` | PGF participation | R | PGF | E6 | Entrypoint participates in configured final PGF build |
+| `TC-GRAMMAR-007` | PGF participation | R | PGF | E6 | Entrypoint participates in the configured PGF build |
 | `TC-GRAMMAR-008` | Artifact registration | R | CONTRACT | E6 | `.gfo`, logs and PGF-related evidence are manifested |
 
 ---
@@ -436,7 +430,7 @@ Coverage notes:
 | `TC-SYNTAX-002` | Public API availability | C/R | LOAD/CONTRACT | E4 | Required syntax/API operations remain available |
 | `TC-SYNTAX-003` | Constructor behavior | R | LINEARIZE/GOLD | E5 | Representative public constructor combinations produce expected output |
 | `TC-SYNTAX-004` | Parse API behavior | R | PARSE/GOLD | E5 | Required parse cases work through the configured API entrypoint |
-| `TC-SYNTAX-005` | PGF participation | R | PGF | E6 | Entrypoint is included when required by final build policy |
+| `TC-SYNTAX-005` | PGF participation | R | PGF | E6 | Entrypoint is included when required by the PGF build policy |
 | `TC-SYNTAX-006` | Application smoke coverage | X/R | LOAD/LINEARIZE/PARSE | E4 | Application-facing use cases pass when this is the application entrypoint |
 
 ---
@@ -528,9 +522,9 @@ It does not define the detailed linguistic expectation; the project specificatio
 | Extension layer | `ExtendSqi.gf` | checkpoint compile | `load`, `linearize`, targeted family cases | changed output only when intentional | R |
 | Concrete grammar | `GrammarSqi.gf` | entrypoint compile | all required scenarios | required gold set | R |
 | Syntax/API surface | `SyntaxSqi.gf` | entrypoint compile | load/linearize/parse smoke paths | API-relevant output | R/X |
-| Missing implementations | final grammar | entrypoint compile | `missing` | `missing.gold` | R |
-| Bounded generation | final grammar | entrypoint compile | `generation` | optional/deterministic projection | O |
-| Final runtime grammar | configured entrypoints | all required compiles | required scenarios | release evidence | R |
+| Missing implementations | release grammar | entrypoint compile | `missing` | `missing.gold` | R |
+| Bounded generation | release grammar | entrypoint compile | `generation` | optional/deterministic projection | O |
+| Runtime grammar | configured entrypoints | all required compiles | required scenarios | release evidence | R |
 
 ---
 
@@ -606,12 +600,12 @@ Examples:
 | `PIFC-GOLD-001` | scenario output → gold | normalized comparison | gold diff/result | R where configured |
 | `PIFC-GOLD-002` | implementation change → gold update | explicit reviewed update | decision/review record | R |
 | `PIFC-ARTIFACT-001` | `.gf` → `.gfo` | current-run object proof | compile artifact | R |
-| `PIFC-ARTIFACT-002` | entrypoints → `.pgf` | final runtime artifact proof | PGF build | R |
+| `PIFC-ARTIFACT-002` | entrypoints → `.pgf` | runtime artifact proof | PGF build | R |
 | `PIFC-ARTIFACT-003` | validation → evidence | complete artifact inventory | manifest | R |
 | `PIFC-DOC-001` | architecture → module ownership | documentation matches source | documentation review/check | R |
 | `PIFC-DOC-002` | category contract → lincats | documented fields match consumers | contract review + compile | R |
 | `PIFC-DOC-003` | validation spec → scenarios | each criterion has evidence | this matrix + registry check | R |
-| `PIFC-DOC-004` | status ledger → temporary code | no hidden fallback | ledger check | R |
+| `PIFC-DOC-004` | known issues → source and validation | no hidden blocker or unsupported fallback | known-issue and contract review | R |
 | `PIFC-DOC-005` | decision log → breaking changes | significant changes recorded | release review | R |
 | `PIFC-RELEASE-001` | checkpoints → entrypoints | all checkpoints pass first | release pipeline | R |
 | `PIFC-RELEASE-002` | required scenarios → release | all required scenarios pass | release pipeline | R |
@@ -631,7 +625,7 @@ Examples:
 | `TC-ART-006` | Scenario stderr | R/O | scenario runner | raw output retained before normalization |
 | `TC-ART-007` | Normalized scenario output | R/O | scenario runner | normalization version recorded |
 | `TC-ART-008` | Gold diff or result | R where gold-backed | comparator | match status and evidence retained |
-| `TC-ART-009` | Final `.pgf` | R | PGF builder | exists, non-empty, expected languages/functions, hash |
+| `TC-ART-009` | Release `.pgf` | R | PGF builder | exists, non-empty, expected languages/functions, hash |
 | `TC-ART-010` | `summary.json` | R | JSON reporter | valid schema and complete result arrays |
 | `TC-ART-011` | `summary.md` | R | Markdown reporter | derives facts from `RunResult` |
 | `TC-ART-012` | `AI_READY.md` | R on failure | AI reporter | bounded, evidence-linked, no rerun |
@@ -718,7 +712,7 @@ required scenarios
 required gold comparisons
 PGF build
 artifact manifest
-known-issue and ledger review
+known-issue review
 release summary
 ```
 
@@ -789,9 +783,9 @@ Required manual reviews:
 |---|---|---|---|---|
 | `TC-MANUAL-001` | Linguistic correctness of changed gold | every gold update | Albanian maintainer | review/decision record |
 | `TC-MANUAL-002` | Public lincat compatibility | lincat change | module owners | contract update |
-| `TC-MANUAL-003` | Override necessity in `ExtendSqi.gf` | override change | extension owner | ledger/decision |
+| `TC-MANUAL-003` | Override necessity in `ExtendSqi.gf` | override change | extension owner | contract or decision record |
 | `TC-MANUAL-004` | Structural lexical category correctness | structural change | structural owner | review record |
-| `TC-MANUAL-005` | Accepted known issues | every release | release owner | release decision |
+| `TC-MANUAL-005` | Release-significant known issues | every release | release owner | release decision |
 | `TC-MANUAL-006` | Dependency map accuracy | architecture change | project maintainer | document review |
 | `TC-MANUAL-007` | Scenario representativeness | scenario change/release | validation owner | validation-spec review |
 | `TC-MANUAL-008` | GF/RGL upgrade output | toolchain upgrade | project + release owners | compatibility review |
@@ -817,33 +811,27 @@ checkpoint has no direct compile proof
 PGF build has no artifact check
 contract has no validation row
 manual criterion has no owner
-temporary implementation has no ledger entry
+known blocker or unsupported fallback is absent from `KNOWN_ISSUES.md`
 latest release evidence used a different project identity or module suffix
 ```
 
-Every gap must be recorded in:
-
-```text
-project/docs/STATUS_LEDGER.md
-```
-
-and, when user-visible or release-significant:
+Every gap is recorded in:
 
 ```text
 project/docs/KNOWN_ISSUES.md
 ```
 
-A gap is not closed by adding a row to this matrix.
+with its affected contract, required correction and release impact.
 
-It is closed by implementing and passing the proof.
+A gap is not closed by adding a row to this matrix. It is closed only when the required proof passes and retained evidence confirms the correction.
 
 ---
 
 # 23. Coverage completeness checks
 
-The project contract checker should verify this matrix against configuration and files.
+The project contract checker verifies this matrix against configuration and files.
 
-Recommended checks:
+Canonical checks:
 
 ```text
 every configured checkpoint appears in this matrix
@@ -859,16 +847,10 @@ no duplicate test-coverage ID exists
 all referenced documents exist
 ```
 
-Recommended command:
+Canonical command:
 
 ```text
-gf-wordbench project contracts check
-```
-
-Strict form:
-
-```text
-gf-wordbench project contracts check --strict
+gf-wordbench project check --strict
 ```
 
 ---
@@ -883,12 +865,11 @@ After every checkpoint or release run:
 4. inspect direct and ambiguous failures before downstream failures;
 5. verify required artifact manifest entries;
 6. review gold differences explicitly;
-7. update `STATUS_LEDGER.md` for new or resolved gaps;
-8. update `KNOWN_ISSUES.md` when release impact changed;
-9. update this matrix only if the required proof set changed;
-10. record release evidence in the release decision.
+7. update `KNOWN_ISSUES.md` when a defect, limitation or release blocker changes;
+8. update this matrix only when the required proof set changes;
+9. record release evidence in the release decision.
 
-Do not paste transient statuses into this matrix.
+Do not paste transient execution results into this matrix.
 
 ---
 
@@ -996,7 +977,6 @@ manifest
 summary.json
 summary.md
 AI_READY.md when failures or accepted exceptions exist
-status-ledger review
 known-issues review
 release decision
 ```
@@ -1097,8 +1077,8 @@ Coverage drift exists when:
 - PGF is required by configuration but omitted from release coverage;
 - a source provider changes without consumer coverage;
 - framework unit tests are cited as proof of Albanian linguistic correctness;
-- historical fixture statuses are presented as current project results;
-- `STATUS_LEDGER.md` and this matrix disagree about a missing proof;
+- historical fixture results are presented as current project results;
+- `KNOWN_ISSUES.md` and this matrix disagree about a missing proof;
 - a release uses evidence from another project ID, language code or module suffix;
 - a manual review is claimed without a retained record.
 
@@ -1110,6 +1090,8 @@ Any drift blocks release until corrected or explicitly accepted through the rele
 
 | Topic | Document |
 |---|---|
+| Documentation alignment | `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` |
+| Single active project | `docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md` |
 | Active project configuration | `project/project.toml` |
 | Project contracts | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
 | Language architecture | `project/docs/LANGUAGE_ARCHITECTURE.md` |
@@ -1117,10 +1099,9 @@ Any drift blocks release until corrected or explicitly accepted through the rele
 | Category and lincat rules | `project/docs/CATEGORY_AND_LINCAT_CONTRACT.md` |
 | Morphology expectations | `project/docs/MORPHOLOGY_SPEC.md` |
 | Syntax expectations | `project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md` |
-| Validation semantics | `project/docs/VALIDATION_SPEC.md` |
-| Current temporary status | `project/docs/STATUS_LEDGER.md` |
+| Validation semantics | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` |
 | Known issues | `project/docs/KNOWN_ISSUES.md` |
-| Release gates | `project/docs/RELEASE_CRITERIA.md` |
+| Release gates | `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` |
 | Project decisions | `project/docs/DECISION_LOG.md` |
 | Framework file selection | `docs/validation/FILE_SELECTION.md` |
 | GF compilation | `docs/gf/GF_COMPILATION.md` |
@@ -1130,7 +1111,7 @@ Any drift blocks release until corrected or explicitly accepted through the rele
 
 ---
 
-# 31. Final rule
+# 31. Governing rule
 
 > Coverage is a relationship between a requirement and retained evidence.
 

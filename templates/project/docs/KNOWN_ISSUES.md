@@ -8,10 +8,10 @@
 **Template scope:** One future active GF project  
 **Canonical active-project destination:** `project/docs/KNOWN_ISSUES.md`  
 **Primary project source:** `project/project.toml`  
-**Primary implementation-state source:** `project/docs/STATUS_LEDGER.md`  
+**Primary implementation-state source:** `project/docs/STATUS_LEDGER__PROJECT_DOCS.md`  
 **Primary contract source:** `project/docs/INTERFILE_CONTRACT_LOCK.md`  
-**Primary coverage source:** `project/docs/TEST_COVERAGE_MATRIX.md`  
-**Primary release source:** `project/docs/RELEASE_CRITERIA.md`  
+**Primary coverage source:** `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`  
+**Primary release source:** `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`  
 **Template owner:** GF Wordbench project-template maintainers  
 **Project owner after initialization:** Active-project maintainers  
 **Last structural review:** `<YYYY-MM-DD>`
@@ -44,7 +44,7 @@ The governing rule is:
 
 This file must not become:
 
-- a substitute for `STATUS_LEDGER.md`;
+- a substitute for `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md`;
 - a substitute for executable tests;
 - a list of vague future ideas;
 - an archive of every closed development task;
@@ -62,10 +62,10 @@ When initializing an active project:
 2. replace all required project placeholders;
 3. delete template-only example issue rows;
 4. add every known active issue;
-5. link temporary implementation states to `STATUS_LEDGER.md`;
+5. link temporary implementation states to `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md`;
 6. link contract-impacting issues to `INTERFILE_CONTRACT_LOCK.md`;
-7. link evidence gaps to `TEST_COVERAGE_MATRIX.md`;
-8. link release impact to `RELEASE_CRITERIA.md`;
+7. link evidence gaps to `TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md`;
+8. link release impact to `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md`;
 9. record baseline-known issues before declaring the project migrated;
 10. retain resolved entries in the resolution archive;
 11. review the registry before every release.
@@ -95,11 +95,11 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 project/validation/scenarios/
 project/validation/inputs/
@@ -135,10 +135,10 @@ Different project records have different owners.
 | Record | Purpose | Example |
 |---|---|---|
 | `KNOWN_ISSUES.md` | Observable defect, limitation, risk, or compatibility restriction | A required parse family remains ambiguous |
-| `STATUS_LEDGER.md` | Implementation maturity and temporary state | A constructor uses a temporary fallback |
-| `TEST_COVERAGE_MATRIX.md` | Proof status and evidence gaps | Negative cases are not yet covered |
+| `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` | Implementation maturity and temporary state | A constructor uses a temporary fallback |
+| `TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md` | Proof status and evidence gaps | Negative cases are not yet covered |
 | `DECISION_LOG.md` | Deliberate architectural or linguistic decision | A non-default word order is accepted |
-| `RELEASE_CRITERIA.md` | Gate interpretation | Issue class blocks release |
+| `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` | Gate interpretation | Issue class blocks release |
 | Source comments | Local implementation context | Reason for a narrow workaround |
 | Issue tracker | Work planning and discussion | Task assignment and conversation |
 | Run results | Observed validation evidence | Scenario `parse` returned `FAIL` |
@@ -1666,7 +1666,7 @@ inherited placeholder
 blocked provider
 ```
 
-must link to a `STATUS_LEDGER.md` entry.
+must link to a `STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` entry.
 
 The known issue describes observed or expected impact.
 
@@ -1921,7 +1921,7 @@ Baseline requirements:
 
 # 70. Waiver policy
 
-A waiver may apply only where `RELEASE_CRITERIA.md` permits it.
+A waiver may apply only where `RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` permits it.
 
 The issue remains open and retains its real severity and release result.
 
@@ -2651,9 +2651,9 @@ When creating a new project from this template:
 [ ] Delete template-only issue examples
 [ ] Import known issues from the existing GF project
 [ ] Import known toolchain/platform restrictions
-[ ] Link every temporary implementation to STATUS_LEDGER.md
+[ ] Link every temporary implementation to STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
 [ ] Link every contract issue to INTERFILE_CONTRACT_LOCK.md
-[ ] Link every validation gap to TEST_COVERAGE_MATRIX.md
+[ ] Link every validation gap to TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md
 [ ] Mark every issue with release impact
 [ ] Assign every open issue to an owner
 [ ] Define every open issue exit condition

@@ -2,11 +2,11 @@
 
 **Document ID:** `GF-WB-ARCH-DEPENDENCY-RULES`  
 **Status:** Normative  
-**Applies to:** GF Wordbench framework, framework tests, project integration boundaries, and generated-artifact consumers  
+**Rules version:** `2.0.0`  
+**Applies to:** GF Wordbench framework, framework tests, active-project integration boundaries, generated artifacts, public exports, and optional external consumers  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\architecture\DEPENDENCY_RULES.md`  
-**Rules version:** `1.0.0`  
-**Last reviewed:** `2026-07-21`
+**Last reviewed:** `2026-07-24`  
+**Target path:** `docs/architecture/DEPENDENCY_RULES.md`
 
 ---
 
@@ -17,22 +17,22 @@ This document defines the allowed dependency directions in GF Wordbench.
 It prevents architectural drift caused by:
 
 - circular imports;
-- user interfaces bypassing orchestration;
-- reports launching validation;
-- multiple components resolving the same configuration differently;
-- low-level utilities importing application models;
+- modules bypassing public contracts;
+- user interfaces bypassing application use cases;
+- report writers executing validation;
+- duplicated configuration or path resolution;
 - framework code depending on one active language;
 - project files controlling framework internals;
 - duplicated artifact ownership;
 - hidden process execution;
-- readers rewriting data owned by writers;
-- tests depending on a developer’s local environment.
-
-A module may be locally correct and still damage the system when it imports, invokes, mutates, or interprets another layer through the wrong boundary.
+- readers mutating data owned by writers;
+- adapters redefining domain policy;
+- Wordbench depending on private `gf-portfolio` code, state, or storage;
+- tests depending on one developer's machine.
 
 The core rule is:
 
-> A higher-level component may coordinate lower-level capabilities, but a lower-level component must not depend on the higher-level policy that coordinates it.
+> Dependencies point from orchestration and mechanisms toward stable contracts, while stable domain rules remain independent of external mechanisms and delivery surfaces.
 
 ---
 
@@ -44,1379 +44,502 @@ It complements, but does not replace:
 
 | Topic | Authoritative document |
 |---|---|
+| Architectural decision | `docs/decisions/ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md` |
 | Exact provider-consumer contracts | `docs/INTERFILE_CONTRACT_LOCK.md` |
 | External executables and process behavior | `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md` |
 | Persisted formats and migrations | `docs/PERSISTED_SCHEMA_LOCK.md` |
-| Product boundary | `docs/SCOPE_AND_NON_GOALS.md` |
+| Product boundary | `docs/architecture/PRODUCT_BOUNDARIES.md` |
 | Component responsibilities | `docs/architecture/COMPONENT_MAP.md` |
 | Runtime order | `docs/architecture/EXECUTION_FLOW.md` |
 | Shared data structures | `docs/architecture/DATA_MODEL.md` |
 | Artifact ownership | `docs/architecture/ARTIFACT_MODEL.md` |
-| Active-language GF dependencies | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
-| Active-language module graph | `project/docs/MODULE_DEPENDENCY_MAP.md` |
+| Active-project GF dependencies | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
+| Active-project module graph | `project/docs/MODULE_DEPENDENCY_MAP.md` |
 
-This document defines whether one layer may depend on another.
-
-The interfile contract lock defines the exact public symbols and behavior at permitted boundaries.
+When documents disagree, accepted ADRs and specialized contract locks govern their respective boundaries.
 
 ---
 
 ## 3. Normative terms
 
-- **MUST**: mandatory.
-- **MUST NOT**: prohibited.
-- **SHOULD**: expected unless a documented exception exists.
-- **SHOULD NOT**: normally prohibited.
+- **MUST / MUST NOT**: mandatory or prohibited.
+- **SHOULD / SHOULD NOT**: expected unless a reviewed exception exists.
 - **MAY**: optional.
-- **DEPENDENCY**: an import, function call, class reference, schema assumption, file read, file write, process invocation, shared constant, or runtime callback.
-- **COMPILE-TIME DEPENDENCY**: a Python import or symbol reference required to load a module.
-- **RUNTIME DEPENDENCY**: a call or data flow that occurs after modules are loaded.
-- **POLICY LAYER**: a layer that decides what operation should occur.
-- **MECHANISM LAYER**: a layer that performs a bounded operation without deciding global workflow.
-- **OWNER**: the component allowed to create or mutate an artifact or state domain.
-- **OBSERVER**: a component allowed to read, summarize, compare, or display an owned artifact.
-- **UPWARD DEPENDENCY**: a lower-level layer importing or controlling a higher-level layer.
-- **DOWNWARD DEPENDENCY**: a higher-level layer invoking a lower-level capability.
-- **LATERAL DEPENDENCY**: a dependency between components at the same architectural level.
-- **CYCLE**: direct or indirect dependency path that returns to its origin.
-- **PRIVATE SYMBOL**: a symbol not declared as public by its provider.
-- **ACTIVE PROJECT**: the single language project represented by `project/`.
-- **FRAMEWORK**: reusable language-neutral code under `app/`, `tests/`, `docs/`, and `templates/`.
+- **DEPENDENCY**: an import, call, callback, schema assumption, file access, process invocation, shared constant, or runtime data flow.
+- **OWNER**: the module or component authorized to define or mutate a contract, state domain, or artifact.
+- **OBSERVER**: a component authorized to read, summarize, compare, or display owned data without mutating it.
+- **PUBLIC CONTRACT**: an explicitly documented API, port, model, schema, artifact, or event shape intended for consumers.
+- **PRIVATE IMPLEMENTATION**: a symbol, file, database, state object, or behavior not declared as a public contract.
+- **POLICY**: a rule deciding what must happen or how an outcome is interpreted.
+- **MECHANISM**: a bounded operation that performs work without owning global workflow policy.
+- **CYCLE**: a direct or indirect dependency path that returns to its origin.
+- **ACTIVE PROJECT**: the single GF language project represented by `project/`.
+- **PUBLIC ARTIFACT**: a versioned Wordbench artifact explicitly intended for external read-only consumption.
 
 ---
 
-# 4. Dependency dimensions
+## 4. Architectural model
 
-Dependency control applies to more than Python imports.
+GF Wordbench is one deployable modular monolith with two complementary dimensions:
 
-## 4.1 Import dependencies
+1. five functional modules;
+2. six hexagonal rings.
 
-Examples:
-
-```python
-from app.models import RunResult
-from app.audit.compiler import compile_file
-```
-
-Import direction must respect the layer model.
-
-## 4.2 Call dependencies
-
-A module may import an abstract type safely but still violate architecture by invoking the wrong operation.
-
-Example of prohibited behavior:
+### 4.1 Functional modules
 
 ```text
-report writer → compiler execution
+projects
+runs
+validation
+diagnostics
+reporting
 ```
 
-## 4.3 Data dependencies
+| Module | Ownership |
+|---|---|
+| `projects` | Active-project identity, configuration, loading, paths, and lifecycle |
+| `runs` | Run identity, orchestration, budgets, continuation, finalization, and history |
+| `validation` | Selection, scanning, compilation, PGF construction, scenarios, gold comparison, regression comparison, and release gates |
+| `diagnostics` | Diagnostic normalization, findings, causal classification, pattern interpretation, and diagnostic tools |
+| `reporting` | Schemas, renderers, manifests, artifact publication, and public exports |
 
-A consumer depends on a provider when it assumes:
+A module owns a cohesive product responsibility. It is not a separate service and does not communicate through a network merely because it has a boundary.
 
-- a field exists;
-- a status has a particular meaning;
-- an array is ordered;
-- a path is relative to a particular root;
-- a result is mutable;
-- an exception indicates a specific failure.
+GF Wordbench has no functional `languages` or portfolio module. Multi-workspace inventory, aggregation, comparison, and portfolio views belong to `gf-portfolio`.
 
-Shared data assumptions must be defined by models or schemas.
+### 4.2 Hexagonal rings
 
-## 4.4 Artifact dependencies
+```text
+domain
+application
+ports
+adapters
+entrypoints
+bootstrap
+```
 
-A reader depends on an artifact owner when it:
+The rings are ordered from stable rules to composition and delivery.
 
-- reads a report;
-- reads a raw log;
-- compares a gold file;
-- loads application state;
-- verifies a manifest;
-- discovers a generated `.pgf`.
+| Ring | Responsibility |
+|---|---|
+| `domain` | Stable models, invariants, statuses, result semantics, and decision rules |
+| `application` | Use cases and coordination of domain behavior |
+| `ports` | Narrow contracts for external or unstable boundaries |
+| `adapters` | Concrete implementations for GF, processes, filesystem, TOML, JSON, persistence, clocks, and other mechanisms |
+| `entrypoints` | CLI, GUI, and automation surfaces |
+| `bootstrap` | Composition root and concrete dependency wiring |
 
-Readers must use the documented artifact path or model.
+Functional modules and rings are orthogonal. A functional module may contain domain, application, port, and adapter elements. The repository does not require one package for every possible module-by-ring combination.
 
-They must not reconstruct owned filenames independently.
+---
 
-## 4.5 Configuration dependencies
+## 5. Ring dependency rules
 
-A component depends on configuration when behavior changes based on:
+### 5.1 Domain
+
+Domain code MAY depend on:
+
+- Python standard-library primitives;
+- pure domain types within the same module;
+- explicitly shared value objects with a single owner.
+
+Domain code MUST NOT depend on:
+
+- application services;
+- ports or adapter implementations;
+- CLI or GUI code;
+- bootstrap;
+- filesystem, subprocess, TOML, JSON, database, or network libraries;
+- framework state files;
+- active-project paths;
+- report formatting;
+- `gf-portfolio`.
+
+Domain models remain passive. They may validate their own invariants and expose pure derived values, but they do not perform I/O or launch work.
+
+### 5.2 Application
+
+Application code MAY depend on:
+
+- domain contracts;
+- port interfaces;
+- public application APIs of another functional module when explicitly allowed;
+- immutable or controlled request and result models.
+
+Application code MUST NOT depend on:
+
+- concrete adapters;
+- GUI widgets or CLI parser objects;
+- bootstrap implementation details;
+- human-readable reports as data;
+- private symbols from another module.
+
+Application services own use-case sequencing. They do not construct ad hoc external commands or bypass ports.
+
+### 5.3 Ports
+
+Ports define contracts for external or unstable boundaries.
+
+A port MAY depend on:
+
+- domain value objects;
+- application request and result types;
+- standard typing primitives.
+
+A port MUST NOT depend on:
+
+- its adapter implementation;
+- entrypoints;
+- bootstrap;
+- third-party mechanism-specific types that leak through the boundary;
+- active-language hardcoded identities.
+
+A new port requires a real external or unstable boundary. Internal helpers do not receive interfaces solely for symmetry.
+
+### 5.4 Adapters
+
+Adapters MAY depend on:
+
+- the port they implement;
+- domain and application types required by that port;
+- approved external libraries or executables;
+- bounded mechanism utilities.
+
+Adapters MUST NOT:
+
+- redefine domain statuses or release policy;
+- orchestrate the complete run;
+- call entrypoints or bootstrap;
+- import GUI widgets;
+- mutate artifacts outside their declared ownership;
+- expose private external representations as canonical Wordbench models;
+- depend on `gf-portfolio` internals.
+
+Adapters translate between external representations and Wordbench contracts.
+
+### 5.5 Entrypoints
+
+Entrypoints MAY depend on:
+
+- public application use cases;
+- public presentation models;
+- state services limited to non-authoritative preferences;
+- bootstrap entry functions.
+
+Entrypoints MUST NOT depend directly on:
+
+- validation-stage internals;
+- process or filesystem adapters;
+- GF command builders;
+- schema-writer internals;
+- project TOML parser internals;
+- diagnostic private helpers;
+- report-writer private helpers.
+
+CLI, GUI, and automation may differ in presentation, but equivalent inputs must resolve to equivalent application requests and domain outcomes.
+
+### 5.6 Bootstrap
+
+Bootstrap MAY depend on public constructors from every ring required for composition.
+
+Bootstrap owns:
+
+- concrete adapter selection;
+- dependency construction;
+- application assembly;
+- environment-specific wiring;
+- public application entry construction.
+
+Bootstrap MUST NOT:
+
+- execute a run during import;
+- parse raw CLI arguments;
+- display GUI dialogs;
+- contain validation algorithms;
+- write reports;
+- redefine project policy;
+- create hidden defaults;
+- mutate files or state through import side effects.
+
+---
+
+## 6. Functional-module dependency rules
+
+### 6.1 `projects`
+
+`projects` owns the active-project boundary.
+
+It MAY expose:
 
 - project identity;
-- source paths;
-- entrypoints;
-- scenarios;
-- timeouts;
-- output roots;
-- external executable paths;
-- validation mode.
+- resolved project configuration;
+- validated project paths;
+- entrypoints and checkpoints;
+- scenario registrations;
+- release policy;
+- project lifecycle operations.
 
-Configuration must flow through the canonical configuration pipeline.
+It MUST NOT depend on:
 
-## 4.6 External-process dependencies
+- run history to infer project identity;
+- GUI state as project authority;
+- validation results;
+- diagnostics;
+- reports;
+- `gf-portfolio` membership;
+- language-specific constants in framework defaults.
 
-A component depends on an external tool when it constructs or executes a command, interprets its result, or consumes its generated artifact.
+Other modules consume a resolved project contract rather than reading `project.toml` independently.
 
-Only designated execution stages may own such dependencies.
+### 6.2 `runs`
 
-## 4.7 Documentation dependencies
+`runs` owns complete-run orchestration and finalization.
 
-A document becomes a dependency when code, configuration, release policy, or another document treats it as authoritative.
+It MAY depend on public contracts from:
 
-Normative rules must have one documentation owner.
+- `projects`;
+- `validation`;
+- `diagnostics`;
+- `reporting`;
+- clock, cancellation, persistence, and process-budget ports.
+
+It MUST NOT:
+
+- implement validation-stage internals;
+- parse GF diagnostics directly;
+- render reports directly;
+- infer project identity from generated artifacts;
+- mutate project-owned sources, scenarios, inputs, or golds;
+- allow a report or interface to redefine run status.
+
+### 6.3 `validation`
+
+`validation` owns bounded validation operations and release criteria.
+
+It MAY consume:
+
+- resolved project contracts;
+- run-scoped requests and artifact paths;
+- GF and process ports;
+- filesystem and clock ports;
+- diagnostic parsing contracts;
+- project-owned scenarios, inputs, and golds.
+
+It MUST NOT:
+
+- depend on report writers;
+- depend on GUI or CLI code;
+- mutate golds during normal validation;
+- use previous human-readable reports as machine truth;
+- implement portfolio aggregation;
+- let one validation stage invoke another unless the composition is an explicit application use case.
+
+Static scan and GF execution remain distinct operations.
+
+### 6.4 `diagnostics`
+
+`diagnostics` owns interpretation of preserved evidence.
+
+It MAY consume:
+
+- structured validation results;
+- raw evidence references;
+- normalized diagnostic inputs;
+- dependency evidence;
+- controlled diagnostic-tool ports.
+
+It MUST NOT:
+
+- launch GF through validation-private helpers;
+- mutate raw evidence;
+- rewrite validation results;
+- generate authoritative run status independently;
+- depend on GUI wording;
+- use AI output as normative evidence;
+- invoke arbitrary commands.
+
+Direct, downstream, ambiguous, tool, configuration, timeout, and framework interpretations must remain traceable to preserved evidence.
+
+### 6.5 `reporting`
+
+`reporting` owns persisted and rendered outputs.
+
+It MAY consume:
+
+- completed or explicitly partial run results;
+- project identity snapshots;
+- validation and diagnostic result models;
+- artifact references;
+- schema and serialization contracts.
+
+It MUST NOT:
+
+- run GF;
+- rerun scanning or scenarios;
+- invoke validation application services;
+- repair missing evidence by executing tools;
+- alter run or release status;
+- rewrite raw evidence;
+- update golds;
+- parse Markdown when a structured schema exists.
+
+All reports derive from the same structured result set.
 
 ---
 
-# 5. Canonical framework layers
+## 7. Intermodule direction matrix
 
-The final GF Wordbench framework uses the following logical layers.
+`✓` means allowed through a public contract.  
+`C` means allowed only through a narrow data or port contract.  
+`—` means prohibited.
 
-The exact number of Python files may evolve, but every file must belong to one primary layer.
+| Caller \ Provider | `projects` | `runs` | `validation` | `diagnostics` | `reporting` |
+|---|---:|---:|---:|---:|---:|
+| `projects` | C | — | — | — | — |
+| `runs` | ✓ | C | ✓ | ✓ | ✓ |
+| `validation` | C | C | C | C | — |
+| `diagnostics` | — | C | C | C | — |
+| `reporting` | C | C | C | C | C |
 
-```text
-L0  shared primitives and pure utilities
-L1  shared models, schemas, and bounded configuration readers
-L2  execution mechanisms and validation stages
-L3  orchestration and result assembly
-L4  reports and application services
-L5  user interfaces and launchers
-```
+Interpretation:
 
-The active project is a separate policy and content domain.
-
-```text
-P0  project configuration and documentation
-P1  GF source modules
-P2  validation inputs, scenarios, and gold files
-```
-
-External tools are outside the Python layer graph.
-
-```text
-E0  GF executable and approved external tools
-```
-
-Generated run artifacts form an output domain.
-
-```text
-A0  raw evidence, normalized evidence, summaries, manifests, GF artifacts
-```
+- `runs` coordinates the complete workflow.
+- `validation` may receive run-scoped contracts but does not control run orchestration.
+- `diagnostics` consumes evidence and structured results but does not call validation execution.
+- `reporting` observes public result contracts and never calls execution behavior.
+- `projects` does not depend on consumers of project data.
+- Same-module dependencies remain acyclic and use public internal contracts where a package boundary exists.
 
 ---
 
-# 6. Layer L0 — Shared primitives and pure utilities
+## 8. Canonical runtime and result flow
 
-Typical owners:
-
-```text
-app/utils/io_utils.py
-app/utils/path_utils.py
-app/utils/logging_utils.py
-app/utils/process_utils.py
-small pure parsing or normalization helpers
-```
-
-## 6.1 Responsibilities
-
-L0 may provide:
-
-- filesystem-safe read and write primitives;
-- path normalization;
-- safe directory creation;
-- atomic file replacement;
-- hash calculation;
-- bounded text handling;
-- command rendering;
-- subprocess execution primitives;
-- time measurement;
-- logging helpers;
-- pure text normalization;
-- generic value validation.
-
-## 6.2 Allowed dependencies
-
-L0 may depend on:
+Execution flow:
 
 ```text
-Python standard library
-explicitly approved low-level third-party libraries
-other L0 modules when acyclic
+CLI / GUI / automation
+    → bootstrap
+    → application use case
+    → projects resolves one active project
+    → runs creates and coordinates one run
+    → validation executes bounded stages
+    → diagnostics interprets preserved evidence
+    → runs finalizes the structured result
+    → reporting writes artifacts
 ```
 
-## 6.3 Prohibited dependencies
-
-L0 must not depend on:
+External execution flow:
 
 ```text
-app.bootstrap
-app.state
-app.gui
-app.main_cli
-app.main_gui
-app.audit.audit_core
-app.audit.compiler
-app.audit.scanner
-app.audit.scenario_runner
-app.reports
-active project modules
-active project identity
-RunResult policy
-release policy
+validation or approved diagnostics use case
+    → external-tool port
+    → adapter
+    → process port
+    → local process adapter
+    → GF or approved executable
 ```
 
-## 6.4 Process utility rule
+Result flow:
 
-`process_utils` owns process mechanism, not GF policy.
+```text
+raw external response
+    → process result
+    → stage result
+    → diagnostic interpretation
+    → finalized run result
+    → reports, manifest, CLI outcome, GUI display
+```
 
-It may know:
+No reverse path may cause a report, UI, or external consumer to execute or alter the originating validation.
+
+---
+
+## 9. Configuration dependencies
+
+Configuration has distinct owners:
+
+```text
+framework defaults
+    language-neutral application behavior
+
+project/project.toml
+    active-project identity and project validation policy
+
+application state
+    local non-authoritative UI and environment preferences
+
+resolved run request
+    one execution's immutable or controlled configuration
+```
+
+Rules:
+
+- each value has one authoritative source;
+- all consumers use the canonical resolution pipeline;
+- GUI state and previous runs do not redefine active-project identity;
+- project configuration does not contain private adapter objects or Python callables;
+- environment-specific executable paths remain outside portable project identity;
+- one run resolves one active project and one normative target;
+- Wordbench configuration contains no Portfolio registry or aggregation state.
+
+---
+
+## 10. External-process dependencies
+
+All external process execution passes through one approved process boundary.
+
+A structured request identifies:
 
 - executable;
 - ordered arguments;
 - working directory;
-- environment overrides;
-- stdin;
-- timeout;
-- encoding;
-- cancellation request;
-- output limits.
+- environment changes;
+- standard input;
+- timeout or run budget;
+- cancellation;
+- output limits;
+- expected artifact roots.
 
-It must not know:
+Rules:
 
-- which GF module should compile;
-- which scenario is required;
-- whether a release passes;
-- how a GF diagnostic should be classified;
-- where project entrypoints come from;
-- which report should be written.
-
-## 6.5 Utility purity rule
-
-A utility must not become a hidden service locator.
-
-A utility function must not silently read:
-
-- global GUI state;
-- application state;
-- `project.toml`;
-- environment variables unrelated to its explicit parameters;
-- current working directory as policy;
-- previous run folders.
-
-Required context must be passed explicitly.
+- normal execution does not use an uncontrolled shell;
+- direct `subprocess` use outside the approved adapter is prohibited;
+- process mechanisms do not know project release policy;
+- GF-specific command construction remains inside the GF anti-corruption boundary;
+- version-specific behavior is isolated in capability probes or adapters;
+- raw stdout, stderr, exit state, timeout state, duration, and artifacts are preserved;
+- classifiers and reports do not depend only on rendered command text;
+- individual stages do not create incompatible process behavior.
 
 ---
 
-# 7. Layer L1 — Shared models, schemas, and configuration readers
-
-Typical owners:
-
-```text
-app/models.py
-app/config.py
-app/project_config.py
-designated schema and migration modules
-```
-
-## 7.1 Responsibilities
-
-L1 may define:
-
-- immutable or controlled shared data models;
-- enums and status vocabularies;
-- application defaults;
-- project configuration parsing;
-- persisted-schema validation;
-- migration of supported legacy data;
-- stable serialization helpers;
-- configuration validation;
-- path-resolution inputs and outputs.
-
-## 7.2 Models are passive
-
-Shared models must remain passive data contracts.
-
-They may contain:
-
-- fields;
-- validation of their own field invariants;
-- small pure derived properties;
-- deterministic serialization helpers;
-- safe constructors.
-
-They must not:
-
-- launch processes;
-- scan source files;
-- compile GF;
-- load GUI widgets;
-- generate reports;
-- discover external tools;
-- select project files;
-- mutate application state;
-- read arbitrary files during property access.
-
-## 7.3 Allowed dependencies
-
-L1 may depend on:
-
-```text
-Python standard library
-L0 utilities
-other L1 primitives when acyclic
-```
-
-A schema module may depend on the model it serializes.
-
-A model should not depend on the schema writer that serializes it.
-
-## 7.4 Prohibited dependencies
-
-L1 must not depend on:
-
-```text
-app.gui
-app.main_cli
-app.main_gui
-app.audit.audit_core
-app.audit compiler/scanner/scenario stages
-app.reports
-release orchestration
-generated run directories as configuration truth
-```
-
-## 7.5 Configuration ownership
-
-Configuration domains must have distinct owners.
-
-```text
-app/config.py
-    framework identity and language-neutral defaults
-
-project/project.toml
-    active-language project identity and validation policy
-
-app state
-    disposable local UI and environment preferences
-
-resolved RunConfig
-    immutable or controlled configuration for one execution
-```
-
-A configuration value must not have competing authoritative definitions.
-
-## 7.6 Project loader rule
-
-The project loader may read and validate `project/project.toml`.
-
-It must not:
-
-- inspect GUI widgets;
-- read previous summaries to infer project identity;
-- alter project configuration during normal loading;
-- import active-language GF files as Python;
-- reinterpret unknown required fields silently.
-
-## 7.7 Schema dependency rule
-
-Persisted-schema readers and writers must depend on shared schema definitions.
-
-Reports, state, and migration components must not each invent independent field names.
-
----
-
-# 8. Layer L2 — Execution mechanisms and validation stages
-
-Typical owners:
-
-```text
-app/audit/file_selector.py
-app/audit/scanner.py
-app/audit/compiler.py
-app/audit/scenario_runner.py
-app/audit/fingerprint.py
-bounded GF command builders
-gold comparison and output normalization components
-```
-
-## 8.1 Responsibilities
-
-L2 performs bounded operations.
-
-Each stage should have:
-
-- explicit input;
-- explicit output;
-- documented side effects;
-- finite execution;
-- structured failure representation;
-- no knowledge of global UI behavior;
-- no control over full-run policy.
-
-## 8.2 Allowed dependencies
-
-L2 may depend on:
-
-```text
-L0 utilities
-L1 models
-L1 resolved configuration
-other narrowly scoped L2 helpers when acyclic
-approved external tools through process_utils
-active project files through explicit paths and contracts
-```
-
-## 8.3 Prohibited dependencies
-
-L2 must not depend on:
-
-```text
-app.gui
-app.main_cli
-app.main_gui
-app.reports
-full audit orchestration
-release decision rendering
-application state mutation
-human Markdown reports
-```
-
-## 8.4 File selector rule
-
-The file selector may depend on:
-
-- resolved project configuration;
-- path utilities;
-- selection models;
-- filesystem metadata.
-
-It must not depend on:
-
-- compiler results;
-- report output;
-- GUI selections directly;
-- previous Markdown reports;
-- language-specific hardcoded paths.
-
-## 8.5 Scanner rule
-
-The scanner may depend on:
-
-- source paths;
-- scan configuration;
-- pure text helpers;
-- scan result models;
-- scan log ownership.
-
-The scanner must not depend on:
-
-```text
-compiler
-scenario runner
-reports
-classifier policy
-GUI
-```
-
-Scan and compile truth remain separate.
-
-## 8.6 Compiler rule
-
-The compiler may depend on:
-
-- resolved GF executable;
-- resolved GF path;
-- process runner;
-- compile request models;
-- raw evidence paths;
-- diagnostic parsing helpers.
-
-The compiler must not depend on:
-
-```text
-reports
-GUI
-previous-run comparison
-release decision
-scanner internals
-```
-
-The compiler may receive scan metadata only when the orchestration contract explicitly supplies it; it must not invoke the scanner.
-
-## 8.7 Scenario runner rule
-
-The scenario runner may depend on:
-
-- scenario registry;
-- `.gfs` paths;
-- process runner;
-- result models;
-- output normalization;
-- assertion evaluation;
-- gold comparator;
-- artifact paths.
-
-It must not depend on:
-
-```text
-reports
-GUI
-release presentation
-gold update during normal validation
-compiler private helpers
-```
-
-Compiler and scenario runner may share a documented GF command builder or process mechanism.
-
-Neither should import the other merely to reuse private code.
-
-## 8.8 Fingerprint rule
-
-Fingerprinting may depend on:
-
-- filesystem reads;
-- hash utilities;
-- fingerprint models.
-
-It must not depend on:
-
-- classifier;
-- report generation;
-- GUI;
-- compilation semantics.
-
-## 8.9 Gold comparator rule
-
-Gold comparison may read:
-
-- normalized current output;
-- registered expected gold;
-- normalization version;
-- comparison policy.
-
-It must not:
-
-- execute GF;
-- normalize through a second inconsistent implementation;
-- update gold during ordinary validation;
-- determine full release status.
-
-## 8.10 Stage isolation
-
-A validation stage must not invoke another stage unless that composition is its explicit responsibility.
-
-Default composition belongs to orchestration.
-
-Examples:
-
-```text
-scanner → compiler                 prohibited
-compiler → scanner                 prohibited
-report → compiler                  prohibited
-scenario runner → release gate     prohibited
-```
-
-A dedicated composite stage may be introduced only when its combined contract is stable and documented.
-
----
-
-# 9. Layer L3 — Orchestration and result assembly
-
-Typical owners:
-
-```text
-app/audit/audit_core.py
-app/audit/result_model.py
-app/audit/classifier.py
-app/audit/diff.py
-release-gate evaluation
-run-path construction
-```
-
-## 9.1 Responsibilities
-
-L3 coordinates lower-level stages.
-
-It may:
-
-- establish run identity;
-- build run paths;
-- execute stages in order;
-- aggregate results;
-- invoke classification;
-- compare previous runs;
-- evaluate release gates;
-- finalize run status;
-- request reports;
-- handle cancellation;
-- preserve partial evidence after failures.
-
-## 9.2 Allowed dependencies
-
-L3 may depend on:
-
-```text
-L0 utilities
-L1 models and resolved configuration
-L2 stages
-L3 peer components through explicit acyclic flow
-L4 report facade for final output requests
-```
-
-## 9.3 Prohibited dependencies
-
-L3 must not depend on:
-
-```text
-GUI widgets
-CLI parser objects
-launcher scripts
-human interaction dialogs
-active-language hardcoded names
-report prose as data
-```
-
-## 9.4 Audit-core rule
-
-`audit_core` is the principal validation coordinator.
-
-It may call:
-
-```text
-run-path builder
-file selector
-scanner
-compiler
-fingerprint
-scenario runner
-result builder
-classifier
-diff engine
-release-gate evaluator
-report facade
-```
-
-It must not:
-
-- parse CLI arguments;
-- read widget state;
-- display dialogs;
-- implement scanner internals;
-- construct subprocess calls directly when a process layer exists;
-- serialize schemas independently;
-- rewrite gold files;
-- infer project identity from generated output.
-
-## 9.5 Result-builder rule
-
-The result builder may combine stage results into shared models.
-
-It must not:
-
-- execute stages;
-- write reports;
-- read GUI state;
-- hide missing required evidence;
-- attach undocumented dynamic fields.
-
-## 9.6 Classifier rule
-
-The classifier may depend on:
-
-- structured file results;
-- structured scenario results;
-- diagnostic data;
-- dependency evidence;
-- shared status vocabularies.
-
-It must not:
-
-```text
-launch GF
-read GUI state
-mutate raw evidence
-rewrite compile results
-generate reports
-```
-
-Classification is derived interpretation.
-
-It does not replace raw stage status.
-
-## 9.7 Diff rule
-
-The diff engine may depend on:
-
-- current structured results;
-- previous compatible structured summary;
-- schema readers;
-- normalized subject identity.
-
-It must not depend on:
-
-- Markdown reports;
-- GUI;
-- compiler;
-- scanner;
-- external process execution.
-
-## 9.8 Release-gate rule
-
-Release-gate evaluation may depend on:
-
-- resolved project release policy;
-- final structured run result;
-- required scenario results;
-- required artifact verification;
-- known-issue status where represented structurally.
-
-It must not:
-
-- alter a failing stage result;
-- skip missing evidence;
-- invoke a replacement stage silently;
-- update gold;
-- read human prose as the only source of a machine decision.
-
----
-
-# 10. Layer L4 — Reports and application services
-
-Typical owners:
-
-```text
-app/reports/report_json.py
-app/reports/report_md.py
-app/reports/report_ai_ready.py
-app/reports/report_logs.py
-app/reports/report_details.py
-designated manifest writer
-state service
-report facade
-```
-
-## 10.1 Responsibilities
-
-L4 may:
-
-- serialize completed structured results;
-- write human summaries;
-- write AI-ready reports;
-- aggregate existing logs;
-- write detail reports;
-- write and verify manifests;
-- save disposable application state;
-- expose report paths to interfaces.
-
-## 10.2 Allowed dependencies
-
-Reports may depend on:
-
-```text
-L0 I/O utilities
-L1 models
-L1 schemas
-artifact path models
-bounded formatting helpers
-```
-
-State services may depend on:
-
-```text
-L0 I/O utilities
-L1 state schema
-safe application-state models
-```
-
-## 10.3 Prohibited dependencies
-
-Reports must not depend on:
-
-```text
-compiler
-scanner
-scenario runner
-process runner
-audit_core execution entrypoint
-GUI widgets
-CLI parser
-active-language implementation modules
-```
-
-## 10.4 Observation-only rule
-
-A report observes completed or partial structured results.
-
-It must not:
-
-- rerun GF;
-- rerun a scan;
-- recalculate project selection;
-- fill missing evidence by external execution;
-- modify stage results;
-- change release status;
-- update gold;
-- rewrite raw evidence.
-
-## 10.5 Report-to-report rule
-
-Reports should derive from the same structured source.
-
-Default rule:
-
-```text
-RunResult → summary.json
-RunResult → summary.md
-RunResult → AI_READY.md
-RunResult → details
-RunResult → aggregate logs
-```
-
-Prohibited default:
-
-```text
-summary.md → AI_READY.md
-AI_READY.md → summary.json
-top_errors.txt → run status
-```
-
-A report may link to another report.
-
-It must not parse another human report to recover authoritative data.
-
-## 10.6 JSON authority rule
-
-`summary.json` is the canonical machine-readable run summary.
-
-Other reports may depend on the same model or schema, but they must not create conflicting status vocabularies.
-
-## 10.7 State separation rule
-
-Application state is not project configuration and not run truth.
-
-The state service may store:
-
-- selected local paths;
-- UI preferences;
-- last-run pointers;
-- last selected mode.
-
-It must not become authoritative for:
-
-- active language identity;
-- required entrypoints;
-- required scenarios;
-- release policy;
-- current run result;
-- `is_running = true` across restarts.
-
----
-
-# 11. Layer L5 — User interfaces and launchers
-
-Typical owners:
-
-```text
-app/main_cli.py
-app/main_gui.py
-app/gui/
-launch_cli.bat
-launch_gui.bat
-```
-
-## 11.1 Responsibilities
-
-L5 may:
-
-- collect user input;
-- parse command-line arguments;
-- validate surface-level input;
-- call bootstrap;
-- request an audit;
-- display progress;
-- display structured outcomes;
-- expose report and artifact paths;
-- map final results to process exit codes.
-
-## 11.2 Allowed dependencies
-
-L5 may depend on:
-
-```text
-bootstrap
-application service facade
-shared public models needed for display
-state service
-audit_core public entrypoint
-report path results
-```
-
-## 11.3 Prohibited dependencies
-
-L5 must not depend directly on:
-
-```text
-compiler internals
-scanner internals
-scenario-runner internals
-process_utils
-diagnostic-parser private helpers
-report writer private helpers
-project TOML parser internals
-```
-
-## 11.4 CLI/GUI parity rule
-
-Equivalent inputs must resolve to equivalent run configuration.
-
-CLI and GUI may differ in presentation.
-
-They must not differ in:
-
-- GF executable resolution;
-- project loading;
-- GF path construction;
-- default timeout semantics;
-- required validation stages;
-- release-gate policy;
-- result classification;
-- persisted schema.
-
-## 11.5 GUI boundary rule
-
-GUI widgets must not launch GF directly.
-
-The path must be:
-
-```text
-GUI widget
-→ GUI controller
-→ bootstrap/application service
-→ audit_core
-→ execution stage
-→ process_utils
-→ GF
-```
-
-## 11.6 CLI boundary rule
-
-The CLI parser must not embed validation implementation.
-
-The path must be:
-
-```text
-CLI arguments
-→ bootstrap/application service
-→ resolved RunConfig
-→ audit_core
-```
-
-## 11.7 Launcher rule
-
-Batch or shell launchers may:
-
-- locate the Python entrypoint;
-- activate a documented environment;
-- forward arguments;
-- set explicitly documented launcher-only values.
-
-They must not:
-
-- define hidden validation defaults;
-- construct GF commands;
-- alter release policy;
-- become the only supported execution route;
-- cause CLI and GUI semantics to diverge.
-
----
-
-# 12. Bootstrap boundary
-
-`bootstrap` is the composition boundary between interfaces and application logic.
-
-## 12.1 Bootstrap may
-
-- load language-neutral application defaults;
-- load project configuration;
-- merge documented CLI or GUI overrides;
-- resolve local environment paths;
-- validate configuration;
-- construct immutable or controlled runtime configuration;
-- construct application services;
-- expose public entrypoints to CLI and GUI.
-
-## 12.2 Bootstrap must not
-
-- run the full audit while being imported;
-- display GUI dialogs;
-- parse raw CLI arguments;
-- implement compile or scan algorithms;
-- write reports;
-- redefine project-owned language policy;
-- hide missing required configuration through implicit fallback.
-
-## 12.3 Import-side-effect rule
-
-Importing `bootstrap` must not:
-
-- launch GF;
-- create a run directory;
-- mutate state;
-- scan project files;
-- prompt the user;
-- write logs.
-
-Composition occurs through explicit function calls.
-
----
-
-# 13. Canonical dependency flow
-
-The expected high-level dependency flow is:
-
-```text
-CLI / GUI / launcher
-        ↓
-bootstrap and application services
-        ↓
-resolved configuration and shared models
-        ↓
-audit orchestration
-        ↓
-validation stages
-        ↓
-process and filesystem mechanisms
-        ↓
-GF and approved external tools
-```
-
-Result flow returns upward as data:
-
-```text
-GF raw response
-        ↑
-process result
-        ↑
-stage result
-        ↑
-classification and run result
-        ↑
-reports, CLI exit status, GUI display
-```
-
-Project policy enters through the configuration boundary:
-
-```text
-project.toml
-project scenarios
-project inputs
-project gold
-project documentation contracts
-        ↓
-project loader and registered validation stages
-```
-
-Generated artifacts leave through the artifact boundary:
-
-```text
-stage owners
-        ↓
-run paths
-        ↓
-raw evidence / normalized evidence / summaries / manifest
-```
-
----
-
-# 14. Canonical allowed-direction matrix
-
-`✓` means generally allowed through public contracts.  
-`C` means allowed only through a specifically documented contract.  
-`—` means no dependency should exist.
-
-| From \ To | L0 Utilities | L1 Models/Config | L2 Stages | L3 Orchestration | L4 Reports/State | L5 Interfaces | Active Project | External Tools |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| L0 Utilities | C | — | — | — | — | — | — | C |
-| L1 Models/Config | ✓ | C | — | — | — | — | C | — |
-| L2 Stages | ✓ | ✓ | C | — | — | — | ✓ | C |
-| L3 Orchestration | ✓ | ✓ | ✓ | C | C | — | C | — |
-| L4 Reports/State | ✓ | ✓ | — | — | C | — | C | — |
-| L5 Interfaces | C | ✓ | — | ✓ | ✓ | C | — | — |
-| Active Project | — | C | — | — | — | — | C | C through scenarios |
-| External Tools | — | — | — | — | — | — | tool-defined | — |
-
-Interpretation:
-
-- L3 may request L4 report generation, but reports must not call back into L3 execution.
-- L5 may call public orchestration but not individual stages.
-- L2 may use active-project files only through resolved paths and project contracts.
-- L0 process utilities may invoke external executables mechanically, but they must not interpret project semantics.
-- Active-project scenarios may issue approved GF commands, but they do not import Python framework internals.
-
----
-
-# 15. Explicitly allowed dependency directions
-
-The following directions are expected:
-
-```text
-CLI → bootstrap
-GUI → bootstrap
-CLI → audit_core public entrypoint
-GUI controller → audit_core public entrypoint
-bootstrap → app defaults
-bootstrap → project loader
-bootstrap → resolved models
-audit_core → run paths
-audit_core → file selector
-audit_core → scanner
-audit_core → compiler
-audit_core → fingerprint
-audit_core → scenario runner
-audit_core → result builder
-audit_core → classifier
-audit_core → diff
-audit_core → release gates
-audit_core → report facade
-compiler → process_utils
-scenario runner → process_utils
-stages → shared models
-reports → shared models
-reports → schema writers
-state service → state schema
-project loader → project schema
-diff → summary schema reader
-manifest writer → artifact paths and hash utilities
-```
-
-All arrows mean dependency on public contracts only.
-
----
-
-# 16. Explicitly prohibited dependency directions
-
-The following are prohibited:
-
-```text
-reports → compiler
-reports → scanner
-reports → scenario_runner
-reports → process_utils
-models → reports
-models → GUI
-models → audit_core
-process_utils → audit models
-process_utils → project policy
-scanner → compiler
-compiler → scanner
-scanner → reports
-compiler → reports
-scenario_runner → reports
-classifier → process execution
-classifier → GUI
-diff → compiler
-diff → Markdown reports
-project configuration → GUI state
-project loader → generated run output as identity source
-GUI widgets → GF process
-CLI parser → GF process
-state → active project identity
-framework defaults → active-language assumptions
-active project → Python framework internals
-```
-
-Equivalent indirect paths are also prohibited.
-
-Example:
-
-```text
-report → helper → compiler
-```
-
-is still a prohibited report-to-compiler dependency.
-
----
-
-# 17. Circular dependency rules
-
-## 17.1 General prohibition
-
-Circular imports between architectural layers are prohibited.
-
-Examples:
-
-```text
-models ↔ reports
-audit_core ↔ report writer
-compiler ↔ classifier
-bootstrap ↔ GUI
-project loader ↔ state
-```
-
-## 17.2 Same-layer cycles
-
-Cycles inside one layer are also prohibited unless a narrowly justified runtime callback avoids import-time coupling.
-
-A cycle is not acceptable merely because Python can load it under some import order.
-
-## 17.3 Cycle-breaking order
-
-Break a cycle using this preference order:
-
-1. move a passive shared type into the model layer;
-2. pass a value explicitly;
-3. introduce a small protocol or callable type in a lower neutral layer;
-4. split policy from mechanism;
-5. create a narrow facade;
-6. use a local import only as a temporary migration step.
-
-A local import is not a permanent architectural solution when the conceptual cycle remains.
-
-## 17.4 Callback rule
-
-Callbacks may flow upward only as injected behavior.
-
-Example:
-
-```text
-audit_core receives progress callback
-```
-
-Allowed callback payloads must use neutral progress models.
-
-A lower stage must not import GUI code to emit progress.
-
----
-
-# 18. Public and private API rules
-
-## 18.1 Public symbols
-
-A cross-file dependency must use:
-
-- an explicitly exported function;
-- an explicitly exported class;
-- a documented dataclass or enum;
-- a documented facade;
-- a documented artifact or schema.
-
-## 18.2 Private symbols
-
-Names beginning with `_` are private unless a contract document explicitly states otherwise.
-
-Consumers must not import private helpers to avoid creating a public API accidentally.
-
-## 18.3 Package re-export rules
-
-`__init__.py` may re-export stable public symbols.
-
-It must not:
-
-- import every submodule eagerly;
-- create circular initialization;
-- hide the true owner of a mutable global;
-- launch work on import;
-- re-export private implementation helpers.
-
-## 18.4 Wildcard imports
-
-Wildcard imports are prohibited in framework production code:
-
-```python
-from module import *
-```
-
-Explicit imports are required for dependency visibility.
-
-## 18.5 Type-only imports
-
-Type-only imports should use:
-
-```python
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    ...
-```
-
-when this avoids a runtime cycle without hiding a real architectural dependency.
-
-String annotations may be used where appropriate.
-
----
-
-# 19. Side-effect rules
-
-## 19.1 Import side effects
-
-Importing a module must not:
-
-- create directories;
-- write files;
-- load active project content;
-- execute GF;
-- start GUI event loops;
-- parse process arguments;
-- mutate environment variables;
-- update gold;
-- migrate schemas automatically;
-- delete stale runs.
-
-## 19.2 Explicit mutation
-
-State and artifact mutation must occur through named functions or services.
-
-The caller must be able to identify:
-
-- what will change;
-- who owns the change;
-- whether the operation is atomic;
-- whether the operation is destructive.
-
-## 19.3 Global mutable state
-
-Global mutable application state is prohibited.
-
-Constants and immutable lookup tables are permitted.
-
-Runtime state must be represented through:
-
-- explicit objects;
-- function parameters;
-- controlled services;
-- event or callback payloads.
-
----
-
-# 20. Artifact ownership dependencies
+## 11. Artifact ownership dependencies
 
 An artifact has one writer and zero or more observers.
 
-| Artifact | Writer | Allowed observers |
+| Artifact | Owner | Allowed observers |
 |---|---|---|
-| `project/project.toml` | project initializer, migrator, maintainer | project loader, documentation checks |
-| application state | state service | bootstrap, GUI |
-| scan log | scanner | orchestration, detail reports |
-| compile stdout/stderr | compiler | classifier, reports, diagnostics |
-| scenario stdout/stderr | scenario runner | assertion engine, reports |
-| normalized scenario output | normalization/scenario stage | gold comparator, reports |
-| `.gold` | explicit gold updater or maintainer | gold comparator |
-| `summary.json` | JSON report writer | diff, GUI, CLI, automation |
-| `summary.md` | Markdown report writer | users, GUI |
-| `AI_READY.md` | AI report writer | users, AI systems |
-| `manifest.json` | manifest writer | verifier, cleanup, export tooling |
-| `.gfo` / `.pgf` copies | artifact collector | release gates, reports, external consumers |
+| `project/project.toml` | project initializer, migrator, or maintainer | `projects`, documentation checks |
+| application state | designated state adapter | bootstrap, entrypoints |
+| raw process evidence | external-tool adapter within its run | validation, diagnostics, reporting, users |
+| normalized evidence | validation normalization owner | comparison, diagnostics, reporting |
+| `.gold` files | explicit reviewed gold-update workflow | validation comparison |
+| structured run result | `runs` | reporting, entrypoints |
+| `summary.json` | reporting schema writer | users, automation, compatible external consumers |
+| `summary.md` | reporting renderer | users and entrypoints |
+| `AI_READY.md` | reporting renderer | users and AI-assisted workflows |
+| `manifest.json` | reporting/finalization owner | verification, cleanup, compatible external consumers |
+| collected `.gfo` / `.pgf` artifacts | validation artifact collector | release gates, reporting, users |
 
-Observers must not rewrite owned artifacts.
+Observers MUST NOT rewrite owned artifacts.
 
-A derived artifact must reference its source evidence.
+Consumers use canonical artifact references or manifest entries. They do not reconstruct filenames independently.
 
 ---
 
-# 21. Framework and active-project boundary
+## 12. Framework, active project, and template boundaries
 
-## 21.1 Framework domain
-
-Framework code includes:
+Framework-owned areas:
 
 ```text
 app/
@@ -1425,656 +548,348 @@ docs/
 templates/
 ```
 
-It owns reusable orchestration and validation behavior.
-
-## 21.2 Active-project domain
-
-The active project includes:
+Active-project-owned areas:
 
 ```text
 project/project.toml
 project/docs/
 project/validation/
-active language GF source files
+active GF source files
 ```
 
-It owns language-specific policy and content.
+Rules:
 
-## 21.3 Prohibited framework dependencies
+- framework production code remains language-neutral;
+- active-language names, module suffixes, concrete source paths, and linguistic policy remain project-owned;
+- project files depend on documented framework contracts, not private Python modules;
+- template files define generic structure and placeholders, not active-project facts;
+- project GF module dependencies are governed by project lock files;
+- generated run directories never become project identity sources.
 
-Framework production code must not depend on active-language identifiers such as:
+---
+
+## 13. `gf-portfolio` boundary
+
+The permitted direction is:
 
 ```text
-a language name
-a language code
-a language-specific module suffix
-a specific Grammar<Lang>.gf filename
-a specific language source directory
-a project-specific known warning
+gf-portfolio
+    → public versioned GF Wordbench artifacts
+
+GF Wordbench
+    -X→ gf-portfolio runtime, code, database, state, schemas, or configuration
 ```
 
-Exceptions are limited to:
+Rules:
 
-- clearly named migration fixtures;
-- historical compatibility tests;
-- examples explicitly marked as examples.
+- Wordbench starts, validates, reports, and passes tests without Portfolio;
+- Portfolio may read only public finalized Wordbench artifacts;
+- Portfolio-specific adapters, indexing, aggregation, scoring, and migrations remain in `gf-portfolio`;
+- Portfolio does not import private Wordbench modules;
+- Wordbench does not discover Portfolio workspaces;
+- an ingestion failure cannot alter a completed Wordbench run;
+- Portfolio schemas do not enter Wordbench configuration or persisted state.
 
-## 21.4 Prohibited project dependencies
+---
 
-Project files must not depend on:
+## 14. Public and private API rules
 
-- Python private module paths;
-- GUI widget names;
-- report implementation classes;
-- internal process runner symbols;
-- framework test fixtures;
-- generated run-directory names as configuration.
+A cross-module dependency uses one of:
 
-The project depends on documented configuration, scenario, and artifact contracts.
+- an explicitly exported function or class;
+- a documented request, result, event, or value object;
+- a documented port;
+- a versioned schema;
+- a documented artifact.
 
-## 21.5 Project GF dependency rules
+Rules:
 
-GF module-to-module rules belong to:
+- names beginning with `_` are private unless explicitly documented otherwise;
+- `__init__.py` may re-export stable public symbols but must not eagerly load all submodules or trigger work;
+- wildcard imports are prohibited in production code;
+- type-only imports may avoid runtime cycles but must not hide a conceptual dependency;
+- a helper used across modules becomes a public contract or moves to a clearly owned shared boundary;
+- a generic shared package must not become an ownerless dumping ground.
+
+---
+
+## 15. Circular dependencies and callbacks
+
+Direct and indirect cycles are prohibited between rings and functional modules.
+
+Examples of prohibited cycles:
 
 ```text
-project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/MODULE_DEPENDENCY_MAP.md
+runs ↔ reporting
+validation ↔ diagnostics execution
+projects ↔ runs
+domain ↔ adapters
+bootstrap ↔ entrypoints
 ```
 
-This framework document does not prescribe one language’s morphology or syntax module graph.
+Cycle-breaking order:
+
+1. pass a value explicitly;
+2. move a passive shared type to its legitimate owner;
+3. introduce a narrow port or protocol;
+4. split policy from mechanism;
+5. create a public facade;
+6. use a local import only as a temporary code migration technique.
+
+Callbacks flow upward only as injected neutral behavior.
+
+A lower component may emit a progress event through an injected callback. It must not import GUI code or call an entrypoint.
 
 ---
 
-# 22. External-tool dependency boundary
+## 16. Side-effect rules
 
-## 22.1 Single process mechanism
+Importing a module MUST NOT:
 
-External process execution must use one designated mechanism layer.
+- create directories;
+- write files;
+- load the active project;
+- execute GF or another process;
+- start a GUI event loop;
+- parse process arguments;
+- mutate environment variables;
+- update golds;
+- migrate schemas automatically;
+- delete runs;
+- connect to Portfolio.
 
-Individual stages may construct tool-specific requests through documented command builders.
+Mutation occurs only through explicit named operations.
 
-They must not each create incompatible subprocess behavior.
-
-## 22.2 GF path ownership
-
-GF path construction must have one owner.
-
-Compilation and scenario execution must consume the same resolved path model unless a documented operation-specific extension exists.
-
-## 22.3 No implicit shell
-
-Normal external execution must use structured arguments and avoid an intermediate shell.
-
-Shell use requires an explicit external-tool contract.
-
-## 22.4 Evidence dependency
-
-Diagnostic interpretation depends on preserved stdout, stderr, exit state, timeout state, and artifacts.
-
-No classifier or report may depend only on rendered command text or one output stream.
-
-## 22.5 Version adapters
-
-Version-specific GF behavior should be isolated in:
-
-- capability probes;
-- compatibility adapters;
-- documented command builders.
-
-Version checks must not be duplicated across stages.
+Global mutable application state is prohibited. Runtime state is represented through explicit objects, function parameters, controlled services, cancellation tokens, or neutral event payloads.
 
 ---
 
-# 23. Persisted-schema dependency rules
+## 17. Error, progress, cancellation, and concurrency dependencies
 
-## 23.1 Writers
+### 17.1 Errors
 
-Each persisted format must have one canonical writer.
+- adapters expose bounded mechanism outcomes;
+- validation converts expected tool outcomes into structured stage results;
+- diagnostics interprets evidence without replacing it;
+- runs determines complete-run continuation and terminal outcome;
+- entrypoints map the finalized result to CLI or GUI presentation;
+- reporting displays structured errors without creating new classifications.
 
-## 23.2 Readers
+Lower rings do not depend on CLI exit codes or GUI wording.
 
-Readers must validate:
+### 17.2 Progress
 
-- `schema_id`;
-- `schema_version`;
-- required fields;
-- enums;
-- path semantics;
-- migration compatibility.
+Neutral progress events may contain:
 
-## 23.3 Migration boundary
-
-Legacy migration must be isolated from normal canonical writing.
-
-A normal reader may call a migrator.
-
-A report writer must not contain ad hoc legacy-field aliases.
-
-## 23.4 Human-report boundary
-
-Structured readers must not parse Markdown when a JSON schema exists.
-
-## 23.5 State boundary
-
-Application-state readers must not treat state as project configuration.
-
-## 23.6 Artifact-path boundary
-
-Consumers must use path fields from the canonical run model or manifest.
-
-They must not independently concatenate expected filenames.
-
----
-
-# 24. Test dependency rules
-
-## 24.1 Test direction
-
-Tests may depend on public production contracts.
-
-Production code must never depend on test modules or test fixtures.
-
-## 24.2 Unit tests
-
-Unit tests should isolate:
-
-- pure utilities;
-- models;
-- command construction;
-- scanners;
-- classifiers;
-- schema handling;
-- reports.
-
-They should not require real GF unless marked as integration tests.
-
-## 24.3 Integration tests
-
-Integration tests may depend on:
-
-- a controlled GF installation;
-- a small neutral fixture grammar;
-- temporary directories;
-- explicit environment configuration.
-
-They must not depend on:
-
-- one developer’s global `GF_LIB_PATH`;
-- the active language project unless testing that project explicitly;
-- existing personal run directories;
-- GUI interaction;
-- network access unless separately marked and justified.
-
-## 24.4 Fixture rules
-
-Framework fixtures must be language-neutral where possible.
-
-Historical language-specific fixtures must be clearly named and isolated.
-
-## 24.5 Mock boundary
-
-Mocks should replace external boundaries, not internal architecture indiscriminately.
-
-Preferred mocking points:
-
-```text
-process runner
-filesystem clock
-environment resolver
-state storage
-```
-
-Avoid mocking every internal function in `audit_core`, because this can hide broken integration contracts.
-
-## 24.6 Contract tests
-
-Contract tests should verify forbidden imports and required boundaries.
-
-Suggested categories:
-
-```text
-tests/contracts/test_dependency_layers.py
-tests/contracts/test_no_report_execution.py
-tests/contracts/test_no_gui_process_calls.py
-tests/contracts/test_framework_language_neutrality.py
-tests/contracts/test_artifact_ownership.py
-tests/contracts/test_schema_ownership.py
-tests/contracts/test_no_circular_imports.py
-```
-
----
-
-# 25. Optional dependency policy
-
-A new dependency may be:
-
-- Python standard library;
-- external Python package;
-- external executable;
-- operating-system service;
-- project file format;
-- runtime plugin or adapter.
-
-It may be added only when:
-
-1. the capability is required by the product scope;
-2. the capability does not sufficiently exist in GF, Python, or the framework;
-3. ownership is clear;
-4. failure behavior is defined;
-5. platform support is known;
-6. security impact is reviewed;
-7. version compatibility is documented;
-8. tests exist;
-9. licensing is acceptable;
-10. the dependency can be removed or replaced through a bounded adapter.
-
-## 25.1 Third-party Python packages
-
-A third-party package should be imported behind the narrowest practical boundary.
-
-Core models must not inherit from optional framework-specific base classes solely for convenience.
-
-## 25.2 Optional imports
-
-Optional dependencies must fail with a clear capability error.
-
-They must not produce partial imports that corrupt unrelated workflows.
-
-## 25.3 Dependency injection
-
-Dependency injection should remain explicit and small.
-
-Allowed examples:
-
-- inject process runner into compiler tests;
-- inject clock into run-ID generation;
-- inject state store into GUI controller;
-- inject report facade into orchestration tests.
-
-A general runtime service container is not required.
-
----
-
-# 26. Error dependency rules
-
-## 26.1 Low-level errors
-
-L0 may raise bounded mechanism errors such as:
-
-- filesystem failure;
-- decoding failure;
-- launch failure;
-- timeout mechanism failure.
-
-## 26.2 Stage errors
-
-L2 should convert expected mechanism outcomes into structured stage results.
-
-It should not force every expected GF failure into a Python exception.
-
-## 26.3 Orchestration errors
-
-L3 distinguishes:
-
-- validation failure;
-- tool-reported failure;
-- launch failure;
-- timeout;
-- cancellation;
-- configuration error;
-- framework error;
-- artifact failure.
-
-## 26.4 Interface mapping
-
-L5 maps the final structured outcome to:
-
-- CLI exit codes;
-- GUI messages;
-- process completion state.
-
-Lower layers must not depend on CLI exit-code constants or GUI wording.
-
-## 26.5 Report mapping
-
-Reports display structured errors.
-
-They must not create new causal or technical classifications independently.
-
----
-
-# 27. Progress and cancellation dependencies
-
-## 27.1 Progress
-
-Lower layers may emit neutral progress events through injected callbacks.
-
-A progress event may contain:
-
-- stage ID;
-- subject ID;
-- completed count;
-- total count;
-- short message;
+- run or stage identity;
+- subject identity;
+- completed and total counts;
+- a short message;
 - severity;
 - timestamp.
 
-It must not contain GUI widget references.
+They contain no GUI widget, terminal object, or adapter instance.
 
-## 27.2 Cancellation
+### 17.3 Cancellation
 
-Cancellation may flow downward through:
+Cancellation flows downward through a neutral token, event, or port contract.
 
-- a cancellation token;
-- an event object;
-- a neutral callable;
-- a process-runner cancellation contract.
+Completed evidence is preserved. Reporting occurs only after `runs` has produced a structured terminal or partial result.
 
-Stages must not inspect GUI state to decide whether to stop.
+### 17.4 Concurrency
 
-## 27.3 Partial results
+When concurrency is used:
 
-Cancellation should preserve completed evidence.
-
-Reports may summarize partial results only after orchestration finalizes a structured cancelled execution state.
-
----
-
-# 28. Concurrency dependency rules
-
-Concurrency is optional.
-
-When introduced:
-
-- orchestration owns scheduling policy;
-- stages remain safe for isolated execution;
+- `runs` owns scheduling policy;
+- stages remain isolated;
 - artifact paths remain unique;
-- report generation waits for finalized results;
+- result ordering remains deterministic;
 - state mutation is serialized;
-- log writes avoid corruption;
-- cancellation propagates through neutral mechanisms;
-- result ordering remains deterministic.
-
-Stages must not create independent unmanaged thread or process pools.
+- cancellation propagates through neutral contracts;
+- stages do not create unmanaged pools.
 
 ---
 
-# 29. Dependency exceptions
+## 18. Test dependency rules
 
-An exception is permitted only when no simpler compliant design satisfies a real requirement.
+Production code MUST NOT depend on tests or fixtures.
 
-The exception must include:
+Tests may depend on public production contracts.
 
-```text
-Exception ID:
-Requester:
-Affected modules:
-Forbidden or unusual direction:
-Reason:
-Alternatives considered:
-Risk:
-Containment:
-Tests:
-Expiry or review trigger:
-ADR:
-```
+### 18.1 Unit and component tests
 
-## 29.1 Required approval
+Unit and component tests isolate:
 
-An exception affecting:
+- domain rules;
+- application use cases;
+- command construction;
+- project loading;
+- scanners;
+- classifiers;
+- normalization and comparison;
+- schemas;
+- report rendering.
 
-- layer direction;
+### 18.2 Integration tests
+
+Integration tests may use:
+
+- controlled GF installations;
+- neutral fixture grammars;
+- temporary directories;
+- explicit environment configuration;
+- fake process adapters.
+
+They must not require:
+
+- one developer's global paths;
+- personal run directories;
+- GUI interaction;
+- network access unless explicitly isolated;
+- `gf-portfolio` for Wordbench core tests.
+
+### 18.3 Architecture tests
+
+Architecture tests MUST verify:
+
+- no forbidden inward-to-outward imports;
+- no intermodule cycles;
+- reports do not import execution behavior;
+- entrypoints do not import process adapters;
+- scanners and compilers do not invoke each other;
+- domain models remain passive;
+- production code does not import tests;
+- framework code remains language-neutral;
+- artifact constants have one owner;
+- direct subprocess use is confined to the approved adapter;
+- Wordbench does not import `gf-portfolio`;
+- normal validation cannot rewrite golds.
+
+Mocks replace external boundaries rather than every internal function.
+
+---
+
+## 19. Optional dependencies
+
+A new Python package, executable, operating-system service, or adapter is permitted only when:
+
+1. the capability belongs to Wordbench scope;
+2. the capability is not adequately provided by existing components;
+3. ownership is explicit;
+4. failure behavior is defined;
+5. platform support is defined;
+6. security and licensing are reviewed;
+7. compatibility is documented;
+8. tests cover the boundary;
+9. the dependency is replaceable through a bounded adapter where appropriate;
+10. Wordbench remains independently operable.
+
+Optional dependencies fail with explicit capability errors. They do not corrupt unrelated workflows or become hidden mandatory dependencies.
+
+Dependency injection remains explicit and small. A general runtime service container is not required.
+
+---
+
+## 20. Dependency exceptions
+
+A dependency exception requires a new or amended accepted ADR when it changes:
+
+- ring direction;
+- functional-module ownership;
 - external execution;
 - persisted schemas;
 - project/framework separation;
 - artifact ownership;
 - security boundaries;
+- the Wordbench/Portfolio boundary.
 
-requires an ADR.
+An exception must identify:
 
-## 29.2 Temporary exceptions
-
-Temporary exceptions must have:
-
-- explicit status;
-- removal condition;
-- tracking issue or ledger entry;
-- test preventing expansion of the exception.
-
-## 29.3 No accidental precedent
+```text
+affected modules
+unusual dependency
+reason
+alternatives considered
+risks
+containment
+tests
+removal or review condition
+authorizing ADR
+```
 
 One exception does not authorize similar dependencies elsewhere.
 
 ---
 
-# 30. Automated enforcement
+## 21. Review checklist
 
-GF Wordbench should provide:
-
-```text
-gf-wordbench contracts check
-```
-
-Dependency validation should check:
-
-1. no forbidden package imports;
-2. no cycles between architectural layers;
-3. reports do not import execution stages;
-4. GUI modules do not import process utilities;
-5. scanners and compilers do not import each other;
-6. models do not import reports or UI;
-7. process utilities do not import audit policy models;
-8. production code does not import tests;
-9. framework code does not contain active-language identifiers;
-10. consumers do not import private symbols across modules;
-11. artifact constants have one owner;
-12. report writers do not launch subprocesses;
-13. project configuration does not depend on GUI state;
-14. normal runs do not rewrite gold files;
-15. schema field definitions are centralized;
-16. launchers do not define hidden audit policy.
-
-Strict mode:
+A change that adds or modifies a dependency is complete only when:
 
 ```text
-gf-wordbench contracts check --strict
-```
-
-Strict mode may also detect:
-
-- duplicate status literals;
-- duplicate artifact filenames;
-- undocumented public exports;
-- import-time filesystem writes;
-- environment access outside approved resolvers;
-- direct `subprocess` use outside process utilities;
-- direct JSON/TOML parsing outside schema owners;
-- direct state-file writes outside state service;
-- Markdown parsing by machine-result consumers.
-
----
-
-# 31. Suggested static enforcement model
-
-The checker may assign each module to a layer.
-
-Example configuration:
-
-```toml
-[layers]
-L0 = [
-  "app.utils",
-]
-L1 = [
-  "app.models",
-  "app.config",
-  "app.project_config",
-  "app.schemas",
-]
-L2 = [
-  "app.audit.file_selector",
-  "app.audit.scanner",
-  "app.audit.compiler",
-  "app.audit.scenario_runner",
-  "app.audit.fingerprint",
-]
-L3 = [
-  "app.audit.audit_core",
-  "app.audit.result_model",
-  "app.audit.classifier",
-  "app.audit.diff",
-  "app.audit.release_gates",
-]
-L4 = [
-  "app.reports",
-  "app.state",
-]
-L5 = [
-  "app.main_cli",
-  "app.main_gui",
-  "app.gui",
-]
-```
-
-The exact checker format may differ.
-
-The semantic layer rules in this document remain authoritative.
-
----
-
-# 32. Dependency review checklist
-
-A change that adds or changes a dependency is complete only when:
-
-```text
-[ ] Caller layer identified
-[ ] Provider layer identified
-[ ] Direction permitted
-[ ] Public contract used
-[ ] No private symbol imported
-[ ] No cycle introduced
-[ ] Configuration ownership preserved
-[ ] Artifact ownership preserved
-[ ] External process boundary preserved
-[ ] Project/framework separation preserved
-[ ] Error semantics preserved
-[ ] Tests updated
-[ ] Contract lock updated when public behavior changed
-[ ] ADR added when an exception is required
+[ ] caller module and ring are identified
+[ ] provider module and ring are identified
+[ ] the direction is permitted
+[ ] a public contract is used
+[ ] no private symbol is imported across a boundary
+[ ] no direct or indirect cycle is introduced
+[ ] configuration ownership remains unique
+[ ] artifact ownership remains unique
+[ ] external process access uses an approved port and adapter
+[ ] framework and active-project boundaries remain intact
+[ ] Wordbench remains independent of gf-portfolio
+[ ] error and cancellation semantics remain intact
+[ ] tests enforce the dependency rule
+[ ] affected contract locks and owner documents agree
+[ ] an ADR authorizes any architectural exception
 ```
 
 ---
 
-# 33. Drift indicators
+## 22. Drift indicators
 
-Probable dependency drift exists when:
+Dependency drift is probable when:
 
-- a report imports the compiler;
-- a GUI widget imports `subprocess`;
-- two stages build the GF path differently;
-- a utility imports `RunResult` only to determine policy;
-- a model imports a formatter or report;
-- a classifier reads raw files that should already be represented in results;
+- a report imports validation execution;
+- a GUI widget imports a process adapter;
+- two components resolve the same path differently;
+- a domain model imports a formatter, adapter, or entrypoint;
+- a diagnostic classifier launches an external process directly;
 - a diff component parses `summary.md`;
-- a project loader reads the last run to infer language identity;
-- a state file contains required project scenarios;
-- a framework source file contains an active-language module suffix;
-- a stage imports another stage’s private helper;
-- a new artifact filename constant appears in several modules;
-- a report modifies a result to make output easier;
-- an `__init__.py` import causes process execution;
-- a launcher supplies hidden defaults;
-- a test passes only when run from one working directory;
-- direct `subprocess` calls appear outside the process layer;
-- direct JSON serialization appears in unrelated consumers;
-- a circular import is hidden by local imports;
-- generated output becomes an input to project identity;
-- a normal validation path can update gold.
+- project identity is inferred from application state or a previous run;
+- framework source contains an active-language module suffix;
+- a consumer imports another module's private helper;
+- one artifact filename is independently declared in several modules;
+- import side effects create files or launch work;
+- a launcher supplies hidden validation defaults;
+- direct `subprocess` calls appear outside the process adapter;
+- a normal validation path can update gold;
+- Wordbench imports `gf-portfolio`;
+- Portfolio state appears in Wordbench configuration or schemas;
+- an adapter decides release policy;
+- bootstrap contains business rules;
+- a port exists only to wrap a private helper.
 
-Each indicator requires review.
-
-Resolution must be either:
-
-1. restore the permitted dependency direction; or
-2. approve and document a deliberate architectural change.
+Each indicator requires restoration of the documented direction or an accepted architectural decision changing the contract.
 
 ---
 
-# 34. Migration from the predecessor layout
+## 23. Enforcement rule
 
-The predecessor `gf-audit` layout already contains useful separation:
-
-```text
-app/audit/
-app/gui/
-app/reports/
-app/utils/
-app/models.py
-app/config.py
-app/state.py
-app/bootstrap.py
-```
-
-Migration to final GF Wordbench should preserve the useful boundaries while tightening them.
-
-Required migration principles:
-
-- keep shared dataclasses in the model layer;
-- keep scanner and compiler separate;
-- centralize external process execution;
-- route CLI and GUI through bootstrap and audit orchestration;
-- keep reports observational;
-- introduce project configuration through one loader;
-- introduce scenario execution as a peer validation stage;
-- introduce schema ownership rather than distributed JSON assumptions;
-- remove active-language defaults from framework configuration;
-- retain legacy readers only in migration boundaries;
-- avoid renaming modules solely for cosmetic architecture.
-
-The target is clearer responsibility, not maximum folder depth.
-
----
-
-# 35. Final dependency contract
-
-The final architecture must preserve this flow:
+GF Wordbench preserves one dependency model:
 
 ```text
-interfaces
-    → bootstrap
-        → resolved configuration
-            → audit orchestration
-                → validation stages
-                    → process and filesystem mechanisms
-                        → GF
+entrypoints
+    → application use cases
+    → domain rules and ports
+    → adapters at explicit external boundaries
+
+bootstrap
+    → composes all required implementations
+
+runs
+    → coordinates projects, validation, diagnostics, and reporting
 ```
 
-Results flow back as structured data:
+Results and evidence return as data. Control does not flow backward from reports, interfaces, generated artifacts, active-project files, or external consumers into validation execution.
 
-```text
-GF evidence
-    → process result
-        → stage result
-            → classified run result
-                → reports, CLI status, GUI display
-```
-
-The following rules are absolute unless changed through an approved architectural decision:
-
-```text
-models remain passive
-utilities remain policy-neutral
-stages do not control the full run
-orchestration does not contain UI logic
-reports do not execute validation
-interfaces do not bypass orchestration
-framework code remains language-neutral
-project policy remains project-owned
-external execution remains centralized
-persisted schemas remain versioned
-cycles remain prohibited
-```
-
-A dependency is acceptable only when it makes responsibility clearer.
-
-A dependency is rejected when it creates hidden policy, duplicate authority, reverse control, or evidence that cannot be traced to its owner.
+A dependency is accepted only when it makes ownership and evidence flow clearer. It is rejected when it creates hidden policy, duplicate authority, reverse control, a cycle, or an undocumented route around the modular hexagonal architecture.

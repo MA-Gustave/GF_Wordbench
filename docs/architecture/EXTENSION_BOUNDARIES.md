@@ -2,142 +2,137 @@
 
 **Document ID:** `GF-WB-ARCH-EXTENSION-BOUNDARIES`  
 **Status:** Normative  
-**Applies to:** GF Wordbench framework, active language project, project template, validation assets, reports, and supported external-tool integrations  
+**Applies to:** GF Wordbench framework, active project, project template, validation assets, reports and approved external-tool integrations  
 **Owner:** GF Wordbench maintainers  
-**Architecture version:** `1.0.0`  
-**Last structural review:** 2026-07-22
+**Architecture version:** `2.0.0`  
+**Last reviewed:** `2026-07-24`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Related locks:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`
 
 ---
 
 ## 1. Purpose
 
-This document defines where GF Wordbench may be extended, how each extension must integrate, and which architectural boundaries must remain closed.
+This document defines where GF Wordbench may be extended, how each extension integrates, and which architectural boundaries remain closed.
 
-GF Wordbench must remain adaptable without becoming an unbounded plugin platform or a generic workflow engine. Extension is therefore permitted only through explicit, documented seams that preserve:
+GF Wordbench is extensible through explicit, owned seams. It is not an open-ended plugin platform, a generic workflow engine or a multi-project orchestration product.
 
-- one active GF language project per GF Wordbench copy;
+The governing rule is:
+
+> Extend GF Wordbench through an owned boundary; never bypass ownership or create a parallel execution path.
+
+Every extension preserves:
+
+- one active GF language project per Wordbench workspace;
+- one normative project target per run;
+- GF as the language-execution authority;
 - deterministic validation;
 - typed and structured results;
 - immutable raw evidence;
 - stable artifact ownership;
 - versioned persisted schemas;
-- identical CLI and GUI semantics;
-- GF as the language-execution engine;
-- Python as the orchestration, evidence, classification, comparison, and reporting layer;
-- backward compatibility or explicit migration;
-- contract-test coverage.
-
-The central rule is:
-
-> Extend GF Wordbench through an owned boundary, never by bypassing ownership or creating a parallel execution path.
+- equivalent CLI and GUI semantics;
+- explicit migrations for incompatible public changes;
+- contract and integration tests.
 
 ---
 
-## 2. Scope
+## 2. Product boundary
 
-This document governs extensions to:
+GF Wordbench owns validation, diagnostics, evidence, reports and release gates for one active GF project.
 
-- the active language project;
-- project configuration;
-- file selection;
-- static scan rules;
-- compilation validation;
-- GF diagnostic parsing;
-- failure classification;
-- validation stages;
-- `.gfs` scenarios;
-- scenario markers and assertions;
-- output normalization;
-- gold comparison;
-- result models;
-- reports;
-- artifact manifests;
-- CLI and GUI surfaces;
-- state handling;
-- external tools;
-- automation and CI;
-- project templates.
+The independent companion product `gf-portfolio` owns multi-workspace inventory, multilingual aggregation, cross-project comparison and portfolio views.
 
-This document also identifies architecture that is intentionally not extensible.
-
----
-
-## 3. Related normative documents
-
-The following documents own adjacent contracts:
+Allowed dependency direction:
 
 ```text
-docs/INTERFILE_CONTRACT_LOCK.md
-docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
-docs/PERSISTED_SCHEMA_LOCK.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+gf-portfolio -> public versioned GF Wordbench artifacts
 ```
 
-Responsibility is divided as follows:
+Prohibited dependency direction:
 
-| Document | Owns |
+```text
+GF Wordbench -> gf-portfolio runtime
+GF Wordbench -> gf-portfolio private schemas
+GF Wordbench -> gf-portfolio storage
+GF Wordbench -> gf-portfolio configuration
+GF Wordbench -> gf-portfolio services
+```
+
+An extension to Wordbench must not introduce a portfolio registry, several active projects in one workspace, several active targets in one run or a reverse dependency on `gf-portfolio`.
+
+---
+
+## 3. Related authorities
+
+Adjacent contracts are owned by:
+
+| Document | Authority |
 |---|---|
-| `INTERFILE_CONTRACT_LOCK.md` | Python-to-Python and framework file contracts |
-| `EXTERNAL_TOOL_CONTRACT_LOCK.md` | GF, operating-system, process, shell, and optional external-tool boundaries |
-| `PERSISTED_SCHEMA_LOCK.md` | Persistent configuration, state, summaries, manifests, outputs, and gold schemas |
-| `project/docs/INTERFILE_CONTRACT_LOCK.md` | Active language GF module, scenario, gold, input, and artifact contracts |
-| `EXTENSION_BOUNDARIES.md` | Authorized extension seams and the rules for using them |
+| `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` | Cross-document product and architecture alignment |
+| `docs/INTERFILE_CONTRACT_LOCK.md` | Framework component and file contracts |
+| `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md` | GF, process, filesystem and approved executable boundaries |
+| `docs/PERSISTED_SCHEMA_LOCK.md` | Configuration, state, summaries, manifests, outputs and gold schemas |
+| `project/docs/INTERFILE_CONTRACT_LOCK.md` | Active-project GF modules, scenarios, inputs, golds and artifacts |
+| `templates/project/docs/INTERFILE_CONTRACT_LOCK.md` | Generic initialized-project structure |
+| `docs/architecture/EXTENSION_BOUNDARIES.md` | Approved extension seams and closed boundaries |
 
-This document does not duplicate field-level schemas or command-level contracts. It defines where a new capability belongs.
+This document defines where a capability belongs. Field-level schemas and command construction remain with their owner documents.
 
 ---
 
 ## 4. Normative terms
 
-- **MUST**: mandatory.
-- **MUST NOT**: prohibited.
-- **SHOULD**: expected unless a documented reason justifies an exception.
-- **SHOULD NOT**: normally prohibited.
+- **MUST / MUST NOT**: mandatory or prohibited.
+- **SHOULD / SHOULD NOT**: expected unless a reviewed exception exists.
 - **MAY**: optional.
-- **EXTENSION POINT**: an approved boundary through which new behavior may be added.
-- **EXTENSION OWNER**: the component responsible for the extension point.
-- **EXTENSION IMPLEMENTATION**: code or project data added through an extension point.
-- **CORE PATH**: the normal execution path shared by CLI, GUI, tests, and automation.
-- **BYPASS**: an alternate path that avoids an owner, validator, model, or contract.
+- **EXTENSION POINT**: an approved boundary through which behavior may be added.
+- **EXTENSION OWNER**: the component responsible for that boundary.
+- **CORE PATH**: the shared execution path used by CLI, GUI, tests and automation.
+- **BYPASS**: an alternate path that avoids an owner, validator, model or contract.
 - **REGISTRATION**: explicit declaration that makes an extension discoverable.
-- **DYNAMIC PLUGIN**: code loaded at runtime from arbitrary or externally supplied modules.
-- **COMPATIBLE EXTENSION**: additive behavior that preserves all existing contracts.
-- **BREAKING EXTENSION**: behavior requiring a contract, schema, command, or migration change.
-- **PROJECT EXTENSION**: language-specific behavior kept under `project/`.
-- **FRAMEWORK EXTENSION**: language-neutral behavior implemented under `app/`.
+- **DYNAMIC PLUGIN**: runtime-loaded code from arbitrary or externally supplied modules.
+- **PROJECT EXTENSION**: language-specific GF or data content under `project/`.
+- **FRAMEWORK EXTENSION**: language-neutral behavior in the Wordbench application.
 
 ---
 
-## 5. Extension philosophy
+## 5. Extension principles
 
 ### 5.1 Explicit before generic
 
-GF Wordbench MUST prefer a small explicit registry or direct orchestration call over:
+Prefer:
 
-- runtime plugin discovery;
-- dependency-injection containers;
-- event buses;
+- explicit registries;
+- direct typed calls;
+- owned adapters;
+- clear orchestration sequences.
+
+Do not introduce:
+
+- arbitrary runtime plugin discovery;
+- dependency-injection containers as service locators;
+- generic event buses;
 - generic hook systems;
-- generic workflow-definition languages;
+- workflow-definition languages;
 - reflection-driven execution;
-- implicit import side effects.
+- import-side-effect registration.
 
-A general extension mechanism may be introduced only when at least two real, stable use cases require the same abstraction and an ADR approves the design.
+A reusable abstraction requires at least two concrete, stable use cases and an accepted architectural decision when it changes dependency direction or public contracts.
 
 ### 5.2 Language-specific behavior belongs to the project
 
-Language-specific modules, paths, scenarios, expectations, morphology checks, and linguistic policy MUST remain under:
+Language-specific modules, paths, scenarios, expectations, morphology checks and linguistic policies remain under:
 
 ```text
 project/
 ```
 
-The framework MUST NOT contain language-specific module names, language suffixes, lexical assumptions, or hard-coded source directories.
+Framework code must not contain active-language module names, suffixes, lexical assumptions or hard-coded language source directories.
 
-### 5.3 The framework owns orchestration
+### 5.3 Framework ownership remains central
 
-The active project may declare what to validate, but it MUST NOT replace:
+The active project declares what is validated. It does not replace:
 
 - process execution;
 - timeout handling;
@@ -146,154 +141,80 @@ The active project may declare what to validate, but it MUST NOT replace:
 - result serialization;
 - report ownership;
 - manifest generation;
-- release-status calculation.
+- release-gate calculation.
 
-### 5.4 GF remains authoritative for GF semantics
+### 5.4 GF remains authoritative
 
-An extension MUST use GF for operations such as:
+Extensions use GF for:
 
 - module loading;
+- type checking;
 - compilation;
 - PGF construction;
 - parsing;
 - linearization;
 - generation;
-- morphology or grammar introspection;
+- morphology and grammar introspection;
 - missing-function inspection.
 
-Python MUST NOT reimplement GF language semantics merely to simplify an extension.
+Python orchestrates, captures, normalizes, classifies, compares and reports. It does not reimplement GF semantics.
 
 ### 5.5 Additive by default
 
-Extensions SHOULD be additive.
+Extensions should preserve existing public behavior.
 
-An extension SHOULD NOT change existing behavior unless:
-
-- the change fixes incorrect behavior;
-- the old behavior is deprecated;
-- a migration is provided;
-- the relevant contract and schema versions are updated;
-- tests cover old and new behavior where compatibility is promised.
+A change that alters a public symbol, field, command, artifact, status, normalization rule, project contract or release criterion requires coordinated contract and migration work.
 
 ---
 
-## 6. Boundary model
+## 6. Architectural model
 
-GF Wordbench uses the following layers:
+GF Wordbench uses one deployable hexagonal modular monolith.
+
+Functional modules:
 
 ```text
-User surfaces
-    CLI
-    GUI
-    automation
-
-Configuration
-    application defaults
-    environment configuration
-    project/project.toml
-    application state
-
-Orchestration
-    bootstrap
-    audit core
-    mode policy
-    release policy
-
-Validation stages
-    file selection
-    static scanning
-    compilation
-    scenarios
-    PGF build
-    regression comparison
-
-Infrastructure
-    process execution
-    path handling
-    filesystem I/O
-    logging
-
-Interpretation
-    diagnostic parsing
-    causal classification
-    result construction
-
-Presentation
-    JSON report
-    Markdown report
-    AI-ready report
-    logs
-    details
-    manifest
-
-Active project
-    GF sources
-    scenarios
-    inputs
-    gold files
-    project documents
+projects
+runs
+validation
+diagnostics
+reporting
 ```
 
-Allowed dependency flow:
+Architectural rings:
 
 ```text
-CLI / GUI / automation
-    → bootstrap
-    → audit core
-    → validation stages
-    → infrastructure
-    → external tools
-
-validation stages
-    → shared models
-    → diagnostic parsing
-    → result construction
-
-audit core
-    → classification
-    → regression comparison
-    → report writers
-
-report writers
-    → structured results
-    → owned artifacts
-
-active project
-    → project loader
-    → audit policy and scenario registry
+domain
+application
+ports
+adapters
+entrypoints
+bootstrap
 ```
 
-An extension MUST preserve this direction.
+Expected dependency direction:
+
+```text
+entrypoints -> application
+bootstrap -> application + ports + adapters
+application -> domain + ports
+adapters -> ports + external systems
+domain -> no GUI, CLI, filesystem, subprocess or external-tool implementation
+```
+
+Extensions preserve this direction.
+
+Reports consume results. They do not execute validation.
+
+GUI and CLI call the same application use cases.
+
+Active-project data enters through the projects boundary and never through arbitrary executable Python supplied by the project.
 
 ---
 
-## 7. Extension maturity states
+## 7. Approved extension points
 
-Every framework extension with a public contract SHOULD have one state:
-
-| State | Meaning |
-|---|---|
-| `experimental` | Available for development; contract may change; excluded from release requirements unless explicitly enabled |
-| `active` | Supported and covered by contract tests |
-| `deprecated` | Still supported temporarily; replacement and removal plan documented |
-| `retired` | No longer active; identifier retained in history and MUST NOT be reused |
-
-Project scenarios may use:
-
-| State | Meaning |
-|---|---|
-| `required` | Must execute and pass for the modes that include it |
-| `optional` | Executes when selected; failure remains visible but release policy decides whether it blocks |
-| `disabled` | Registered but intentionally not executed; reason documented |
-| `retired` | Removed from active execution; ID retained in project history |
-
-Extension states MUST NOT be inferred from filenames or directory location alone.
-
----
-
-# 8. Approved extension points
-
-## 8.1 Active language project
+## 7.1 Active project
 
 **Owner**
 
@@ -302,40 +223,39 @@ project/project.toml
 project/
 ```
 
-**Permitted extensions**
+**Permitted**
 
-- adding or changing GF source modules;
-- declaring entrypoints and checkpoints;
-- adding language-specific scenarios;
-- adding scenario inputs;
-- adding or updating reviewed gold files;
-- defining project release requirements;
-- documenting language architecture and module contracts;
-- registering optional language-specific validation coverage.
+- add or change GF source modules;
+- declare entrypoints and checkpoints;
+- add native `.gfs` scenarios;
+- add scenario inputs;
+- add or update reviewed gold files;
+- define project release requirements;
+- document language architecture and module contracts;
+- register language-specific validation coverage.
 
 **Required integration**
 
-- project configuration validation;
-- module-to-module contract update;
-- dependency-map update;
-- scenario and gold review;
-- checkpoint compilation;
-- release-level validation when applicable.
+- validate project configuration;
+- update affected GF interfile contracts;
+- update the dependency map;
+- review scenarios and golds;
+- run affected checkpoint and release validation.
 
 **Forbidden**
 
-- importing project Python code into the framework;
-- placing project-specific defaults in `app/config.py`;
-- writing project identity into GUI state as the authoritative source;
-- changing framework status semantics from project configuration;
-- letting project files select arbitrary Python callables;
-- supporting multiple active language profiles in one project file.
+- importing project Python into the framework;
+- placing project-specific defaults in framework configuration;
+- using GUI state as project authority;
+- changing framework-wide status semantics from project data;
+- selecting arbitrary Python callables from project configuration;
+- defining several active language profiles in one project file.
 
-The active project is a data-and-GF extension boundary, not a Python plugin boundary.
+The active project is a GF-and-data extension boundary, not a Python plugin boundary.
 
 ---
 
-## 8.2 Project template
+## 7.2 Project template
 
 **Owner**
 
@@ -343,127 +263,106 @@ The active project is a data-and-GF extension boundary, not a Python plugin boun
 templates/project/
 ```
 
-**Permitted extensions**
+**Permitted**
 
-- adding required project files;
-- adding placeholders for new project-level contracts;
-- adding generic scenario or documentation templates;
-- adding safe default configuration fields.
+- add required project files;
+- add generic placeholders for project contracts;
+- add generic scenario, input, gold or documentation templates;
+- add safe configuration defaults.
 
 **Required integration**
 
-A template change MUST be reviewed against:
+Review changes against:
 
 ```text
 project/
 docs/projects/
 docs/configuration/
 docs/PERSISTED_SCHEMA_LOCK.md
+templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 **Forbidden**
 
-- embedding the active language’s identity or linguistic content;
-- introducing template fields not understood by the project loader;
-- allowing the active project and template structures to drift silently.
-
-The template SHOULD mirror the required project structure while keeping all language-specific values as explicit placeholders.
+- active-language identity or linguistic content;
+- fields unknown to the project loader;
+- structural drift between initialized projects and the template.
 
 ---
 
-## 8.3 Project configuration fields
+## 7.3 Project configuration
 
 **Owner**
 
 ```text
-app/project_config.py
+projects module
 project/project.toml
+docs/configuration/PROJECT_TOML_REFERENCE.md
 ```
 
-or the final designated project loader and schema.
+A new field may represent:
 
-**Permitted extension**
-
-A new project field MAY be added when it represents a stable project concern such as:
-
+- project identity;
+- language identity;
 - source selection;
 - entrypoints;
 - checkpoints;
 - GF path parts;
 - scenario registration;
 - release targets;
-- project identity;
 - validation policy.
 
-**Requirements**
+Every field defines:
 
-- one authoritative field definition;
-- type validation;
-- explicit default or required status;
-- canonical TOML example;
-- `ProjectConfig` model update;
-- bootstrap integration;
-- persisted-schema version review;
-- configuration tests;
-- migration behavior where required.
+```text
+name
+type
+required or optional policy
+default
+validation
+path base
+consumer
+serialization
+compatibility behavior
+```
 
 **Forbidden**
 
-- arbitrary key/value bags consumed differently by separate modules;
-- hidden fields interpreted only by GUI or CLI;
+- arbitrary key-value bags with different meanings per consumer;
+- GUI-only or CLI-only project fields;
 - executable Python references;
-- absolute machine-specific paths for project-owned files;
+- machine-specific absolute paths for project-owned files;
 - secrets;
-- transient UI state.
-
-A configuration field is not an extension point until the loader, model, documentation, and tests recognize it.
+- transient UI state;
+- Portfolio-owned fields.
 
 ---
 
-## 8.4 Application defaults
+## 7.4 Framework defaults
 
 **Owner**
 
 ```text
-app/config.py
+bootstrap and configuration owners
 ```
 
-**Permitted extension**
+Permitted defaults are language-neutral:
 
-- adding language-neutral framework defaults;
-- adding canonical filenames;
-- adding safe timeout or retention defaults;
-- adding supported mode-independent behavior flags.
+- canonical filenames;
+- safe timeouts;
+- output limits;
+- retention defaults;
+- mode-independent behavior defaults.
 
-**Requirements**
+Defaults must be resolved consistently for CLI and GUI.
 
-- default must be platform-safe or explicitly platform-scoped;
-- default must not identify the active language;
-- CLI and GUI must resolve the same default through bootstrap;
-- a persisted value must follow the schema lock.
-
-**Forbidden**
-
-- active-project module names;
-- active-project source paths;
-- developer-specific absolute paths;
-- duplicate constants owned by `RunPaths` or another component;
-- default values that silently change release semantics.
+They must not encode active-language names, project source paths, developer-specific paths or duplicate an artifact-path owner.
 
 ---
 
-## 8.5 Validation modes
+## 7.5 Validation modes
 
-**Owner**
-
-```text
-app/bootstrap.py
-app/audit/audit_core.py
-```
-
-and the designated mode-policy implementation.
-
-Canonical modes:
+Canonical modes are:
 
 ```text
 quick
@@ -472,65 +371,43 @@ release
 diagnostic
 ```
 
-**Permitted extension**
+A new mode requires:
 
-A new mode MAY be proposed only when it defines a stable, reusable selection of existing validation capabilities that cannot be expressed safely as an option to an existing mode.
-
-**Requirements**
-
-- clear purpose and non-goals;
-- stage inclusion policy;
-- required/optional stage semantics;
+- a stable purpose;
+- explicit stage policy;
+- required and optional semantics;
 - CLI and GUI parity;
 - exit-code behavior;
-- report representation;
-- persisted summary representation;
-- backward-compatibility analysis;
-- ADR approval;
+- report and schema representation;
+- compatibility analysis;
+- an accepted ADR;
 - contract tests.
 
-**Forbidden**
+A mode must not introduce another audit engine or language-specific framework behavior.
 
-- a mode implemented only in CLI or only in GUI;
-- a mode that invokes a separate audit engine;
-- aliases treated as new canonical modes;
-- language-specific modes in framework code;
-- a mode whose behavior depends on undocumented environment state.
-
-Historical aliases such as `file` and `all` may be read for migration but MUST NOT be emitted as canonical modes.
+Legacy aliases may be accepted by migrations but are not canonical output values.
 
 ---
 
-## 8.6 Validation pipeline stages
+## 7.6 Validation stages
 
 **Owner**
 
 ```text
-app/audit/audit_core.py
+validation application orchestration
 ```
 
-**Permitted extension**
+A stage produces distinct evidence or evaluates a distinct validation concern.
 
-A new validation stage MAY be added when it produces distinct evidence or a distinct release criterion that does not belong inside an existing stage.
-
-Examples:
-
-- PGF build validation;
-- scenario validation;
-- artifact-integrity validation;
-- project-contract validation.
-
-**Stage contract**
-
-Each stage MUST define:
+Each stage defines:
 
 ```text
-stage_id
+stage ID
 purpose
-owner module
-input models
-output models
-required configuration
+owner
+typed inputs
+typed outputs
+configuration
 owned artifacts
 status mapping
 execution-state mapping
@@ -540,262 +417,177 @@ mode inclusion
 tests
 ```
 
-**Stage implementation rules**
+A stage must:
 
-- accept explicit typed inputs;
-- return structured results;
 - preserve raw evidence before interpretation;
-- use `RunPaths` for run-owned paths;
-- avoid writing another stage’s artifacts;
-- avoid directly rendering user-facing reports;
-- be deterministic for equivalent input and environment;
-- expose cancellation or timeout distinctly where applicable;
-- leave the current run structurally valid after recoverable failure.
+- use owned run paths;
+- write only its artifacts;
+- return structured results;
+- expose timeout and cancellation explicitly;
+- leave the run structurally valid after recoverable failure.
 
-**Registration**
+A stage must not:
 
-The canonical pipeline SHOULD use one explicit ordered registry or an equally explicit orchestration sequence.
-
-Example conceptual structure:
-
-```python
-VALIDATION_STAGES = (
-    "select",
-    "scan",
-    "compile",
-    "scenario",
-    "pgf",
-    "compare",
-)
-```
-
-This example does not require a plugin API. The real registry, if used, MUST contain known framework stages rather than dynamically imported project code.
-
-**Forbidden**
-
-- stage discovery through arbitrary installed packages;
-- stage activation through import side effects;
-- report writers acting as validation stages;
-- stages reparsing another stage’s human report;
-- stages launching external tools without the common process layer;
-- stages mutating gold files during normal validation;
-- stage-local definitions of global status semantics.
+- discover arbitrary packages;
+- register through import side effects;
+- render user-facing reports;
+- parse another stage's Markdown report;
+- launch tools outside the common process boundary;
+- update golds during normal validation;
+- redefine global status semantics.
 
 ---
 
-## 8.7 File-selection policies
+## 7.7 File selection
 
 **Owner**
 
 ```text
-app/audit/file_selector.py
+validation file-selection component
 ```
 
-**Permitted extension**
+Permitted extensions include:
 
-- additional language-neutral include/exclude rules;
+- language-neutral include and exclude rules;
 - checkpoint-aware selection;
 - deterministic source grouping;
-- explicit project-configured source roots;
-- additional safe file metadata.
+- project-configured source roots;
+- structured selection metadata.
 
-**Requirements**
+Requirements:
 
-- selection remains deterministic;
-- every exclusion has a structured reason;
-- paths remain project-relative in canonical results;
-- project-root containment is enforced;
-- selection does not read generated run output as source;
-- maximum-file limits are applied predictably;
-- mode policy remains outside low-level enumeration where possible.
+- deterministic order;
+- a structured reason for every exclusion;
+- canonical project-relative result paths;
+- containment within approved roots;
+- generated run output excluded from source discovery;
+- predictable limits.
 
-**Forbidden**
-
-- compile attempts during discovery;
-- linguistic inference from filename content;
-- hidden global ignore files;
-- scanning outside configured roots without explicit authorization;
-- nondeterministic filesystem order.
+File discovery must not compile files, infer linguistic meaning from names or scan outside approved roots.
 
 ---
 
-## 8.8 Static scan rules
+## 7.8 Static scan rules
 
 **Owner**
 
 ```text
-app/audit/scanner.py
+validation scanner
 ```
 
-or a future language-neutral scan-rule package owned by the scanner.
-
-**Permitted extension**
-
-A new static scan rule MAY be added when it detects a source-level condition without requiring GF execution.
-
-Each rule MUST define:
+Each rule defines:
 
 ```text
-rule_id
+rule ID
 title
 purpose
 scope
 severity
 input representation
-false-positive constraints
 finding fields
+false-positive constraints
 normalization behavior
 tests
 ```
 
-**Rule behavior**
+Rules are deterministic analyses of normalized source text and structural masks.
 
-A scan rule SHOULD be a deterministic pure analysis over normalized source text and structural masks.
-
-A finding SHOULD include:
+A finding contains, when available:
 
 ```text
-rule_id
-file_path
+rule ID
+file path
 line
-column when available
+column
 message
 evidence excerpt
 severity
 ```
 
-**Registration**
+The registry uses stable unique IDs and deterministic order.
 
-Rules MAY be held in an explicit scanner-owned registry.
+Static rules must not:
 
-The registry MUST:
-
-- use stable rule identifiers;
-- preserve deterministic order;
-- reject duplicate identifiers;
-- expose enabled rules in run evidence;
-- remain language-neutral unless the rule is project-declared data interpreted by a documented framework feature.
-
-**Forbidden**
-
-- calling GF from a static rule;
-- writing reports directly;
-- classifying interfile causal relationships;
-- editing source files;
-- silently changing an existing rule’s meaning under the same ID;
-- using regex directly on comments or string literals when the rule claims structural GF analysis;
-- loading arbitrary project Python code as a scan rule.
-
-A rule-meaning change requires fixture review and may require a rule-version or identifier change.
+- execute GF;
+- edit sources;
+- write reports;
+- classify interfile causality;
+- load project Python;
+- silently change meaning under an existing ID.
 
 ---
 
-## 8.9 GF compilation validation
+## 7.9 GF compilation
 
 **Owner**
 
 ```text
-app/audit/compiler.py
+validation compiler and GF adapter
 ```
 
-**Permitted extension**
+Permitted extensions include:
 
-- additional supported compile targets;
+- additional compile targets;
 - explicit compilation policies;
-- additional captured metadata;
-- version-gated command construction;
+- captured metadata;
+- version-aware command construction;
 - artifact verification.
 
-**Requirements**
+Compilation must:
 
-- use the common process runner;
+- use the common process port;
 - use the common GF path resolver;
 - preserve stdout and stderr;
-- record or reconstruct the exact command;
-- distinguish success, validation failure, launch failure, timeout, and skipped execution;
-- return structured compile data;
-- leave causal classification to the classifier.
+- record executable, arguments and working directory;
+- distinguish validation failure, launch failure, timeout, cancellation and skipped execution;
+- return structured compile results;
+- leave causal classification to diagnostics.
 
-**Forbidden**
-
-- adding language-specific command behavior in the compiler;
-- invoking reports;
-- invoking GUI code;
-- classifying a result as downstream;
-- interpreting zero exit code as proof that every required artifact exists;
-- bypassing external-tool contract review.
+Compilation must not contain language-specific command branches, invoke reports or treat zero exit status as proof that every required artifact exists.
 
 ---
 
-## 8.10 GF diagnostic parsers
+## 7.10 Diagnostic parsing
 
 **Owner**
 
 ```text
-app/audit/diagnostics.py
+diagnostics module
 ```
 
-or the final designated diagnostic-normalization module.
-
-**Permitted extension**
-
-A new parser rule MAY recognize:
-
-- a new GF diagnostic family;
-- a GF-version-specific diagnostic form;
-- an additional structured source location;
-- an artifact or process contract failure;
-- an unsupported-version signal.
-
-Each parser rule MUST define:
+A parser rule defines:
 
 ```text
-diagnostic_rule_id
+rule ID
 source stream
 recognition pattern
 priority
 normalized kind
 captured fields
-version applicability
+GF-version applicability
 fallback behavior
 fixtures
 ```
 
-**Parsing rules**
+Requirements:
 
-- raw output remains authoritative evidence;
+- raw output remains authoritative;
 - parser order is deterministic;
-- specific patterns precede generic fallbacks;
-- unmatched diagnostics remain visible as `OTHER` or the canonical fallback;
-- a parser MUST NOT erase unrecognized lines;
-- parser failure MUST NOT destroy compile or scenario evidence;
-- output wording changes across GF versions require compatibility fixtures.
+- specific patterns precede fallbacks;
+- unmatched evidence remains visible;
+- parser failure does not destroy process evidence.
 
-**Forbidden**
-
-- assigning `direct`, `downstream`, or `ambiguous`;
-- launching GF;
-- reading Markdown reports;
-- changing global validation status independently;
-- hiding a GF error because no parser recognized it;
-- relying on only stdout or only stderr without documented command behavior.
+Diagnostic parsers do not assign direct, downstream or ambiguous causality and do not launch processes.
 
 ---
 
-## 8.11 Failure classifiers
+## 7.11 Failure classification
 
 **Owner**
 
 ```text
-app/audit/classifier.py
+diagnostics causal classifier
 ```
-
-**Permitted extension**
-
-- new evidence-based causal rules;
-- better blocker resolution;
-- additional ambiguity handling;
-- project dependency data used through a documented model.
 
 Canonical causal classes:
 
@@ -808,251 +600,180 @@ noise
 skipped
 ```
 
-**Requirements**
+A classifier extension may add evidence-based causal rules or blocker resolution.
+
+It must:
 
 - consume structured results and dependency evidence;
-- preserve the original error kind;
-- never alter raw tool output;
-- provide deterministic classification;
+- preserve error kind and raw output;
 - record blockers when known;
-- prefer `ambiguous` over unsupported certainty;
-- include tests for ordering and multi-failure cases.
+- remain deterministic;
+- prefer ambiguity to unsupported certainty.
 
-**Forbidden**
-
-- launching processes;
-- scanning files independently;
-- writing reports;
-- redefining validation status;
-- assigning a root cause solely from processing order;
-- treating every non-zero result as direct.
-
-Technical execution failures belong to execution state or error kind, not causal classification.
+It must not execute processes, scan sources independently, render reports or redefine validation status.
 
 ---
 
-## 8.12 Scenario types
+## 7.12 Native GF scenarios
 
-**Owner**
+**Owners**
 
 ```text
-app/audit/scenario_runner.py
+validation scenario runner
 project/validation/scenarios/
 ```
 
-**Permitted extension**
+Scenarios may validate:
 
-New scenarios may validate:
-
-- module loading;
+- loading;
 - missing functions;
-- linearization;
 - parsing;
+- linearization;
 - bounded generation;
 - morphology;
 - grammar introspection;
 - PGF behavior;
-- language-specific regression cases.
+- language-specific regressions.
 
-**Scenario registration**
-
-Every scenario MUST have:
+Every scenario defines:
 
 ```text
-scenario_id
+scenario ID
 script path
-required or optional status
+required or optional policy
 applicable modes
-timeout policy
+timeout
 entrypoint or target
 assertion strategy
 gold path when applicable
-normalization version
+normalization identity
 ```
 
-**Requirements**
+Scenarios:
 
-- use native `.gfs` scripts;
+- use native `.gfs`;
 - execute through GF;
 - use stable markers or another documented completion protocol;
 - preserve raw output;
-- normalize only after raw capture;
-- produce `ScenarioResult`;
-- keep scenario IDs stable;
-- use deterministic execution order;
-- make random or unbounded operations unsuitable for exact gold comparison unless constrained.
+- normalize only after capture;
+- produce structured scenario results;
+- run in deterministic configured order.
 
-**Forbidden**
-
-- Python reimplementation of the GF shell;
-- arbitrary Python callbacks declared by project configuration;
-- scenario-specific process runners;
-- unregistered scenarios influencing release status;
-- normal runs rewriting gold;
-- successful exit code being the only completion assertion;
-- shell escape or operating-system execution unless explicitly authorized by external-tool policy.
+Scenarios must not use project Python callbacks, private process runners, implicit gold mutation or unregistered release-gating behavior.
 
 ---
 
-## 8.13 Scenario markers and assertions
+## 7.13 Scenario assertions
 
-**Owner**
+**Owners**
 
 ```text
-app/audit/scenario_runner.py
+scenario runner
 docs/scenarios/SCENARIO_MARKERS_AND_ASSERTIONS.md
 ```
 
-**Permitted extension**
-
-New assertion types MAY be added for stable, machine-verifiable conditions such as:
-
-- required marker observed;
-- section completed;
-- output contains or excludes a stable token;
-- normalized output equals gold;
-- artifact exists;
-- parse count meets a declared condition;
-- missing-function output is empty.
-
-**Requirements**
-
-Every assertion type MUST define:
+An assertion type defines:
 
 ```text
-assertion_type
+type ID
 input source
 comparison semantics
 failure representation
 serialization
-human-report rendering
+report rendering
 tests
 ```
 
-**Forbidden**
+Supported assertion families may include:
 
-- assertions evaluated only from rendered Markdown;
-- undocumented substring conventions;
-- assertions that discard contradictory raw evidence;
-- language-specific Python code loaded from the project;
-- treating an unknown assertion type as pass.
+- required markers;
+- section completion;
+- stable contains or excludes checks;
+- normalized equality;
+- artifact existence;
+- declared parse-count conditions;
+- empty missing-function output.
+
+Assertions must not depend on rendered Markdown, discard contradictory evidence or treat unknown assertion types as success.
 
 ---
 
-## 8.14 Output normalization rules
+## 7.14 Output normalization
 
 **Owner**
 
 ```text
-app/audit/output_normalization.py
+validation normalization component
 ```
 
-or the final designated normalization component.
+Normalization may remove documented presentation instability such as:
 
-**Permitted extension**
-
-A normalization rule MAY remove or replace only unstable presentation noise such as:
-
-- platform newline differences;
+- line-ending differences;
 - approved absolute path prefixes;
 - run-directory identifiers;
 - non-semantic timing values;
 - approved ANSI sequences;
-- known tool banners when the scenario contract excludes them.
+- excluded tool banners.
 
-**Requirements**
+Every normalization rule has a stable ID and deterministic order. Comparison-affecting changes use an explicit normalization version and reviewed gold updates.
 
-- stable normalization-rule IDs;
-- explicit normalization version;
-- deterministic rule order;
-- raw evidence retained unchanged;
-- normalized output traceable to raw evidence;
-- fixtures before and after normalization;
-- gold review when semantics or comparison output changes.
-
-**Forbidden**
-
-Normalization MUST NOT remove or rewrite:
+Normalization must not remove or rewrite:
 
 - GF error meaning;
 - abstract trees;
 - linearized strings;
-- parse ambiguity evidence;
+- parse ambiguity;
 - missing-function lists;
 - morphology output;
-- Unicode distinctions relevant to the language;
+- relevant Unicode distinctions;
 - required markers;
-- evidence that a section failed to execute;
-- semantically meaningful punctuation or whitespace.
+- failure evidence;
+- meaningful punctuation or whitespace.
 
-Normalization is not a repair mechanism and MUST NOT turn failure into success.
+Raw evidence remains unchanged.
 
 ---
 
-## 8.15 Gold-comparison strategies
+## 7.15 Gold comparison
 
 **Owner**
 
 ```text
-app/audit/gold.py
+validation comparison component
 ```
 
-or the final designated scenario-comparison component.
-
-**Permitted extension**
-
-Supported comparison strategies MAY include:
+Comparison strategies may include:
 
 - exact normalized text;
 - normalized section equality;
-- declared unordered-set comparison;
+- declared unordered-set equality;
 - structured count comparison;
-- explicit pattern-based assertion.
+- explicit pattern assertions.
 
-**Requirements**
+Each strategy is declared by scenario configuration and produces a machine-readable result and human-readable diff.
 
-- strategy declared by scenario configuration;
-- deterministic comparison;
-- human-readable diff;
-- machine-readable failure;
-- missing required gold treated as failure;
-- gold update performed only by an explicit operation;
-- strategy identity serialized in scenario results.
+Missing required gold is a failure.
 
-**Forbidden**
+Gold files are changed only through an explicit reviewed operation.
 
-- choosing a strategy from output content;
-- silently accepting missing gold;
-- automatic gold regeneration on mismatch;
-- fuzzy comparison without explicit thresholds and tests;
-- comparison against raw output when normalization is contractually required.
+The comparison strategy must not be inferred from output content or silently changed on mismatch.
 
 ---
 
-## 8.16 Result models
+## 7.16 Result models
 
 **Owner**
 
 ```text
-app/models.py
-app/audit/result_model.py
+domain and application result models
 ```
 
-**Permitted extension**
-
-- optional fields with safe defaults;
-- new structured result types for approved stages;
-- additive metadata required by reports or manifests;
-- explicit compatibility adapters.
-
-**Requirements**
-
-A model extension MUST define:
+A model extension defines:
 
 ```text
 field name
 type
-required or optional
+required or optional policy
 default
 producer
 consumers
@@ -1061,266 +782,187 @@ compatibility behavior
 validation invariants
 ```
 
-**Rules**
+Models contain data and invariants, not orchestration or presentation code.
 
-- models contain data, not orchestration;
-- model construction remains centralized where designated;
-- producers and consumers update together;
-- serialized fields follow the schema lock;
-- derived values SHOULD have one canonical computation owner;
-- unknown enum values are not silently reinterpreted.
+Producers and consumers change together.
 
-**Forbidden**
+Persisted fields follow the schema lock.
 
-- report rendering methods in core result models;
-- GUI objects in shared models;
-- process handles or open streams in persisted results;
-- arbitrary dictionaries where a stable typed structure exists;
-- adding required persisted fields without schema review.
+Models must not contain GUI objects, open process handles, streams or untyped extension bags when a stable typed structure is appropriate.
 
 ---
 
-## 8.17 Report writers
+## 7.17 Reports
 
 **Owner**
 
 ```text
-app/reports/
+reporting module
 ```
 
-**Permitted extension**
-
-A new report MAY be added when it serves a distinct consumer or format, for example:
-
-- machine integration;
-- human review;
-- AI handoff;
-- CI annotations;
-- artifact inventory.
-
-**Report contract**
-
-Each report MUST define:
+Each report defines:
 
 ```text
-report_id
+report ID
 consumer
 input model
 owned path
 media type
-required or optional status
+required or optional policy
 stable sections or schema
 failure behavior
 manifest role
 tests
 ```
 
-**Requirements**
+Reports:
 
-- consume completed structured results;
-- use paths provided by `RunPaths`;
+- consume structured results;
+- use owned paths;
 - write only owned artifacts;
 - never rerun validation;
 - never reclassify failures independently;
 - preserve deterministic ordering;
-- expose report-generation failure without invalidating already captured evidence;
-- include new persistent formats in schema review.
+- isolate writer failures from captured evidence.
 
-**Forbidden**
+Prohibited dependencies:
 
 ```text
-reports → compiler
-reports → scanner
-reports → scenario runner
-reports → process runner
-reports → GUI
+reports -> compiler
+reports -> scanner
+reports -> scenario runner
+reports -> process runner
+reports -> GUI
 ```
-
-A report is a projection of results, not a validation stage.
 
 ---
 
-## 8.18 Artifact types and manifest roles
+## 7.18 Artifact roles and manifest entries
 
 **Owner**
 
 ```text
-app/artifacts.py
-app/reports/manifest.py
+runs and reporting artifact owners
 ```
 
-or the final designated artifact and manifest owners.
+A new role defines:
 
-**Permitted extension**
+```text
+stable role ID
+producer
+required or optional policy
+owned path
+media type
+hash policy
+retention
+summary linkage
+tests
+```
 
-A new artifact role MAY be added for a new approved stage or report.
+Two components must not write the same artifact.
 
-**Requirements**
+Consumers must not reconstruct filenames already owned by a path or artifact model.
 
-- stable role identifier;
-- producing component;
-- required or optional status;
-- canonical path ownership;
-- media type;
-- hash policy;
-- retention policy;
-- summary linkage;
-- manifest tests.
-
-**Forbidden**
-
-- reconstructing artifact paths independently in consumers;
-- two owners writing the same artifact;
-- changing an artifact filename without schema and migration review;
-- excluding required evidence from the manifest;
-- modifying raw evidence after capture.
+Raw evidence is immutable after capture.
 
 ---
 
-## 8.19 CLI commands and options
+## 7.19 CLI
 
 **Owner**
 
 ```text
-app/main_cli.py
-app/bootstrap.py
+CLI entrypoint and bootstrap
 ```
 
-**Permitted extension**
+A CLI extension:
 
-- exposing an approved framework capability;
-- adding an explicit maintenance command;
-- adding safe overrides for documented configuration;
-- adding schema, contract, or project checks.
+- exposes an approved application capability;
+- reuses bootstrap and application services;
+- validates inputs before execution;
+- uses documented exit codes;
+- documents defaults and precedence;
+- has parser and integration tests.
 
-**Requirements**
+CLI handlers must not execute GF directly, create separate result models, mutate hidden project state or define validation semantics that differ from GUI behavior.
 
-- reuse bootstrap and core services;
-- preserve CLI/GUI semantic parity for shared capabilities;
-- validate inputs before execution;
-- use documented exit codes;
-- document defaults and precedence;
-- add parser and integration tests;
-- avoid exposing internal-only implementation switches as stable user API.
-
-**Forbidden**
-
-- direct GF execution from CLI handlers;
-- separate result or report models;
-- hidden project mutation;
-- CLI-only validation semantics;
-- options that bypass project containment or security policy;
-- command names that silently alias behavior with different status semantics.
+The normative command surface belongs to `docs/usage/CLI_REFERENCE.md`.
 
 ---
 
-## 8.20 GUI actions and panels
+## 7.20 GUI
 
 **Owner**
 
 ```text
-app/main_gui.py
-app/gui/
-app/bootstrap.py
+GUI entrypoint and presentation adapters
 ```
 
-**Permitted extension**
+A GUI extension may:
 
-- exposing approved configuration;
-- displaying structured results;
-- adding navigation to owned artifacts;
-- adding explicit maintenance operations;
-- adding progress presentation.
+- expose approved configuration;
+- display structured results;
+- navigate to owned artifacts;
+- invoke explicit maintenance operations;
+- show progress.
 
-**Requirements**
+The GUI:
 
-- construct configuration through bootstrap;
-- execute validation through the same core path as CLI;
-- keep UI state disposable;
-- keep worker-thread or process boundaries explicit;
-- map errors from structured results;
-- avoid blocking the UI during external execution;
-- maintain equivalent meaning with CLI options.
+- uses the same application services as the CLI;
+- keeps local UI state disposable;
+- maps structured errors for presentation;
+- keeps external execution away from widget code;
+- preserves CLI-equivalent semantics.
 
-**Forbidden**
-
-- widget-level GF execution;
-- widget-level command construction;
-- GUI-only project configuration fields;
-- GUI state becoming authoritative project configuration;
-- recomputing classifications in presentation code;
-- editing gold without an explicit dedicated operation.
+GUI widgets must not construct GF commands, execute tools directly, own project configuration or recompute diagnostics.
 
 ---
 
-## 8.21 Application state
+## 7.21 Application state
 
 **Owner**
 
 ```text
-app/state.py
+application-state adapter
 ```
-
-**Permitted extension**
 
 State may store disposable local preferences such as:
 
-- last selected environment paths;
+- environment selections;
 - last mode;
 - display preferences;
-- last output location;
+- output location;
 - recent run pointers.
 
-**Requirements**
+State must use safe defaults, atomic writes, schema validation and corruption recovery.
 
-- safe defaults;
-- atomic writes;
-- schema version review;
-- malformed-state recovery;
-- no restoration of an active running state;
-- no project authority;
-- no secrets.
+It must not become authority for project identity, entrypoints, scenario policy, results, credentials or release decisions.
 
-**Forbidden**
-
-- active language identity as authoritative data;
-- project entrypoints or scenario policy;
-- result objects;
-- process handles;
-- credentials;
-- release decisions.
-
-Deleting state MUST leave the project valid.
+Deleting application state must leave the project valid.
 
 ---
 
-## 8.22 External tools
+## 7.22 External tools
 
-**Owner**
+**Owners**
 
 ```text
-app/utils/process_utils.py
+external-tool port and adapter
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 ```
 
-and a tool-specific adapter when approved.
-
-**Permitted extension**
-
-A new external tool MAY be integrated only when GF, the Python standard library, and existing components do not sufficiently provide the required capability.
-
-**Required approval data**
+A tool integration defines:
 
 ```text
-tool identity
+tool ID
 purpose
 license
 supported versions
-installation method
+installation expectations
 platform support
 command contract
 working directory
-environment use
+environment
 inputs
 outputs
 timeouts
@@ -1331,158 +973,107 @@ fallback behavior
 tests
 ```
 
-**Requirements**
+All tools use the common process boundary and explicit command contracts.
 
-- explicit adapter or command builder;
-- common process layer;
-- exact command evidence;
-- captured stdout and stderr;
-- timeout and cancellation policy;
-- artifact verification;
-- external-tool contract ID;
-- optional behavior unless deliberately made a prerequisite;
-- no hidden automatic download or installation.
+Arbitrary command execution and dynamic discovery are prohibited.
 
-**Forbidden**
+Optional tools must not silently become prerequisites.
 
-- shell command strings assembled from untrusted project text;
-- optional tools becoming required accidentally;
-- external tools launched from reports or GUI widgets;
-- different GF path rules per caller;
-- silent fallback to different semantics;
-- tool output replacing raw GF evidence.
+Tool output supplements but does not replace GF evidence.
 
 ---
 
-## 8.23 Automation and CI adapters
+## 7.23 Automation and CI
 
 **Owner**
 
 ```text
-app/main_cli.py
-docs/operations/AUTOMATION_AND_CI.md
+supported CLI and public run artifacts
 ```
 
-**Permitted extension**
+Automation may:
 
-- CI wrappers;
-- machine-readable annotations derived from `summary.json`;
-- archive or publication steps;
-- contract and schema checks;
-- release-gate integration.
+- invoke supported commands;
+- consume `summary.json` and `manifest.json`;
+- generate machine annotations;
+- archive artifacts;
+- enforce release gates.
 
-**Requirements**
+Automation must preserve exit-code semantics and project identity, avoid machine-specific assumptions, and retain required evidence.
 
-- call supported CLI or public application services;
-- consume structured artifacts;
-- preserve exit-code semantics;
-- avoid developer-machine assumptions;
-- expose the exact GF version and project identity;
-- archive raw evidence for failed release runs where policy requires it.
-
-**Forbidden**
-
-- parsing human Markdown when JSON exists;
-- changing validation status after the run;
-- bypassing required release stages;
-- editing project sources or gold during ordinary CI validation;
-- relying on global unrecorded environment configuration.
+It must not parse Markdown when structured data exists, rewrite validation status, bypass required stages or mutate sources and golds during ordinary validation.
 
 ---
 
-# 9. Closed boundaries
+## 8. Closed boundaries
 
-The following are intentionally not extension points.
+The following are not extension points.
 
-## 9.1 Arbitrary Python project plugins
+### 8.1 Arbitrary project Python
 
-GF Wordbench MUST NOT load arbitrary Python modules from the active project.
+Wordbench does not load Python modules or callables from the active project.
 
-Reasons:
+Language-specific executable behavior is expressed through GF sources and reviewed `.gfs` scenarios.
 
-- project files may be untrusted;
-- execution would no longer be reproducible from configuration alone;
-- language-specific code would leak into framework behavior;
-- plugin compatibility would become an independent product surface;
-- security and packaging complexity would increase without demonstrated need.
+### 8.2 Global result semantics
 
-A future plugin system requires a separate ADR, threat model, versioned API, isolation policy, and compatibility plan.
+Validation status, execution state, error kind and diagnostic causal class are centrally owned.
 
-## 9.2 Shared status semantics
+New values require coordinated model, schema, report, CLI, GUI and migration updates.
 
-The following concepts are centrally owned and MUST NOT be locally extended with undocumented values:
+### 8.3 Process execution
 
-```text
-validation status
-execution state
-error kind
-diagnostic causal class
-extension maturity state
-```
+All external processes use the common process port and adapter.
 
-New values require model, schema, report, CLI/GUI, and migration review.
+No stage, report or interface owns a private process runner.
 
-## 9.3 Core process execution
+### 8.4 Artifact paths
 
-External processes MUST run through the common process layer.
+Paths and filenames are owned centrally by project configuration, run paths or the artifact registry.
 
-No extension may provide a second process runner merely to support a new stage or tool.
+Consumers do not reconstruct them.
 
-## 9.4 Artifact path construction
+### 8.5 Raw evidence
 
-Artifact paths and filenames MUST be owned centrally through `RunPaths`, project configuration, or the designated artifact registry.
+Captured commands, stdout, stderr, exit status and tool artifacts remain immutable.
 
-Consumers MUST NOT reconstruct filenames.
+Derived normalization and summaries never replace them.
 
-## 9.5 Raw evidence
+### 8.6 Release decision
 
-Raw stdout, stderr, commands, exit codes, and tool-produced evidence are immutable after capture.
+One release-policy owner computes the run's release result from structured stage results.
 
-Extensions may derive normalized or summarized artifacts but MUST NOT replace raw evidence.
+Stages, reports, GUI panels and project scripts do not independently declare release success.
 
-## 9.6 Release decision
+### 8.7 Multiple active projects
 
-One designated release-policy owner computes the final release result from structured stage results.
+A Wordbench workspace does not contain several active projects or runtime-switchable language profiles.
 
-Individual stages, reports, GUI panels, or project scripts MUST NOT independently declare a release successful.
-
-## 9.7 Multi-language runtime profiles
-
-One GF Wordbench copy represents one active language project.
-
-Runtime switching among multiple language profiles is outside the architecture.
-
-Supporting another language means cloning or resetting the project boundary and supplying one new active project.
+Cross-workspace and multilingual capabilities belong to `gf-portfolio`.
 
 ---
 
-# 10. Extension package placement
+## 9. Placement rules
 
-New files SHOULD be placed by responsibility.
+New files are placed by responsibility:
 
 ```text
 app/
-├── audit/
-│   ├── stage implementations
-│   ├── scanner rules
-│   ├── diagnostic parsing
-│   ├── scenario execution
-│   ├── normalization
-│   └── comparison
-├── reports/
-│   └── report writers and manifest projection
-├── gui/
-│   └── presentation-only components
-├── utils/
-│   └── language-neutral infrastructure
-├── models.py
-├── bootstrap.py
-├── project_config.py
-└── state.py
+├── projects/
+├── runs/
+├── validation/
+├── diagnostics/
+├── reporting/
+├── domain/
+├── application/
+├── ports/
+├── adapters/
+├── entrypoints/
+└── bootstrap/
 
 project/
 ├── project.toml
-├── GF source tree
+├── GF sources
 ├── validation/
 │   ├── scenarios/
 │   ├── inputs/
@@ -1493,15 +1084,15 @@ templates/project/
 └── generic mirror of required project structure
 ```
 
-A new top-level package SHOULD NOT be created when an existing owner clearly fits the responsibility.
+A new top-level package is not created when an existing owner fits the responsibility.
 
 ---
 
-# 11. Registration rules
+## 10. Registration rules
 
-An extension that participates in execution MUST be explicitly registered.
+Extensions participating in execution are explicitly registered.
 
-A registry entry SHOULD contain only stable declarative metadata and a known framework implementation reference.
+A registration entry contains stable declarative metadata and a known framework implementation reference.
 
 Conceptual example:
 
@@ -1514,229 +1105,172 @@ StageDefinition(
 )
 ```
 
-Registration requirements:
+Registration requires:
 
-- stable ID;
+- stable unique ID;
 - one owner;
 - deterministic order;
-- duplicate-ID rejection;
 - explicit applicable modes;
-- explicit required/optional semantics;
+- explicit required or optional semantics;
 - no import-time execution;
-- no project-provided Python callable;
-- no hidden environment-controlled registration;
-- visible representation in diagnostics or run metadata where useful.
+- no project-supplied Python callable;
+- no hidden environment-controlled registration.
 
-Registration does not eliminate direct typed contracts. A registry MUST NOT become an untyped service locator.
+A registry must not become an untyped service locator.
 
 ---
 
-# 12. Compatibility rules
+## 11. Compatibility
 
-## 12.1 Internal extension
+### 11.1 Internal change
 
-An extension is internal when it changes no:
+An internal change alters no public symbol, result field, schema, command, artifact path, status meaning, project contract or CLI/GUI behavior.
 
-- public symbol;
-- result field;
-- schema;
-- command;
-- artifact path;
-- status meaning;
-- project contract;
-- CLI/GUI behavior.
+It requires tests but no migration.
 
-It requires normal tests but no compatibility migration.
-
-## 12.2 Compatible public extension
+### 11.2 Compatible public extension
 
 Examples:
 
-- optional result metadata with a safe default;
+- optional result metadata with a defined default;
 - optional report;
 - optional scenario;
 - optional manifest role;
-- new scan rule with a new stable ID;
-- new diagnostic parser preserving fallback behavior;
+- new scan rule with a unique ID;
+- new parser preserving fallback behavior;
 - new project field with a safe default.
 
-A compatible extension MUST:
+A compatible extension updates its owner, consumers, tests, documentation and relevant locks. Persisted public additions follow schema versioning rules.
 
-1. update its owner;
-2. review all consumers;
-3. add tests;
-4. update documentation;
-5. update the relevant lock;
-6. increment a minor schema or contract version when persisted or public data changes.
-
-## 12.3 Breaking extension
+### 11.3 Breaking extension
 
 Examples:
 
-- changing a stage order with semantic effects;
+- semantically changing stage order;
 - making an optional stage required;
 - renaming an ID;
-- changing a model field type;
-- changing artifact ownership;
-- changing normalization that invalidates gold;
+- changing a field type;
+- moving artifact ownership;
+- changing normalization in a way that invalidates gold;
 - changing status meaning;
 - changing a command contract;
 - adding required project configuration;
 - changing release criteria.
 
-A breaking extension MUST:
-
-1. identify affected contract IDs;
-2. document the reason;
-3. enumerate producers and consumers;
-4. define migration or deprecation;
-5. update all affected files together;
-6. update fixtures and gold deliberately;
-7. update schema or contract major versions;
-8. add compatibility tests where support is promised;
-9. update changelog and migration documentation;
-10. pass release-level validation.
+A breaking extension requires coordinated provider and consumer changes, migration or deprecation, version updates, tests, changelog entries and release validation.
 
 ---
 
-# 13. Security boundaries
+## 12. Security boundaries
 
-Extensions MUST treat the following as untrusted unless explicitly controlled:
+Treat these inputs as untrusted unless explicitly controlled:
 
 - project paths;
-- scenario files;
-- scenario inputs;
-- external-tool paths;
+- scenario files and inputs;
+- executable paths;
 - environment variables;
 - previous-run artifacts;
-- imported legacy state;
-- copied project templates.
+- imported state;
+- copied templates.
 
-Security rules:
+Extensions must:
 
 - validate path containment;
 - avoid shell interpretation;
-- do not execute project Python;
-- prohibit unauthorized GF shell escape behavior;
-- do not persist secrets;
-- do not log complete environments;
-- do not auto-install external tools;
-- validate schemas before use;
-- write state and persistent artifacts atomically;
+- prohibit project Python execution;
+- control GF shell escape behavior;
+- avoid secrets and full environment dumps;
+- avoid automatic tool installation;
+- validate persisted schemas;
+- write state and artifacts atomically;
 - reject path traversal;
-- separate raw evidence from rendered output;
 - preserve failure evidence.
 
-An extension introducing a new executable or executable input requires external-tool and security review.
+A new executable or executable input requires external-tool and security review.
 
 ---
 
-# 14. Performance boundaries
+## 13. Performance boundaries
 
-Performance work MAY change internal implementation but MUST preserve observable contracts.
+Performance changes preserve observable contracts.
 
-Extensions SHOULD:
+Extensions should:
 
-- avoid reading the same large source repeatedly;
-- avoid recompiling solely for reports;
-- avoid unbounded output capture without policy;
-- preserve deterministic result ordering;
-- respect per-operation timeout policy;
-- keep quick mode meaningfully bounded;
-- avoid global caches whose invalidation cannot be proven;
-- record truncation explicitly when evidence limits apply.
+- avoid repeated reads of large sources;
+- avoid recompilation for report generation;
+- bound captured output;
+- preserve deterministic ordering;
+- respect timeout and cancellation policies;
+- keep quick mode bounded;
+- avoid caches without explicit ownership and invalidation;
+- record truncation.
 
-A cache becomes an architectural component when another run or process depends on it. Such a cache requires ownership, invalidation, schema, and corruption policy.
+A cache shared across runs or processes requires an owner, invalidation policy, persistence contract and corruption behavior.
 
 ---
 
-# 15. Testing requirements
+## 14. Testing requirements
 
-Every extension MUST have tests appropriate to its boundary.
+Every extension has tests appropriate to its boundary.
 
-## 15.1 Unit tests
+### Unit tests
 
 Use unit tests for:
 
 - configuration validation;
 - registration;
-- rule matching;
-- parser behavior;
-- classifier rules;
+- scanner rules;
+- diagnostic parsing;
+- classification;
 - normalization;
-- comparison strategies;
+- comparison;
 - result construction;
 - report rendering;
 - path containment;
-- migration helpers.
+- migrations.
 
-## 15.2 Contract tests
+### Contract tests
 
 Use contract tests for:
 
 - public signatures;
 - required model fields;
 - artifact ownership;
-- deterministic order;
+- deterministic ordering;
 - schema round trips;
 - CLI/GUI parity;
 - process result semantics;
 - stage registration;
-- required/optional scenario behavior;
+- scenario requirements;
 - gold immutability;
-- external-tool command construction.
+- command construction;
+- prohibited dependency directions.
 
-Recommended location:
-
-```text
-tests/contracts/
-```
-
-## 15.3 Integration tests
+### Integration tests
 
 Use integration tests for:
 
-- full pipeline orchestration;
-- a successful fixture grammar;
-- a failing fixture grammar;
+- pipeline orchestration;
+- successful and failing fixture grammars;
 - GF version probing;
 - compilation;
-- `.gfs` execution;
+- native `.gfs` execution;
 - timeout containment;
 - PGF production;
 - report and manifest completeness;
 - previous-run comparison.
 
-Tests requiring real GF SHOULD be separately marked so unit suites remain runnable without GF.
-
-## 15.4 Regression fixtures
-
-A bug fix that changes extension behavior MUST add a fixture reproducing the original failure when practical.
+Tests requiring real GF remain separable from the unit suite.
 
 ---
 
-# 16. Documentation requirements
+## 15. Documentation rule
 
-An extension is incomplete until documentation is updated.
+Documentation changes are required when an extension changes a public contract, command, schema, artifact, user workflow, project structure, security boundary or architectural ownership.
 
-Depending on scope, update:
+The authoritative owner document is updated once. Other documents link to it instead of duplicating the complete rule.
 
-```text
-docs/architecture/
-docs/validation/
-docs/scenarios/
-docs/diagnostics/
-docs/reports/
-docs/configuration/
-docs/usage/
-docs/development/
-docs/operations/
-docs/release/
-docs/reference/
-docs/decisions/
-```
-
-Minimum extension documentation:
+Extension documentation identifies:
 
 ```text
 purpose
@@ -1753,168 +1287,140 @@ security implications
 tests
 ```
 
-Rules MUST have one authoritative owner. Other documents SHOULD link to that owner rather than restating the full rule.
+Internal implementation edits that preserve every documented contract do not require broad documentation rewrites.
 
 ---
 
-# 17. ADR threshold
+## 16. ADR threshold
 
 An ADR is required when an extension:
 
-- adds a new architectural layer;
-- introduces a new required external tool;
+- adds an architectural layer;
+- introduces a required external tool;
 - adds runtime plugin discovery;
-- adds a new canonical validation mode;
-- changes single-active-language architecture;
+- adds a canonical validation mode;
+- changes the one-active-project model;
 - introduces a database or remote service;
 - changes artifact ownership;
-- changes release-status computation;
-- changes the persistent schema major version;
-- introduces executable project code outside GF scenarios;
-- replaces an established core component;
-- changes dependency direction.
+- changes release-result computation;
+- changes a persisted schema major version;
+- introduces executable project code outside GF;
+- replaces a core component;
+- changes dependency direction;
+- changes the Wordbench/Portfolio boundary.
 
-Small additive rules, reports, parsers, and scenarios do not require separate ADRs when they follow an existing approved boundary.
+Small additive rules, reports, parsers and scenarios do not require a separate ADR when they remain inside an existing approved boundary.
 
 ---
 
-# 18. Anti-overengineering constraints
+## 17. Anti-overengineering constraints
 
-The final GF Wordbench architecture intentionally does not require:
+GF Wordbench does not require:
 
-- a general plugin marketplace;
+- a plugin marketplace;
 - a dependency-injection framework;
 - an event bus;
 - a message broker;
 - a database;
 - a web service;
-- a remote execution service;
+- remote execution;
 - a generic DAG engine;
-- a custom GF scripting language;
-- a custom test-description language replacing `.gfs`;
+- a custom language replacing `.gfs`;
 - simultaneous language profiles;
 - runtime discovery of third-party Python packages.
 
-One of these may be introduced only when:
-
-1. a concrete requirement cannot be met by the existing boundary;
-2. at least two stable use cases justify a reusable abstraction;
-3. operational and security costs are documented;
-4. a simpler explicit design has been evaluated;
-5. an ADR is accepted;
-6. migration and removal strategies exist.
-
-Complexity is acceptable when it protects a real contract or enables a real capability. Complexity is not acceptable merely to anticipate unspecified future use.
+Such a mechanism requires a concrete unmet need, at least two stable use cases, documented security and operational costs, comparison with a simpler design and an accepted ADR.
 
 ---
 
-# 19. Extension review checklist
-
-Use this checklist for every extension.
+## 18. Review checklist
 
 ```text
-[ ] Extension purpose is concrete
-[ ] Existing owner cannot already provide the capability cleanly
-[ ] Extension point is identified
-[ ] Extension owner is identified
+[ ] Purpose is concrete
+[ ] Existing owner cannot provide the capability cleanly
+[ ] Extension point and owner are identified
 [ ] Framework or project placement is correct
-[ ] Stable extension ID is assigned
+[ ] Stable ID is assigned
 [ ] Inputs and outputs are typed or schema-defined
+[ ] Applicable modes are explicit
 [ ] Required and optional behavior is explicit
-[ ] Applicable validation modes are explicit
-[ ] Status, execution state, error kind, and causal class remain distinct
 [ ] Artifact ownership is explicit
 [ ] Raw evidence remains immutable
-[ ] Process execution uses the common runner
+[ ] Process execution uses the common boundary
 [ ] GF semantics remain delegated to GF
 [ ] Project Python execution is not introduced
 [ ] Path containment is validated
 [ ] Deterministic ordering is preserved
-[ ] CLI and GUI semantics are aligned
-[ ] Persisted-schema impact is reviewed
+[ ] CLI and GUI semantics agree
+[ ] Schema impact is reviewed
 [ ] External-tool impact is reviewed
 [ ] Security impact is reviewed
-[ ] Compatibility classification is recorded
-[ ] Migration or deprecation is defined when needed
-[ ] Unit tests are added
-[ ] Contract tests are added
-[ ] Integration tests are added where appropriate
-[ ] Documentation owner is updated
-[ ] Relevant lock files are updated
-[ ] ADR added when threshold is met
-[ ] Release validation passes
+[ ] Compatibility and migration are handled
+[ ] Tests are added
+[ ] Owner documentation and locks are updated
+[ ] ADR is added when required
+[ ] Relevant validation passes
+[ ] Wordbench remains independent from gf-portfolio
 ```
 
 ---
 
-# 20. Extension registry
+## 19. Extension registry
 
-The final system SHOULD maintain a concise registry in this document or a generated reference derived from code.
-
-Initial architectural registry:
-
-| Extension domain | Owner | Mechanism | Dynamic project code allowed |
+| Domain | Owner | Mechanism | Project code allowed |
 |---|---|---|---|
-| Active language sources | `project/` | GF files and project configuration | No Python |
-| Project scenarios | `project/validation/scenarios/` | Registered `.gfs` files | No Python |
+| Active language sources | `project/` | GF files and project configuration | GF only |
+| Project scenarios | `project/validation/scenarios/` | Registered `.gfs` files | GF only |
 | Scenario inputs | `project/validation/inputs/` | Declared data files | No executable code |
-| Gold expectations | `project/validation/gold/` | Explicit reviewed files | No |
-| Project configuration | `project_config.py` | Versioned TOML fields | No callables |
-| Validation modes | bootstrap and audit policy | Explicit canonical mode registry | No |
-| Validation stages | `audit_core.py` and stage owners | Explicit ordered registration | Framework code only |
-| Static scan rules | `scanner.py` | Explicit rule registry | Framework code only |
-| Diagnostic parsers | `diagnostics.py` | Ordered parser registry | Framework code only |
-| Causal classifiers | `classifier.py` | Explicit rule functions | Framework code only |
-| Output normalizers | normalization owner | Versioned ordered rules | Framework code only |
-| Gold strategies | comparison owner | Explicit strategy registry | Framework code only |
-| Reports | `app/reports/` | Explicit writer registration or orchestration | Framework code only |
-| Artifact roles | artifact/manifest owner | Stable role registry | Framework code only |
-| CLI | `main_cli.py` | Explicit commands and options | No |
-| GUI | `main_gui.py`, `app/gui/` | Explicit actions calling core services | No |
-| External tools | process layer and adapter | Contract-approved adapter | No arbitrary discovery |
-| CI integrations | supported CLI and artifacts | External wrapper | No internal bypass |
-
-A registry entry is descriptive unless the corresponding code registry is explicitly defined. Documentation MUST NOT imply runtime discovery that the implementation does not provide.
+| Gold expectations | `project/validation/gold/` | Reviewed expected outputs | No |
+| Project configuration | projects module | Versioned TOML | No callables |
+| Validation modes | application policy | Explicit mode registry | No |
+| Validation stages | validation module | Explicit ordered registration | Framework code only |
+| Static scan rules | validation scanner | Explicit rule registry | Framework code only |
+| Diagnostic parsers | diagnostics module | Ordered parser registry | Framework code only |
+| Causal classifiers | diagnostics module | Explicit typed rules | Framework code only |
+| Normalizers | validation module | Versioned ordered rules | Framework code only |
+| Gold strategies | validation module | Explicit strategy registry | Framework code only |
+| Reports | reporting module | Explicit writer orchestration | Framework code only |
+| Artifact roles | runs/reporting | Stable role registry | Framework code only |
+| CLI | entrypoints | Explicit commands | No |
+| GUI | entrypoints/adapters | Application use cases | No |
+| External tools | adapters | Approved command contracts | No dynamic discovery |
+| CI integration | public CLI and artifacts | External wrappers | No private bypass |
+| Portfolio integration | public Wordbench artifacts | Read-only external consumer | No reverse dependency |
 
 ---
 
-# 21. Drift indicators
+## 20. Drift indicators
 
-Extension-boundary drift is probable when:
+Boundary drift is present when:
 
-- project-specific names appear in framework modules;
+- project-specific names appear in framework defaults;
 - a report imports a validation stage;
-- a GUI widget builds or executes a GF command;
-- CLI and GUI use different configuration builders;
-- a new stage writes an existing stage’s artifacts;
-- a result field appears without a documented producer;
-- a report computes a different status from the run result;
+- a GUI widget constructs or executes a GF command;
+- CLI and GUI use different application rules;
+- a stage writes another stage's artifacts;
+- a result field has no owner;
+- a report recomputes status;
 - a scanner rule executes GF;
-- a diagnostic parser assigns causal classification;
+- a parser assigns causal classification;
 - a classifier launches a process;
-- a project configuration field selects a Python callable;
-- a `.gfs` scenario updates gold during a normal run;
-- an extension depends on import order or side effects;
-- a new status literal appears outside its owner;
+- project configuration selects Python code;
+- a scenario changes gold during normal validation;
+- registration depends on import order or hidden environment state;
 - a consumer reconstructs an artifact filename;
 - raw output is modified after capture;
-- a new tool is invoked without an external-tool contract;
-- a language project changes framework code to add linguistic behavior;
-- multiple language profiles are introduced into one active project;
-- an optional extension silently becomes release-required;
-- a schema changes without a version increment;
-- a new abstraction exists without a concrete second use case.
+- a tool is invoked without an approved contract;
+- several active projects appear in one Wordbench workspace;
+- Wordbench imports or requires `gf-portfolio`;
+- a schema changes without versioning;
+- a generic abstraction has no concrete second use case.
 
-Any drift indicator requires either:
-
-1. restoration of the existing boundary; or
-2. an explicit architectural change with contracts, tests, migration, and documentation.
+Drift is resolved by restoring the existing boundary or accepting a coordinated architectural change.
 
 ---
 
-# 22. Final enforcement rule
-
-GF Wordbench is extensible, but it is not open-ended.
+## 21. Enforcement
 
 A valid extension:
 
@@ -1926,9 +1432,10 @@ A valid extension:
 - uses common infrastructure;
 - remains deterministic;
 - is documented and tested;
-- does not introduce hidden behavior;
-- does not weaken the separation between framework and active project.
+- introduces no hidden behavior;
+- preserves framework/project separation;
+- preserves Wordbench/Portfolio independence.
 
 Therefore:
 
-> No extension may create a second source of truth, a second execution engine, a second status system, or an undocumented path around the core architecture.
+> No extension may create a second source of truth, a second execution engine, a second status system, a second active-project model or an undocumented path around the core architecture.

@@ -6,8 +6,9 @@
 **Primary owners:** Language maintainers and GF Wordbench maintainers  
 **Canonical active project:** `project/`  
 **Canonical project configuration:** `project/project.toml`  
-**Target architecture:** Final GF Wordbench architecture  
-**Last structural review:** 2026-07-22
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Target architecture:** GF Wordbench architecture  
+**Last structural review:** 2026-07-24
 
 ---
 
@@ -83,6 +84,16 @@ docs/projects/PROJECT_COMPLETION_CHECKLIST.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
+The migration also follows:
+
+```text
+docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
+```
+
+Migration concerns one active Wordbench project. Multi-workspace aggregation belongs to the independent `gf-portfolio` product and does not alter Wordbench project configuration, run identity or release evidence.
+
 Project-specific authoritative documents created or completed during migration include:
 
 ```text
@@ -92,12 +103,12 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 ```
 
@@ -297,7 +308,7 @@ The canonical migration phases are:
 11. define entrypoints and checkpoints
 12. create scenarios and inputs
 13. establish gold baselines
-14. build final PGF
+14. build release PGF
 15. produce baseline evidence
 16. perform cutover
 17. archive migration records
@@ -355,7 +366,7 @@ existing PGF name
 known test commands
 ```
 
-Recommended baseline record:
+Canonical baseline record:
 
 ```text
 project/docs/RESEARCH_EVIDENCE.md
@@ -429,7 +440,7 @@ lincat definitions
 interfaces and instances
 entrypoint role
 known consumers
-implementation status
+known constraints
 ```
 
 Recommended module kinds:
@@ -492,7 +503,7 @@ Use:
 
 ```text
 project/docs/KNOWN_ISSUES.md
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 Exit condition:
@@ -574,13 +585,11 @@ Initialize from:
 templates/project/
 ```
 
-Target operation:
+Canonical operation:
 
 ```text
 gf-wordbench project init
 ```
-
-If the command is not yet implemented, copy the template manually while preserving the same structure.
 
 Initialization must not overwrite an existing non-empty `project/` without explicit authorization.
 
@@ -891,7 +900,6 @@ For every cross-file relationship, identify:
 
 ```text
 contract ID
-status
 provider
 consumers
 provided symbol or structure
@@ -960,14 +968,13 @@ Every active cross-file dependency has an authoritative provider or an explicit 
 
 ---
 
-# 17. Phase 10 — Classify incomplete behavior
+# 17. Phase 10 — Record known issues and constraints
 
-Migration often reveals code that compiles but is not production-ready.
+Migration often reveals behavior that compiles but still violates a linguistic, architectural or release contract.
 
-Record every:
+Record every relevant issue, including:
 
 ```text
-temporary implementation
 fallback
 placeholder
 warning
@@ -978,37 +985,35 @@ shallow constructor
 string-based substitute
 unresolved inheritance
 known missing linearization
-experimental module
-deprecated module
+obsolete module
+duplicate provider
 ```
 
 Use:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/KNOWN_ISSUES.md
 ```
 
-Each entry needs:
+Each entry defines:
 
 ```text
-stable ID
-status
+stable issue ID
 owner
 module or symbol
 reason
 consumer impact
 validation impact
-next action
-exit condition
+required correction
 release impact
 ```
 
-Do not convert an incomplete implementation into “stable” merely because migration requires a baseline.
+A migration baseline must not hide a known issue or weaken a release gate to accommodate it.
 
 Exit condition:
 
 ```text
-No known incomplete active behavior is undocumented.
+Every known issue affecting active behavior is documented and correctly gated.
 ```
 
 ---
@@ -1349,8 +1354,8 @@ Every required gold is canonical, reviewed, version-controlled, and reproducible
 Complete:
 
 ```text
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 ```
 
 Coverage should map:
@@ -1385,7 +1390,7 @@ extensions
 linearization
 parsing
 bounded generation
-final PGF
+release PGF
 ```
 
 Do not claim coverage merely because a file compiles.
@@ -1498,7 +1503,7 @@ Document modes, required stages, scenarios, and expected evidence.
 
 ## 25.8 `STATUS_LEDGER.md`
 
-Document incomplete, blocked, temporary, and retired behavior.
+Document known issues, blockers, retired behavior and release impact.
 
 ## 25.9 `DECISION_LOG.md`
 
@@ -1511,7 +1516,7 @@ Document exact gates.
 Exit condition:
 
 ```text
-No active implementation promise exists only in maintainer memory.
+No active contract, limitation or release requirement exists only in maintainer memory.
 ```
 
 ---
@@ -1553,7 +1558,7 @@ current release scripts
 current project examples
 ```
 
-Recommended checker:
+Canonical checker:
 
 ```text
 gf-wordbench project contracts check
@@ -1649,7 +1654,7 @@ They must not:
 
 # 28. Baseline run sequence
 
-Recommended first complete sequence:
+Canonical first complete sequence:
 
 ```text
 1. project configuration check
@@ -1674,7 +1679,6 @@ gf-wordbench checkpoint
 gf-wordbench release
 ```
 
-If commands are not yet implemented, execute the equivalent documented workflow and preserve the same evidence.
 
 ---
 
@@ -1703,8 +1707,7 @@ project configuration hash
 Record the baseline run ID in:
 
 ```text
-project/docs/STATUS_LEDGER.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 ```
 
@@ -1729,7 +1732,7 @@ Required cutover checks:
 [ ] Module inventory complete
 [ ] Dependency map complete
 [ ] Interfile contract lock populated
-[ ] Temporary states recorded
+[ ] Known issues recorded
 [ ] Entrypoints declared
 [ ] Checkpoints declared
 [ ] Required scenarios registered
@@ -1763,7 +1766,7 @@ no required scenario SKIPPED
 required gold comparisons pass
 required PGF builds and is non-empty
 required artifacts appear in manifest
-no release-blocking status-ledger entries
+no unresolved release-blocking issues
 documentation agrees with source
 old active identifiers are absent
 source fingerprints are valid
@@ -1875,10 +1878,10 @@ A project must not silently alternate between authorities.
 | Stale `.gfo` accepted | Use clean run-owned artifacts |
 | Old output accepted as gold | Run current scenario and review diff |
 | Module rename breaks consumers | Update one coordinated contract unit |
-| Incomplete behavior appears stable | Use status ledger |
+| Known issue is hidden by migration | Record it in `KNOWN_ISSUES.md` and keep the release gate |
 | Wrong language identity persists | Scan active project identifiers |
 | GUI state overrides project | Keep identity in `project.toml` |
-| Old audit mode remains canonical | Migrate to final mode names |
+| Old audit mode remains canonical | Migrate to canonical mode names |
 | Release succeeds without PGF | Enforce project release gate |
 | Scenario silently skips commands | Require completion markers |
 | Migration script damages source | Copy first; atomic project writes |
@@ -1938,15 +1941,15 @@ The active project lock must not remain a generic template.
 
 ---
 
-# 37. Automation requirements
+# 37. Migration command
 
-A future migration command should:
+The canonical migration command is:
 
 ```text
 gf-wordbench project migrate <source-root>
 ```
 
-It should support:
+It supports:
 
 ```text
 --dry-run
@@ -2012,7 +2015,7 @@ Until then, use a reviewed Markdown report or internal structure.
 
 # 39. Test requirements
 
-Recommended framework tests:
+Framework migration tests:
 
 ```text
 tests/projects/test_project_migration.py
@@ -2047,7 +2050,7 @@ scenario/gold discovery
 unsafe path rejection
 ```
 
-Integration tests should use a small fixture language, never the active language project.
+Integration tests use a small fixture language, never the active language project.
 
 ---
 
@@ -2067,7 +2070,7 @@ Integration tests should use a small fixture language, never the active language
 [ ] Public providers are identified
 [ ] Consumers are identified
 [ ] Lincat contracts are documented
-[ ] Temporary behavior is recorded
+[ ] Known issues are recorded
 [ ] Entrypoints are declared
 [ ] Checkpoints are meaningful
 [ ] Required scenarios exist
@@ -2135,7 +2138,7 @@ Migration is complete when:
 10. current compile and scenario evidence exists;
 11. the PGF requirement is explicit;
 12. known incomplete states are visible;
-13. project documents agree with implementation;
+13. project documents agree with source and behavior;
 14. a baseline run is retained;
 15. rollback remains possible;
 16. maintainers approve cutover.
@@ -2161,7 +2164,7 @@ Release-ready migration additionally requires:
 
 ---
 
-# 44. Final invariants
+# 44. Migration invariants
 
 The migration process must preserve:
 
@@ -2173,7 +2176,7 @@ The migration process must preserve:
 6. environment paths outside project configuration;
 7. deterministic entrypoint and checkpoint order;
 8. explicit provider/consumer ownership;
-9. explicit incomplete states;
+9. explicit known issues and constraints;
 10. current raw GF evidence;
 11. separate stdout and stderr;
 12. explicit timeout behavior;
@@ -2188,7 +2191,7 @@ The migration process must preserve:
 
 ---
 
-# 45. Final rule
+# 45. Governing rule
 
 > Do not migrate only the files. Migrate the language project's identity, contracts, validation evidence, release expectations, and maintenance workflow.
 

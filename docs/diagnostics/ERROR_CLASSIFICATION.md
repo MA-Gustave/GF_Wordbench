@@ -2,12 +2,13 @@
 
 **Document ID:** `GF-WB-DIAGNOSTICS-ERROR-CLASSIFICATION`  
 **Status:** Normative  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\diagnostics\ERROR_CLASSIFICATION.md`  
+**Canonical path:** `docs/diagnostics/ERROR_CLASSIFICATION.md`  
 **Applies to:** File results, scenario results, diagnostic causality, blocker relationships, aggregate diagnostic counts, and report consumption  
 **Owner:** GF Wordbench maintainers  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Contract references:** `IFC-AUDIT-008`, `IFC-AUDIT-009`  
 **Document version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -71,7 +72,7 @@ This document does not govern:
 - raw GF diagnostic parsing syntax;
 - static scan pattern detection;
 - file selection;
-- process launch implementation;
+- process launch mechanics;
 - source dependency discovery through a custom GF parser;
 - report formatting;
 - regression comparison;
@@ -465,7 +466,7 @@ A quick single-file run may classify against one result only.
 
 # 11. Primary status preservation
 
-The final classifier MUST treat valid stage status as authoritative.
+The classifier MUST treat valid stage status as authoritative.
 
 It may normalize only when a result is explicitly marked as provisional or legacy.
 
@@ -855,7 +856,7 @@ B = blocked by A
 C = blocked by B
 ```
 
-Canonical final result:
+Canonical normalized result:
 
 ```text
 A: direct,     blocked_by=[]
@@ -897,7 +898,7 @@ Examples:
 - unresolved dependency cycle;
 - parser fallback classified as `OTHER`.
 
-Ambiguous is a valid final answer.
+Ambiguous is a valid classification outcome.
 
 The classifier MUST NOT force a direct root merely to simplify reports.
 
@@ -1487,7 +1488,7 @@ Meaning:
 
 Optional scenario failures may affect overall status only according to validation-mode policy.
 
-Run-level totals must be derived from final classified results.
+Run-level totals must be derived from classified results.
 
 ---
 
@@ -1516,7 +1517,7 @@ ambiguous_count
 
 If fields retain names such as `direct_fail`, their schema must state whether `ERROR` is included.
 
-Final recommendation:
+Canonical field names:
 
 ```text
 direct_count
@@ -1546,7 +1547,7 @@ No consumer may use `is_direct` to override `diagnostic_class`.
 
 A persisted mismatch is a schema validation error.
 
-A future major schema may remove `is_direct` after all consumers migrate.
+Removing `is_direct` requires a major schema revision and coordinated migration of all consumers.
 
 ---
 
@@ -1731,11 +1732,11 @@ Classification MUST NOT depend on:
 
 ---
 
-# 38. Mutation policy
+# 38. Result transformation policy
 
-The current API mutates `FileResult` objects in place and returns the list.
+The public classifier consumes a deterministic list of `FileResult` values and returns the classified list in the same logical order.
 
-Current contract:
+Canonical contract:
 
 ```python
 def classify_file_results(
@@ -1744,9 +1745,7 @@ def classify_file_results(
     ...
 ```
 
-Final implementation may retain this approach or return immutable replacements.
-
-Whichever model is chosen must be consistent.
+The classifier may update classification-owned fields on the supplied objects or return equivalent immutable replacements. Within one call and one public API version, the transformation model MUST be consistent and MUST preserve result identity, ordering, raw evidence, source paths and compile summaries.
 
 ## 38.1 In-place requirements
 
@@ -1807,9 +1806,9 @@ The all-results function is authoritative because causal classification requires
 
 ---
 
-# 40. Recommended implementation decomposition
+# 40. Classifier decomposition
 
-A balanced implementation may use:
+The classifier is decomposed into:
 
 ```text
 classifier.py
@@ -1842,9 +1841,9 @@ The v1 deterministic rule set is sufficient.
 
 ---
 
-# 41. Migration from current classifier
+# 41. Migration from GF Audit classification
 
-The existing GF Audit classifier already provides useful behavior:
+The predecessor GF Audit classifier provides the following legacy behavior:
 
 - `OK` and `SKIPPED` normalization;
 - self-reference detection;
@@ -1855,7 +1854,7 @@ The existing GF Audit classifier already provides useful behavior:
 - blocker-chain collapse;
 - deterministic path normalization.
 
-The final GF Wordbench model changes several behaviors.
+GF Wordbench applies the following canonical behavior changes.
 
 ## 41.1 Remove non-canonical diagnostic classes
 
@@ -1877,7 +1876,7 @@ or another appropriate canonical combination.
 
 ## 41.2 Preserve `ERROR`
 
-Current logic derives only:
+GF Audit compatibility input may derive only:
 
 ```text
 OK
@@ -1885,7 +1884,7 @@ FAIL
 SKIPPED
 ```
 
-Final logic preserves canonical:
+Canonical logic preserves:
 
 ```text
 OK
@@ -1896,7 +1895,7 @@ SKIPPED
 
 ## 41.3 Do not treat timeout as direct automatically
 
-Current direct-kind set includes:
+The GF Audit direct-kind set includes:
 
 ```text
 INTERNAL
@@ -1904,7 +1903,7 @@ TIMEOUT
 SCRIPT
 ```
 
-Final policy:
+Canonical policy:
 
 - `TIMEOUT` is ambiguous by default;
 - `INTERNAL` requires local evidence;
@@ -1912,13 +1911,13 @@ Final policy:
 
 ## 41.4 Failed dependency takes precedence
 
-Final policy resolves known failed external blockers before error-kind direct heuristics.
+Canonical policy resolves known failed external blockers before error-kind direct heuristics.
 
 ## 41.5 Separate legacy status initialization
 
-Current `_initialize_status` mixes stage-status derivation and causal classification.
+GF Audit `_initialize_status` mixes stage-status derivation and causal classification.
 
-Final architecture separates:
+The architecture separates:
 
 ```text
 legacy result normalization
@@ -1932,13 +1931,13 @@ canonical causal classification
 
 ## 41.6 Detect duplicate identities
 
-Current indexes retain the first identity silently.
+GF Audit indexes retain the first identity silently.
 
-Final strict mode treats duplicates as a model error.
+Strict mode treats duplicates as a model error.
 
 ## 41.7 Improve cycle handling
 
-Final blocker-graph handling explicitly detects cycles and avoids false roots.
+Blocker-graph handling explicitly detects cycles and avoids false roots.
 
 ---
 
@@ -2309,7 +2308,7 @@ Migration repairs must be deterministic and recorded.
 
 # 50. Property invariants
 
-For every final result:
+For every classified result:
 
 ```python
 if diagnostic_class == "direct":
@@ -2369,9 +2368,9 @@ Real-GF fixtures belong to diagnostic parsing and compilation integration suites
 
 ---
 
-# 52. Acceptance criteria
+# 52. Contract verification checklist
 
-The classification subsystem is complete when:
+The classification contract is verified by the following checks:
 
 ```text
 [ ] status, execution state, error kind, and class are separate
@@ -2391,7 +2390,7 @@ The classification subsystem is complete when:
 [ ] classifier does not invoke GF
 [ ] classifier does not parse reports
 [ ] reports do not reclassify
-[ ] aggregate counts derive from final results
+[ ] aggregate counts derive from classified results
 [ ] legacy behavior has an explicit adapter
 [ ] unit and graph tests pass
 [ ] lock files and schemas agree
@@ -2414,7 +2413,7 @@ When a result is misclassified, inspect:
 9. self-reference filtering;
 10. blocker graph;
 11. cycle handling;
-12. final coherence enforcement;
+12. coherence enforcement;
 13. report consumption.
 
 Do not begin by modifying report formatting.
@@ -2483,7 +2482,7 @@ this document
 
 ---
 
-# 56. Final rule
+# 56. Enforcement rule
 
 > The classifier may state only what the evidence supports.
 

@@ -1,7 +1,7 @@
 # GF Wordbench — Run Directory Lifecycle
 
 **Document ID:** `GF-WB-RUN-DIRECTORY-LIFECYCLE`  
-**Status:** Final normative specification  
+**Status:** Normative specification  
 **Applies to:** Creation, use, finalization, verification, recovery, retention, archival, restoration, and deletion of GF Wordbench run directories  
 **Owner:** GF Wordbench maintainers  
 **Run-layout contract:** `gf-wordbench.run-layout/1.0`  
@@ -9,15 +9,16 @@
 - `docs/PERSISTED_SCHEMA_LOCK.md`
 - `docs/INTERFILE_CONTRACT_LOCK.md`
 - `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`
+- `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
 - `docs/architecture/ARTIFACT_MODEL.md`
 - `docs/architecture/PROCESS_EXECUTION_MODEL.md`
 - `docs/reports/ARTIFACT_MANIFEST.md`
 - `docs/reports/RAW_LOGS_REFERENCE.md`
 - `docs/reports/SUMMARY_JSON_REFERENCE.md`
 - `docs/validation/RELEASE_GATES.md`
-- `docs/operations/CLEANUP_BACKUP_AND_RECOVERY.md`
 
-**Document version:** `1.0.0`
+**Document version:** `1.0.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -40,6 +41,12 @@ This document defines the complete operational lifecycle of the directory that o
 > A run directory is an append-then-finalize evidence container. It is not a working copy of the project and it is not a shared cache.
 
 A run directory may contain a successful result, a validation failure, a tool error, or partial evidence from an interrupted execution. Its lifecycle state and its validation outcome are separate concepts.
+
+### 1.1 Workspace and product boundary
+
+Each run belongs to one GF Wordbench workspace, one active project, and one resolved normative language target.
+
+Run directories do not form a multi-project registry and do not store cross-workspace portfolio state. The independent `gf-portfolio` product may consume public, versioned Wordbench artifacts. GF Wordbench does not depend on Portfolio runtime, code, storage, or configuration.
 
 ---
 
@@ -162,7 +169,7 @@ validation status = ERROR
 
 and still be a structurally complete, useful, manifest-verified run.
 
-Conversely, a directory containing many successful artifacts may remain incomplete when final reports or the manifest were never safely finalized.
+Conversely, a directory containing many successful artifacts may remain incomplete when completed reports or the manifest were never safely finalized.
 
 ---
 
@@ -342,7 +349,7 @@ The selected suffix becomes part of `run_id`.
 
 ### 6.4 Run-ID pattern
 
-Recommended canonical pattern:
+Canonical pattern:
 
 ```text
 ^\d{8}_\d{6}(?:_\d{2,})?$
@@ -352,13 +359,13 @@ Recommended canonical pattern:
 
 Uniqueness MUST be established through atomic directory creation.
 
-The implementation MUST NOT:
+The run allocator MUST NOT:
 
 1. check that a path is absent;
 2. wait;
 3. create it without collision handling.
 
-Recommended behavior:
+Canonical allocation behavior:
 
 ```python
 candidate.mkdir(parents=False, exist_ok=False)
@@ -495,7 +502,7 @@ They MUST:
 
 - remain inside the run root;
 - use collision-safe names;
-- not be treated as final artifacts;
+- not be treated as published artifacts;
 - be removed after successful replacement;
 - be ignored or quarantined after failed writes;
 - not appear in `manifest.json`.
@@ -506,21 +513,11 @@ They MUST:
 
 ### 9.1 Single builder
 
-Exactly one component owns construction of run paths.
+The functional `runs` module owns construction of run paths.
 
-Canonical contract:
+Bootstrap supplies the resolved run configuration and receives the resulting `RunPaths`. It does not define, duplicate, or reconstruct run-directory names and paths.
 
-```python
-build_run_paths(run_config: RunConfig) -> RunPaths
-```
-
-Recommended owner:
-
-```text
-app/bootstrap.py
-```
-
-or a future dedicated run-path module selected through a coordinated contract change.
+The callable boundary and model ownership are governed by `docs/INTERFILE_CONTRACT_LOCK.md`.
 
 ### 9.2 Consumer rule
 
@@ -578,7 +575,7 @@ Persisted run-owned paths use run-relative `/` form.
 
 ### 10.1 Creation order
 
-Recommended sequence:
+Canonical sequence:
 
 ```text
 1. validate output root
@@ -634,7 +631,7 @@ The master log SHOULD be available before the first validation stage begins.
 
 ### 11.3 Initial evidence
 
-Recommended initial records:
+Initial records include:
 
 ```text
 run ID
@@ -642,7 +639,7 @@ run start timestamp
 GF Wordbench version
 project ID
 mode
-resolved project root
+resolved workspace and project roots
 resolved output root
 ```
 
@@ -813,7 +810,7 @@ Concurrent runs may update it with atomic last-writer-wins behavior, but state o
 
 Cleanup must not delete a run known to be active.
 
-Implementations SHOULD use an OS-level exclusive lock or equivalent internal mechanism.
+Active-run protection SHOULD use an OS-level exclusive lock or an equivalent controlled mechanism.
 
 Any temporary lock representation:
 
@@ -846,7 +843,7 @@ The canonical run layout does not require copying the complete source tree into 
 
 When a source file changes after fingerprinting but before its dependent operation finishes, GF Wordbench SHOULD detect the inconsistency when feasible.
 
-Strict release mode SHOULD fail or restart rather than combine multiple source states.
+Strict release mode MUST fail when it detects that one run combined multiple source states.
 
 ### 16.5 Historical rebuild
 
@@ -999,7 +996,7 @@ Canonical successful sequence:
 12. write top_errors.txt
 13. write aggregate/detail artifacts not yet finalized
 14. close every non-manifest writer
-15. calculate final artifact sizes and SHA-256 values
+15. calculate published artifact sizes and SHA-256 values
 16. atomically write manifest.json
 17. re-read and verify manifest.json
 18. freeze the run directory against normal writes
@@ -1015,7 +1012,7 @@ Canonical successful sequence:
 
 `summary.json` may reference `manifest.json`.
 
-The manifest hashes the final `summary.json`.
+The manifest hashes the published `summary.json`.
 
 ### 21.3 No post-manifest writes
 
@@ -1078,7 +1075,7 @@ application state
 migration outputs
 ```
 
-It SHOULD also be used for final Markdown/text reports.
+It SHOULD also be used for completed Markdown/text reports.
 
 ### 23.2 Procedure
 
@@ -1096,7 +1093,7 @@ A failed temporary write must not destroy the last valid destination.
 
 ### 23.4 Run-local temporary files
 
-Temporary files remain run-owned but are not final artifacts.
+Temporary files remain run-owned but are not published artifacts.
 
 ### 23.5 Directory creation
 
@@ -1137,7 +1134,7 @@ Typical indicators:
 - no valid `summary.json`;
 - no valid `manifest.json`;
 - temporary report files remain;
-- stage logs exist without final result;
+- stage logs exist without completed result;
 - manifest path referenced but absent;
 - process ended during finalization.
 
@@ -1173,7 +1170,7 @@ A new execution creates a new run.
 
 Files may be copied for investigation.
 
-A recovered report package must not be represented as the original run's successful finalization unless a future explicit recovery schema and audit trail are introduced.
+A recovered report package must not be represented as the original run's successful finalization unless a versioned recovery schema and audit trail explicitly define that operation.
 
 ---
 
@@ -1381,7 +1378,7 @@ Deletion requires:
 - explicit automation policy;
 - or documented retention configuration.
 
-### 31.3 Future retention dimensions
+### 31.3 Retention dimensions
 
 A configurable policy may consider:
 
@@ -1465,7 +1462,7 @@ Cleanup must not follow directory symlinks or unsafe reparse points outside the 
 
 Cleanup must refuse any path resolving to:
 
-- project root;
+- workspace root;
 - source root;
 - project validation root;
 - project gold root;
@@ -1522,11 +1519,7 @@ unknown
 
 ### 34.2 Dry run
 
-Recommended command behavior:
-
-```text
-gf-wordbench runs clean --dry-run
-```
+The cleanup interface MUST provide a read-only planning operation before deletion. Exact CLI syntax belongs to `docs/usage/CLI_REFERENCE.md`.
 
 ### 34.3 Deterministic order
 
@@ -1592,7 +1585,7 @@ Deletion after archival requires a separate explicit decision.
 
 ## 36. Archive verification
 
-Recommended process:
+Archive verification sequence:
 
 ```text
 1. verify source run manifest
@@ -1704,7 +1697,7 @@ Do not modify the original manifested run in place.
 
 ### 39.4 Source evidence
 
-An export should reference the original run ID and manifest hash through a future explicit export contract.
+An export references the original run ID and manifest hash through its own versioned export contract.
 
 ---
 
@@ -1773,7 +1766,7 @@ Do not execute files discovered in a historical run during inspection or verific
 
 ### 41.7 Cleanup attack resistance
 
-Recursive deletion requires containment checks on the final resolved path, not only string-prefix checks.
+Recursive deletion requires containment checks on the resolved path, not only string-prefix checks.
 
 ---
 
@@ -1922,7 +1915,7 @@ The canonical model does not require one global run-index file.
 
 The output-root directory plus each run's `summary.json`/`manifest.json` is sufficient.
 
-### 46.3 Future index
+### 46.3 Optional persistent index
 
 A persistent index may improve performance, but it would require:
 
@@ -1935,7 +1928,7 @@ A persistent index may improve performance, but it would require:
 
 ### 46.4 Cache semantics
 
-Any future index must be rebuildable and must not replace run-local evidence as authority.
+Any persistent index must be rebuildable and must not replace run-local evidence as authority.
 
 ---
 
@@ -2022,7 +2015,7 @@ Archiving a legacy directory does not make it canonical.
 
 ## 49. Operational diagnostics
 
-Recommended stable diagnostic codes:
+Stable diagnostic codes:
 
 ```text
 RUN_OUTPUT_ROOT_INVALID
@@ -2077,18 +2070,17 @@ Tool-stage failures preserve their own error kinds.
 
 ## 50. CLI behavior
 
-Recommended commands:
+The CLI exposes operations to:
 
-```text
-gf-wordbench runs list
-gf-wordbench runs show <run-id>
-gf-wordbench runs verify <run-id>
-gf-wordbench runs verify <run-id> --strict
-gf-wordbench runs archive <run-id>
-gf-wordbench runs restore <archive>
-gf-wordbench runs clean --dry-run
-gf-wordbench runs clean <run-id>
-```
+- list discovered runs;
+- inspect one run;
+- verify schemas and artifact integrity;
+- archive a run;
+- restore a verified archive;
+- preview cleanup;
+- delete explicitly selected eligible runs.
+
+Exact command names, arguments, and exit codes belong to `docs/usage/CLI_REFERENCE.md`.
 
 ### 50.1 `runs list`
 
@@ -2123,7 +2115,7 @@ Requires explicit selection or retention policy.
 
 It does not delete active runs.
 
-Exact command syntax becomes normative in `CLI_REFERENCE.md`.
+CLI syntax is defined in `docs/usage/CLI_REFERENCE.md`.
 
 ---
 
@@ -2170,7 +2162,7 @@ CI may clean old workspace runs through explicit job policy.
 
 ### 52.2 Publication
 
-Publish PGF as final only when release decision is `READY`.
+Publish PGF only when release decision is `READY`.
 
 ### 52.3 Interrupted job
 
@@ -2184,65 +2176,54 @@ Parallel jobs require distinct output roots or collision-safe run allocation.
 
 ---
 
-## 53. Implementation architecture
+## 53. Runs module ownership
 
-Recommended modules:
+The functional `runs` module owns the run-directory lifecycle within the hexagonal modular monolith.
 
-```text
-app/runs/paths.py
-app/runs/lifecycle.py
-app/runs/discovery.py
-app/runs/finalize.py
-app/runs/cleanup.py
-app/runs/archive.py
-```
+Its responsibilities are separated by architectural ring:
 
-A smaller implementation may combine modules, but responsibilities must remain explicit.
+### 53.1 Domain
 
-### 53.1 `paths.py`
+The domain defines:
 
-- run ID;
-- collision handling;
-- RunPaths;
-- directory creation;
-- containment.
+- run identity;
+- lifecycle states and allowed transitions;
+- containment and immutability invariants;
+- cleanup eligibility;
+- archive and restoration invariants.
 
-### 53.2 `lifecycle.py`
+### 53.2 Application
 
-- operational transitions;
-- active-run guards;
-- lifecycle classification.
+Application services coordinate:
 
-### 53.3 `discovery.py`
+- allocation and initialization;
+- read-only discovery;
+- finalization;
+- verification;
+- cleanup planning and deletion;
+- archival and restoration.
 
-- read-only output-root scanning;
-- canonical/legacy classification;
-- previous-run candidates.
+### 53.3 Ports
 
-### 53.4 `finalize.py`
+Ports define required external capabilities for:
 
-- writer closure;
-- report order;
-- artifact declarations;
-- manifest finalization;
-- freeze rules.
+- filesystem operations;
+- clocks and run identifiers;
+- active-run locking;
+- hashing;
+- archive creation and extraction.
 
-### 53.5 `cleanup.py`
+### 53.4 Adapters
 
-- eligibility;
-- dry-run plan;
-- safe deletion.
+Adapters implement operating-system and archive behavior while preserving the domain invariants in this document.
 
-### 53.6 `archive.py`
+### 53.5 Entrypoints and bootstrap
 
-- archive creation;
-- archive digest;
-- extraction verification;
-- restoration.
+CLI and GUI invoke the same application services. Bootstrap assembles the services and adapters but does not own lifecycle policy or path semantics.
 
 ---
 
-## 54. Recommended models
+## 54. Run models
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -2352,7 +2333,7 @@ Every indicator requires restoring the contract or performing a coordinated vers
 
 ## 57. Required tests
 
-Recommended files:
+Test files:
 
 ```text
 tests/runs/test_run_id.py
@@ -2569,7 +2550,7 @@ A coordinated change MUST update:
 
 ---
 
-## 60. Final enforcement rule
+## 60. Enforcement rule
 
 A run directory begins mutable, gathers evidence, and becomes immutable only through verified finalization.
 

@@ -2,9 +2,10 @@
 
 **Document ID:** `GF-WB-ARCH-ARTIFACT-MODEL`  
 **Status:** Normative architecture  
-**Applies to:** GF Wordbench framework, active project validation and generated run directories  
+**Applies to:** GF Wordbench framework, one active project, one run and generated run directories  
 **Owner:** GF Wordbench maintainers  
-**Primary implementation owners:** audit orchestration, stage owners, report writers and manifest writer  
+**Primary owners:** run orchestration, stage owners, report writers and manifest writer  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Related schema authority:** `docs/PERSISTED_SCHEMA_LOCK.md`  
 **Related external boundary:** `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`  
 **Related interfile authority:** `docs/INTERFILE_CONTRACT_LOCK.md`
@@ -73,6 +74,26 @@ This model does not define:
 
 Those topics belong to their dedicated specifications and contract locks.
 
+### 2.1 Product and Portfolio boundary
+
+Every Wordbench run and every run-owned artifact belongs to exactly one resolved active project and one run identity.
+
+Wordbench artifacts MUST NOT contain or imply:
+
+- a registry of several active projects;
+- a portfolio-wide run identity;
+- cross-workspace aggregation state;
+- `gf-portfolio` private configuration, storage identifiers or lifecycle state.
+
+Finalized public Wordbench artifacts MAY be consumed read-only by `gf-portfolio`.
+
+```text
+gf-portfolio -> public versioned GF Wordbench artifacts
+GF Wordbench -X-> gf-portfolio runtime, storage, code or configuration
+```
+
+Portfolio ingestion, indexing, aggregation, comparison and portfolio readiness remain owned by `gf-portfolio`. Their failure MUST NOT mutate or invalidate an otherwise valid Wordbench run artifact set.
+
 ---
 
 ## 3. Normative terms
@@ -95,7 +116,7 @@ Those topics belong to their dedicated specifications and contract locks.
 - **FINALIZED**: no longer writable during normal run execution.
 - **REQUIRED ARTIFACT**: artifact whose absence invalidates a stage, run or release criterion.
 - **OPTIONAL ARTIFACT**: artifact that may be absent without invalidating the run.
-- **EPHEMERAL FILE**: temporary implementation file that is not part of the finalized artifact set.
+- **EPHEMERAL FILE**: temporary internal file that is not part of the finalized artifact set.
 - **PATH BASE**: authoritative directory against which a relative artifact path is resolved.
 - **PROVENANCE**: information connecting an artifact to its producer, inputs and operation.
 
@@ -115,7 +136,7 @@ Language implementation files consumed by GF:
 *.gf
 ```
 
-Source files are inputs. A normal audit MUST NOT modify them.
+Source files are inputs. Normal validation MUST NOT modify them.
 
 ### Project assets
 
@@ -135,7 +156,7 @@ They are not generated run artifacts.
 
 ### Run artifacts
 
-Files created or captured for one audit run:
+Files created or captured for one Wordbench run:
 
 ```text
 run_<run-id>/
@@ -295,7 +316,7 @@ Expected:
 summary_path = run_paths.summary_json_path
 ```
 
-The owner of path construction may use filename constants internally.
+The path owner may use filename constants internally.
 
 ---
 
@@ -517,7 +538,7 @@ Fields may be added compatibly only when:
 - Path fields use one consistent internal type.
 - Serialized run-owned paths are run-relative where the schema requires portability.
 - No consumer derives a sibling path by renaming a supplied path.
-- The path model is built before audit stages execute.
+- The path model is built before run stages execute.
 - Run paths do not encode active-language defaults.
 - Path validation occurs before external execution.
 
@@ -791,8 +812,8 @@ Normal validation MUST NOT modify them.
 | scenario `*.gfs` | project maintainers | project loader, scenario runner, security checks |
 | validation inputs | project maintainers | scenario runner |
 | gold `*.gold` | project maintainers / explicit gold updater | comparator, reports |
-| run directory | audit orchestration | all run components |
-| `master.log` | audit orchestration or log owner | report aggregation, users |
+| run directory | run orchestration | all run components |
+| `master.log` | run orchestration or log owner | report aggregation, users |
 | per-file scan log | scanner | result builder, details, reports |
 | compile stdout/stderr | compiler | diagnostic parser, classifier, details, reports |
 | scenario stdout/stderr | scenario runner | normalizer, assertions, reports |
@@ -806,7 +827,7 @@ Normal validation MUST NOT modify them.
 | `top_errors.txt` | log/report writer | users, automation where documented |
 | `details/` | detail report writer | users, GUI |
 | aggregate logs | aggregate log writer | users, reports |
-| `manifest.json` | manifest writer | verifier, cleanup, export, automation |
+| `manifest.json` | manifest writer | verifier, cleanup, export, automation, optional `gf-portfolio` consumer |
 
 An observer MUST NOT rewrite an artifact owned by another component.
 
@@ -1200,7 +1221,7 @@ manifest.json
 master.log
 ```
 
-`AI_READY.md` and `top_errors.txt` are required when enabled by the final product contract.
+`AI_READY.md` and `top_errors.txt` are required when enabled by the reporting contract.
 
 The definitive required set is controlled by the persisted schema and release policy.
 
@@ -1517,7 +1538,18 @@ manifest
 license and provenance metadata
 ```
 
-A release package is not automatically the same as a complete audit archive.
+A release package is not automatically the same as a complete run archive.
+
+### 27.1 Public consumer contract
+
+A public artifact bundle intended for `gf-portfolio` or another external consumer:
+
+- contains only finalized, versioned Wordbench artifacts;
+- preserves Wordbench-owned paths, identities and hashes;
+- is read-only from the consumer's perspective;
+- excludes private application state and private module data;
+- does not include portfolio-specific indexes or aggregate statuses;
+- remains valid independently of consumer availability.
 
 ---
 
@@ -1661,7 +1693,7 @@ Such changes require:
 
 ## 33. Artifact contract tests
 
-Recommended test modules:
+Contract test modules:
 
 ```text
 tests/artifacts/
@@ -1740,7 +1772,7 @@ Required test cases include:
 
 ## 34. Automated artifact checks
 
-Recommended command:
+Canonical command:
 
 ```text
 gf-wordbench artifacts check <run-dir>
@@ -1752,7 +1784,7 @@ Strict mode:
 gf-wordbench artifacts check <run-dir> --strict
 ```
 
-The checker should verify:
+The checker verifies:
 
 1. run directory identity;
 2. canonical control files;
@@ -1852,7 +1884,7 @@ Tests:
 
 ## 37. Responsibility boundaries
 
-### Audit orchestration
+### Run orchestration
 
 Owns:
 
@@ -1927,10 +1959,17 @@ Does not redefine artifact ownership or success.
 
 ### Normative locks
 
+- `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
 - `docs/INTERFILE_CONTRACT_LOCK.md`
 - `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`
 - `docs/PERSISTED_SCHEMA_LOCK.md`
 - `project/docs/INTERFILE_CONTRACT_LOCK.md`
+
+### Product-boundary decisions
+
+- `docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md`
+- `docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md`
+- `docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md`
 
 ### Architecture
 
@@ -1966,6 +2005,6 @@ They are the durable evidence, machine contracts and review surfaces through whi
 
 Therefore:
 
-> No artifact path, role, owner, requiredness, lifecycle, schema or retention meaning may change through an isolated implementation edit.
+> No artifact path, role, owner, requiredness, lifecycle, schema or retention meaning may change through an isolated code or documentation edit.
 
 Every artifact-model change must update its producer, owner, observers, path model, schema, manifest behavior, tests and documentation as one coordinated change.

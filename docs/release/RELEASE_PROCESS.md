@@ -2,59 +2,76 @@
 
 **Document ID:** `GF-WB-RELEASE-PROCESS`  
 **Status:** Normative release procedure  
-**Applies to:** GF Wordbench framework releases, project-template releases, active-language project releases, prereleases, hotfixes, and security releases  
-**Primary owners:** GF Wordbench maintainers and designated release manager  
+**Applies to:** GF Wordbench framework releases, project-template releases, active-project releases, prereleases, hotfixes and security releases  
+**Owner:** GF Wordbench maintainers and designated release manager  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Versioning authority:** `CHANGELOG.md` and the published package metadata  
+**Schema authority:** `docs/PERSISTED_SCHEMA_LOCK.md`  
+**Contract authorities:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`  
 **Process version:** `1.0`  
-**Target product state:** Final architecture  
-**Last reviewed:** 2026-07-22  
+**Last reviewed:** `2026-07-24`
 
 ---
 
 ## 1. Purpose
 
-This document defines the complete release process for GF Wordbench.
+This document defines the release process for GF Wordbench.
 
 It specifies:
 
-- which deliverables may be released;
-- which roles participate;
-- how a release is proposed and classified;
-- how versions are selected;
-- which contracts, schemas, migrations, tests, and artifacts must be reviewed;
-- how release candidates are prepared;
-- how packages and evidence are built;
-- how releases are approved, tagged, published, and verified;
-- how project-language releases differ from framework releases;
-- how hotfixes and security releases are handled;
-- how failed or defective releases are withdrawn without mutating published versions.
+- independently releasable deliverables;
+- release roles and workflow states;
+- version and compatibility review;
+- contract, schema and migration review;
+- required tests and platform evidence;
+- package and project-artifact construction;
+- candidate, approval, tagging and publication procedures;
+- post-publication verification;
+- hotfix, security, withdrawal and rollback procedures;
+- evidence retention.
 
-The process is designed to ensure that every release is reproducible, reviewable, migration-safe, and supported by durable evidence.
+The governing rule is:
 
----
-
-## 2. Core rule
-
-> A release is complete only when its source, versions, contracts, schemas, tests, artifacts, migration notes, changelog, tag, and published outputs all describe the same product state.
+> A release is complete only when its source, versions, contracts, schemas, tests, artifacts, migration notes, changelog, tag and published outputs describe the same approved product state.
 
 Passing tests alone is insufficient.
 
-Building a package alone is insufficient.
+Building an artifact alone is insufficient.
 
 Creating a tag alone is insufficient.
 
-A release exists only after publication and post-publication verification succeed.
+Publication is complete only after the published outputs are independently verified.
+
+---
+
+## 2. Product boundary
+
+GF Wordbench and `gf-portfolio` are independent products.
+
+This process covers:
+
+```text
+GF Wordbench framework
+GF Wordbench project template
+one active GF language project
+```
+
+It does not cover a `gf-portfolio` product release.
+
+A Portfolio release may consume public, versioned Wordbench artifacts. Wordbench release tooling must not depend on Portfolio code, runtime, storage, schemas, configuration or publication state.
+
+One Wordbench project release concerns exactly one project identity and one normative language target.
 
 ---
 
 ## 3. Related authority
 
-The following documents govern specific release boundaries:
-
 ```text
 CHANGELOG.md
-docs/release/VERSIONING_POLICY.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/release/MIGRATION_AND_DEPRECATION.md
 docs/development/TESTING_GF_WORDBENCH.md
+docs/architecture/PRODUCT_BOUNDARIES.md
 docs/architecture/ARCHITECTURE_OVERVIEW.md
 docs/architecture/ARTIFACT_MODEL.md
 docs/architecture/ERROR_HANDLING_MODEL.md
@@ -63,37 +80,47 @@ docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/reports/REPORTING_OVERVIEW.md
 docs/reports/ARTIFACT_MANIFEST.md
-docs/gf/GF_VERSION_COMPATIBILITY.md
+docs/validation/RELEASE_GATES.md
 docs/projects/PROJECT_COMPLETION_CHECKLIST.md
-project/docs/RELEASE_CRITERIA.md
-project/docs/STATUS_LEDGER.md
-project/docs/KNOWN_ISSUES.md
-project/docs/DECISION_LOG.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Priority when rules overlap:
 
-1. versioning policy governs version meaning;
-2. persisted-schema lock governs serialized compatibility;
-3. contract locks govern provider-consumer and external-tool boundaries;
-4. testing policy governs executable evidence;
-5. this document governs release sequencing and approval;
-6. project release criteria govern the active-language project.
+1. accepted ADRs and the documentation-alignment lock govern product and architecture decisions;
+2. package metadata and release version policy govern version identity;
+3. the persisted-schema lock governs serialized compatibility;
+4. contract locks govern provider, consumer and external-tool boundaries;
+5. testing policy governs executable evidence;
+6. this document governs release sequencing and approval;
+7. project release criteria govern the active project.
 
 ---
 
-## 4. Release deliverables
+## 4. Releasable deliverables
 
-GF Wordbench recognizes three independently releasable deliverables.
+GF Wordbench recognizes three independently releasable deliverables:
 
 ```text
-GF Wordbench framework
+framework
 project template
-active language project
+active project
 ```
 
-A combined publication may release more than one deliverable, but each retains its own version, gates, and evidence.
+A combined publication may include more than one deliverable. Each deliverable retains its own:
+
+- version;
+- source identity;
+- compatibility statement;
+- gates;
+- artifacts;
+- approval;
+- publication evidence.
+
+A successful release of one deliverable does not prove that another deliverable is releasable.
 
 ---
 
@@ -103,19 +130,22 @@ A framework release publishes the GF Wordbench software.
 
 It may include:
 
-- Python package;
+- Python distribution;
 - CLI;
-- optional GUI;
+- GUI when included by package metadata;
 - framework documentation;
-- canonical schemas;
+- schemas;
 - project loader;
-- process execution;
-- validation stages;
+- process execution adapters;
+- validation modules;
+- diagnostics;
 - report writers;
 - migration utilities;
-- clean project template.
+- project template.
 
-A framework release does not certify that the current active language project is linguistically release-ready.
+A framework release does not certify the linguistic completeness of the active project.
+
+Framework integration tests use language-neutral fixture projects rather than depending on the active `project/`.
 
 ---
 
@@ -127,17 +157,26 @@ A template release publishes the reusable structure under:
 templates/project/
 ```
 
-It proves that a new project can be initialized from a clean language-neutral source.
+It proves that a new project can be initialized from a language-neutral source.
 
-A template release may be bundled with a framework release.
+Template requirements:
 
-The template version remains independent.
+- generic placeholders only;
+- no active-language identity;
+- no machine-local path;
+- no application state;
+- no run artifact;
+- valid project documentation structure;
+- compatibility with the framework project loader;
+- successful initialization and smoke validation.
+
+The template may be bundled with a framework release, but its version and evidence remain identifiable.
 
 ---
 
-## 7. Active-language project release
+## 7. Active-project release
 
-A project release publishes or certifies the current project under:
+An active-project release publishes or certifies the project under:
 
 ```text
 project/
@@ -148,15 +187,28 @@ It may include:
 - GF source modules;
 - project configuration;
 - project documentation;
-- scenarios;
+- native `.gfs` scenarios;
 - inputs;
-- gold files;
-- final PGF;
-- project release evidence.
+- reviewed gold files;
+- PGF;
+- release reports;
+- artifact manifest;
+- checksums.
 
-A project release records the exact GF Wordbench and GF versions used.
+The project release records:
 
-It does not change the GF Wordbench framework version automatically.
+```text
+project ID
+project version
+source revision
+GF Wordbench version
+GF version
+RGL release or revision
+normalization version
+PGF SHA-256
+```
+
+A project release does not change the GF Wordbench framework version automatically.
 
 ---
 
@@ -175,219 +227,188 @@ project-only
 template-only
 ```
 
-A release type influences gates and communication, but it does not override versioning policy.
+Release type affects gates, communication and publication channel. It does not override compatibility or versioning rules.
 
----
-
-## 9. Stable release
+### 8.1 Stable
 
 A stable release is intended for supported use.
 
 It requires:
 
-- final version;
-- complete changelog;
-- complete migration notes;
-- all mandatory release gates;
-- no unresolved release blocker;
+- approved version;
+- complete changelog and release notes;
+- required migrations;
+- all mandatory gates;
+- no unresolved blocker;
 - immutable publication;
 - post-publication verification.
 
----
+### 8.2 Release candidate
 
-## 10. Release candidate
+A release candidate is a complete candidate for a stable release.
 
-A release candidate is intended to become the stable release unless a blocker is found.
+It uses the intended:
 
-It should use:
+- schemas;
+- migration behavior;
+- report identities;
+- compatibility matrix;
+- package structure.
 
-- final intended schemas;
-- final intended migration behavior;
-- final intended report identities;
-- final intended compatibility matrix;
-- final intended package structure.
+A release candidate must not conceal a missing required capability.
 
-A release candidate must not be used to hide an unfinished required feature.
+### 8.3 Alpha and beta
 
----
+Alpha may expose incomplete or experimental behavior.
 
-## 11. Alpha and beta
+Beta has the planned release scope but may require broader compatibility verification.
 
-Alpha may contain incomplete functionality.
+Both must:
 
-Beta should be feature-complete but may still require compatibility validation.
-
-Alpha and beta releases must:
-
-- identify their instability;
-- avoid claiming stable compatibility;
+- identify instability;
+- avoid stable-support claims;
 - use versioned persisted formats;
 - preserve migration evidence;
-- avoid silently overwriting stable installations or data.
+- avoid overwriting stable data silently.
 
----
+### 8.4 Hotfix
 
-## 12. Hotfix
-
-A hotfix addresses an urgent compatible defect in a published release.
+A hotfix corrects an urgent defect in a published release.
 
 Typical examples:
 
 - process cleanup failure;
-- false diagnostic classification;
-- report-generation defect;
-- supported-platform regression;
-- package metadata error;
+- incorrect diagnostic interpretation;
+- report defect;
+- platform regression;
+- package metadata defect;
 - migration correction preserving intended semantics.
 
-A hotfix normally increments the patch version.
+### 8.5 Security
 
----
-
-## 13. Security release
-
-A security release addresses a vulnerability involving:
+A security release addresses vulnerabilities involving:
 
 - process execution;
-- shell injection;
+- command injection;
 - path traversal;
 - symlink or junction escape;
 - secret disclosure;
-- unsafe scenario execution;
-- unsafe gold update;
+- scenario execution;
 - artifact overwrite;
 - untrusted file handling.
 
-Compatibility may be broken when required for safety.
-
-Security takes priority over preserving an unsafe interface.
+Safety may require a compatibility break. The release must document the impact and migration or mitigation.
 
 ---
 
-# 14. Release roles
+## 9. Roles
 
-A small team may combine roles, but the responsibilities remain distinct.
-
-Canonical roles:
+A small team may combine roles, but responsibilities remain explicit.
 
 ```text
 release manager
-implementation owner
+change owner
 test owner
-schema/contract reviewer
+schema and contract reviewer
 project maintainer
 security reviewer
 approver
 ```
 
----
+### 9.1 Release manager
 
-## 15. Release manager
-
-The release manager owns:
+Owns:
 
 - release plan;
-- version proposal;
-- release checklist;
-- branch or commit selection;
+- proposed version;
+- checklist;
+- commit selection;
 - gate coordination;
 - artifact build;
 - tag creation;
 - publication;
 - post-publication verification;
-- release evidence archive.
+- evidence archive.
 
-The release manager must not override failed gates without a documented exception approved under this process.
+The release manager cannot convert a failed gate into success without an approved exception.
 
----
+### 9.2 Change owner
 
-## 16. Implementation owner
+Confirms:
 
-The implementation owner confirms:
-
-- completed scope;
+- included scope;
 - relevant tests;
-- unresolved limitations;
+- known limitations;
 - affected contracts;
 - affected schemas;
 - migration impact;
 - documentation updates.
 
----
+### 9.3 Test owner
 
-## 17. Test owner
-
-The test owner verifies:
+Confirms:
 
 - required suites ran;
-- expected platforms were covered;
-- required GF tests did not skip;
-- coverage thresholds passed;
-- flaky or quarantined tests are documented;
+- required platforms were covered;
+- real-GF tests did not skip unexpectedly;
+- coverage policy passed;
+- quarantined tests are documented;
 - failure evidence is retained.
 
----
+### 9.4 Schema and contract reviewer
 
-## 18. Schema and contract reviewer
+Confirms:
 
-The reviewer confirms:
-
-- version increments are correct;
-- providers and consumers are aligned;
+- version increments match semantic impact;
+- providers and consumers agree;
 - migrations exist where required;
-- canonical writers emit only current formats;
-- old supported inputs remain readable;
-- locks and fixtures agree.
+- canonical writers emit current formats;
+- supported older inputs remain readable;
+- locks, models and fixtures agree.
 
----
+### 9.5 Project maintainer
 
-## 19. Project maintainer
+For an active-project release, confirms:
 
-For an active-language release, the project maintainer confirms:
-
-- linguistic scope;
+- project scope;
 - project version;
 - scenarios;
 - gold expectations;
-- known issues;
 - release criteria;
 - PGF entrypoints;
+- known nonblocking limitations;
 - project documentation.
 
----
+### 9.6 Security reviewer
 
-## 20. Security reviewer
-
-The security reviewer is required when the release changes:
+Required when a release changes:
 
 - process execution;
 - environment inheritance;
 - path containment;
-- scenario trust policy;
+- scenario trust;
 - secret redaction;
 - external-tool integration;
 - migration of untrusted files;
-- update or overwrite behavior.
+- overwrite or update behavior.
 
----
+### 9.7 Approver
 
-## 21. Approver
-
-The approver confirms that:
+Confirms:
 
 - no required gate is missing;
-- exceptions are documented;
+- exceptions are explicit;
 - evidence matches the proposed version;
 - release notes are accurate;
 - publication may proceed.
 
-For a one-person project, the release manager may also approve, but the checklist must still record the self-review.
+A one-person project may use self-approval, but the evidence must still record the review.
 
 ---
 
-# 22. Release states
+## 10. Workflow states
 
-Canonical internal release states:
+Release workflow states are process metadata, not implementation-status tracking.
 
 ```text
 proposed
@@ -402,93 +423,26 @@ superseded
 aborted
 ```
 
-These states are release-process metadata.
+- `proposed`: scope and version are under review.
+- `planned`: intended scope and compatibility impact are recorded.
+- `in preparation`: scope is frozen and gates are running.
+- `candidate`: immutable candidate artifacts exist.
+- `approved`: required evidence authorizes publication.
+- `published`: artifacts are available at the designated destination.
+- `verified`: published artifacts were fetched or installed and checked.
+- `withdrawn`: the release remains identifiable but should not be used.
+- `superseded`: a newer release replaces it operationally.
+- `aborted`: preparation ended before publication.
 
-They are not validation statuses.
-
----
-
-## 23. Proposed
-
-Scope and target version are not yet final.
-
-No publication claim exists.
-
----
-
-## 24. Planned
-
-The intended scope, compatibility impact, and target release type are documented.
+A published or tagged identifier is never reused for different bytes.
 
 ---
 
-## 25. In preparation
+## 11. Release evidence
 
-Implementation is frozen or stabilizing.
+Release preparation creates a dedicated evidence directory outside the active project source and package source.
 
-Required gates are being executed.
-
----
-
-## 26. Candidate
-
-A release-candidate artifact and tag exist for review.
-
-The release is not stable.
-
----
-
-## 27. Approved
-
-All required evidence is complete and publication is authorized.
-
----
-
-## 28. Published
-
-Artifacts and release metadata are publicly or internally distributed at the designated destination.
-
----
-
-## 29. Verified
-
-Published artifacts were independently fetched or installed and verified.
-
-This is the normal terminal state for a successful release.
-
----
-
-## 30. Withdrawn
-
-The release remains historically identifiable but should no longer be installed or used.
-
-Published version content must not be changed.
-
----
-
-## 31. Superseded
-
-A newer release replaces the release operationally.
-
-The old release remains immutable.
-
----
-
-## 32. Aborted
-
-Preparation ended before publication.
-
-An aborted version may be reused only when no immutable tag or public artifact was published and policy explicitly permits it.
-
-A published or tagged candidate identifier is not reused.
-
----
-
-# 33. Release evidence directory
-
-A release preparation should create a dedicated evidence directory outside the active source tree or under an approved release-output root.
-
-Recommended shape:
+Canonical shape:
 
 ```text
 release_<version>/
@@ -506,45 +460,34 @@ release_<version>/
 └── publication-verification/
 ```
 
-The evidence directory is not the application package.
-
-It supports review and audit.
-
----
-
-## 34. Evidence retention
-
-Retain, when applicable:
+Retain, as applicable:
 
 ```text
+tag
 commit ID
 source archive hash
 version audit
-test commands
-test results
+test commands and results
 coverage report
 GF version output
 platform details
 schema validation output
-migration results
+migration evidence
 package artifacts
 package hashes
-release-mode run summary
-release-mode manifest
+release-mode summary and manifest
 PGF hash
-publication verification
 approval record
+publication verification
 ```
 
 Secrets and complete environment dumps are prohibited.
 
 ---
 
-# 35. Release initiation
+## 12. Release initiation
 
-A release begins with a release plan.
-
-Minimum release plan:
+A release begins with a plan containing:
 
 ```text
 deliverable
@@ -560,110 +503,95 @@ platform changes
 migration requirements
 deprecations
 known blockers
-target publication channel
+publication destinations
 owners
 ```
 
----
-
-## 36. Scope freeze
-
-Before release-candidate preparation, freeze the intended scope.
+Before candidate preparation, freeze the intended scope.
 
 After freeze, allowed changes are limited to:
 
-- release blocker fixes;
+- release-blocker corrections;
 - documentation corrections;
-- packaging fixes;
+- packaging corrections;
 - migration corrections;
-- security fixes;
-- test corrections that reveal or prove release behavior.
+- security corrections;
+- test corrections that expose or prove release behavior.
 
-New unrelated features require a later release.
+Unrelated features move to another release.
 
 ---
 
-## 37. Release branch
+## 13. Source and branch rules
 
-A release branch may be used:
+A release branch may use:
 
 ```text
 release/<version>
 ```
 
-It is optional.
+A hotfix branch may use:
+
+```text
+hotfix/<version>
+```
+
+Branches are optional.
 
 When used:
 
-- branch from a passing reviewed commit;
-- accept only stabilization changes;
-- merge or forward-port every correction;
-- avoid maintaining divergent implementations;
+- start from a reviewed passing commit;
+- accept only release-relevant changes;
+- forward-port every correction;
+- avoid permanent divergent implementations;
 - tag the exact approved commit.
 
-The release branch does not define the version by itself.
-
----
-
-## 38. Clean source requirement
-
-Release preparation requires:
+Stable preparation requires:
 
 - expected branch or commit;
-- no uncommitted production changes;
-- no modified fixtures;
-- no generated run artifacts tracked accidentally;
-- no temporary migration files;
-- no local secrets;
-- no stale package artifacts in the build directory.
+- no uncommitted production change;
+- no modified fixture outside release scope;
+- no tracked generated run artifact;
+- no temporary migration file;
+- no local secret;
+- no stale build artifact.
 
-A dirty source tree may be used only for diagnostic builds, never for a stable release.
+A dirty tree is permitted only for diagnostic builds, never for stable publication.
 
 ---
 
-# 39. Release classification
+## 14. Version and changelog
 
-Classify the release according to `VERSIONING_POLICY.md`.
+Classify compatibility before reserving a version.
 
 Review:
 
 ```text
-application compatibility
-schema compatibility
-contract compatibility
-CLI compatibility
-Python API compatibility
+application behavior
+persisted schemas
+public contracts
+CLI
+GUI
+Python API when public
 platform support
 GF support
 project-template compatibility
 active-project compatibility
 ```
 
-The highest required application-version impact wins.
+The largest required version impact governs the framework version.
 
----
+Before reserving a version, verify:
 
-## 40. Version reservation
-
-Select the proposed version only after compatibility classification.
-
-Verify:
-
-- version is valid;
-- tag does not already exist;
-- package destination does not already contain different artifacts under that version;
+- identifier is valid;
+- tag is unused;
+- publication destination has no conflicting artifact;
 - changelog has no conflicting published section;
-- release candidate identifiers are monotonic.
+- candidate sequence is monotonic.
 
----
+Update the canonical application version once. Derived version displays read from that source.
 
-## 41. Version source update
-
-Update the canonical application version once.
-
-Derived versions must read from it.
-
-Verify:
+Verify agreement among:
 
 ```text
 package metadata
@@ -673,100 +601,55 @@ report producer metadata
 release tag
 ```
 
-all agree.
+Move release entries from `Unreleased` into the versioned changelog section at publication.
+
+Release notes include:
+
+- purpose;
+- principal changes;
+- compatibility;
+- installation and upgrade impact;
+- migrations;
+- known issues;
+- supported GF and Python ranges;
+- supported platforms;
+- verification summary.
+
+Release notes do not replace the changelog or migration guide.
 
 ---
 
-## 42. Changelog preparation
+## 15. Schema audit
 
-Move included entries from:
-
-```text
-## [Unreleased]
-```
-
-into:
+For every persisted schema, record:
 
 ```text
-## [MAJOR.MINOR.PATCH] - YYYY-MM-DD
-```
-
-Use the actual publication date only at final publication.
-
-Before that point, a candidate may use an explicitly marked candidate date or retain release notes separately.
-
-The changelog must include:
-
-- user-visible additions;
-- behavior changes;
-- deprecations;
-- removals;
-- fixes;
-- security changes;
-- migrations.
-
----
-
-## 43. Release notes
-
-Release notes summarize the release for its audience.
-
-They should include:
-
-```text
-release purpose
-key changes
-compatibility
-installation or upgrade impact
-migration actions
-known issues
-supported GF versions
-supported Python versions
-supported platforms
-verification summary
-```
-
-Release notes do not replace the changelog or migration documentation.
-
----
-
-# 44. Schema audit
-
-For every canonical schema, record:
-
-```text
-current schema version
-version emitted by this release
-older supported versions
+schema ID
+current version
+version emitted by the release
+supported older versions
 migration availability
-breaking or compatible classification
+compatibility classification
 fixtures
 round-trip status
 ```
 
-Schemas include:
+Applicable families include:
 
 ```text
 gf-wordbench.project
 gf-wordbench.app-state
 gf-wordbench.run-summary
 gf-wordbench.artifact-manifest
-gf-wordbench.scenario-output
-gf-wordbench.scenario-gold
+scenario-output and gold formats defined by the schema lock
 ```
 
----
-
-## 45. Schema release requirements
-
-A release changing a schema requires:
+A schema change requires:
 
 - updated schema lock;
-- canonical writer;
-- canonical reader;
+- canonical writer and reader;
 - migration when required;
-- canonical minimal fixture;
-- canonical complete fixture;
+- minimal and complete fixtures;
 - invalid fixtures;
 - legacy fixtures;
 - round-trip tests;
@@ -774,17 +657,11 @@ A release changing a schema requires:
 - path-base tests;
 - changelog entry.
 
----
-
-## 46. Unknown-major behavior
-
-Before release, verify that unknown newer major schema versions are rejected explicitly.
-
-A release must not claim compatibility by silently accepting unknown meaning.
+Unknown newer major versions must be rejected explicitly.
 
 ---
 
-# 47. Contract audit
+## 16. Contract audit
 
 Review:
 
@@ -795,81 +672,67 @@ project/docs/INTERFILE_CONTRACT_LOCK.md
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
-For each changed contract:
+For every changed contract:
 
-- version increment matches impact;
-- status is final;
+- semantic version impact is correct;
+- the contract is active and normative;
 - provider exists;
 - consumers exist;
-- public symbols exist;
-- artifact ownership is correct;
+- public symbols or message shapes agree;
+- artifact ownership is singular;
 - tests exist;
 - migration exists when required;
-- forbidden behavior remains absent.
+- prohibited dependencies remain absent.
+
+Stable release behavior must not depend on an inactive, experimental or undocumented contract.
 
 ---
 
-## 48. Contract status requirement
-
-Required release behavior must use:
-
-```text
-Active
-```
-
-Experimental behavior may ship when:
-
-- explicitly labeled;
-- nonessential to stable release;
-- disabled by default or clearly isolated;
-- no canonical persisted ambiguity is introduced.
-
-A stable release must not rely on a merely planned contract.
-
----
-
-## 49. External-tool audit
+## 17. External-tool audit
 
 Verify:
 
 - GF executable resolution;
-- version probe;
+- exact version probe;
 - supported GF range;
-- exact command construction;
-- working directories;
-- environment policy;
+- typed command construction;
+- ordered argument arrays;
+- explicit working directories;
+- controlled environment policy;
 - finite timeouts;
 - separate stdout and stderr;
-- required artifacts;
-- scenario stdin;
+- native `.gfs` standard input;
+- required-artifact declarations;
 - no implicit shell;
 - version-sensitive diagnostics;
-- optional-tool contracts.
+- optional diagnostic-tool contracts.
 
 ---
 
-# 50. Normalization and gold audit
+## 18. Normalization and gold audit
 
-When normalization or scenario behavior changed:
+When scenario behavior or normalization changes:
 
-1. preserve before/after raw evidence;
+1. preserve before-and-after raw evidence;
 2. verify normalization version;
 3. run normalization fixtures;
-4. inspect every changed `.out`;
-5. inspect every changed `.gold`;
+4. inspect changed normalized outputs;
+5. inspect changed gold files;
 6. confirm no meaningful linguistic output was removed;
-7. confirm headers agree;
+7. confirm headers and metadata agree;
 8. document regeneration or migration;
 9. record project impact;
 10. run required scenario release tests.
 
-Widespread unexplained gold change is a release blocker.
+Widespread unexplained gold changes block release.
+
+Gold updates remain explicit project-maintenance operations. Release automation must not approve them automatically.
 
 ---
 
-# 51. Migration audit
+## 19. Migration and deprecation audit
 
-Every migration included in the release must be tested against:
+Each migration is tested against:
 
 ```text
 valid legacy input
@@ -880,22 +743,18 @@ invalid input
 already canonical input
 target collision
 write failure
-repeat execution
+repeated execution
 ```
 
 Verify:
 
-- source is preserved until success;
+- source remains intact until success;
 - losses are reported;
 - warnings are actionable;
 - target validates;
 - canonical writer emits no legacy aliases.
 
----
-
-# 52. Deprecation audit
-
-For every deprecation, verify:
+Each deprecation records:
 
 ```text
 deprecated item
@@ -908,13 +767,13 @@ tests
 documentation
 ```
 
-For every removal, verify that its required deprecation window or emergency exception is documented.
+A removal must satisfy the documented deprecation window or an approved emergency exception.
 
 ---
 
-# 53. Compatibility matrix
+## 20. Compatibility matrix
 
-Before candidate approval, finalize the supported matrix.
+Before candidate approval, publish the supported matrix.
 
 Minimum dimensions:
 
@@ -923,7 +782,7 @@ GF Wordbench version
 Python versions
 GF versions
 project schema versions
-summary schema versions
+run-summary schema versions
 platforms
 GUI availability
 ```
@@ -940,182 +799,104 @@ incompatible
 unknown
 ```
 
+Do not label a version or platform `tested` without evidence.
+
 ---
 
-# 54. Documentation audit
+## 21. Documentation audit
 
 Verify that:
 
-- root README reflects current product identity;
-- installation instructions match package contents;
-- CLI reference matches implemented commands;
-- GUI reference matches implemented behavior;
-- project template paths exist;
-- release notes match changelog;
-- migration steps are complete;
-- no canonical document presents deprecated names as current;
-- no generated path is documented under the wrong base;
-- all linked normative documents exist;
-- documentation uses the selected version consistently.
+- README reflects current product identity;
+- installation instructions match package metadata;
+- CLI reference matches the command parser;
+- GUI reference matches shipped behavior;
+- project-template paths exist;
+- release notes match the changelog;
+- migration procedures are complete;
+- deprecated names are not presented as current;
+- generated paths use the correct base;
+- normative links resolve;
+- release version is consistent;
+- Wordbench documentation does not describe Portfolio as an internal module;
+- no implementation-status labels are used as product documentation.
 
 ---
 
-# 55. Project-template audit
+## 22. Framework and template isolation
 
-When the framework release includes the template, verify:
+A framework release test must not depend on the linguistic correctness of the active project.
 
-- template structure matches the documented project model;
-- placeholders remain generic;
-- no active-language name appears;
-- no machine-local path appears;
-- no state file appears;
-- no run artifact appears;
-- required documentation exists;
-- project configuration validates after required placeholder replacement;
-- template contract lock matches the framework project loader;
-- template version is updated correctly.
+Use a dedicated language-neutral fixture project.
 
----
+A template audit verifies:
 
-# 56. Active-project isolation
-
-A framework release test must not depend on the linguistic correctness of the active `project/`.
-
-Use a dedicated framework fixture project for release integration.
-
-The active project may be tested separately as a project release.
-
-This prevents one incomplete language project from blocking a valid framework release and prevents one successful language project from masking framework defects.
+- documented structure;
+- generic placeholders;
+- no active-language identity;
+- no machine-local path;
+- no state or run artifact;
+- required documentation;
+- project-loader compatibility;
+- successful initialized-project smoke test.
 
 ---
 
-# 57. Freeze checks
+## 23. Release gates
 
-At release-candidate freeze, confirm:
+Exact commands and package roots are defined by `pyproject.toml` and `docs/development/TESTING_GF_WORDBENCH.md`.
+
+Required gate families:
 
 ```text
-[ ] no unrelated feature remains open
-[ ] no unresolved schema decision remains
-[ ] no unresolved contract decision remains
-[ ] compatibility matrix is final
-[ ] migration scope is final
-[ ] normalization version is final
-[ ] required gold changes are reviewed
-[ ] package structure is final
-[ ] release notes are drafted
-[ ] blockers are enumerated
+format and lint
+type checking
+documentation consistency
+dependency direction
+version consistency
+artifact ownership
+contract validation
+unit and component tests
+schema and migration tests
+security tests
+platform tests
+real-GF tests
+fake-GF end-to-end
+real-GF end-to-end
+coverage
+repository cleanliness
 ```
 
----
+Required tests must not skip unexpectedly.
 
-# 58. Static release gates
+Expected failures require a current issue and removal condition.
 
-Run:
+A retry-only pass is not stable evidence.
 
-```text
-python -m ruff format --check .
-python -m ruff check .
-python -m mypy app
-```
+### 23.1 Security evidence
 
-Also run:
+At minimum:
 
-- documentation consistency checks;
-- dependency-direction tests;
-- version-consistency tests;
-- artifact-ownership tests;
-- contract metadata validation.
-
-No required warning is ignored without a documented exception.
-
----
-
-# 59. Default test gate
-
-Run the complete suite that does not require a real GF installation.
-
-Recommended:
-
-```text
-python -m pytest -m "not gf"
-```
-
-This includes:
-
-- unit;
-- component;
-- contracts;
-- schemas;
-- migrations;
-- fake process;
-- fake-GF integration;
-- supported GUI-independent behavior;
-- security tests not requiring GF.
-
----
-
-# 60. Contract gate
-
-Run:
-
-```text
-python -m pytest -m contract
-```
-
-Verify:
-
-- public boundaries;
-- result fields;
-- status meanings;
-- artifact ownership;
-- no prohibited imports;
-- CLI/GUI configuration equivalence;
-- no report-time execution;
-- no gold modification.
-
----
-
-# 61. Schema and migration gate
-
-Run:
-
-```text
-python -m pytest -m "schema or migration"
-```
-
-Verify every supported persisted family and migration path.
-
----
-
-# 62. Security gate
-
-Run security-marked tests.
-
-Verify at minimum:
-
+- argument-boundary tests;
 - no shell injection;
-- argument boundaries;
 - path traversal rejection;
-- symlink/junction containment;
+- symlink and junction containment;
 - secret redaction;
-- output limit;
+- bounded output;
 - scenario OS-escape policy;
-- gold write separation;
-- safe artifact destination;
+- gold-write separation;
+- safe artifact destinations;
 - no environment dump.
 
----
+### 23.2 Windows evidence
 
-# 63. Windows gate
+At minimum:
 
-Required Windows evidence includes:
-
-- paths containing spaces;
+- paths with spaces;
 - Unicode paths;
-- native `gf.exe` or fake executable;
-- CRLF inputs;
-- timeout;
-- cancellation;
+- `gf.exe` or a controlled fake executable;
+- CRLF input;
+- timeout and cancellation;
 - child-process termination;
 - drive handling;
 - junction containment;
@@ -1123,60 +904,40 @@ Required Windows evidence includes:
 - CLI launcher;
 - GUI launcher when shipped.
 
----
+### 23.3 POSIX evidence
 
-# 64. POSIX gate
-
-Required POSIX evidence includes:
+At minimum:
 
 - executable permission;
 - Unicode paths;
-- path separator behavior;
-- process group termination;
+- search-path separator behavior;
+- process-group termination;
 - symlink containment;
 - atomic writes;
-- CLI package execution.
+- installed CLI execution.
 
----
+### 23.4 Real-GF evidence
 
-# 65. Real-GF gate
-
-Run:
-
-```text
-python -m pytest -m gf
-```
-
-The release environment must provide explicit tested GF configuration.
-
-The job fails if required GF tests skip unexpectedly.
-
-Required real-GF evidence:
+At minimum:
 
 - version probe;
-- successful compile;
-- failed compile;
-- explicit GF path;
+- successful compilation;
+- failing compilation;
+- explicit GF search path;
 - PGF build;
-- `.gfs` load;
-- parse;
-- linearize;
+- native `.gfs` execution;
+- parsing;
+- linearization;
 - bounded generation;
-- markers;
+- marker checks;
 - Unicode;
-- required artifact verification.
+- required-artifact verification.
 
 ---
 
-# 66. End-to-end gate
+## 24. End-to-end release flow
 
-Run fake-GF and real-GF end-to-end workflows.
-
-Fake-GF E2E proves framework control.
-
-Real-GF E2E proves the external contract.
-
-Required final real-GF flow:
+Required real-GF flow:
 
 ```text
 temporary canonical project
@@ -1191,193 +952,115 @@ temporary canonical project
     → manifest verification
 ```
 
----
+Fake-GF end-to-end proves framework control and failure semantics.
 
-# 67. Coverage gate
-
-Recommended release thresholds:
-
-```text
-overall line coverage: at least 85%
-changed production lines: at least 90%
-critical-module branch coverage target: at least 90%
-```
-
-Critical modules:
-
-```text
-process execution
-path containment
-schema migration
-release gates
-gold update
-manifest
-```
-
-A threshold change requires an explicit policy update.
-
-It must not be lowered solely to release the current change set.
+Real-GF end-to-end proves the external GF contract.
 
 ---
 
-# 68. Skip and xfail gate
+## 25. Coverage and cleanliness
 
-Release requirements:
+Coverage thresholds are owned by the testing policy.
 
-- no unexpected skip in required test categories;
-- no strict xpass;
-- every expected failure has a current issue and removal condition;
-- quarantined tests are enumerated and approved;
-- no retry-only success is accepted as stable evidence.
+A threshold must not be reduced merely to release the current changes.
 
----
+After all gates:
 
-# 69. Repository cleanliness gate
-
-After all tests:
-
-- tracked fixtures remain unchanged;
-- project golds remain unchanged unless the release intentionally updates them;
-- no child process remains;
-- no untracked secret appears;
-- no generated package or run artifact is accidentally staged;
-- source tree remains reproducible.
+- tracked fixtures remain unchanged unless intentionally updated;
+- project gold remains unchanged unless explicitly reviewed;
+- no owned child process remains;
+- no untracked secret exists;
+- no generated run or package artifact is staged accidentally;
+- the source tree remains reproducible.
 
 ---
 
-# 70. Package build
+## 26. Package build and inspection
 
 Build from the exact candidate commit in a clean environment.
 
-Recommended outputs:
+Framework distribution artifacts may include:
 
 ```text
 wheel
-source distribution when supported
+source distribution
 source archive
+checksums
+release notes
+migration guide
+compatibility matrix
+test and coverage summaries
 ```
 
-Build tools and commands must be recorded.
+The release plan identifies which formats are required.
 
-The build directory must not contain stale artifacts from another version.
+Clean build environment:
 
----
+- supported Python;
+- declared build dependencies;
+- no editable installation;
+- no uncommitted changes;
+- no inherited application state;
+- no hidden GF path dependency;
+- controlled dependency retrieval.
 
-## 71. Clean build environment
+Inspect package contents.
 
-The build environment should provide:
+Required inclusions:
 
-```text
-supported Python
-declared build dependencies
-no editable installation
-no uncommitted source changes
-no inherited project state
-no hidden GF path dependency
-no network use except dependency retrieval when explicitly permitted
-```
-
-A reproducible internal build may use a prepopulated dependency cache.
-
----
-
-## 72. Package-content audit
-
-Inspect the built package.
-
-Verify inclusion of:
-
-- production Python modules;
-- required metadata;
+- production package content;
+- metadata;
 - license;
-- required package resources;
+- required resources;
 - template assets when shipped.
 
-Verify exclusion of:
+Required exclusions:
 
-- tests unless intentionally shipped;
 - local state;
 - active project source unless intentionally packaged;
 - generated run artifacts;
-- release evidence directory;
+- evidence directory;
 - secrets;
 - caches;
 - temporary files;
-- developer-only snapshots.
+- developer snapshots.
 
 ---
 
-## 73. Install smoke test
+## 27. Installation smoke and version audit
 
 Install the built artifact into a clean environment.
 
 Verify:
 
 ```text
-import app
-CLI --help
-CLI --version
-configuration inspection without GF
-package metadata
-optional GUI import or launch when shipped
-```
-
-The installed package must not depend on repository-relative imports.
-
----
-
-## 74. Version verification
-
-From the installed package, verify:
-
-```text
-installed distribution version
-app.__version__
+distribution metadata
+CLI help
 CLI version
-GUI version
-report producer version
+configuration inspection without GF
+GUI import or launch when shipped
+package resources
 ```
 
-all equal the candidate application version.
+Do not rely on repository-relative imports.
 
----
-
-## 75. Source archive verification
-
-A source archive should:
-
-- correspond to the candidate commit;
-- contain required build files;
-- omit local state and generated artifacts;
-- reproduce the package build;
-- have a recorded SHA-256.
-
----
-
-# 76. Release-candidate artifact set
-
-Recommended framework candidate artifacts:
+Verify version agreement among:
 
 ```text
-wheel
-source distribution or source archive
-checksums file
-release notes
-CHANGELOG excerpt
-migration guide
-compatibility matrix
-test summary
-coverage summary
-version audit
+installed distribution
+public CLI
+public GUI
+report producer metadata
+release tag
 ```
 
-Internal releases may omit distribution formats not used by the installation method, but the omission must be deliberate.
+Internal Python package paths are not duplicated in this process document; they come from package metadata and architecture documentation.
 
 ---
 
-## 77. Checksums
+## 28. Checksums and signing
 
-Use SHA-256 for release-artifact integrity.
+Use SHA-256 for distribution-artifact integrity.
 
 Canonical checksum line:
 
@@ -1385,22 +1068,14 @@ Canonical checksum line:
 <sha256><two spaces><filename>
 ```
 
-The checksum file itself may be signed when a signing process exists.
+Artifact signing may be used only under a documented key-management and verification policy.
 
-Do not claim signature verification unless signing and verification are actually implemented.
-
----
-
-## 78. Signing
-
-Artifact signing is recommended for public distribution but is not mandatory until a signing policy and trusted key management are implemented.
-
-When signing is enabled, document:
+When signing is enabled, record:
 
 - signing identity;
 - key custody;
 - signature format;
-- verification command;
+- verification procedure;
 - rotation;
 - revocation;
 - CI access policy.
@@ -1409,7 +1084,7 @@ Unsigned artifacts must not be described as signed.
 
 ---
 
-# 79. Candidate tag
+## 29. Candidate process
 
 Create an immutable candidate tag only after candidate artifacts pass internal verification.
 
@@ -1419,166 +1094,100 @@ Example:
 v1.2.0-rc.1
 ```
 
-The tag must identify the exact source used to build the candidate.
+Do not rebuild the same candidate identifier with different bytes.
 
-Do not rebuild the same candidate tag with different content.
-
----
-
-## 80. Candidate publication
-
-Publish the candidate to a prerelease or staging channel.
-
-Candidate communication must state:
+Candidate publication identifies:
 
 - prerelease status;
-- target stable version;
+- intended stable version;
 - tested compatibility;
 - known issues;
-- migration requirements;
+- migrations;
 - feedback channel;
-- installation separation from stable release.
-
----
-
-## 81. Candidate validation period
+- installation separation from stable releases.
 
 During candidate validation:
 
-- run representative upgrade tests;
-- run representative clean-install tests;
-- validate package on required platforms;
-- validate real-GF integration;
+- test clean installation and upgrade;
+- test required platforms;
+- run real-GF integration;
 - inspect reports and manifests;
 - review migration logs;
-- collect blockers.
+- collect blockers;
+- add no unrelated features.
 
-No unrelated feature is added.
+A blocker requires:
 
----
-
-## 82. Candidate blocker
-
-A candidate blocker includes:
-
-- data loss;
-- unsafe execution;
-- incorrect validation evidence;
-- failing required platform;
-- failing supported GF integration;
-- invalid package;
-- invalid schema or migration;
-- missing required report or manifest;
-- incorrect version;
-- release-note contradiction;
-- reproducible severe regression.
-
-A blocker requires a new candidate after correction.
+1. correction;
+2. regression test;
+3. updated candidate notes;
+4. affected and mandatory gates;
+5. incremented candidate identifier;
+6. new artifacts and immutable tag.
 
 ---
 
-## 83. Candidate correction
+## 30. Stable approval
 
-For every candidate correction:
-
-1. add or update a regression test;
-2. update source;
-3. update changelog or candidate notes;
-4. rerun affected gates;
-5. rerun all mandatory release gates;
-6. increment candidate number;
-7. build new artifacts;
-8. create new immutable candidate tag.
-
----
-
-# 84. Stable approval
-
-Stable approval requires a completed release checklist.
-
-Minimum approval evidence:
+Approval evidence includes:
 
 ```text
 version audit
-all required gates
-package install smoke
-real-GF E2E
+required gates
+clean install smoke
+real-GF end-to-end
 schema and migration audit
 contract audit
-security audit where applicable
+security audit when applicable
 compatibility matrix
 release notes
 checksums
-candidate feedback resolution
+candidate blocker resolution
 ```
-
----
-
-## 85. Approval exceptions
 
 A required gate may be waived only when:
 
-- the gate is impossible for a documented external reason;
+- an external reason makes it impossible;
 - equivalent evidence exists;
-- risk is understood;
+- risk is documented;
 - approver accepts the risk;
-- release notes identify the limitation;
-- a follow-up issue exists.
+- release notes disclose the limitation;
+- a follow-up exists.
 
-The following normally cannot be waived for a stable release:
+Normally non-waivable:
 
 - version consistency;
 - package installability;
 - required schema validity;
 - required migration safety;
-- process security invariants;
-- release manifest integrity;
+- process-security invariants;
+- manifest integrity;
 - source preservation;
-- no known data-loss defect.
-
----
-
-# 86. Stable release preparation
+- absence of known data-loss defects.
 
 Before stable tagging:
 
-1. update final publication date;
-2. finalize changelog section;
-3. finalize release notes;
-4. confirm version source;
-5. confirm no code changed after final gate;
-6. rebuild from the exact approved commit if candidate artifacts are not promoted directly;
-7. verify hashes;
-8. verify package contents;
-9. record approval.
+1. update publication date;
+2. approve changelog and release notes;
+3. confirm version source;
+4. confirm no code changed after gates;
+5. build from the approved commit;
+6. verify package contents and hashes;
+7. record approval.
 
 ---
 
-## 87. Stable tag
+## 31. Tagging and publication
 
-Canonical tag:
+Stable tag:
 
 ```text
 v<MAJOR>.<MINOR>.<PATCH>
 ```
 
-Example:
+Tags and published artifacts are immutable.
 
-```text
-v1.2.0
-```
-
-The tag is immutable.
-
-It must correspond exactly to the published source.
-
----
-
-## 88. Stable artifact build
-
-Stable artifacts must be built from the stable tag or its exact commit.
-
-Do not publish artifacts built from a different working tree.
+Stable artifacts are built from the stable tag or its exact commit.
 
 Record:
 
@@ -1587,214 +1196,106 @@ tag
 commit
 build environment
 build command
-artifact hash
+filename
+size
+SHA-256
 ```
 
----
+Publication destinations may include:
 
-# 89. Publication
+- package registry;
+- source-hosting release page;
+- internal artifact repository;
+- signed archive location;
+- project release location.
 
-Publication destinations depend on the project’s distribution model.
+The release plan names the actual destinations.
 
-Possible destinations:
-
-```text
-package registry
-source hosting release page
-internal artifact repository
-signed archive location
-project release directory
-```
-
-The release plan must name the actual destinations.
-
-The process must not claim publication to a destination that was not verified.
-
----
-
-## 90. Publication order
-
-Recommended order:
+Publication sequence:
 
 1. publish source tag;
-2. publish package artifacts;
-3. publish checksums or signatures;
+2. upload package artifacts;
+3. upload checksums or signatures;
 4. publish release notes;
 5. publish migration guide;
 6. publish compatibility matrix;
-7. mark release stable;
-8. begin post-publication verification.
+7. promote the release;
+8. begin independent verification.
 
-If package publication fails, do not claim the release complete.
+When staging is supported, verify privately before promotion.
 
----
-
-## 91. Atomic publication
-
-When the destination supports staging:
-
-- upload artifacts privately or as draft;
-- verify names and hashes;
-- publish or promote atomically.
-
-When atomic publication is unavailable:
-
-- upload in documented order;
-- withhold stable announcement until all required artifacts verify;
-- withdraw partial artifacts if consistency cannot be restored.
+When publication is partially complete, do not announce a stable release.
 
 ---
 
-# 92. Post-publication verification
+## 32. Post-publication verification
 
-Use a fresh environment separate from the build environment.
+Use a clean environment separate from the build environment.
 
 Verify:
 
 ```text
-release tag resolves
-published artifact downloads
+tag resolves
+published artifacts download
 SHA-256 matches
 package installs
-CLI version matches
+version matches
 CLI help works
-configuration command works
+configuration inspection works
 real-GF smoke works when required
 migration example works
-release notes display
-links resolve
+release notes and links resolve
 ```
 
----
+A release is not verified merely because upload succeeded.
 
-## 93. Published-package smoke
+If a downloaded hash differs:
 
-At minimum:
-
-```text
-install published package
-run --version
-run --help
-load canonical project config
-create a temporary run
-produce canonical reports with fake or real GF as appropriate
-```
-
-A public release is not verified merely because upload succeeded.
-
----
-
-## 94. Publication mismatch
-
-If a downloaded artifact hash differs:
-
-- stop release announcement;
-- mark the release incomplete or withdrawn;
-- do not overwrite the artifact under the same version silently;
-- investigate publication or build contamination;
+- stop announcement;
+- mark publication incomplete or withdraw it;
+- do not overwrite the version silently;
+- investigate build or publication contamination;
 - publish a corrected new version when required.
-
----
-
-## 95. Post-release announcement
 
 Announce only after verification.
 
-Include:
-
-- version;
-- release type;
-- key changes;
-- supported environments;
-- migration requirements;
-- known issues;
-- release notes location;
-- security guidance when applicable.
-
-Do not claim unsupported compatibility.
-
 ---
 
-# 96. Post-release repository updates
-
-After successful publication:
-
-- reopen `Unreleased`;
-- merge release changes to the main development branch;
-- forward-port hotfixes;
-- update development version when policy uses one;
-- record release evidence;
-- close release blockers;
-- create follow-up issues;
-- mark the release `verified`.
-
----
-
-## 97. Release evidence archive
-
-Archive:
+## 33. Framework release checklist
 
 ```text
-release plan
-approved checklist
-tag and commit
-artifacts
-hashes
-test results
-coverage
-GF version evidence
-compatibility matrix
-migration evidence
-publication verification
-approvals
-```
-
-The archive should be read-only after finalization.
-
----
-
-# 98. Framework release checklist
-
-```text
-[ ] release scope frozen
-[ ] release type classified
-[ ] application version selected
-[ ] version source updated
+[ ] scope frozen
+[ ] release type and version classified
+[ ] canonical version source updated
 [ ] package metadata agrees
-[ ] CHANGELOG finalized
-[ ] release notes finalized
-[ ] compatibility matrix finalized
+[ ] changelog and release notes approved
+[ ] compatibility matrix approved
 [ ] schema audit complete
 [ ] contract audit complete
 [ ] external-tool audit complete
-[ ] normalization/gold audit complete
-[ ] migration audit complete
-[ ] deprecation audit complete
+[ ] normalization and gold audit complete
+[ ] migration and deprecation audit complete
 [ ] documentation audit complete
 [ ] template audit complete when shipped
-[ ] static gates pass
-[ ] default suite passes
-[ ] contract suite passes
-[ ] schema suite passes
-[ ] migration suite passes
-[ ] security suite passes
-[ ] Windows suite passes
-[ ] POSIX suite passes
+[ ] static and dependency gates pass
+[ ] unit and component suites pass
+[ ] contract suites pass
+[ ] schema and migration suites pass
+[ ] security suites pass
+[ ] required platform suites pass
 [ ] real-GF suite passes
-[ ] fake-GF E2E passes
-[ ] real-GF E2E passes
-[ ] coverage gate passes
-[ ] no unexpected required skips
-[ ] no strict xpass
-[ ] repository remains clean
-[ ] package builds
+[ ] fake-GF and real-GF end-to-end pass
+[ ] coverage policy passes
+[ ] no unexpected skip or strict xpass
+[ ] repository is clean
+[ ] package builds from approved commit
 [ ] package-content audit passes
-[ ] clean install smoke passes
+[ ] clean installation smoke passes
 [ ] version audit passes
 [ ] checksums generated
 [ ] candidate validated when required
 [ ] approval recorded
-[ ] tag created
+[ ] immutable tag created
 [ ] artifacts published
 [ ] published hashes verified
 [ ] post-publication smoke passes
@@ -1803,120 +1304,86 @@ The archive should be read-only after finalization.
 
 ---
 
-# 99. Template release process
+## 34. Template release process
 
-A template-only release follows:
-
-1. classify template-version change;
+1. classify template-version impact;
 2. update template version;
-3. validate template contract;
+3. validate the template contract;
 4. validate placeholder policy;
-5. initialize a temporary project from the template;
-6. fill required test placeholders;
+5. initialize a temporary project;
+6. fill test placeholders;
 7. load `project.toml`;
-8. run fake-GF validation;
-9. run real-GF fixture validation when relevant;
-10. verify no active-language data;
-11. verify no local paths or run artifacts;
-12. package or publish template;
-13. verify downloaded template;
-14. record compatibility with GF Wordbench versions.
+8. run fake-GF smoke validation;
+9. run real-GF fixture validation when applicable;
+10. verify language neutrality;
+11. verify absence of local paths and run artifacts;
+12. package or publish the template;
+13. verify the downloaded template;
+14. record framework compatibility.
 
----
-
-## 100. Template release checklist
+Checklist:
 
 ```text
 [ ] template version classified
 [ ] required files exist
 [ ] generic placeholders only
-[ ] no active-language names
-[ ] no machine-local absolute paths
+[ ] no active-language identity
+[ ] no machine-local path
 [ ] no state file
-[ ] no generated artifacts
-[ ] project configuration validates after initialization
-[ ] template contract lock matches framework loader
+[ ] no generated artifact
+[ ] initialized project configuration validates
+[ ] template contract matches framework loader
 [ ] initialized project passes smoke validation
 [ ] documentation links resolve
-[ ] archive contents verified
+[ ] archive contents verify
 [ ] compatibility range recorded
 ```
 
 ---
 
-# 101. Active-language project release process
+## 35. Active-project release process
 
-A project release is driven by:
+The active project release is driven by:
 
 ```text
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
-Framework release gates do not replace project linguistic gates.
-
-Project release sequence:
+Sequence:
 
 1. freeze project scope;
 2. classify project version;
 3. update project version;
-4. verify project configuration;
-5. verify project contract lock;
-6. review status ledger and known issues;
-7. run release validation;
-8. build required PGF;
-9. run required scenarios;
-10. compare required gold;
-11. verify release gates;
-12. generate reports;
-13. verify manifest;
-14. review linguistic changes;
-15. create project release notes;
-16. tag or archive project revision;
-17. publish project artifacts;
-18. verify published PGF and evidence.
+4. validate project configuration;
+5. validate the project contract lock;
+6. review the project status ledger;
+7. run release-mode validation;
+8. validate required source and entrypoints;
+9. build the PGF;
+10. run required scenarios;
+11. compare required gold;
+12. evaluate release gates;
+13. publish reports;
+14. verify the artifact manifest;
+15. review linguistic changes;
+16. prepare project release notes;
+17. tag or archive the project revision;
+18. publish project artifacts;
+19. verify published PGF and evidence.
 
----
-
-## 102. Project release prerequisites
-
-Required:
+Required prerequisites:
 
 - one active project identity;
+- one normative language target;
 - canonical `project.toml`;
 - no unresolved required placeholder;
-- declared entrypoints;
-- declared checkpoints;
+- declared entrypoints and checkpoints;
 - required scenarios;
-- valid gold files;
+- valid required gold files;
 - documented release criteria;
-- no unresolved blocking known issue;
-- supported GF Wordbench version;
-- supported or approved GF version;
+- no unresolved blocker;
+- supported Wordbench and GF versions;
 - clean source revision.
-
----
-
-## 103. Project release mode
-
-Run GF Wordbench in:
-
-```text
-release
-```
-
-The release run must not silently disable:
-
-- required source validation;
-- required entrypoints;
-- PGF build;
-- required scenarios;
-- gold comparison;
-- required artifacts;
-- manifest integrity.
-
----
-
-## 104. Project release evidence
 
 Required project evidence normally includes:
 
@@ -1926,228 +1393,131 @@ summary.md
 AI_READY.md
 top_errors.txt
 manifest.json
-master.log
-required raw compiler evidence
-required raw scenario evidence
+master log
+required compiler streams
+required scenario streams
 normalized scenario outputs
-gold diffs when failures occur
-final PGF
+gold diffs on failure
+PGF
 project version
 source revision
 GF Wordbench version
 GF version
 ```
 
-A successful project release must not contain a required failure diff.
+A successful release contains no required failure or skipped required criterion.
 
 ---
 
-## 105. Project PGF verification
+## 36. Project artifact verification
 
-Verify:
+PGF verification:
 
-- expected PGF exists;
+- expected path exists;
 - file is non-empty;
-- path is owned;
-- source entrypoints are correct;
+- path is run-owned;
+- configured entrypoints were used;
 - GF version is recorded;
 - SHA-256 is recorded;
 - manifest entry exists;
-- prior release artifact was not overwritten silently;
-- published PGF hash matches release evidence.
+- previous release artifact was not overwritten;
+- published hash matches release evidence.
 
----
+Required scenario verification:
 
-## 106. Project scenario verification
+- scenario exists;
+- process executed;
+- required marker sections completed;
+- assertions passed;
+- normalization version matches;
+- required gold matches;
+- required artifacts exist;
+- result is `OK`.
 
-Every required release scenario must:
+`SKIPPED` is not success for a required scenario.
 
-- exist;
-- execute;
-- complete required sections;
-- pass assertions;
-- use the declared normalization version;
-- match required gold;
-- produce required artifacts;
-- have status `OK`.
+A nonblocking project issue may remain only when it is:
 
-`SKIPPED` is not success for a required release scenario.
-
----
-
-## 107. Project known issues
-
-A known issue may remain only when:
-
-- explicitly nonblocking under project release criteria;
+- explicitly permitted by release criteria;
 - documented;
 - scoped;
 - supported by evidence;
-- not a security, data-loss, or invalid-release-evidence issue.
-
-The release notes must identify relevant nonblocking limitations.
+- neither a security issue nor an invalid-evidence issue.
 
 ---
 
-## 108. Project release tag
+## 37. Combined release
 
-A project may use a project-specific tag.
+A combined framework, template and project publication executes each applicable checklist independently.
 
-Recommended:
-
-```text
-project/<project-id>/v<version>
-```
-
-or a repository-appropriate equivalent.
-
-The tag must not be confused with the GF Wordbench framework tag.
-
----
-
-## 109. Project artifact publication
-
-Possible project deliverables:
+Do not infer:
 
 ```text
-PGF
-source archive
-project documentation
-scenario/gold archive
-manifest
-release summary
-checksums
+framework passed -> project passed
+project passed -> framework passed
 ```
 
-The release criteria determine which are required.
-
----
-
-## 110. Project release checklist
-
-```text
-[ ] project scope frozen
-[ ] project version classified
-[ ] project version updated
-[ ] project configuration validates
-[ ] project contract lock current
-[ ] status ledger current
-[ ] known issues reviewed
-[ ] release criteria current
-[ ] source validation passes
-[ ] entrypoint validation passes
-[ ] PGF build passes
-[ ] required scenarios pass
-[ ] required gold matches
-[ ] normalization versions agree
-[ ] required artifacts exist
-[ ] release manifest verifies
-[ ] project release notes complete
-[ ] GF Wordbench version recorded
-[ ] GF version recorded
-[ ] source revision recorded
-[ ] PGF hash recorded
-[ ] project tag/archive created
-[ ] published artifacts verified
-```
-
----
-
-# 111. Combined framework and project release
-
-A combined release must execute both checklists independently.
-
-It must not infer:
-
-```text
-framework passed → project passed
-project passed → framework passed
-```
-
-The release record should identify:
+Record:
 
 ```text
 framework version
 template version
 project version
 GF version
+RGL revision
 ```
 
 ---
 
-# 112. Hotfix process
+## 38. Hotfix and security releases
 
-Hotfix sequence:
+### 38.1 Hotfix
 
 1. identify affected release;
 2. reproduce defect;
-3. assess security, data, schema, and compatibility impact;
-4. create regression test;
-5. implement minimal correction;
-6. classify patch/minor/major;
+3. assess security, schema, data and compatibility impact;
+4. add regression test;
+5. implement the minimal correction;
+6. classify version impact;
 7. update changelog;
-8. run focused gates;
-9. run all mandatory release gates;
-10. build clean artifacts;
-11. publish new immutable version;
-12. verify upgrade from affected release;
-13. communicate mitigation.
+8. run focused and mandatory gates;
+9. build clean artifacts;
+10. publish a new immutable version;
+11. verify upgrade from the affected version;
+12. communicate mitigation;
+13. forward-port the correction.
 
-A hotfix must not skip required schema or migration review.
+A hotfix does not skip schema or migration review.
 
----
+### 38.2 Security release
 
-## 113. Hotfix branch
-
-Optional:
-
-```text
-hotfix/<version>
-```
-
-The correction must be forward-ported to active development.
-
-Avoid maintaining a permanent divergent hotfix implementation.
-
----
-
-# 114. Security release process
-
-Security release sequence:
-
-1. limit disclosure to necessary participants;
+1. limit disclosure;
 2. preserve evidence securely;
 3. identify affected versions;
-4. implement safe fix;
-5. add security regression tests;
+4. implement the safe correction;
+5. add exploit regression tests;
 6. assess compatibility impact;
 7. prepare migration or mitigation;
-8. execute required gates;
+8. execute mandatory gates;
 9. build and verify artifacts;
-10. publish new version;
+10. publish a new version;
 11. publish advisory when safe;
 12. provide upgrade instructions;
-13. revoke or withdraw unsafe artifacts where operationally possible.
+13. mark or withdraw unsafe releases where operationally possible.
 
----
+Non-waivable security-release evidence:
 
-## 115. Security release minimum gates
-
-The following cannot be omitted:
-
-- focused exploit regression;
-- process/path/security contract tests;
+- exploit regression;
+- process, path and security contract tests;
 - package integrity;
 - migration safety when data changes;
 - version consistency;
-- clean install;
+- clean installation;
 - post-publication verification.
-
-Time pressure does not justify publishing unverified artifacts.
 
 ---
 
-# 116. Failed release preparation
+## 39. Failed and defective releases
 
 Abort preparation when:
 
@@ -2155,55 +1525,26 @@ Abort preparation when:
 - required gates fail;
 - migration is unsafe;
 - package cannot install;
-- release evidence is inconsistent;
-- required platform is unavailable without approved equivalent evidence;
+- evidence is inconsistent;
 - version classification is unresolved;
 - security review blocks publication.
 
-An aborted preparation is not a release.
+Withdraw a candidate under its existing historical identifier and publish a corrected candidate with a new identifier.
 
----
-
-## 117. Candidate withdrawal
-
-Withdraw a candidate when a blocker is found.
-
-Do not delete its historical identity when it was distributed.
-
-Publish the next candidate under a new identifier.
-
----
-
-## 118. Stable release defect
-
-When a stable release is defective:
+For a defective stable release:
 
 1. assess severity;
-2. stop further promotion;
-3. mark affected release;
+2. stop promotion;
+3. mark the affected release;
 4. preserve published artifacts;
 5. publish mitigation;
 6. prepare a corrected new version;
 7. test upgrade and rollback guidance;
 8. verify corrected publication.
 
-Do not silently replace the original artifacts.
+Never silently replace published bytes.
 
----
-
-## 119. Release withdrawal
-
-Withdrawal may be required for:
-
-- security vulnerability;
-- data loss;
-- incorrect migration;
-- invalid package;
-- corrupted artifacts;
-- false release evidence;
-- licensing issue.
-
-Withdrawal record should include:
+Withdrawal record:
 
 ```text
 version
@@ -2214,51 +1555,33 @@ recommended replacement
 mitigation
 ```
 
----
-
-## 120. Rollback guidance
-
-Rollback is operational, not a mutation of the release.
-
-Before recommending downgrade:
-
-- inspect schema versions;
-- preserve user data;
-- confirm older application can read current data;
-- provide reverse migration only when tested;
-- warn when downgrade is unsupported.
-
-A new fix release is preferred over destructive rollback.
+Rollback is operational, not a mutation of the release. Downgrade guidance must respect persisted-schema compatibility and preserve user data.
 
 ---
 
-# 121. Reproducibility verification
+## 40. Reproducibility and traceability
 
-A release should be reproducible from:
+A release is reproducible from:
 
 ```text
 tag
 source archive
-declared Python version
+supported Python version
 declared build dependencies
 build command
 package configuration
 ```
 
-Minimum reproducibility check:
+When practical:
 
-- build twice from clean environments where practical;
+- build twice in clean environments;
 - compare package contents;
 - explain permitted metadata differences;
 - compare hashes when deterministic builds are supported.
 
-A release must not claim byte-for-byte reproducibility without proof.
+Do not claim byte-for-byte reproducibility without evidence.
 
----
-
-## 122. Source-to-artifact traceability
-
-For each release artifact, record:
+For each distribution artifact, record:
 
 ```text
 release version
@@ -2271,7 +1594,7 @@ build command
 build environment
 ```
 
-For project PGF:
+For a project PGF, record:
 
 ```text
 project version
@@ -2282,65 +1605,34 @@ source revision
 SHA-256
 ```
 
----
+The run manifest verifies run artifacts.
 
-# 123. Manifest use in release
+The distribution checksum file verifies published distribution artifacts.
 
-A GF Wordbench run manifest validates run artifacts.
-
-A distribution checksum file validates published distribution artifacts.
-
-They serve different scopes.
-
-Do not substitute one for the other.
-
-For a project release, the run manifest should include the final PGF and required reports.
+They are different integrity scopes.
 
 ---
 
-## 124. Manifest verification
+## 41. Release report and approvals
 
-Before project release approval:
-
-- load manifest;
-- verify schema;
-- verify every required entry exists;
-- recompute SHA-256;
-- verify size;
-- reject path escape;
-- reject unexpected mutation after manifest creation;
-- confirm required role coverage.
-
----
-
-# 125. Release report
-
-The release manager should produce a concise final release report.
-
-Recommended sections:
+The release manager produces a concise release report containing:
 
 ```text
-Release identity
-Scope
-Versions
-Compatibility
-Schema changes
-Contract changes
-Migrations
-Test evidence
-Artifacts and hashes
-Known issues
-Approvals
-Publication verification
+release identity
+scope
+versions
+compatibility
+schema changes
+contract changes
+migrations
+test evidence
+artifacts and hashes
+known issues
+approvals
+publication verification
 ```
 
-This report is release evidence, not a replacement for `summary.json` or the changelog.
-
----
-
-# 126. Approval record
-
-Minimum approval record:
+Approval record:
 
 ```text
 release
@@ -2351,7 +1643,7 @@ exceptions
 decision
 ```
 
-Decision:
+Allowed decisions:
 
 ```text
 approved
@@ -2359,11 +1651,7 @@ rejected
 approved with documented exception
 ```
 
----
-
-# 127. Exception record
-
-Every approved exception must state:
+Each exception records:
 
 ```text
 gate
@@ -2376,11 +1664,11 @@ follow-up
 approver
 ```
 
-Exceptions must not become undocumented permanent policy.
+Exceptions must not become undocumented policy.
 
 ---
 
-# 128. Release automation
+## 42. Automation and CI
 
 Automation may:
 
@@ -2395,428 +1683,165 @@ Automation may:
 
 Automation must not:
 
-- choose a breaking version silently;
-- approve migrations automatically without tests;
+- select a breaking version silently;
+- approve migrations without tests;
 - update project gold automatically;
-- mark a release stable before required verification;
-- move an existing tag;
-- overwrite published artifacts.
+- mark a release stable before verification;
+- move a tag;
+- overwrite published artifacts;
+- require `gf-portfolio` for Wordbench release completion.
 
----
+Exact CLI release commands, if exposed, are defined by `docs/usage/CLI_REFERENCE.md`. This document does not invent command syntax.
 
-## 129. Release command
-
-A future command may coordinate release checks:
-
-```text
-gf-wordbench release check
-```
-
-Possible strict mode:
+Canonical CI stages:
 
 ```text
-gf-wordbench release check --strict
+static checks
+    -> unit and component
+    -> contracts, schemas and migrations
+    -> security
+    -> required platforms
+    -> real GF
+    -> end-to-end
+    -> package build
+    -> artifact inspection
+    -> staged publication
+    -> post-publication verification
 ```
 
-The command may verify:
-
-- versions;
-- schema constants;
-- contracts;
-- required tests;
-- artifact paths;
-- changelog;
-- compatibility;
-- project release gates.
-
-It does not replace human approval.
+Release credentials are isolated from untrusted pull-request code and from GF project content.
 
 ---
 
-# 130. CI release workflow
-
-Recommended CI release sequence:
-
-```text
-static
-    ↓
-unit/component
-    ↓
-contracts/schemas/migrations
-    ↓
-security
-    ↓
-Windows/POSIX
-    ↓
-real GF
-    ↓
-end-to-end
-    ↓
-package build
-    ↓
-artifact inspection
-    ↓
-staged publication
-    ↓
-post-publication verification
-```
-
-Each stage should expose bounded evidence.
-
----
-
-# 131. CI trust boundary
-
-Release credentials must be:
-
-- limited to release jobs;
-- inaccessible to pull-request code from untrusted sources;
-- scoped to required destinations;
-- rotated;
-- excluded from logs;
-- unavailable to normal validation scenarios.
-
-GF project content must not be able to access publishing credentials through inherited environment values.
-
----
-
-# 132. Release artifact retention
-
-Retain stable release artifacts according to distribution policy.
-
-At minimum retain:
-
-- source tag;
-- source archive;
-- package artifacts;
-- hashes;
-- release notes;
-- migration guide;
-- compatibility matrix.
-
-Do not depend solely on one ephemeral CI run.
-
----
-
-# 133. Release metrics
-
-Optional release metrics may include:
-
-```text
-test count
-coverage
-platforms tested
-GF versions tested
-migration fixtures
-artifact count
-release duration
-```
-
-Metrics do not determine version or replace gates.
-
----
-
-# 134. Manual verification
-
-Manual verification is limited to behavior not reasonably automated.
-
-Examples:
-
-- GUI visual smoke;
-- installer prompt;
-- operating-system warning;
-- release-page presentation;
-- signing prompt.
-
-Record:
-
-```text
-environment
-steps
-expected
-actual
-reviewer
-date
-evidence
-```
-
----
-
-# 135. Release communication accuracy
+## 43. Communication accuracy
 
 Release communication must not claim:
 
-- support not present in the compatibility matrix;
-- a tested GF version without evidence;
-- successful migration not exercised;
+- support absent from the compatibility matrix;
+- tested GF versions without evidence;
+- successful migrations not exercised;
 - signed artifacts when unsigned;
 - reproducible builds without proof;
 - project linguistic completeness beyond release criteria;
-- zero known issues when nonblocking issues remain documented.
+- no known issues when documented nonblocking issues remain;
+- Portfolio integration as a Wordbench runtime requirement.
 
 ---
 
-# 136. Release-process drift indicators
+## 44. Drift indicators
 
 Release drift exists when:
 
-- package version differs from CLI version;
+- package version differs from CLI or tag;
 - changelog version differs from tag;
-- published artifact differs from approved hash;
-- a release is tagged before gates complete;
-- a schema changed without migration;
-- a contract changed without consumer tests;
+- published bytes differ from approved hashes;
+- tag is created before required gates;
+- schema changes without migration;
+- contract changes without consumer tests;
 - gold changes without review;
 - required real-GF tests skip;
-- framework release depends on active-language success;
+- framework release depends on active-project success;
 - project release omits PGF verification;
-- manifest is generated before final reports;
-- published artifact is overwritten under the same version;
+- manifest is generated before owned artifacts are closed;
+- published artifacts are overwritten under the same version;
 - release notes omit a required migration;
 - unknown GF version is labeled tested;
 - source tree is dirty during stable build;
-- package includes local state or run artifacts;
-- a release exception lacks approval;
-- a hotfix is not forward-ported;
-- candidate and stable artifacts come from different unrecorded commits;
-- post-publication verification is omitted;
-- release announcement occurs before verification.
+- package contains local state or run artifacts;
+- an exception lacks approval;
+- hotfix is not forward-ported;
+- candidate and stable artifacts come from unrecorded different commits;
+- announcement occurs before verification;
+- Wordbench release depends on `gf-portfolio` availability.
 
-Any drift indicator blocks or invalidates release approval.
-
----
-
-# 137. Framework release approval checklist
-
-```text
-Identity
-[ ] deliverable identified
-[ ] release type identified
-[ ] version classified
-[ ] version source consistent
-[ ] tag available
-
-Compatibility
-[ ] Python range verified
-[ ] GF range verified
-[ ] platform matrix verified
-[ ] project schema support verified
-[ ] summary schema support verified
-[ ] deprecations verified
-
-Architecture
-[ ] contract locks current
-[ ] schema lock current
-[ ] external-tool lock current
-[ ] artifact ownership current
-[ ] dependency direction passes
-
-Validation
-[ ] static checks pass
-[ ] unit/component tests pass
-[ ] contracts pass
-[ ] schemas pass
-[ ] migrations pass
-[ ] security tests pass
-[ ] platform tests pass
-[ ] real-GF tests pass
-[ ] E2E tests pass
-[ ] coverage passes
-
-Packaging
-[ ] clean build
-[ ] package content verified
-[ ] install smoke passes
-[ ] versions agree
-[ ] hashes generated
-
-Documentation
-[ ] changelog finalized
-[ ] release notes finalized
-[ ] migration guide finalized
-[ ] compatibility matrix finalized
-[ ] known issues accurate
-
-Publication
-[ ] approval recorded
-[ ] tag created
-[ ] artifacts uploaded
-[ ] hashes verified
-[ ] installed from published artifact
-[ ] post-publication smoke passes
-[ ] release evidence archived
-```
+Any drift indicator blocks or invalidates approval.
 
 ---
 
-# 138. Project release approval checklist
-
-```text
-Identity
-[ ] project ID verified
-[ ] project version classified
-[ ] source revision clean
-[ ] framework version recorded
-[ ] GF version recorded
-
-Project contracts
-[ ] project.toml validates
-[ ] project contract lock current
-[ ] category/lincat contract current
-[ ] validation spec current
-[ ] release criteria current
-[ ] known issues reviewed
-
-Validation
-[ ] release mode executed
-[ ] required source modules pass
-[ ] required entrypoints pass
-[ ] required PGF exists
-[ ] required scenarios pass
-[ ] required gold matches
-[ ] no required scenario skipped
-[ ] release gates pass
-
-Artifacts
-[ ] summary.json valid
-[ ] summary.md present
-[ ] AI_READY.md present
-[ ] top_errors.txt present
-[ ] master.log present
-[ ] manifest valid
-[ ] PGF hash verified
-[ ] published artifacts match hashes
-
-Publication
-[ ] project release notes complete
-[ ] tag/archive created
-[ ] artifacts published
-[ ] post-publication verification passes
-[ ] evidence archived
-```
-
----
-
-# 139. Hotfix approval checklist
-
-```text
-[ ] affected version identified
-[ ] defect reproduced
-[ ] regression test added
-[ ] compatibility impact classified
-[ ] schema/migration impact reviewed
-[ ] focused security review complete when applicable
-[ ] full mandatory gates pass
-[ ] upgrade from affected version tested
-[ ] corrected version selected
-[ ] changelog updated
-[ ] new immutable artifacts built
-[ ] publication verified
-[ ] active development receives the fix
-```
-
----
-
-# 140. Security approval checklist
-
-```text
-[ ] vulnerability scope identified
-[ ] affected versions identified
-[ ] exploit regression exists
-[ ] unsafe behavior removed
-[ ] secrets absent from evidence
-[ ] process/path/security contracts reviewed
-[ ] migration or mitigation documented
-[ ] package integrity verified
-[ ] disclosure plan approved
-[ ] new version published
-[ ] advisory published when safe
-[ ] unsafe release marked or withdrawn
-```
-
----
-
-# 141. Prohibited release behavior
+## 45. Prohibited behavior
 
 The following are prohibited:
 
-- releasing from an uncommitted working tree;
+- releasing from an uncommitted stable-build tree;
 - publishing before required gates;
-- silently skipping real-GF release tests;
+- silently skipping required real-GF tests;
 - moving a published tag;
 - rebuilding a published version with different content;
 - publishing artifacts from a different commit than the tag;
 - changing schema meaning without versioning;
 - changing normalization without gold review;
-- treating a missing PGF as success;
-- treating a missing manifest as success;
-- using active project success as framework proof;
+- treating a missing PGF or manifest as success;
+- using active-project success as framework proof;
 - using framework success as project proof;
 - automatic gold approval;
 - hiding failed migrations;
 - omitting breaking changes from release notes;
 - claiming unsupported GF compatibility;
 - publishing secrets or environment dumps;
-- using shell commands built from untrusted project text in release automation;
-- overwriting previous release artifacts silently;
+- building shell commands from untrusted project text;
+- overwriting previous release artifacts;
 - announcing stable release before post-publication verification;
-- deleting historical evidence to conceal a defective release.
+- deleting historical evidence to conceal a defect;
+- publishing several active projects as one Wordbench project release;
+- treating `gf-portfolio` as an internal Wordbench release module.
 
 ---
 
-# 142. Final invariants
+## 46. Governing invariants
 
-1. Framework, template, and project releases remain distinct.
-2. Every release has one classified version in its own domain.
-3. Published versions and tags are immutable.
-4. Stable releases come from clean source.
-5. Changelog, package, CLI, GUI, reports, and tag agree.
-6. Schema changes are versioned and migrated.
-7. Contract changes update providers and consumers.
-8. Normalization changes trigger deliberate gold review.
-9. Required test gates cannot skip silently.
-10. Real-GF integration is required for a stable framework release.
-11. Active-language release requires GF Wordbench release mode.
-12. Required project scenarios cannot be skipped.
-13. Required PGF must exist and be non-empty.
-14. Required reports and manifest must exist.
-15. Manifest hashes final artifacts.
-16. Package artifacts are built from the approved commit.
-17. Published downloads are verified independently.
-18. Release evidence is retained.
-19. Security may override compatibility when required for safety.
-20. A defective release is replaced by a new version, not mutated.
-21. Rollback guidance respects schema compatibility.
-22. Release automation never provides final approval by itself.
-23. Exceptions are explicit, bounded, and approved.
-24. Framework fixtures remain language-neutral.
-25. Project release evidence records framework and GF versions.
-26. No release claims compatibility beyond recorded evidence.
-27. Release notes do not replace migration documentation.
-28. Release candidates are immutable and sequential.
-29. Hotfixes are forward-ported.
-30. Publication is complete only after post-publication verification.
+1. Framework, template and project releases remain distinct.
+2. One project release represents one project identity and one normative language target.
+3. Each deliverable has one classified version in its own domain.
+4. Published versions, tags and candidate identifiers are immutable.
+5. Stable releases come from clean source.
+6. Changelog, package metadata, public version displays, reports and tag agree.
+7. Schema changes are versioned and migrated.
+8. Contract changes update providers and consumers.
+9. Normalization changes trigger deliberate gold review.
+10. Required gates cannot skip silently.
+11. Real-GF integration is required for stable framework release evidence.
+12. Active-project release uses release-mode validation.
+13. Required project scenarios cannot be skipped.
+14. Required PGF is present and non-empty.
+15. Required reports and manifest exist.
+16. The manifest hashes closed, finalized artifact bytes.
+17. Distribution artifacts are built from the approved commit.
+18. Published downloads are independently verified.
+19. Release evidence is retained.
+20. Safety may override compatibility.
+21. A defective release is replaced by a new version, not mutated.
+22. Rollback guidance respects schema compatibility.
+23. Automation never provides approval by itself.
+24. Exceptions are explicit, bounded and approved.
+25. Framework fixtures remain language-neutral.
+26. Project release evidence records framework and GF versions.
+27. Compatibility claims do not exceed evidence.
+28. Release notes do not replace migration documentation.
+29. Candidate identifiers are immutable and sequential.
+30. Hotfixes are forward-ported.
+31. Wordbench releases do not depend on `gf-portfolio`.
+32. Publication is complete only after post-publication verification.
 
 ---
 
-# 143. Final rule
+## 47. Governing rule
 
-The GF Wordbench release process follows one controlled evidence chain:
+The release process follows one controlled evidence chain:
 
 ```text
 classified change
-    → correct versions
-    → synchronized contracts and schemas
-    → tested migrations
-    → complete release gates
-    → clean reproducible artifacts
-    → approval
-    → immutable tag
-    → publication
-    → independent verification
-    → retained evidence
+    -> correct versions
+    -> synchronized contracts and schemas
+    -> tested migrations
+    -> complete gates
+    -> clean reproducible artifacts
+    -> approval
+    -> immutable tag
+    -> publication
+    -> independent verification
+    -> retained evidence
 ```
 
-A release must stop at the first missing link.
+A release stops at the first missing link.
 
-No artifact may be called a completed GF Wordbench release until every required link is present and verified.
+No artifact is a completed GF Wordbench release until every required link is present and verified.

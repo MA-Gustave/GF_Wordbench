@@ -4,9 +4,11 @@
 **Status:** Normative  
 **Applies to:** One active GF language project managed by GF Wordbench  
 **Owner:** GF Wordbench maintainers and the active project owner  
-**Checklist version:** `1.0.0`  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\projects\PROJECT_COMPLETION_CHECKLIST.md`  
-**Last structural review:** 2026-07-22
+**Checklist version:** `1.1.0`  
+**Canonical path:** `docs/projects/PROJECT_COMPLETION_CHECKLIST.md`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Product-boundary authority:** `docs/architecture/PRODUCT_BOUNDARIES.md` and ADR-0001, ADR-0011, ADR-0012  
+**Last structural review:** 2026-07-24
 
 ---
 
@@ -21,7 +23,7 @@ This checklist defines the evidence required before an active GF language projec
 - released;
 - safely transferable or clonable.
 
-It is the final project-level gate that connects:
+It is the project-level conformance gate that connects:
 
 - project identity;
 - GF source architecture;
@@ -40,7 +42,7 @@ It is the final project-level gate that connects:
 
 The central rule is:
 
-> A project is complete only when every required promise is implemented, validated, documented, and supported by current evidence.
+> A project is complete only when every required promise is satisfied, validated, documented, and supported by current evidence.
 
 A successful compile of one entrypoint is necessary evidence in many projects, but it is not sufficient proof of project completion.
 
@@ -57,18 +59,18 @@ project GF source files
 project/docs/
 project/validation/
 project release artifacts
-the final GF Wordbench release run
+the GF Wordbench release run
 ```
 
 It applies when:
 
 - creating a project from `templates/project/`;
 - resetting a cloned GF Wordbench copy;
-- migrating an existing GF language implementation;
+- migrating an existing GF language project;
 - replacing one active language project with another;
 - declaring a development milestone complete;
 - preparing a release candidate;
-- declaring a final release;
+- recording a release;
 - handing the project to another maintainer.
 
 ---
@@ -80,15 +82,17 @@ This checklist does not:
 - define GF syntax or semantics;
 - replace the project validation specification;
 - replace the project interfile contract lock;
-- define the framework implementation checklist;
+- define framework code conformance;
 - approve linguistic claims unsupported by evidence;
 - authorize automatic gold acceptance;
 - require every optional GF feature;
 - require every RGL category when the project scope explicitly excludes it;
 - turn undocumented omissions into acceptable non-applicability;
-- replace legal, licensing, or publication review.
+- replace legal, licensing, or publication review;
+- aggregate several Wordbench workspaces;
+- define `gf-portfolio` storage, registry, comparison, or orchestration rules.
 
-Framework implementation completion is governed separately by framework architecture, development, validation, and release documents.
+Framework code conformance is governed separately by framework architecture, development, validation, and release documents.
 
 ---
 
@@ -97,6 +101,11 @@ Framework implementation completion is governed separately by framework architec
 Framework-level owners:
 
 ```text
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/architecture/PRODUCT_BOUNDARIES.md
+docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
+docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
+docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -119,18 +128,18 @@ project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 ```
 
 When this checklist and a specialized normative document overlap, the specialized document owns the detailed rule.
 
-This checklist owns the final proof that all required documents and evidence agree.
+This checklist owns the conformance proof that all required documents and evidence agree.
 
 ---
 
@@ -141,7 +150,7 @@ This checklist owns the final proof that all required documents and evidence agr
 - **SHOULD**: expected unless a documented exception exists.
 - **SHOULD NOT**: normally prohibited.
 - **MAY**: optional.
-- **COMPLETE**: every in-scope project promise is implemented or explicitly resolved.
+- **COMPLETE**: every in-scope project promise is satisfied or explicitly resolved.
 - **RELEASE-READY**: complete and passing every mandatory release gate.
 - **RELEASED**: release-ready evidence has been reviewed and the intended release has been published or recorded.
 - **BLOCKER**: unresolved condition preventing completion or release.
@@ -197,11 +206,11 @@ Some release criteria may still fail.
 
 ## 6.6 `complete_not_release_ready`
 
-The declared project scope is fully implemented and documented, but one or more release blockers remain.
+The declared project scope is complete and documented, but one or more release blockers remain.
 
 Examples:
 
-- accepted implementation complete, but required PGF not built;
+- required source and project contracts complete, but required PGF not built;
 - required scenario mismatch;
 - unsupported GF version;
 - unresolved release-blocking known issue.
@@ -219,13 +228,13 @@ A release-ready state has been signed off and recorded with immutable or archive
 The current state must be recorded in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 Release readiness must also be recorded in:
 
 ```text
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 A UI label or console message is not the authoritative project state.
@@ -342,12 +351,12 @@ A project is `release_ready` only when all mandatory gate groups pass.
 | Architecture and ownership | Yes | Yes |
 | Interfile contracts | Yes | Yes |
 | Checkpoint compilation | As declared | Yes |
-| Final entrypoint compilation | Yes | Yes |
-| Required scenarios | Implemented | Yes |
-| Required assertions | Implemented | Yes |
+| Release entrypoint compilation | Yes | Yes |
+| Required scenarios | Available | Yes |
+| Required assertions | Available | Yes |
 | Required gold files | Present | Match |
 | Required PGF | Declared when applicable | Built and verified |
-| Diagnostics and evidence | Implemented | Complete |
+| Diagnostics and evidence | Available | Complete |
 | Known issues and ledger | Current | No unapproved blocker |
 | Documentation | Complete | Current |
 | Tests | Present | Pass |
@@ -380,7 +389,7 @@ It must not weaken mandatory framework integrity, security, evidence, or schema 
 [ ] A-012 Optional scenarios are explicit.
 [ ] A-013 Release targets are explicit.
 [ ] A-014 Expected PGF identity is explicit when applicable.
-[ ] A-015 One active language project is represented.
+[ ] A-015 Exactly one active language project is represented in the workspace.
 ```
 
 ## 10.2 Identity agreement
@@ -401,7 +410,7 @@ Release is blocked when:
 
 - project identity is inferred from old output;
 - GUI state is the only identity source;
-- more than one active language profile is configured;
+- more than one active project identity is configured in the workspace;
 - project and entrypoint names disagree;
 - the expected PGF name is ambiguous.
 
@@ -458,7 +467,7 @@ Historical references must be clearly identified as history rather than active i
 ## 12.2 Required project documents
 
 ```text
-[ ] C-009 `project/docs/00_PROJECT_START_HERE.md` exists.
+[ ] C-009 `project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md` exists.
 [ ] C-010 `project/docs/INTERFILE_CONTRACT_LOCK.md` exists.
 [ ] C-011 `project/docs/LANGUAGE_OVERVIEW.md` exists.
 [ ] C-012 `project/docs/LANGUAGE_ARCHITECTURE.md` exists.
@@ -466,12 +475,12 @@ Historical references must be clearly identified as history rather than active i
 [ ] C-014 `project/docs/CATEGORY_AND_LINCAT_CONTRACT.md` exists.
 [ ] C-015 `project/docs/MORPHOLOGY_SPEC.md` exists.
 [ ] C-016 `project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md` exists.
-[ ] C-017 `project/docs/VALIDATION_SPEC.md` exists.
-[ ] C-018 `project/docs/TEST_COVERAGE_MATRIX.md` exists.
-[ ] C-019 `project/docs/STATUS_LEDGER.md` exists.
+[ ] C-017 `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` exists.
+[ ] C-018 `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` exists.
+[ ] C-019 `project/docs/STATUS_LEDGER__PROJECT_DOCS.md` exists.
 [ ] C-020 `project/docs/DECISION_LOG.md` exists.
 [ ] C-021 `project/docs/KNOWN_ISSUES.md` exists.
-[ ] C-022 `project/docs/RELEASE_CRITERIA.md` exists.
+[ ] C-022 `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` exists.
 [ ] C-023 `project/docs/RESEARCH_EVIDENCE.md` exists.
 ```
 
@@ -590,10 +599,10 @@ Historical references must be clearly identified as history rather than active i
 [ ] E-023 Test-only modules are identified and excluded from release entrypoints.
 ```
 
-## 14.3 Temporary implementation
+## 14.3 Temporary project elements
 
 ```text
-[ ] E-024 Placeholder modules are registered in the status ledger.
+[ ] E-024 Placeholder modules are registered in the project ledger.
 [ ] E-025 Temporary `oper` definitions are registered.
 [ ] E-026 Fallback linearizations are registered.
 [ ] E-027 Disabled functions are registered.
@@ -689,7 +698,7 @@ Historical references must be clearly identified as history rather than active i
 [ ] G-026 Source → `.gfo` relationship is locked.
 [ ] G-027 Entrypoint → `.pgf` relationship is locked.
 [ ] G-028 Validation → evidence relationship is locked.
-[ ] G-029 Documentation → implementation relationships are locked.
+[ ] G-029 Documentation → source and behavior relationships are locked.
 [ ] G-030 Known issues → release decision relationship is locked.
 ```
 
@@ -700,7 +709,7 @@ Historical references must be clearly identified as history rather than active i
 [ ] G-032 Lincat records match consumer assumptions.
 [ ] G-033 Constructor arity matches all callers.
 [ ] G-034 Public `oper` types match all consumers.
-[ ] G-035 Ordering contracts match implementation.
+[ ] G-035 Ordering contracts match source behavior.
 [ ] G-036 Side effects and artifacts match documentation.
 [ ] G-037 Failure behavior matches validation expectations.
 [ ] G-038 No isolated contract-changing edit remains uncoordinated.
@@ -716,7 +725,7 @@ This gate applies to all categories declared in project scope.
 
 ```text
 [ ] H-001 Every in-scope abstract category is inventoried.
-[ ] H-002 Every category has an implementation owner.
+[ ] H-002 Every category has an authoritative owner.
 [ ] H-003 Every category has a documented lincat.
 [ ] H-004 Every lincat field has documented meaning.
 [ ] H-005 Every lincat field has documented producer.
@@ -816,10 +825,10 @@ A `NOT_APPLICABLE` category requires a scope reference, not an empty table.
 [ ] J-010 Negation and polarity behavior are documented where in scope.
 ```
 
-## 19.2 Implementation completeness
+## 19.2 Constructor coverage
 
 ```text
-[ ] J-011 Every required abstract function has a concrete implementation.
+[ ] J-011 Every required abstract function has a concrete definition.
 [ ] J-012 Missing linearizations are absent or explicitly release-accepted.
 [ ] J-013 Placeholder strings are absent or registered.
 [ ] J-014 Runtime failure placeholders are absent or registered.
@@ -886,7 +895,7 @@ A `NOT_APPLICABLE` category requires a scope reference, not an empty table.
 # 21. Gate L — Dependency hygiene
 
 ```text
-[ ] L-001 No lower-level module imports the final language entrypoint.
+[ ] L-001 No lower-level module imports the release language entrypoint.
 [ ] L-002 No resource module imports a higher syntax API without an approved contract.
 [ ] L-003 No release entrypoint imports test-only modules.
 [ ] L-004 Scenarios load documented entrypoints.
@@ -894,7 +903,7 @@ A `NOT_APPLICABLE` category requires a scope reference, not an empty table.
 [ ] L-006 Gold files do not drive source-generation logic.
 [ ] L-007 Project configuration does not depend on generated run output.
 [ ] L-008 Circular imports are absent or explicitly supported.
-[ ] L-009 Duplicate helper implementations are absent or selected by policy.
+[ ] L-009 Duplicate helper definitions are absent or selected by policy.
 [ ] L-010 Inheritance and override behavior is documented where used.
 [ ] L-011 Local redefinitions of inherited families are justified.
 [ ] L-012 Import paths are project- and toolchain-compatible.
@@ -978,13 +987,13 @@ A checkpoint is complete only when:
 
 ---
 
-# 24. Gate O — Final entrypoints
+# 24. Gate O — Release entrypoints
 
 ## 24.1 Entrypoint identity
 
 ```text
-[ ] O-001 Final abstract or grammar entrypoint is explicit.
-[ ] O-002 Final concrete language entrypoint is explicit.
+[ ] O-001 Release abstract or grammar entrypoint is explicit.
+[ ] O-002 Release concrete language entrypoint is explicit.
 [ ] O-003 API or syntax entrypoint is explicit where applicable.
 [ ] O-004 Entrypoint module names match files.
 [ ] O-005 Entrypoints import every required component.
@@ -996,15 +1005,15 @@ A checkpoint is complete only when:
 
 ```text
 [ ] O-008 All required checkpoints pass first.
-[ ] O-009 Final entrypoints compile from a clean artifact state.
-[ ] O-010 Final entrypoints produce expected `.gfo` artifacts.
-[ ] O-011 Final entrypoints load in the GF shell.
+[ ] O-009 Release entrypoints compile from a clean artifact state.
+[ ] O-010 Release entrypoints produce expected `.gfo` artifacts.
+[ ] O-011 Release entrypoints load in the GF shell.
 [ ] O-012 Missing-function inspection satisfies project policy.
-[ ] O-013 Required scenarios target the final entrypoint.
+[ ] O-013 Required scenarios target the release entrypoint.
 [ ] O-014 Entrypoint evidence belongs to the current source fingerprint.
 ```
 
-A lower-level substitute is not proof that the final entrypoint works.
+A lower-level substitute is not proof that the release entrypoint works.
 
 ---
 
@@ -1432,7 +1441,7 @@ When required:
 ## 35.1 Status ledger
 
 ```text
-[ ] Z-001 Every temporary implementation is registered.
+[ ] Z-001 Every temporary project element is registered.
 [ ] Z-002 Every fallback is registered.
 [ ] Z-003 Every blocked area is registered.
 [ ] Z-004 Every disabled required function is registered.
@@ -1496,7 +1505,7 @@ When required:
 [ ] AA-013 Conflicting sources are acknowledged.
 [ ] AA-014 Project conventions are separated from external linguistic facts.
 [ ] AA-015 Unverified assumptions are labeled.
-[ ] AA-016 Research-driven implementation choices link to affected modules.
+[ ] AA-016 Research-driven design choices link to affected modules.
 [ ] AA-017 Research gaps affecting release are identified.
 [ ] AA-018 Copyright or data-use restrictions are recorded.
 ```
@@ -1560,7 +1569,7 @@ Ambiguous rights block public distribution until reviewed.
 ```text
 [ ] AD-001 Release source commit or snapshot is identified.
 [ ] AD-002 Working tree state is recorded.
-[ ] AD-003 Project version is final.
+[ ] AD-003 Project version is fixed for the release.
 [ ] AD-004 GF Wordbench version is recorded.
 [ ] AD-005 GF version is recorded.
 [ ] AD-006 Operating system and architecture are recorded when relevant.
@@ -1742,7 +1751,7 @@ This gate applies before another maintainer takes ownership.
 [ ] AI-007 Scenario purposes are documented.
 [ ] AI-008 Gold update policy is documented.
 [ ] AI-009 Known blockers are explicit.
-[ ] AI-010 Temporary implementations are explicit.
+[ ] AI-010 Temporary project elements are explicit.
 [ ] AI-011 Release procedure is documented.
 [ ] AI-012 Last accepted release run ID is recorded.
 [ ] AI-013 Last accepted artifact manifest is recorded.
@@ -1759,8 +1768,8 @@ Automation cannot prove every linguistic requirement.
 The project must list manual review criteria in:
 
 ```text
-project/docs/VALIDATION_SPEC.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 For every manual criterion:
@@ -1883,7 +1892,7 @@ Use the following decision order.
 The project may be called `structurally_complete` only when:
 
 ```text
-[ ] Project identity is final.
+[ ] Project identity is fixed.
 [ ] Clone/reset hygiene passes.
 [ ] Required directory structure exists.
 [ ] Project configuration validates.
@@ -1976,7 +1985,7 @@ A project may be called `release_ready` only when:
 
 ---
 
-# 51. Final release sign-off record
+# 51. Release sign-off record
 
 Copy this record into the release evidence or project release document.
 
@@ -2010,7 +2019,7 @@ Copy this record into the release evidence or project release document.
 
 The reviewed project scope is complete and all mandatory release criteria
 identified by `PROJECT_COMPLETION_CHECKLIST.md` and
-`project/docs/RELEASE_CRITERIA.md` have been evaluated against the cited
+`project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` have been evaluated against the cited
 current evidence.
 
 ## Signatures or approvals
@@ -2032,11 +2041,11 @@ The retained release evidence bundle should contain or reference:
 ```text
 project/project.toml
 project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 release run summary.json
 release run summary.md
 release run AI_READY.md
@@ -2057,17 +2066,11 @@ Every reference must remain resolvable under the retention policy.
 
 ---
 
-# 53. Recommended automation
+# 53. Automated conformance checks
 
-A future project-completion checker should support a command conceptually equivalent to:
+`docs/usage/CLI_REFERENCE.md` owns the canonical command and options used to execute project-completion checks.
 
-```text
-project completion check
-```
-
-The exact command name and options belong to `docs/usage/CLI_REFERENCE.md`.
-
-The checker should verify automatically where possible:
+Automated checks verify, where possible:
 
 - required file existence;
 - placeholder absence;
@@ -2087,9 +2090,9 @@ The checker should verify automatically where possible:
 - manifest completeness;
 - required artifact existence.
 
-The checker must report manual criteria separately.
+Automated checks report manual criteria separately.
 
-It must not mark manual criteria `PASS` automatically.
+They must not mark manual criteria `PASS` automatically.
 
 ---
 
@@ -2181,7 +2184,7 @@ Before signing:
 
 ---
 
-# 57. Final enforcement rule
+# 57. Enforcement rule
 
 Project completion is a claim about the whole project, not one successful file.
 
@@ -2202,6 +2205,8 @@ It requires agreement among:
 - documentation;
 - release evidence.
 
+Portfolio aggregation is outside this checklist. `gf-portfolio` may consume public, versioned release artifacts, but it cannot satisfy or replace a Wordbench project gate.
+
 Therefore:
 
-> GF Wordbench must not describe an active language project as complete or release-ready while any required contract is unimplemented, any mandatory criterion is unproven, any blocking issue is unresolved, or any cited evidence belongs to a different project state.
+> GF Wordbench must not describe an active language project as complete or release-ready while any required contract is unsatisfied, any mandatory criterion is unproven, any blocking issue is unresolved, or any cited evidence belongs to a different project state.

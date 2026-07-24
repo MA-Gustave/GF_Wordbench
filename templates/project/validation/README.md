@@ -61,13 +61,13 @@ It does not define the complete validation matrix.
 The authoritative project validation design belongs in:
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 Feature-to-evidence coverage belongs in:
 
 ```text
-project/docs/TEST_COVERAGE_MATRIX.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 ```
 
 ---
@@ -203,19 +203,19 @@ manifest writer
 
 ```text
 project/project.toml
-project/docs/00_PROJECT_START_HERE.md
+project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md
 project/docs/LANGUAGE_OVERVIEW.md
 project/docs/LANGUAGE_ARCHITECTURE.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 project/docs/MORPHOLOGY_SPEC.md
 project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC.md
-project/docs/TEST_COVERAGE_MATRIX.md
-project/docs/STATUS_LEDGER.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/DECISION_LOG.md
 project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 project/docs/RESEARCH_EVIDENCE.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
@@ -837,7 +837,7 @@ It is never an automatic pass.
 Maintain the authoritative scenario inventory in:
 
 ```text
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 or one designated source referenced by it.
@@ -985,7 +985,7 @@ The exact active marker syntax is governed by:
 
 ```text
 docs/scenarios/SCENARIO_MARKERS_AND_ASSERTIONS.md
-project/docs/VALIDATION_SPEC.md
+project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 A missing required end marker is a scenario failure.
@@ -1308,7 +1308,7 @@ A project release should require:
 The authoritative release checklist belongs in:
 
 ```text
-project/docs/RELEASE_CRITERIA.md
+project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 ---
@@ -1333,7 +1333,7 @@ PGF build is unavailable
 Record in:
 
 ```text
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 project/docs/KNOWN_ISSUES.md
 ```
 
@@ -2363,19 +2363,19 @@ A template change should be tested by initializing a small synthetic project.
 ```text
 templates/project/README.md
 templates/project/project.toml
-templates/project/docs/00_PROJECT_START_HERE.md
+templates/project/docs/00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md
 templates/project/docs/LANGUAGE_OVERVIEW.md
 templates/project/docs/LANGUAGE_ARCHITECTURE.md
 templates/project/docs/MODULE_DEPENDENCY_MAP.md
 templates/project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
 templates/project/docs/MORPHOLOGY_SPEC.md
 templates/project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-templates/project/docs/VALIDATION_SPEC.md
-templates/project/docs/TEST_COVERAGE_MATRIX.md
-templates/project/docs/STATUS_LEDGER.md
+templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
+templates/project/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md
+templates/project/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md
 templates/project/docs/DECISION_LOG.md
 templates/project/docs/KNOWN_ISSUES.md
-templates/project/docs/RELEASE_CRITERIA.md
+templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md
 templates/project/docs/RESEARCH_EVIDENCE.md
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 templates/project/validation/scenarios/README.md

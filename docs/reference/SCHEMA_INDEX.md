@@ -4,9 +4,12 @@
 **Status:** Normative schema registry and navigation reference  
 **Applies to:** GF Wordbench persisted configuration, application state, run artifacts, scenario outputs, gold expectations, human reports, migrations, and external readers  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\reference\SCHEMA_INDEX.md`  
-**Document version:** `1.0.0`  
-**Registry source:** `docs/PERSISTED_SCHEMA_LOCK.md`
+**Canonical path:** `docs/reference/SCHEMA_INDEX.md`  
+**Document version:** `1.1.0`  
+**Registry source:** `docs/PERSISTED_SCHEMA_LOCK.md`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Product-boundary authority:** ADR-0001, ADR-0011 and ADR-0012  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -21,9 +24,9 @@ It answers:
 - which version is canonical;
 - which component owns each writer;
 - which components may read each format;
-- whether a format is canonical, planned, soft, embedded, or legacy;
+- whether a format is canonical, soft, embedded, deprecated, or legacy-readable;
 - which migration path applies;
-- which formats may be written by current code;
+- which formats canonical writers emit;
 - which formats remain read-only compatibility inputs;
 - which documents define full field-level behavior.
 
@@ -59,6 +62,10 @@ registry entry
 ```
 
 No new unversioned machine-readable schema is permitted.
+
+GF Wordbench schemas describe exactly one active project and one run at a time. They must not contain a Portfolio workspace registry, cross-workspace aggregation state, portfolio readiness, or `gf-portfolio` private configuration.
+
+`gf-portfolio` may consume finalized public Wordbench artifacts through versioned read-only contracts. Wordbench does not require Portfolio storage, runtime, services, schemas, or availability.
 
 ---
 
@@ -119,26 +126,25 @@ Canonical writers must never emit them.
 
 # 4. Canonical schema registry
 
-| Schema ID | Version | Format | Canonical path or pattern | Status |
+| Schema ID | Version | Format | Canonical path or pattern | Contract class |
 |---|---:|---|---|---|
-| `gf-wordbench.project` | `1.0` | TOML | `project/project.toml` | Planned normative |
-| `gf-wordbench.app-state` | `1.0` | JSON | `.gf_wordbench_state.json` | Planned normative |
-| `gf-wordbench.run-summary` | `1.0` | JSON | `run_<run-id>/summary.json` | Planned normative |
-| `gf-wordbench.artifact-manifest` | `1.0` | JSON | `run_<run-id>/manifest.json` | Planned normative |
-| `gf-wordbench.scenario-output` | `1.0` | canonical text | `run_<run-id>/raw/scenarios/<scenario-id>.out` | Planned normative |
-| `gf-wordbench.scenario-gold` | `1.0` | canonical text | `project/validation/gold/<scenario-id>.gold` | Planned normative |
+| `gf-wordbench.project` | `1.0` | TOML | `project/project.toml` | Canonical root schema |
+| `gf-wordbench.app-state` | `1.0` | JSON | `.gf_wordbench_state.json` | Canonical root schema |
+| `gf-wordbench.run-summary` | `1.0` | JSON | `run_<run-id>/summary.json` | Canonical root schema |
+| `gf-wordbench.artifact-manifest` | `1.0` | JSON | `run_<run-id>/manifest.json` | Canonical root schema |
+| `gf-wordbench.scenario-output` | `1.0` | canonical text | `run_<run-id>/raw/scenarios/<scenario-id>.out` | Canonical text schema |
+| `gf-wordbench.scenario-gold` | `1.0` | canonical text | `project/validation/gold/<scenario-id>.gold` | Canonical text schema |
 
-The status reflects the target schema registry defined by the persisted-schema lock.
-
-A schema becomes **Active** only when:
+Every canonical schema requires:
 
 ```text
-[ ] canonical writer exists
-[ ] canonical reader exists
-[ ] validation exists
-[ ] migration behavior exists where required
-[ ] contract tests pass
-[ ] implementation and lock agree
+[ ] one writer owner
+[ ] documented readers
+[ ] field and path validation
+[ ] deterministic serialization
+[ ] migration behavior where required
+[ ] contract tests
+[ ] registry and lock agreement
 ```
 
 ---
@@ -214,7 +220,7 @@ Rules:
 
 ## 6.3 Producer metadata
 
-Canonical JSON documents should contain:
+Canonical JSON documents contain:
 
 ```json
 {
@@ -260,7 +266,7 @@ LF
 CRLF
 ```
 
-A final newline is required for:
+A terminating newline is required for:
 
 ```text
 .gold files
@@ -305,7 +311,7 @@ Use paths relative to the run directory with `/`.
 
 May be absolute.
 
-Canonical writers should normalize separators to `/`.
+Canonical writers normalize separators to `/`.
 
 ### Raw external output
 
@@ -322,7 +328,7 @@ Canonical timestamps must:
 - use RFC 3339-compatible text;
 - avoid naive local timestamps in canonical output.
 
-Recommended form:
+Canonical form:
 
 ```text
 2026-07-22T14:32:10Z
@@ -440,7 +446,7 @@ LF
 
 ## 7.4 Purpose
 
-Defines one active language project per GF Wordbench copy.
+Defines the single active language project in one GF Wordbench workspace.
 
 It contains portable project facts and validation policy.
 
@@ -695,13 +701,13 @@ The run directory is a persisted layout contract.
 
 It is not a root schema ID by itself.
 
-## 9.1 Name
+## 9.1 Directory name
 
 ```text
 run_<run-id>
 ```
 
-Recommended v1 run ID:
+Canonical v1 run ID:
 
 ```text
 YYYYMMDD_HHMMSS
@@ -751,13 +757,13 @@ run_<run-id>/
 | `top_errors.txt` | report/log writer |
 | `manifest.json` | manifest writer |
 | `details/` | detail report writer |
-| `raw/master.log` | audit lifecycle owner |
-| `raw/compile/` | compiler/process evidence owner |
-| `raw/scan/` | scanner |
-| `raw/scenarios/` | scenario runner |
-| `artifacts/gfo/` | GF compile stage |
-| `artifacts/out/` | external-tool output stage |
-| `artifacts/pgf/` | PGF build stage |
+| `raw/master.log` | runs module |
+| `raw/compile/` | validation module and process adapter |
+| `raw/scan/` | validation module |
+| `raw/scenarios/` | validation module and process adapter |
+| `artifacts/gfo/` | validation module |
+| `artifacts/out/` | owning module through the artifact service |
+| `artifacts/pgf/` | validation module |
 
 No observer may rewrite another component’s artifact.
 
@@ -841,6 +847,7 @@ migration tools
 schema validator
 report verifier
 export tooling
+external consumers of finalized public artifacts, including `gf-portfolio`
 ```
 
 ## 10.6 Canonical root structure
@@ -1206,7 +1213,7 @@ run_<run-id>/manifest.json
 
 ## 15.3 Purpose
 
-Defines the final artifact set for a run and proves integrity.
+Defines the finalized artifact set for a run and proves integrity.
 
 ## 15.4 Writer
 
@@ -1278,9 +1285,9 @@ Additional optional metadata requires a schema-minor review.
 - hashes use SHA-256;
 - empty files are valid artifacts when expected;
 - the manifest does not hash itself;
-- strict mode should reject escaping symlinks;
+- strict mode rejects escaping symlinks;
 - entries are sorted by normalized path;
-- hashes are computed from final bytes.
+- hashes are computed from finalized bytes.
 
 ## 15.9 Failure meaning
 
@@ -1313,7 +1320,7 @@ run_<run-id>/raw/scenarios/<scenario-id>.out
 canonical text
 UTF-8 without BOM
 LF
-final newline
+terminating newline
 ```
 
 ## 16.4 Canonical skeleton
@@ -1406,7 +1413,7 @@ project/validation/gold/<scenario-id>.gold
 canonical text
 UTF-8 without BOM
 LF
-final newline
+terminating newline
 ```
 
 ## 17.4 Canonical skeleton
@@ -1450,13 +1457,11 @@ project review tooling
 - empty gold is valid only when documented;
 - normalization-version changes require reviewing affected gold files.
 
-## 17.8 Explicit update command
+## 17.8 Explicit update operation
 
-Planned canonical workflow:
+`docs/usage/CLI_REFERENCE.md` owns the exact command surface for gold updates.
 
-```text
-gf-wordbench gold update <scenario-id>
-```
+The operation requires a scenario ID, shows or stores the diff, writes atomically and records the project-owned decision evidence.
 
 A standard validation command must not update gold.
 
@@ -1601,7 +1606,7 @@ Provides a compact deterministic rendering of grouped top errors.
 - does not replace item results;
 - does not replace raw logs;
 - stable ordering follows count and message rules;
-- canonical UTF-8, LF, and final newline apply.
+- canonical UTF-8, LF, and terminating newline apply.
 
 The exact textual rendering is a soft schema unless a machine parser is formally introduced.
 
@@ -1625,7 +1630,7 @@ audit orchestration / lifecycle logger
 
 Chronological lifecycle evidence.
 
-## 21.4 Recommended line format
+## 21.4 Canonical line format
 
 ```text
 <RFC3339-UTC> <LEVEL> <EVENT> [key=value ...]
@@ -1701,22 +1706,22 @@ The following are persisted artifacts but are not themselves root data schemas.
 
 | Artifact | Path | Owner | Contract type |
 |---|---|---|---|
-| Compile stdout | `raw/compile/<key>.out.txt` | compiler/process runner | raw evidence |
-| Compile stderr | `raw/compile/<key>.err.txt` | compiler/process runner | raw evidence |
-| Scenario stdout | `raw/scenarios/<id>.out.txt` | scenario runner/process runner | raw evidence |
-| Scenario stderr | `raw/scenarios/<id>.err.txt` | scenario runner/process runner | raw evidence |
-| GF version stdout | `raw/gf_version.out.txt` | GF adapter/process runner | raw evidence |
-| GF version stderr | `raw/gf_version.err.txt` | GF adapter/process runner | raw evidence |
-| Scan log | `raw/scan/<key>.scan.txt` | scanner | semi-structured evidence |
+| Compile stdout | `raw/compile/<key>.out.txt` | validation module / process adapter | raw evidence |
+| Compile stderr | `raw/compile/<key>.err.txt` | validation module / process adapter | raw evidence |
+| Scenario stdout | `raw/scenarios/<id>.out.txt` | validation module / process adapter | raw evidence |
+| Scenario stderr | `raw/scenarios/<id>.err.txt` | validation module / process adapter | raw evidence |
+| GF version stdout | `raw/gf_version.out.txt` | GF adapter / process adapter | raw evidence |
+| GF version stderr | `raw/gf_version.err.txt` | GF adapter / process adapter | raw evidence |
+| Scan log | `raw/scan/<key>.scan.txt` | validation module | semi-structured evidence |
 | Detail report | `details/*` | detail report writer | soft report |
-| `.gfo` | `artifacts/gfo/**` | GF compile stage | external binary artifact |
-| `.pgf` | `artifacts/pgf/*.pgf` | GF PGF stage | external binary artifact |
-| Other tool output | `artifacts/out/**` | tool stage | external/derived artifact |
+| `.gfo` | `artifacts/gfo/**` | validation module | external binary artifact |
+| `.pgf` | `artifacts/pgf/*.pgf` | validation module | external binary artifact |
+| Other tool output | `artifacts/out/**` | owning module through the artifact service | external/derived artifact |
 | Gold diff | designated run path | gold comparator | derived evidence |
 
 These artifacts are indexed in `manifest.json`.
 
-A future component that parses one of these as a stable machine format must define a schema or formal contract before relying on it.
+Any component that parses one of these as a stable machine format must first define a schema or formal contract.
 
 ---
 
@@ -1733,10 +1738,10 @@ A future component that parses one of these as a stable machine format must defi
 | `summary.md` | Markdown report writer | humans |
 | `AI_READY.md` | AI report writer | humans, AI systems |
 | `top_errors.txt` | report/log writer | humans, optional external tools |
-| `master.log` | lifecycle logger | humans, aggregate writer |
-| individual compile logs | compiler/process runner | diagnostics, reports |
-| individual scan logs | scanner | reports, aggregate writer |
-| individual scenario logs | scenario runner/process runner | diagnostics, normalizer |
+| `master.log` | runs module | humans, aggregate writer |
+| individual compile logs | validation module / process adapter | diagnostics, reports |
+| individual scan logs | validation module | reports, aggregate writer |
+| individual scenario logs | validation module / process adapter | diagnostics, normalizer |
 | aggregate logs | aggregate writer | humans, support workflows |
 
 A reader must not rewrite an asset it does not own.
@@ -1789,18 +1794,16 @@ An explicit migration may create a new canonical file.
 
 # 26. Schema compatibility matrix
 
-| Schema | Canonical writer | Canonical reader | Legacy reader | Migration required |
+| Schema | Canonical writer policy | Canonical reader policy | Legacy reader | Migration policy |
 |---|---|---|---|---|
-| Project `1.0` | Planned | Planned | project-specific older formats when documented | Explicit |
-| App state `1.0` | Planned | Planned | `.gf_audit_state.json`, unversioned flat state | Yes |
-| Run summary `1.0` | Planned | Planned | nested and flat GF Audit summaries | Yes |
-| Manifest `1.0` | Planned | Planned | none canonical | Not applicable |
-| Scenario output `1.0` | Planned | Planned | unversioned transcripts only when explicitly supported | Usually regenerate |
-| Scenario gold `1.0` | Planned | Planned | legacy expected outputs when explicitly imported | Explicit review |
+| Project `1.0` | Emit `gf-wordbench.project/1.0` only | Validate `1.x`; reject unsupported major versions | project-specific older formats when documented | Explicit |
+| App state `1.0` | Emit `gf-wordbench.app-state/1.0` only | Validate `1.x`; tolerate disposable-state recovery | `.gf_audit_state.json`, unversioned flat state | Required when imported |
+| Run summary `1.0` | Emit `gf-wordbench.run-summary/1.0` only | Validate `1.x`; reject unreliable required fields | nested and flat GF Audit summaries | Required when imported |
+| Manifest `1.0` | Emit `gf-wordbench.artifact-manifest/1.0` only | Verify paths, required files and hashes | none canonical | Not applicable |
+| Scenario output `1.0` | Emit versioned normalized output only | Validate header, scenario identity and markers | explicitly supported unversioned transcripts | Regenerate or explicitly import |
+| Scenario gold `1.0` | Write only through explicit reviewed update | Validate header, scenario identity and normalization version | explicitly imported legacy expected outputs | Explicit review |
 
-This matrix describes target compatibility.
-
-Implementation status must be verified by tests before a release claims support.
+Release support is established by schema validation, migration fixtures and contract tests.
 
 ---
 
@@ -1823,7 +1826,7 @@ Migration must:
 
 ## 27.2 Migration result
 
-Recommended record:
+Canonical migration record:
 
 ```json
 {
@@ -1853,50 +1856,48 @@ A migration must never claim success when required meaning could not be recovere
 
 ---
 
-# 28. Schema status lifecycle
+# 28. Schema support classes
 
-Recommended status values:
+The registry uses these support classes:
 
 ```text
-Planned normative
-Experimental
-Active
+Canonical
 Deprecated
 Legacy readable
 Retired
 ```
 
-## 28.1 Planned normative
+## 28.1 Canonical
 
-Specified but not yet fully implemented and enforced.
+The schema is the format emitted by canonical writers and accepted by canonical readers.
 
-## 28.2 Experimental
+Only one canonical version line is emitted for each persisted asset class.
 
-Implemented for evaluation.
+## 28.2 Deprecated
 
-Compatibility may be limited.
+The schema remains readable, and may remain writable only when an explicit compatibility policy requires it.
 
-Experimental data must still have an identity and version.
+Every deprecated schema identifies:
 
-## 28.3 Active
+```text
+replacement
+migration path
+reader policy
+writer policy
+removal condition
+```
 
-Canonical writer, reader, validation, tests, and migrations agree.
+## 28.3 Legacy readable
 
-## 28.4 Deprecated
-
-Still readable or writable temporarily, with replacement and removal plan.
-
-## 28.5 Legacy readable
-
-Read-only compatibility input.
+The format is accepted only as a migration or historical input.
 
 Canonical writers never emit it.
 
-## 28.6 Retired
+## 28.4 Retired
 
-No longer supported by current readers or writers.
+The format is not accepted by current readers or writers.
 
-Historical preservation may remain external to runtime support.
+Historical preservation may remain outside runtime support.
 
 ---
 
@@ -1956,14 +1957,9 @@ The framework release version may still change.
 
 # 30. Validation commands
 
-Planned canonical validation commands:
+`docs/usage/CLI_REFERENCE.md` owns the canonical command names and options for schema validation.
 
-```text
-gf-wordbench schemas check
-gf-wordbench schemas check --strict
-```
-
-Expected checks:
+The schema-validation operation performs these checks:
 
 ```text
 validate project.toml
@@ -1981,13 +1977,13 @@ verify required files
 detect legacy aliases in canonical output
 ```
 
-Until implemented, equivalent tests and manual checks are required.
+The same rules apply to automated validation, tests and explicit manual review.
 
 ---
 
 # 31. Required tests
 
-Recommended directory:
+Canonical test directory:
 
 ```text
 tests/schemas/
@@ -2107,7 +2103,9 @@ Persisted-schema drift exists when:
 - a legacy alias becomes canonical;
 - a required JSON field is renamed without a major version;
 - normalized scenario output lacks a version header;
-- a new machine-readable text format is parsed without registry entry.
+- a new machine-readable text format is parsed without registry entry;
+- a Wordbench schema contains a multi-workspace or Portfolio registry;
+- Wordbench requires `gf-portfolio` state or schemas to read its own artifacts.
 
 Drift must be resolved by:
 
@@ -2136,13 +2134,15 @@ A schema change is complete only when:
 [ ] unit tests updated
 [ ] integration tests updated
 [ ] PERSISTED_SCHEMA_LOCK.md updated
+[ ] DOCUMENTATION_ALIGNMENT_LOCK.md reviewed
+[ ] product-boundary ADRs reviewed
 [ ] SCHEMA_INDEX.md updated
 [ ] detailed reference updated
 [ ] changelog updated
 [ ] release compatibility reviewed
 ```
 
-No persisted-schema change may be implemented in one writer only.
+No persisted-schema change may be applied in one writer only.
 
 ---
 
@@ -2210,11 +2210,11 @@ No persisted-schema change may be implemented in one writer only.
 | Markdown report writer | `summary.md` |
 | AI report writer | `AI_READY.md` |
 | Report/log writer | `top_errors.txt`, aggregate logs |
-| Lifecycle logger | `master.log` |
-| Compiler/process runner | compile stdout/stderr |
-| Scanner | scan logs |
-| GF compilation stage | `.gfo` |
-| GF PGF stage | `.pgf` |
+| Runs module | `master.log` |
+| Validation module / process adapter | compile stdout/stderr |
+| Validation module | scan logs |
+| Validation module | `.gfo` |
+| Validation module | `.pgf` |
 
 ---
 
@@ -2251,14 +2251,15 @@ No persisted-schema change may be implemented in one writer only.
 | What should a human read first? | `summary.md` |
 | What should an AI system receive? | `AI_READY.md` plus structured/raw evidence |
 | What format versions are supported? | this index and `PERSISTED_SCHEMA_LOCK.md` |
+| What may Portfolio consume? | finalized public artifacts defined by Wordbench contracts |
 
 ---
 
-# 39. Final enforcement rule
+# 39. Enforcement rule
 
 Persisted schemas are public contracts across time.
 
-> No persisted field, enum, path convention, artifact name, marker, normalization rule, report identity, or directory layout may change through an isolated implementation edit.
+> No persisted field, enum, path convention, artifact name, marker, normalization rule, report identity, or directory layout may change through an isolated code edit.
 
 Every change must be:
 
@@ -2273,4 +2274,4 @@ documented
 reviewed
 ```
 
-This index must always identify the current canonical target and every legacy format still supported for reading.
+This index identifies every canonical schema and every legacy format supported for reading.

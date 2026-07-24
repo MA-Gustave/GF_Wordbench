@@ -1,161 +1,188 @@
 # GF Wordbench — Reporting Overview
 
 **Document ID:** `GF-WB-REPORTING-OVERVIEW`  
-**Status:** Normative reporting architecture  
-**Applies to:** Every completed or terminal GF Wordbench run  
-**Primary owners:** `app/reports/` and the run orchestrator  
-**Reporting model version:** `1.0`  
-**Target product state:** Final architecture  
-**Last reviewed:** 2026-07-22  
+**Status:** Normative  
+**Applies to:** Every terminal GF Wordbench run  
+**Owner:** Reporting module and run orchestration  
+**Reporting model version:** `2.0`  
+**Last reviewed:** `2026-07-24`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Related locks:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`
 
 ---
 
 ## 1. Purpose
 
-This document defines the final reporting system for GF Wordbench.
+This document defines the reporting architecture of GF Wordbench.
 
-It explains:
+It establishes:
 
-- which reports exist;
-- which report is authoritative for each use;
-- which component owns each artifact;
-- what information report writers may consume;
-- how report writers are ordered;
-- how report failures are handled;
-- how paths, timestamps, statuses, diagnostics, and artifacts are presented;
-- how reports remain deterministic and safe;
-- how current GF Audit reporting migrates to GF Wordbench.
+- which reports and evidence artifacts exist;
+- which artifact is authoritative for each use;
+- which component owns each path;
+- what report writers may consume;
+- report-generation order;
+- report-failure behavior;
+- path, timestamp, status and diagnostic presentation;
+- deterministic serialization;
+- artifact integrity;
+- security and size limits.
 
-The reporting system converts one completed validation result into durable, reviewable evidence.
+The reporting system transforms one terminal run result into durable, reviewable evidence.
 
-It must not perform a second validation.
+It does not perform validation again.
 
 ---
 
 ## 2. Core rule
 
-> Reports describe completed evidence; they do not create, repair, reinterpret, or rerun that evidence.
+> Reports describe captured evidence; they do not create, repair, reinterpret or rerun that evidence.
 
 A report writer may:
 
 - serialize structured results;
 - select and order existing facts;
 - render human-readable explanations;
-- copy or aggregate existing logs when it owns the destination;
-- calculate presentation-only summaries from `RunResult`;
+- aggregate existing logs into an owned destination;
+- calculate presentation-only summaries;
 - catalog completed artifacts.
 
 A report writer must not:
 
 - launch GF;
-- rerun a scanner;
-- rerun a scenario;
+- rerun static scanning;
+- rerun compilation;
+- rerun scenarios;
 - rebuild a PGF;
-- change a validation status;
-- assign direct or downstream causality;
+- change validation status;
+- assign causal ownership;
 - normalize scenario output independently;
-- update a `.gold` file;
-- infer missing machine fields from another human report;
+- update gold files;
+- reconstruct machine facts from another human report;
 - rewrite raw evidence owned by another component.
 
 ---
 
-## 3. Related authority
+## 3. Product boundary
 
-The following documents remain authoritative for their domains:
+Reporting concerns one active Wordbench project and one run.
+
+GF Wordbench reports do not own:
+
+- a registry of several Wordbench workspaces;
+- multilingual portfolio aggregation;
+- cross-project trend analysis;
+- portfolio readiness scoring;
+- companion-product state or storage.
+
+The independent product `gf-portfolio` may consume public versioned Wordbench artifacts.
+
+Allowed direction:
 
 ```text
-docs/architecture/ARCHITECTURE_OVERVIEW.md
-docs/architecture/DATA_MODEL.md
-docs/architecture/ARTIFACT_MODEL.md
-docs/architecture/ERROR_HANDLING_MODEL.md
-docs/architecture/PROCESS_EXECUTION_MODEL.md
-docs/INTERFILE_CONTRACT_LOCK.md
-docs/PERSISTED_SCHEMA_LOCK.md
-docs/reports/SUMMARY_JSON_REFERENCE.md
-docs/reports/SUMMARY_MARKDOWN_REFERENCE.md
-docs/reports/AI_READY_REFERENCE.md
-docs/reports/RAW_LOGS_REFERENCE.md
-docs/reports/ARTIFACT_MANIFEST.md
-docs/reference/STATUS_VALUES.md
-docs/reference/DIAGNOSTIC_KINDS.md
+gf-portfolio -> public versioned GF Wordbench artifacts
 ```
 
-Priority when rules overlap:
+Prohibited direction:
 
-1. `PERSISTED_SCHEMA_LOCK.md` governs machine schemas, path bases, versions, and stable report identities;
-2. `INTERFILE_CONTRACT_LOCK.md` governs Python provider-consumer boundaries and artifact ownership;
-3. `ARTIFACT_MODEL.md` governs artifact classes and lifecycle;
-4. this document governs the overall reporting architecture;
-5. each report-specific reference governs that report’s detailed layout.
+```text
+GF Wordbench -> gf-portfolio runtime
+GF Wordbench -> gf-portfolio private schemas
+GF Wordbench -> gf-portfolio storage or services
+```
 
----
-
-## 4. Reporting goals
-
-The final reporting system must provide:
-
-### 4.1 Machine usability
-
-Automation must be able to load one versioned structured run record without parsing Markdown.
-
-### 4.2 Human review
-
-A developer must be able to understand the outcome quickly without opening every raw log.
-
-### 4.3 AI handoff
-
-An AI system must receive bounded, explicit evidence without requiring a second run.
-
-### 4.4 Traceability
-
-Every important claim must be traceable to structured results or owned evidence paths.
-
-### 4.5 Reproducibility
-
-Reports must identify the run, project, GF version, mode, configuration, timestamps, and artifacts needed to understand the execution context.
-
-### 4.6 Anti-drift
-
-Each report has one writer, one stable purpose, and no competing source of truth.
-
-### 4.7 Failure preservation
-
-A report failure must not destroy validation evidence already captured.
+Wordbench reporting remains complete and usable when `gf-portfolio` is absent.
 
 ---
 
-## 5. Reporting non-goals
+## 4. Related authorities
 
-The core reporting system is not:
+| Topic | Authority |
+|---|---|
+| Cross-document alignment | `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` |
+| Framework component boundaries | `docs/INTERFILE_CONTRACT_LOCK.md` |
+| Persisted schemas and stable paths | `docs/PERSISTED_SCHEMA_LOCK.md` |
+| Architecture | `docs/architecture/ARCHITECTURE_OVERVIEW.md` |
+| Data model | `docs/architecture/DATA_MODEL.md` |
+| Artifact lifecycle | `docs/architecture/ARTIFACT_MODEL.md` |
+| Error handling | `docs/architecture/ERROR_HANDLING_MODEL.md` |
+| Process evidence | `docs/architecture/PROCESS_EXECUTION_MODEL.md` |
+| JSON summary | `docs/reports/SUMMARY_JSON_REFERENCE.md` |
+| Markdown summary | `docs/reports/SUMMARY_MARKDOWN_REFERENCE.md` |
+| AI packet | `docs/reports/AI_READY_REFERENCE.md` |
+| Raw logs | `docs/reports/RAW_LOGS_REFERENCE.md` |
+| Manifest | `docs/reports/ARTIFACT_MANIFEST.md` |
+| Status values | `docs/reference/STATUS_VALUES.md` |
+| Diagnostic kinds | `docs/reference/DIAGNOSTIC_KINDS.md` |
+
+When rules overlap, the specialized owner document governs its field-level contract.
+
+---
+
+## 5. Reporting goals
+
+The reporting system provides:
+
+### Machine usability
+
+Automation loads one versioned structured record without parsing Markdown.
+
+### Human review
+
+A maintainer can understand the outcome and evidence paths without opening every raw file.
+
+### AI handoff
+
+A bounded evidence packet supports assisted diagnosis without another validation run.
+
+### Traceability
+
+Every material claim points to structured data or owned evidence.
+
+### Reproducibility
+
+Reports identify the run, active project, GF version, validation mode, timestamps and artifacts.
+
+### Anti-drift
+
+Each artifact has one purpose, one path owner and one writer.
+
+### Failure preservation
+
+A report failure never destroys evidence already captured.
+
+---
+
+## 6. Non-goals
+
+The reporting subsystem is not:
 
 - a database;
 - a telemetry service;
 - a remote dashboard;
 - a log-shipping platform;
-- a general analytics engine;
-- a replacement for version control;
+- a generic analytics engine;
+- a live process monitor;
+- an unrestricted report-plugin framework;
 - a replacement for GF diagnostics;
 - a replacement for project documentation;
-- a live process monitor;
-- an HTML publishing system;
-- an unrestricted report-plugin framework.
+- a portfolio product.
 
-Additional export formats may be introduced through explicit contracts, but they must not weaken the canonical reports.
+Additional formats require explicit ownership and contracts.
 
 ---
 
-## 6. Report families
+## 7. Report families
 
 GF Wordbench produces four report families.
 
-### 6.1 Canonical machine record
+### 7.1 Machine record
 
 ```text
 summary.json
 ```
 
-### 6.2 Canonical human reports
+### 7.2 Human-facing reports
 
 ```text
 summary.md
@@ -163,29 +190,29 @@ AI_READY.md
 top_errors.txt
 ```
 
-### 6.3 Evidence and detail artifacts
+### 7.3 Evidence and detail artifacts
 
 ```text
-master.log
-ALL_SCAN_LOGS.TXT
-ALL_LOGS.TXT
+raw/master.log
+raw/ALL_SCAN_LOGS.TXT
+raw/ALL_LOGS.TXT
+raw/compile/
+raw/scan/
+raw/scenarios/
 details/
-raw/
 ```
 
-### 6.4 Artifact integrity record
+### 7.4 Artifact integrity record
 
 ```text
 manifest.json
 ```
 
-These families have different purposes.
-
-No family should be forced to serve all audiences.
+No artifact is forced to serve every audience.
 
 ---
 
-## 7. Canonical run layout
+## 8. Run layout
 
 ```text
 run_<run-id>/
@@ -208,20 +235,16 @@ run_<run-id>/
     └── pgf/
 ```
 
-The schema lock defines the canonical path contract.
+Paths come from the run-path owner or artifact registry.
 
-A report writer must obtain its path from `RunPaths` or the designated artifact-path owner.
-
-It must not reconstruct the same filename independently.
+Report writers do not reconstruct canonical filenames independently.
 
 ---
 
-## 8. Source-of-truth hierarchy
-
-The source hierarchy is:
+## 9. Source-of-truth hierarchy
 
 ```text
-raw tool and scan evidence
+raw process and scan evidence
         ↓
 structured stage results
         ↓
@@ -232,20 +255,20 @@ summary.json
 human reports and external consumers
 ```
 
-Clarifications:
+Interpretation:
 
-- raw evidence is authoritative for what the external tool emitted;
-- structured results are authoritative for GF Wordbench’s normalized interpretation;
-- `RunResult` is authoritative during the current process;
+- raw evidence is authoritative for what tools emitted;
+- structured stage results are authoritative for Wordbench interpretation;
+- `RunResult` is authoritative in memory;
 - `summary.json` is authoritative after persistence;
-- Markdown reports are authoritative only as human presentations of those facts;
-- `manifest.json` is authoritative for final artifact inventory and integrity metadata.
+- Markdown reports are human projections;
+- `manifest.json` is authoritative for artifact inventory and integrity metadata.
 
-A human report must not become the input used to reconstruct `RunResult`.
+No human report is used to reconstruct `RunResult`.
 
 ---
 
-## 9. Primary machine-readable report
+## 10. `summary.json`
 
 Canonical path:
 
@@ -253,50 +276,37 @@ Canonical path:
 summary.json
 ```
 
-Canonical schema:
+Schema:
 
 ```text
-schema_id: gf-wordbench.run-summary
-schema_version: 1.0
+schema_id = gf-wordbench.run-summary
+schema_version = 1.0
 ```
 
-Primary owner:
+Owner:
 
 ```text
-app/reports/report_json.py
+reporting JSON writer
 ```
 
-Primary public symbol:
+Conceptual public responsibility:
 
 ```python
 write_summary_json(run_result: RunResult) -> Path
 ```
 
-Detailed field definitions belong to:
-
-```text
-docs/reports/SUMMARY_JSON_REFERENCE.md
-docs/PERSISTED_SCHEMA_LOCK.md
-```
-
----
-
-## 10. `summary.json` responsibilities
-
-`summary.json` must preserve enough structured information for:
+It provides structured information for:
 
 - previous-run comparison;
 - GUI result loading;
-- CLI or automation inspection;
+- CLI and automation;
 - release-gate verification;
-- historical analysis;
 - migration;
-- report verification;
-- AI handoff metadata;
 - artifact discovery;
-- diagnostic aggregation.
+- diagnostic aggregation;
+- optional read-only Portfolio ingestion.
 
-It normally includes:
+It includes, as applicable:
 
 ```text
 schema identity
@@ -305,41 +315,33 @@ run metadata
 resolved execution context
 overall status
 totals
-artifact paths
+artifact references
 file results
 scenario results
-PGF or entrypoint results when applicable
+PGF or entrypoint results
 diff entries
 top errors
-release-gate outcomes
+release gates
 framework errors
 ```
 
-The exact canonical shape is governed by the schema lock.
+The writer must not:
 
----
-
-## 11. `summary.json` restrictions
-
-The JSON writer must not:
-
-- serialize arbitrary object internals through uncontrolled recursion;
-- depend on Python object field order as semantic order;
-- write unversioned canonical output;
-- emit absolute project paths where project-relative paths are required;
-- emit Windows-only separators in canonical project or run-relative paths;
+- serialize arbitrary object internals;
+- depend on incidental Python field ordering;
+- emit unversioned canonical output;
+- emit wrong path bases or separators;
 - serialize enum objects directly;
-- serialize timestamps without timezone semantics;
+- emit naive timestamps;
 - emit `NaN` or infinity;
-- silently rename legacy fields into canonical output without migration rules;
-- copy unknown legacy fields into a new canonical document;
-- use Markdown prose as a source.
+- copy undocumented legacy fields;
+- derive facts from Markdown.
 
-Serialization must be deliberate and schema-owned.
+Serialization is explicit and schema-owned.
 
 ---
 
-## 12. Human summary
+## 11. `summary.md`
 
 Canonical path:
 
@@ -350,10 +352,10 @@ summary.md
 Owner:
 
 ```text
-app/reports/report_md.py
+reporting Markdown-summary writer
 ```
 
-Primary public symbols:
+Conceptual responsibilities:
 
 ```python
 build_summary_md(run_result: RunResult) -> str
@@ -362,68 +364,41 @@ write_summary_md(run_result: RunResult) -> Path
 
 Purpose:
 
-- provide a concise but complete human review of the run;
-- expose outcome, totals, root failures, downstream failures, scenarios, changes, and artifact links;
-- help a developer decide what to inspect next.
+- summarize the run for human review;
+- expose outcome, totals and release gates;
+- distinguish direct, ambiguous and downstream failures;
+- show scenario failures and regressions;
+- link to artifacts and raw evidence.
 
 It is not a machine schema.
 
----
-
-## 13. Human-summary minimum content
-
-The final human summary should cover, when applicable:
+Minimum content, when applicable:
 
 ```text
 Run
 Outcome
 Totals
-Release gates
-Direct failures
-Downstream failures
-Ambiguous failures
-Framework errors
-Failing scenarios
-Successful validation
-Skipped validation
-Top errors
-Heuristic scan notes
-Changes since previous run
-Artifacts and evidence
+Release Gates
+Framework Errors
+Direct Failures
+Required Scenario Failures
+Ambiguous Failures
+Downstream Failures
+Successful Validation
+Skipped Validation
+Top Errors
+Heuristic Scan Findings
+Changes Since Previous Run
+Artifacts and Evidence
 ```
 
-Empty sections may be omitted when the report-specific reference permits it.
+The outcome appears near the beginning.
 
-The top-level outcome must remain visible near the beginning.
+Stable groups use deterministic ordering.
 
 ---
 
-## 14. Human-summary ordering
-
-Recommended failure order:
-
-```text
-framework errors
-direct failures
-required scenario failures
-ambiguous failures
-downstream failures
-warnings and scan notes
-```
-
-Within stable groups:
-
-- file results use normalized project-relative path order;
-- scenario results use declared scenario order;
-- diagnostics use severity and stable subject order;
-- diff entries use change severity, then subject identity;
-- artifacts use normalized path order.
-
-Report order must not depend on filesystem enumeration.
-
----
-
-## 15. AI handoff report
+## 12. `AI_READY.md`
 
 Canonical path:
 
@@ -434,10 +409,10 @@ AI_READY.md
 Owner:
 
 ```text
-app/reports/report_ai_ready.py
+reporting AI-packet writer
 ```
 
-Primary public symbol:
+Conceptual public responsibility:
 
 ```python
 write_ai_ready(run_result: RunResult) -> Path
@@ -451,18 +426,15 @@ Required first heading:
 
 Purpose:
 
-- provide a bounded self-contained handoff;
+- provide a bounded diagnostic handoff;
 - foreground likely root failures;
-- distinguish direct, downstream, and ambiguous failures;
+- distinguish direct, ambiguous and downstream failures;
 - include failing scenarios;
-- include relevant excerpts and artifact paths;
-- avoid requiring the AI system to rerun GF.
+- include bounded evidence excerpts;
+- retain complete evidence paths;
+- avoid any second execution.
 
----
-
-## 16. AI handoff minimum sections
-
-When applicable:
+Required sections:
 
 ```text
 Run Summary
@@ -472,49 +444,34 @@ Failing Files
 Failing Scenarios
 Evidence
 Artifacts
+Ready Prompt For AI
 ```
 
-Optional sections may include:
+Evidence may include bounded excerpts from:
 
-```text
-Changes Since Previous Run
-Heuristic Scan Notes
-Suggested Investigation Order
-Known Limitations of This Packet
-```
-
-A suggested investigation order must be derived from structured classification, not invented linguistic advice.
-
----
-
-## 17. AI handoff evidence policy
-
-The AI packet may inline bounded evidence from:
-
-- primary diagnostic messages;
-- diagnostic details;
-- compiler stdout/stderr excerpts;
-- scenario stdout/stderr excerpts;
+- primary diagnostics;
+- compiler stdout and stderr;
+- scenario stdout and stderr;
+- normalized output;
 - gold diffs;
 - scan findings;
 - blocker relationships.
 
 Rules:
 
-- raw artifact paths remain visible;
-- excerpts are bounded;
+- source paths remain visible;
 - truncation is explicit;
-- no unsupported diagnosis is added;
-- no secret values are included;
-- complete large logs are referenced instead of copied;
+- unsupported diagnosis is prohibited;
+- secrets are excluded;
+- complete large logs are referenced;
 - downstream failures are not presented as independent root causes;
-- missing evidence is stated honestly.
+- missing evidence is identified honestly.
 
-The packet must not silently rewrite evidence for narrative convenience.
+Detailed behavior is governed by ADR-0006 and `AI_READY_REFERENCE.md`.
 
 ---
 
-## 18. Top-error report
+## 13. `top_errors.txt`
 
 Canonical path:
 
@@ -525,13 +482,7 @@ top_errors.txt
 Owner:
 
 ```text
-app/reports/report_logs.py
-```
-
-Primary public symbol:
-
-```python
-write_top_errors(run_result: RunResult) -> Path
+reporting compact-error writer
 ```
 
 Canonical line format:
@@ -546,17 +497,7 @@ Example:
 3	TYPE	type mismatch
 ```
 
-Purpose:
-
-- provide a compact deterministic error-frequency index;
-- support quick review and simple tooling;
-- avoid opening the entire summary.
-
----
-
-## 19. Top-error aggregation
-
-Recommended aggregation key:
+Aggregation key:
 
 ```text
 error kind + normalized primary message
@@ -565,18 +506,17 @@ error kind + normalized primary message
 Rules:
 
 - counts are positive integers;
-- embedded tabs and newlines in messages become spaces;
-- messages are not reduced to an empty value;
-- distinct error kinds are not merged merely because text matches;
-- order is descending count, then case-insensitive message;
-- an empty file is valid when no errors exist;
-- the file uses UTF-8, LF, and a final newline.
+- tabs and newlines in messages become spaces;
+- distinct error kinds remain distinct;
+- order is descending count, then stable message order;
+- an empty file is valid;
+- encoding is UTF-8 with LF and a trailing newline.
 
 Detailed diagnostic identity remains in `summary.json`.
 
 ---
 
-## 20. Artifact manifest
+## 14. `manifest.json`
 
 Canonical path:
 
@@ -584,59 +524,43 @@ Canonical path:
 manifest.json
 ```
 
+Schema:
+
+```text
+schema_id = gf-wordbench.artifact-manifest
+schema_version = 1.0
+```
+
 Owner:
 
 ```text
-app/reports/report_manifest.py
-```
-
-or the final designated manifest writer.
-
-Canonical schema:
-
-```text
-schema_id: gf-wordbench.artifact-manifest
-schema_version: 1.0
+manifest writer
 ```
 
 Purpose:
 
-- list finalized run artifacts;
-- identify each artifact’s role and owner;
-- record required/optional status;
-- record size and SHA-256;
-- support verification, cleanup, export, and release evidence.
+- list retained run artifacts;
+- identify role and producer;
+- record required or optional policy;
+- record media type, size and SHA-256;
+- support verification, cleanup, export and release evidence.
 
-Detailed fields belong to:
+The manifest is written after the artifacts it catalogs are stable.
 
-```text
-docs/reports/ARTIFACT_MANIFEST.md
-docs/PERSISTED_SCHEMA_LOCK.md
-```
+It must not:
 
----
-
-## 21. Manifest timing
-
-The manifest is written after all other final artifact writers have completed or failed.
-
-It must describe actual final state.
-
-The manifest writer must not:
-
-- claim an absent artifact exists;
-- hash a file before its final write completes;
-- modify a file to make its hash match;
-- catalog temporary files as final artifacts;
-- conceal required missing artifacts.
-
-If the manifest catalogs itself, its self-entry must follow the explicit manifest schema policy. A recursive self-hash must not be invented.
+- claim absent files exist;
+- hash an artifact before writing completes;
+- modify an artifact to satisfy a hash;
+- catalog temporary files as stable artifacts;
+- hide required missing artifacts;
+- invent a recursive self-hash.
 
 ---
 
-## 22. Raw logs
+## 15. Raw logs
 
-Canonical raw logs include:
+Canonical raw paths include:
 
 ```text
 raw/master.log
@@ -647,21 +571,19 @@ raw/scan/
 raw/scenarios/
 ```
 
-Raw-log responsibilities are divided:
+Ownership:
 
-- compiler owns per-operation compile streams;
-- scanner owns per-file scan logs;
-- scenario runner owns scenario streams and normalized scenario output;
-- orchestration/log owner owns `master.log`;
-- report/log aggregation owner owns aggregate views.
+- process adapters own per-operation streams;
+- scanner owns per-file scan evidence;
+- scenario runner owns scenario streams and normalized outputs;
+- run orchestration owns chronological master-log events;
+- log aggregation owns aggregate views.
 
-An aggregate log is derived evidence.
-
-It must not replace the original files.
+Aggregate logs are derived evidence. They never replace original files.
 
 ---
 
-## 23. Master log
+## 16. Master log
 
 Canonical path:
 
@@ -669,432 +591,321 @@ Canonical path:
 raw/master.log
 ```
 
-Purpose:
+It records:
 
-- provide chronological orchestration evidence;
-- record stage starts and completions;
-- record report-generation warnings;
-- record terminal run context;
-- aid investigation of framework failures.
+- run and stage lifecycle;
+- process and artifact events;
+- report-generation warnings;
+- terminal run context;
+- framework failures.
 
-The master log is not the primary machine result.
+The master log is not a persisted machine schema.
 
-It must not be parsed as the canonical run schema.
+Automation must not parse it as the canonical run record.
 
 ---
 
-## 24. Aggregate logs
+## 17. Aggregate logs
 
-Canonical aggregate views:
+Canonical paths:
 
 ```text
 raw/ALL_SCAN_LOGS.TXT
 raw/ALL_LOGS.TXT
 ```
 
-Purpose:
-
-- provide convenient combined evidence;
-- preserve source section boundaries;
-- support manual and AI review.
-
-Each section should identify:
+Each section identifies:
 
 ```text
 artifact role
-source subject
+subject
 source path
 content
 ```
 
-Aggregate logs must:
+Aggregate logs:
 
 - use deterministic source ordering;
-- preserve original source files;
+- preserve original evidence;
 - identify missing referenced sources;
-- bound content only under an explicit recorded policy;
+- use explicit truncation policy;
 - avoid ambiguous concatenation.
 
 ---
 
-## 25. Detail files
+## 18. Detail artifacts
 
-Canonical destination:
+Canonical directory:
 
 ```text
 details/
 ```
 
-Owner:
-
-```text
-app/reports/report_details.py
-```
-
 Purpose:
 
 - gather focused evidence for failed or selected subjects;
-- reduce navigation across many raw directories;
+- reduce navigation;
 - provide per-file or per-scenario review packets.
 
-Detail files are derived artifacts.
+Detail artifacts may copy existing evidence into owned files.
 
-They may copy existing evidence but must not alter the original evidence.
+They do not alter source evidence.
+
+Retention may depend on:
+
+- validation status;
+- diagnostic class;
+- scenario outcome;
+- keep-all policy;
+- release evidence requirements.
+
+Retention never changes validation results.
 
 ---
 
-## 26. Detail retention
+## 19. Reporting module
 
-Detail-retention policy may depend on:
+Reporting belongs to the `reporting` module of the modular monolith.
+
+Conceptual responsibilities include:
 
 ```text
-failure status
-diagnostic class
-scenario failure
-explicit keep-all option
-release evidence requirements
+JSON serialization
+human Markdown rendering
+AI packet rendering
+compact error index
+detail artifacts
+aggregate logs
+manifest construction
+report coordination
 ```
 
-A successful subject may omit duplicated detail output when:
+Internal filenames may vary, but ownership and public contracts remain stable.
 
-- raw evidence remains available;
-- the omission is documented;
-- summary and manifest paths remain correct.
+No general runtime plugin registry is required.
 
-Retention policy must not alter validation results.
+A public facade may expose stable writer functions while private helpers remain private.
 
 ---
 
-## 27. Report writer architecture
+## 20. Report inputs
 
-Recommended final report modules:
-
-```text
-app/reports/
-├── __init__.py
-├── report_json.py
-├── report_md.py
-├── report_ai_ready.py
-├── report_logs.py
-├── report_details.py
-└── report_manifest.py
-```
-
-A separate coordinator module may be introduced only if orchestration logic becomes substantial:
-
-```text
-app/reports/report_coordinator.py
-```
-
-The audit orchestrator may also remain the coordinator when the logic is small and explicit.
-
-No general report-plugin registry is required.
-
----
-
-## 28. Shared report facade
-
-`app/reports/__init__.py` may export the stable public report functions.
-
-Expected public exports:
-
-```python
-write_summary_json
-write_summary_md
-write_ai_ready
-write_top_errors
-write_master_log
-write_all_scan_logs
-write_all_logs
-write_file_detail_logs
-write_manifest
-```
-
-Private formatting helpers must remain private.
-
-Consumers must not import private helpers from another report module.
-
----
-
-## 29. Report inputs
-
-Canonical report input:
+Primary input:
 
 ```text
 RunResult
 ```
 
-Additional allowed inputs are narrowly owned:
+Additional narrowly owned inputs may include:
 
-- `master_log_lines` for the master-log writer;
-- explicit artifact records for the manifest writer;
-- report-generation warnings collected by the coordinator;
-- schema producer metadata from application configuration.
+- master-log events;
+- artifact records;
+- report-write outcomes;
+- producer metadata.
 
-Report writers should not independently reload project configuration or application state.
+Report writers do not reload project configuration or application state to reconstruct execution facts.
 
-All execution-relevant facts must already be resolved.
-
----
-
-## 30. Required `RunResult` domains
-
-Reporting may depend on documented fields for:
-
-```text
-run configuration
-run paths
-overall status
-timestamps
-duration
-GF version
-project identity
-validation mode
-file results
-scenario results
-entrypoint or PGF results
-totals
-diagnostic groups
-top errors
-diff entries
-release gates
-artifact records
-framework errors
-```
-
-A report that needs a missing cross-component field must request a model change.
-
-It must not attach dynamic attributes or recover the value from prose.
+A missing cross-component fact requires a model change, not dynamic attributes or prose parsing.
 
 ---
 
-## 31. Report purity
+## 21. Report purity
 
-A report builder should behave like:
+A report builder follows:
 
 ```text
 structured input
-        → deterministic text or JSON value
+        → deterministic document value
 ```
 
-Allowed side effect for a writer:
+A writer's permitted side effect is:
 
 ```text
-write only its owned artifact
+write its owned artifact
 ```
 
-A pure build function is preferred where useful:
+Pure build functions are preferred where useful:
 
 ```python
 build_summary_md(run_result) -> str
 build_ai_ready(run_result) -> str
-build_summary_document(run_result) -> dict
+build_summary_document(run_result) -> dict[str, object]
 ```
 
-The build function supports testing without filesystem writes.
+The input model is not mutated.
 
 ---
 
-## 32. Report-generation dependency graph
+## 22. Dependency graph
 
 ```text
 RunResult
- ├── top_errors.txt
+ ├── summary.json
  ├── summary.md
  ├── AI_READY.md
+ ├── top_errors.txt
  ├── details/
- ├── aggregate logs
- └── summary.json
+ └── aggregate logs
 
-all finalized artifacts
+all stable retained artifacts
         ↓
 manifest.json
 ```
 
-No canonical report depends on parsing another human-facing report.
+No canonical report parses another human report.
 
-Permitted dependency:
-
-- `AI_READY.md` may use structured fields also rendered in `summary.md`;
-- it should not read `summary.md` to recover them.
+Shared facts come from shared structured models.
 
 ---
 
-## 33. Report-generation lifecycle
+## 23. Generation lifecycle
 
-Recommended lifecycle:
+Canonical lifecycle:
 
 ```text
 1. finalize stage evidence
 2. finalize RunResult
-3. finalize master-log content available so far
-4. write detail and aggregate evidence
-5. write top_errors.txt
-6. write summary.md
-7. write AI_READY.md
-8. write summary.json
+3. write detail and aggregate evidence
+4. write top_errors.txt
+5. write summary.md
+6. write AI_READY.md
+7. write summary.json
+8. record report outcomes
 9. write manifest.json
-10. append or finalize report warnings in master.log
+10. finalize master.log
 11. verify required outputs
 ```
 
-The exact internal order may change when dependencies require it.
+The internal order may vary when explicit dependencies require it.
 
-Locked ordering rules:
+Locked rules:
 
-- writers consume a finalized validation result;
-- `manifest.json` is written after the artifacts it catalogs;
-- no report writer reruns validation;
+- writers consume a terminal structured validation result;
+- manifest generation follows cataloged artifacts;
+- no writer reruns validation;
 - missing report artifacts remain visible;
 - required release evidence is verified before release success.
 
 ---
 
-## 34. Finalization and immutability
+## 24. Immutability
 
-`RunResult` should be logically finalized before report generation.
+Report writers do not mutate:
 
-Report writers must not mutate:
-
-- file status;
-- scenario status;
+- file or scenario status;
 - diagnostic class;
-- blocker lists;
-- counts;
+- blocker relationships;
+- totals;
 - diff entries;
-- release-gate results;
-- raw artifact paths.
+- release gates;
+- raw evidence paths;
+- source or gold files.
 
-Presentation-only local values may be computed without modifying the model.
+Presentation-only local values may be computed without changing the model.
 
-If a report writer discovers an invalid model invariant, it should fail explicitly rather than repair the result silently.
+Invalid model invariants produce explicit reporting errors rather than silent repair.
 
 ---
 
-## 35. Report write results
+## 25. Report-write outcomes
 
-The coordinator should track each write attempt with minimal structured facts:
+The coordinator records, at minimum:
 
 ```text
 report ID
 target path
-required flag
-success flag
+required policy
+success
 error kind
 error message
 ```
 
-This may remain an internal model unless persisted-schema requirements add it to `summary.json` or `manifest.json`.
+A simple ordered collection is sufficient.
 
-The system does not need a complex report job engine.
-
-A simple ordered collection of report write outcomes is sufficient.
+A generic report-job engine is not required.
 
 ---
 
-## 36. Report failure semantics
+## 26. Failure semantics
 
-A report write failure is a framework reporting error.
+A report failure is a framework reporting error.
 
 It is not:
 
-- a GF syntax failure;
-- a type error;
+- a GF syntax or type failure;
 - a scenario failure;
 - a gold mismatch;
 - a downstream language failure.
 
-The original validation outcome remains available.
+Captured validation evidence remains available.
 
-However, release success may be blocked when a required report or integrity artifact is missing.
+A missing required report or integrity artifact may block release.
 
----
-
-## 37. Required versus optional reports
-
-Final required reports for a normal completed run:
-
-```text
-summary.json
-summary.md
-AI_READY.md
-top_errors.txt
-manifest.json
-master.log
-```
-
-Required raw stage evidence depends on the stages executed.
-
-Detail and aggregate artifacts may be optional by policy, except where release criteria require them.
-
-A release run must satisfy its required artifact manifest.
-
----
-
-## 38. Best-effort recovery
-
-When the run terminates through a framework exception after the run directory exists, GF Wordbench should attempt to write a bounded terminal evidence set:
-
-```text
-master.log
-summary.json
-summary.md
-AI_READY.md
-manifest.json when possible
-```
-
-The recovered reports must state:
-
-- terminal framework error;
-- completed evidence retained;
-- incomplete stages;
-- unavailable reports;
-- no unsupported success claim.
-
-Best-effort writing must not hide its own failures.
-
----
-
-## 39. Failure isolation
-
-One report writer should not prevent all remaining independent writers from being attempted.
+One writer failure does not prevent independent writers from being attempted when safe.
 
 Example:
 
 ```text
-summary.md write fails
-AI_READY.md may still be attempted
-summary.json may still be attempted
+summary.md fails
+AI_READY.md is attempted
+summary.json is attempted
 manifest records actual presence
-master.log records warnings
+master.log records the reporting error
 ```
 
-Dependencies must still be respected.
-
-The manifest cannot accurately catalog a report that has not finished.
+Dependencies still apply.
 
 ---
 
-## 40. Overall status and reporting failure
+## 27. Terminal recovery
 
-Recommended run semantics:
+After a run directory exists, a terminal framework failure triggers best-effort production of a bounded evidence set when possible:
 
-- validation `OK` plus missing required report → overall `ERROR` or release gate failure;
-- validation `FAIL` plus report failure → validation remains `FAIL`, with additional framework reporting error;
-- validation `ERROR` plus report failure → retain both errors;
-- optional report failure → warning unless project or mode makes it required.
+```text
+master.log
+summary.json
+summary.md
+AI_READY.md
+manifest.json
+```
 
-The centralized error-handling model owns the final status-combination rule.
+Recovered reports identify:
 
-Reports themselves do not calculate the overall status.
+- the terminal framework error;
+- retained completed evidence;
+- incomplete stages;
+- unavailable artifacts;
+- reporting failures;
+- absence of any unsupported success claim.
+
+Recovery does not recurse indefinitely.
 
 ---
 
-## 41. Atomic-write policy
+## 28. Required artifacts
 
-Canonical machine and stable human reports should use atomic replacement where supported.
+A normal terminal run produces:
 
-Required candidates:
+```text
+summary.json
+summary.md
+AI_READY.md
+top_errors.txt
+manifest.json
+raw/master.log
+```
+
+Stage-specific raw evidence depends on executed stages.
+
+Detail and aggregate artifacts follow their retention policy.
+
+A release run satisfies its required artifact manifest.
+
+---
+
+## 29. Atomic writes
+
+Stable reports use atomic replacement where supported:
 
 ```text
 summary.json
@@ -1104,22 +915,22 @@ top_errors.txt
 manifest.json
 ```
 
-Recommended process:
+Process:
 
 1. write a sibling temporary file;
-2. flush and close it;
-3. validate the generated content;
-4. replace the destination atomically.
+2. flush and close;
+3. validate content;
+4. atomically replace the destination.
 
-A failed write must not destroy a previously valid destination.
+A failed write must not leave a complete-looking partial artifact.
 
-Streaming raw logs are exempt from final atomic replacement during capture.
+Streaming raw logs are exempt during capture.
 
 ---
 
-## 42. Encoding and newlines
+## 30. Encoding and newlines
 
-Canonical report encoding:
+Canonical text encoding:
 
 ```text
 UTF-8 without BOM
@@ -1131,57 +942,38 @@ Canonical newline:
 LF
 ```
 
-A final newline is required for:
+Text reports end with one newline.
 
-```text
-summary.md
-AI_READY.md
-top_errors.txt
-master.log
-aggregate text logs
-detail text reports
-```
+JSON is valid UTF-8 and follows the JSON writer's stable formatting policy.
 
-JSON must be valid UTF-8 and end consistently according to the JSON writer policy.
-
-Readers may accept CRLF for legacy compatibility.
+Readers may accept CRLF for legacy input.
 
 ---
 
-## 43. Deterministic serialization
+## 31. Determinism
 
-Determinism requirements include:
+Determinism requires:
 
-- stable subject ordering;
-- stable artifact ordering;
-- stable top-error ordering;
+- stable subject order;
+- stable artifact order;
 - stable section order;
+- stable top-error ordering;
 - stable JSON indentation;
-- stable Unicode emission;
-- no set iteration without sorting;
-- no dependence on dictionary insertion created from filesystem order;
+- stable Unicode handling;
+- explicit sorting where unordered collections exist;
+- no filesystem-enumeration dependence;
 - no locale-dependent sorting;
-- no local-time ambiguity.
+- timezone-aware timestamps.
 
-Timestamps and durations are expected to vary between runs.
+Timestamps and measured durations legitimately vary between runs.
 
 ---
 
-## 44. Path rendering
+## 32. Path rendering
 
-Paths are classified as:
-
-```text
-project-relative
-run-relative
-environment-specific
-```
-
-Reports must preserve the correct base.
+Paths retain their base.
 
 ### Project-relative
-
-Examples:
 
 ```text
 lib/src/language/GrammarX.gf
@@ -1190,46 +982,36 @@ validation/scenarios/parse.gfs
 
 ### Run-relative
 
-Examples:
-
 ```text
-raw/compile/GrammarX.stdout.txt
+raw/compile/GrammarX.out.txt
 artifacts/pgf/Grammar.pgf
 ```
 
 ### Environment-specific
-
-Examples:
 
 ```text
 C:/tools/gf/gf.exe
 C:/work/gf-rgl/src
 ```
 
-Canonical persisted separators use `/`.
+Persisted project-relative and run-relative paths use `/`.
 
-Human reports may show environment paths when needed for diagnosis.
-
----
-
-## 45. Path safety
+Human reports may show environment paths when diagnostically necessary.
 
 Report writers must not:
 
-- follow a diagnostic-mentioned path outside allowed roots without validation;
-- copy arbitrary files into `details/`;
-- resolve `..` outside the run root;
-- overwrite source or gold assets;
-- create report files outside the active run directory;
-- infer a path by concatenating untrusted subject text.
-
-Safe artifact names must use the shared path utility.
+- follow unvalidated paths from diagnostics;
+- copy arbitrary files;
+- escape the run root;
+- overwrite source or gold files;
+- create reports outside the active run directory;
+- derive filenames from untrusted free text.
 
 ---
 
-## 46. Timestamp policy
+## 33. Timestamps
 
-Canonical persisted timestamps use RFC 3339-compatible UTC text.
+Persisted timestamps use RFC 3339-compatible UTC.
 
 Example:
 
@@ -1237,19 +1019,15 @@ Example:
 2026-07-22T18:25:43Z
 ```
 
-Human reports may show the same UTC time.
-
-Local time may be added only as secondary display text with an explicit timezone.
-
-Naive timestamps are prohibited in canonical machine reports.
+Local time may appear only as secondary display with an explicit timezone.
 
 Durations use integer milliseconds.
 
 ---
 
-## 47. Status rendering
+## 34. Status and diagnostic rendering
 
-Canonical validation statuses:
+Validation status:
 
 ```text
 OK
@@ -1258,7 +1036,7 @@ ERROR
 SKIPPED
 ```
 
-Canonical diagnostic classes:
+Diagnostic class:
 
 ```text
 ok
@@ -1269,7 +1047,7 @@ noise
 skipped
 ```
 
-Canonical execution states:
+Execution state:
 
 ```text
 completed
@@ -1278,17 +1056,17 @@ cancelled
 launch_failed
 ```
 
-Reports must keep these dimensions separate.
+Error kind is a separate technical dimension.
 
-A report must not label every non-zero exit as direct.
+Reports keep all dimensions distinct.
+
+A non-zero process exit is not automatically a direct failure.
 
 ---
 
-## 48. Failure grouping
+## 35. Failure grouping
 
-Human and AI reports should group failures by causal usefulness.
-
-Recommended groups:
+Human and AI reports order failures by causal usefulness:
 
 ```text
 framework errors
@@ -1296,89 +1074,63 @@ direct language failures
 required scenario failures
 ambiguous failures
 downstream failures
-warnings/noise
+warnings and noise
 ```
 
-`blocked_by` relationships should be shown for downstream subjects.
+Downstream items show `blocked_by` relationships.
 
-The same subject should not appear as an independent root failure and as downstream without explicit explanation.
+The same subject is not presented as both an independent root and downstream without explicit explanation.
 
 ---
 
-## 49. Diagnostic rendering
+## 36. Static scan rendering
 
-For each significant failure, reports may show:
-
-```text
-subject
-status
-diagnostic class
-error kind
-primary message
-pattern ID when available
-blocked_by
-raw evidence paths
-detail path
-```
-
-A human report may omit empty fields.
-
-It must not change normalized diagnostic meaning.
-
----
-
-## 50. Scan-result rendering
-
-Static scan findings are separate from GF execution diagnostics.
-
-Reports should label them as:
+Static findings are labeled:
 
 ```text
 heuristic scan findings
 ```
 
-They must not present scan findings as authoritative GF type or syntax errors.
+They are not presented as authoritative GF syntax or type errors.
 
-A file may be:
+This state remains representable:
 
 ```text
 compile OK
 scan findings present
 ```
 
-This state must remain representable.
-
 ---
 
-## 51. Scenario rendering
+## 37. Scenario rendering
 
-Scenario reports should show:
+Scenario sections show, when available:
 
 ```text
 scenario ID
-required or optional
-status
+required or optional policy
+validation status
 execution state
 duration
 primary message
-failed sections or assertions
+failed assertions or sections
 gold result
 blocked_by
-raw stdout/stderr
+stdout and stderr paths
 normalized output
 gold diff
 produced artifacts
 ```
 
-Scenario order follows project configuration.
+Order follows project configuration.
 
-Reports must not reparse markers or recompute gold comparison.
+Reports do not reparse markers or recompute gold comparison.
 
 ---
 
-## 52. Release-gate rendering
+## 38. Release-gate rendering
 
-Release reports should show each required gate:
+Release reports show each gate:
 
 ```text
 gate ID
@@ -1388,21 +1140,13 @@ evidence
 blocking subjects
 ```
 
-The final release decision must be explicit.
+Release readiness is explicit and comes from structured gate results.
 
-Example:
-
-```text
-Release readiness: FAIL
-```
-
-It must not be inferred only from file compile totals.
+It is not inferred from file compile totals.
 
 ---
 
-## 53. Regression rendering
-
-Previous-run comparison uses structured diff entries.
+## 39. Regression rendering
 
 Canonical change kinds:
 
@@ -1414,39 +1158,29 @@ removed
 unchanged
 ```
 
-Recommended report order:
+Display order follows that severity order.
 
-```text
-regressed
-new
-improved
-removed
-unchanged
-```
-
-A report must not compare Markdown text to determine these changes.
+Reports consume structured diff entries and do not compare Markdown text.
 
 ---
 
-## 54. Artifact links
+## 40. Artifact references
 
-Human reports should use relative artifact paths where practical.
+Human reports prefer relative artifact paths.
 
-Benefits:
+Benefits include:
 
 - portability;
-- clone-independent review;
 - archive compatibility;
-- shorter text;
-- safer AI handoff.
+- shorter reports;
+- safer handoff;
+- independence from local clone paths.
 
-A report may show an environment path when the artifact is external and cannot be represented run-relatively.
-
-The manifest remains the canonical artifact inventory.
+The manifest remains the artifact inventory authority.
 
 ---
 
-## 55. Secret and privacy policy
+## 41. Security and privacy
 
 Reports must not contain:
 
@@ -1456,696 +1190,378 @@ Reports must not contain:
 - cookies;
 - complete environment dumps;
 - secret command arguments;
-- unrestricted user-home inventories;
-- unrelated file contents.
+- unrelated user-home inventories;
+- arbitrary unrelated file contents.
 
-Command and environment evidence must use redaction declared by the process request.
+Redaction follows process-request policy.
 
 Local absolute paths are not automatically secrets, but export tooling may redact them.
 
-Redaction must not change the stored raw GF output unless the raw output itself contains a secret and an explicit secure-handling policy applies.
+Raw evidence is not silently rewritten for presentation convenience.
 
 ---
 
-## 56. Output-size policy
+## 42. Size policy
 
-Reports must remain bounded.
+Reports remain bounded.
 
-Recommended controls:
+Controls include:
 
-- limit inlined raw excerpts;
-- limit repeated downstream failures in AI summaries while preserving full structured results;
-- reference full logs;
-- cap per-subject excerpt size;
-- make truncation explicit;
-- avoid embedding complete PGF or GFO binary content;
-- avoid copying full aggregate logs into Markdown.
+- bounded evidence excerpts;
+- explicit truncation markers;
+- limits on repeated downstream failures;
+- references to complete logs;
+- per-subject excerpt limits;
+- no binary embedding;
+- no complete aggregate-log embedding in Markdown.
 
-`summary.json` must still retain complete structured records required by its schema.
+`summary.json` retains complete structured records required by its schema.
 
 ---
 
-## 57. Large-run behavior
+## 43. Large, empty and partial runs
 
-For large projects:
+### Large runs
 
 - `summary.md` remains a summary;
-- `AI_READY.md` foregrounds root failures and bounded evidence;
+- `AI_READY.md` foregrounds root failures;
 - `top_errors.txt` remains compact;
-- full file and scenario results remain in `summary.json`;
+- full structured results remain in `summary.json`;
 - raw evidence remains in owned directories;
-- manifest lists all final artifacts.
+- the manifest lists retained artifacts.
 
-Pagination is a presentation concern for GUI or external tooling.
+### Empty selection
 
-The persisted schema should not be split into undocumented fragments solely because a run is large.
-
----
-
-## 58. Empty-run behavior
-
-A run with no included validation subjects must not be presented as a normal successful release.
-
-Reports should state:
+Reports state:
 
 ```text
 No validation subjects were included.
 ```
 
-The overall status follows validation-mode policy.
+An empty release selection is not presented as normal release success.
 
-Reports must still be valid and loadable when the run terminates cleanly with an empty selection.
+### Partial run
 
----
+Reports preserve completed facts, identify incomplete stages, distinguish skipped from not reached and state the terminal cause.
 
-## 59. Partial-run behavior
-
-A partial run may contain:
-
-- completed file results;
-- incomplete later stages;
-- terminal framework error;
-- cancelled scenario;
-- missing final PGF;
-- report warnings.
-
-Reports must:
-
-- preserve completed facts;
-- identify incomplete stages;
-- avoid treating absent results as passed;
-- distinguish skipped from not reached;
-- identify terminal cause.
+Absent results are never treated as passed.
 
 ---
 
-## 60. Legacy compatibility
+## 44. Compatibility
 
-GF Wordbench must read documented legacy GF Audit summaries during migration.
+Canonical writers emit only current Wordbench formats.
 
-Legacy elements may include:
+Documented legacy GF Audit inputs may be read through isolated migration code.
+
+Examples include:
 
 ```text
 unversioned summary.json
-flat summary shape
-nested unversioned summary shape
-ai_brief_path
-ai_ready_path alias
-top_errors mapping
+legacy flat or nested summaries
+legacy artifact aliases
 absolute artifact paths
 mode=file
 mode=all
 ```
 
-Canonical writers emit only the current GF Wordbench schema.
+Legacy names do not appear in canonical output.
 
-Human reports should use canonical product naming after migration.
+A public report change is classified as:
 
----
+### Internal
 
-## 61. Current GF Audit reporting baseline
+No public output or contract changes.
 
-The inherited baseline already includes:
+### Compatible extension
 
-```text
-app/reports/report_json.py
-app/reports/report_md.py
-app/reports/report_ai_ready.py
-app/reports/report_logs.py
-app/reports/report_details.py
-```
+Examples:
 
-It produces:
+- optional JSON field with a default;
+- optional Markdown section;
+- optional manifest role;
+- additional bounded AI evidence.
 
-```text
-summary.json
-summary.md
-AI_READY.md
-top_errors.txt
-master.log
-ALL_SCAN_LOGS.TXT
-ALL_LOGS.TXT
-per-file details
-```
+### Breaking change
 
-It already separates:
+Examples:
 
-- structured JSON;
-- human summary;
-- AI handoff;
-- aggregate logs;
-- detail artifacts.
+- filename change;
+- field removal or rename;
+- path-base change;
+- status semantic change;
+- required heading removal;
+- ownership transfer;
+- ordering semantic change;
+- timestamp semantic change;
+- top-error format change;
+- artifact-role redefinition.
 
-This separation is retained.
+Breaking changes require coordinated schema, writer, reader, migration, test, lock and release-note updates.
 
 ---
 
-## 62. Baseline strengths retained
+## 45. Adding report content
 
-The final design retains:
-
-- one run directory per execution;
-- `summary.json` for tooling;
-- `summary.md` for humans;
-- `AI_READY.md` for AI handoff;
-- grouped top errors;
-- direct/downstream/ambiguous sections;
-- scan and compile distinction;
-- detail retention policy;
-- aggregate log convenience;
-- best-effort terminal reporting.
-
-These are valid foundations.
-
----
-
-## 63. Baseline migration requirements
-
-Migration to the final reporting model requires:
-
-1. rename GF Audit product headings to GF Wordbench;
-2. add schema identity and version;
-3. replace uncontrolled dataclass serialization with explicit schema builders;
-4. normalize project-relative and run-relative paths;
-5. add scenario results;
-6. add release-gate results;
-7. add PGF and manifest artifacts;
-8. add framework `ERROR` semantics;
-9. add canonical report-generation warnings;
-10. add `manifest.json`;
-11. migrate legacy top-error mappings to canonical records;
-12. remove legacy aliases from canonical output;
-13. keep old readers isolated in migration code;
-14. update report tests and fixtures.
-
----
-
-## 64. Explicit JSON construction
-
-The final JSON writer should construct the canonical object explicitly.
-
-Preferred pattern:
-
-```python
-def build_summary_document(run_result: RunResult) -> dict[str, object]:
-    return {
-        "schema_id": "gf-wordbench.run-summary",
-        "schema_version": "1.0",
-        "producer": build_producer(...),
-        "metadata": build_metadata(run_result),
-        "totals": build_totals(run_result),
-        "artifacts": build_artifact_paths(run_result),
-        "file_results": build_file_results(run_result),
-        "scenario_results": build_scenario_results(run_result),
-        "diff_entries": build_diff_entries(run_result),
-        "top_errors": build_top_errors(run_result),
-    }
-```
-
-Generic recursion may remain a private helper for leaf values.
-
-It must not define the schema accidentally.
-
----
-
-## 65. Report-specific references
-
-This overview intentionally does not duplicate complete layouts.
-
-Detailed ownership:
-
-```text
-SUMMARY_JSON_REFERENCE.md
-    field-by-field JSON schema explanation
-
-SUMMARY_MARKDOWN_REFERENCE.md
-    required headings and human rendering
-
-AI_READY_REFERENCE.md
-    AI packet structure, excerpt policy, and limits
-
-RAW_LOGS_REFERENCE.md
-    raw and aggregate log formats
-
-ARTIFACT_MANIFEST.md
-    manifest schema, roles, and verification
-```
-
-A detailed rule belongs in one report-specific reference.
-
-This overview should contain only cross-report architecture.
-
----
-
-## 66. Testing strategy
-
-Recommended test structure:
-
-```text
-tests/reports/
-├── test_summary_json.py
-├── test_summary_markdown.py
-├── test_ai_ready.py
-├── test_top_errors.py
-├── test_raw_logs.py
-├── test_details.py
-├── test_manifest.py
-├── test_report_failures.py
-├── test_report_determinism.py
-├── test_report_security.py
-└── test_report_migration.py
-```
-
-Schema-specific tests remain under:
-
-```text
-tests/schemas/
-```
-
-Contract tests remain under:
-
-```text
-tests/contracts/
-```
-
----
-
-## 67. JSON tests
-
-Required cases:
-
-```text
-valid schema identity
-valid schema version
-Unicode preservation
-UTC timestamps
-project-relative paths
-run-relative artifact paths
-environment paths
-file results
-scenario results
-empty lists
-top errors
-diff entries
-release gates
-framework errors
-unknown enum rejection
-deterministic ordering
-legacy migration
-atomic write
-```
-
-A round-trip test should load the generated summary through the canonical reader.
-
----
-
-## 68. Markdown-summary tests
-
-Required cases:
-
-- complete successful run;
-- direct failure;
-- downstream failure with blocker;
-- ambiguous failure;
-- framework error;
-- scan finding with compile success;
-- required scenario failure;
-- gold mismatch;
-- release gate failure;
-- previous-run regression;
-- empty optional sections;
-- Unicode paths and text;
-- final newline;
-- no machine parsing dependency.
-
-Golden text fixtures may be used for stable report layouts, but changes must be deliberate.
-
----
-
-## 69. AI report tests
-
-Required cases:
-
-- no failures;
-- one direct failure;
-- many downstream failures;
-- ambiguous failure;
-- failing scenario;
-- bounded excerpt;
-- truncated excerpt marker;
-- missing raw evidence;
-- artifact links;
-- no secrets;
-- no second execution;
-- correct first heading;
-- deterministic investigation order.
-
-The AI packet must not claim certainty absent from `RunResult`.
-
----
-
-## 70. Top-error tests
-
-Required cases:
-
-- empty errors;
-- one error;
-- duplicate normalized errors;
-- same message with different kinds;
-- tabs and newlines in message;
-- deterministic count order;
-- deterministic message tie-break;
-- Unicode message;
-- final newline.
-
----
-
-## 71. Manifest tests
-
-Required cases:
-
-- required report exists;
-- optional artifact absent;
-- missing required artifact;
-- SHA-256 correctness;
-- size correctness;
-- deterministic path ordering;
-- no path escape;
-- hash after final write;
-- verifier detects modification;
-- self-entry policy;
-- atomic write.
-
----
-
-## 72. Report-failure tests
-
-Simulate failure of:
-
-```text
-summary.json
-summary.md
-AI_READY.md
-top_errors.txt
-detail writer
-aggregate log writer
-manifest writer
-master log writer
-```
-
-Verify:
-
-- independent writers are attempted when safe;
-- original evidence remains;
-- reporting error is visible;
-- missing required report blocks release;
-- no language status is rewritten incorrectly;
-- manifest reflects actual files;
-- recovery does not recurse indefinitely.
-
----
-
-## 73. Determinism tests
-
-Equivalent structured input must produce byte-identical reports except for fields explicitly expected to vary.
-
-Test:
-
-- shuffled input collection normalized into canonical order;
-- filesystem enumeration differences;
-- Windows versus POSIX path inputs normalized correctly;
-- dictionary insertion differences;
-- Unicode sort behavior under the documented policy;
-- stable headings;
-- stable JSON indentation.
-
----
-
-## 74. Security tests
-
-Verify:
-
-- secret arguments are redacted;
-- environment dump is absent;
-- ANSI control sequences do not affect displayed Markdown;
-- malicious filenames cannot escape the run directory;
-- Markdown text does not create unsafe local path writes;
-- detail copying enforces containment;
-- large logs are bounded in AI report;
-- binary artifacts are not embedded;
-- report writers do not execute commands.
-
----
-
-## 75. Performance expectations
-
-Report generation should be small relative to GF execution.
-
-Requirements:
-
-- no second GF run;
-- no repeated full-log parsing by each report;
-- shared structured results;
-- bounded excerpts;
-- streaming or bounded copying for large logs;
-- SHA-256 computed once per manifest artifact;
-- no complete binary artifact reads into memory;
-- no unbounded recursive serialization.
-
-Correctness remains more important than minor rendering speed.
-
----
-
-## 76. Report API compatibility
-
-A public report writer should:
-
-- accept the documented result model;
-- return the path written;
-- create required parent directories;
-- write only its owned destination;
-- raise a documented exception on failure;
-- avoid modifying its input;
-- produce a final newline for text reports.
-
-Changing a public signature requires coordinated migration.
-
----
-
-## 77. Adding a report field
+### New field
 
 A new field requires:
 
 ```text
-[ ] source model owner identified
-[ ] field meaning documented
-[ ] producer updated
-[ ] every report consumer reviewed
-[ ] JSON schema impact classified
-[ ] default behavior defined
+[ ] producer identified
+[ ] meaning documented
+[ ] consumers reviewed
+[ ] schema impact classified
+[ ] default defined
 [ ] path semantics reviewed
 [ ] enum semantics reviewed
 [ ] tests added
 [ ] migration added when required
-[ ] report-specific reference updated
+[ ] owner reference updated
 ```
 
-A report writer must not invent a field that no producer guarantees.
+A writer must not invent a field with no guaranteed producer.
 
----
+### New section
 
-## 78. Adding a report section
+An optional human section is compatible when it uses existing facts, preserves required headings, remains bounded and has tests.
 
-A new optional human section is normally compatible when:
+### New format
 
-- its facts already exist;
-- existing required headings remain;
-- no machine consumer depends on heading order;
-- report size remains bounded;
-- tests are updated.
-
-Changing or removing a required soft-schema heading requires a major soft-schema revision.
-
----
-
-## 79. Adding a report format
-
-A new format is justified only when it serves a distinct stable consumer.
-
-Before adding it, define:
+A new format defines:
 
 ```text
 purpose
 owner
 audience
 source data
-canonical or optional status
 path
 schema or soft schema
 security policy
 size policy
 failure behavior
+retention
 tests
-retention policy
 ```
 
-The new format must not replace `summary.json` without a major architectural decision.
+It does not replace `summary.json` without an architectural decision.
 
 ---
 
-## 80. Change classification
+## 46. Testing
 
-### 80.1 Internal compatible change
+Tests cover:
 
-Examples:
+### JSON
 
-- private formatting helper;
-- improved implementation with identical output;
-- performance improvement;
-- internal test refactor.
+```text
+schema identity and version
+Unicode
+UTC timestamps
+path bases
+file and scenario results
+empty collections
+top errors
+diff entries
+release gates
+framework errors
+enum validation
+deterministic ordering
+legacy migration
+atomic write
+round-trip loading
+```
 
-### 80.2 Compatible report extension
+### Markdown summary
 
-Examples:
+```text
+success
+direct, ambiguous and downstream failures
+framework error
+scan findings with compile success
+scenario failure
+gold mismatch
+release-gate failure
+regression
+empty optional sections
+Unicode
+trailing newline
+no machine parsing dependency
+```
 
-- optional JSON field with a documented default;
-- optional Markdown section;
-- optional manifest role;
-- additional bounded AI evidence.
+### AI packet
 
-Requires a minor schema change when persisted machine structure changes.
+```text
+no failures
+direct and downstream failures
+ambiguous failure
+scenario failure
+bounded evidence
+truncation marker
+missing evidence
+artifact links
+secret exclusion
+no second execution
+required heading
+deterministic investigation order
+```
 
-### 80.3 Breaking change
+### Manifest
 
-Examples:
+```text
+required and optional artifacts
+missing required artifact
+hash and size
+deterministic paths
+containment
+post-write hashing
+modification detection
+self-entry policy
+atomic write
+```
 
-- report filename change;
-- field removal or rename;
-- path-base change;
-- status meaning change;
-- required heading removal;
-- ownership transfer;
-- array ordering change;
-- timestamp semantic change;
-- top-error line-format change;
-- artifact role redefinition.
+### Failure isolation
 
-Requires:
+Simulate failure of every writer and verify:
 
-1. impact analysis;
-2. schema or soft-schema version update;
-3. writer update;
-4. reader update;
-5. migration;
-6. fixtures and tests;
-7. changelog;
-8. contract-lock review.
+- independent writers continue when safe;
+- original evidence survives;
+- errors remain visible;
+- release is blocked when required output is missing;
+- manifest reflects actual files;
+- recovery does not recurse.
+
+### Security and determinism
+
+Verify:
+
+- secret redaction;
+- no environment dump;
+- safe Markdown rendering;
+- path containment;
+- bounded large logs;
+- no binary embedding;
+- no command execution;
+- byte-stable output for equivalent structured input except documented variable fields.
 
 ---
 
-## 81. Drift indicators
+## 47. Performance
+
+Report generation remains small relative to GF execution.
+
+Requirements:
+
+- no second GF run;
+- no repeated complete log parsing by every writer;
+- shared structured results;
+- bounded excerpts;
+- streaming or bounded copying;
+- one hash computation per manifest artifact;
+- no complete binary reads;
+- no unbounded recursive serialization.
+
+Correctness and traceability take precedence over minor rendering speed.
+
+---
+
+## 48. Drift indicators
 
 Reporting drift exists when:
 
-- a report reruns GF;
-- a report reruns the scanner;
+- a report launches GF or another validator;
 - two writers own the same path;
-- a reader rewrites another owner’s artifact;
-- Markdown becomes the source for machine comparison;
-- `summary.json` changes without a schema version;
-- report and JSON show different statuses;
-- top errors use different aggregation rules in different reports;
-- AI report classifies a failure differently from `RunResult`;
-- a report reconstructs artifact paths instead of using owned fields;
-- stdout is shown while stderr is silently ignored;
-- a report modifies a raw log;
-- a gold file changes during report generation;
-- manifest hashes pre-final content;
-- required missing reports are not visible;
+- Markdown becomes a machine source;
+- `summary.json` changes without schema versioning;
+- reports disagree with structured status;
+- top-error aggregation differs between writers;
+- AI reporting reclassifies failures;
+- paths are reconstructed instead of consumed from owners;
+- one raw stream is omitted silently;
+- raw evidence or gold files are modified;
+- manifest hashes unstable content;
+- missing required reports are hidden;
 - report generation mutates `RunResult`;
-- GUI and CLI produce different reports from equivalent results;
-- absolute project paths become canonical accidentally;
-- a new report field has no documented producer;
-- legacy aliases appear in canonical output.
+- CLI and GUI produce different semantics from equivalent results;
+- a field has no producer;
+- canonical output contains legacy aliases;
+- Wordbench reporting depends on `gf-portfolio`.
 
-Any drift indicator requires coordinated review.
+Any drift indicator requires coordinated correction.
 
 ---
 
-## 82. Reporting compliance checklist
+## 49. Compliance checklist
 
 ```text
-[ ] summary.json exists and validates
+[ ] summary.json validates against its schema
 [ ] summary.md derives from RunResult
 [ ] AI_READY.md derives from RunResult and bounded evidence
-[ ] top_errors.txt uses canonical ordering
-[ ] manifest.json catalogs finalized artifacts
-[ ] master.log records orchestration and report warnings
+[ ] top_errors.txt uses canonical aggregation
+[ ] manifest.json catalogs stable artifacts
+[ ] master.log records orchestration and reporting errors
 [ ] every artifact has one writer
-[ ] no report launches GF
-[ ] no report reruns scanning
-[ ] no report changes validation status
-[ ] no report modifies raw evidence
-[ ] no report modifies gold
-[ ] stdout and stderr references remain distinct
-[ ] project and run paths use correct bases
+[ ] no report launches validation
+[ ] no report changes validation semantics
+[ ] no report modifies raw evidence or golds
+[ ] stdout and stderr remain separately discoverable
+[ ] path bases are explicit
 [ ] timestamps use UTC
 [ ] text uses UTF-8 and LF
-[ ] text reports have final newline
+[ ] text reports end with a newline
 [ ] machine schemas are versioned
-[ ] human reports remain non-authoritative for automation
-[ ] missing required reports block release
-[ ] report errors remain visible
-[ ] secrets are redacted
+[ ] automation does not parse Markdown
+[ ] required report failures block release
+[ ] reporting errors remain visible
+[ ] secrets are excluded
 [ ] deterministic ordering is tested
 [ ] atomic writes are used where required
-[ ] legacy reading is isolated from canonical writing
+[ ] legacy reading is isolated
+[ ] Wordbench remains independent from gf-portfolio
 ```
 
 ---
 
-## 83. Final invariants
+## 50. Invariants
 
-1. `RunResult` is the single in-memory source for final reporting.
-2. `summary.json` is the primary persisted machine record.
-3. `summary.md` is the primary human summary.
+1. `RunResult` is the in-memory reporting source.
+2. `summary.json` is the persisted machine record.
+3. `summary.md` is the general human summary.
 4. `AI_READY.md` is the bounded AI handoff.
-5. `top_errors.txt` is the compact frequency index.
-6. `manifest.json` is the final artifact inventory.
-7. Raw evidence remains owned by the stage that captured it.
+5. `top_errors.txt` is the compact error index.
+6. `manifest.json` is the artifact inventory.
+7. Raw evidence remains owned by the capturing stage.
 8. Aggregate logs never replace raw evidence.
-9. Every report artifact has one writer.
-10. Report writers never launch GF.
-11. Report writers never rerun scans or scenarios.
-12. Report writers never change validation semantics.
-13. Report writers never update gold files.
-14. Human reports derive from structured results.
-15. Machine consumers never depend on Markdown parsing.
-16. Paths retain explicit project, run, or environment bases.
-17. Status, execution state, error kind, and causal class remain distinct.
-18. Both stdout and stderr remain discoverable.
-19. Required report failure remains visible.
-20. Earlier evidence survives later report failure.
-21. Text output is UTF-8, deterministic, and reviewable.
-22. Machine output is explicitly versioned.
-23. Manifest hashes finalized artifacts.
-24. Report changes are coordinated with models, schemas, readers, and tests.
-25. Complexity is added only for a stable audience, artifact, or integrity requirement.
+9. Every artifact has one writer.
+10. Report writers never execute GF, scanning or scenarios.
+11. Report writers never change validation semantics.
+12. Report writers never update gold files.
+13. Human reports derive from structured results.
+14. Machine consumers do not depend on Markdown.
+15. Paths retain explicit bases.
+16. Status, execution state, error kind and causal class remain distinct.
+17. Both stdout and stderr remain discoverable.
+18. Required writer failure remains visible.
+19. Earlier evidence survives later report failure.
+20. Machine output is versioned.
+21. Manifest hashes stable artifacts.
+22. Changes are coordinated with models, schemas, readers and tests.
+23. Reporting has no dependency on `gf-portfolio`.
 
 ---
 
-## 84. Final rule
+## 51. Enforcement
 
-GF Wordbench reporting follows one evidence-preserving transformation:
+GF Wordbench reporting follows this evidence-preserving transformation:
 
 ```text
-completed validation evidence
-        → finalized RunResult
-        → canonical machine record
+captured validation evidence
+        → terminal RunResult
+        → versioned machine record
         → bounded human and AI views
-        → final artifact manifest
+        → artifact manifest
 ```
 
-Every report must be traceable backward through that chain.
+Every report claim must be traceable through that chain.
 
-A report that cannot identify the structured fact or raw evidence supporting a claim must omit the claim or mark it as unavailable.
+A claim without structured support or identifiable evidence is omitted or marked unavailable.

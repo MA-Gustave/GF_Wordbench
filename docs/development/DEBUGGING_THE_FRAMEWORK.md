@@ -2,10 +2,12 @@
 
 **Document ID:** `GF-WB-DEVELOPMENT-DEBUGGING`  
 **Status:** Normative development and incident-diagnosis guide  
-**Applies to:** GF Wordbench framework code, tests, CLI, GUI, external GF integration, schemas, reports, migrations, and one active language project  
+**Applies to:** GF Wordbench framework code, tests, CLI, GUI, GF and registered diagnostic-tool integration, schemas, reports, migrations, and one active language project  
 **Owner:** GF Wordbench maintainers  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\development\DEBUGGING_THE_FRAMEWORK.md`  
-**Document version:** `1.0.0`
+**Canonical path:** `docs/development/DEBUGGING_THE_FRAMEWORK.md`  
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Document version:** `1.1.0`  
+**Last reviewed:** `2026-07-24`
 
 ---
 
@@ -55,8 +57,19 @@ Language-project debugging begins with the evidence produced by GF Wordbench, bu
 project/docs/INTERFILE_CONTRACT_LOCK.md
 project/docs/MODULE_DEPENDENCY_MAP.md
 project/docs/KNOWN_ISSUES.md
-project/docs/STATUS_LEDGER.md
+project/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
+
+Every investigation concerns exactly one active Wordbench project and one run.
+Cross-workspace discovery, multilingual readiness aggregation, and portfolio-wide
+orchestration belong to the independent `gf-portfolio` product.
+
+`gf-portfolio` may consume completed public Wordbench artifacts. It does not call
+Wordbench's private debugging, process, validation, or migration APIs, and
+Wordbench does not require Portfolio code, state, storage, configuration, or
+services.
+
+This guide does not track coding progress in document metadata or project records.
 
 ---
 
@@ -66,6 +79,8 @@ Read this guide with:
 
 ```text
 docs/00_START_HERE.md
+docs/DOCUMENTATION_ALIGNMENT_LOCK.md
+docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
@@ -87,7 +102,7 @@ docs/reference/EXIT_CODES.md
 docs/reference/STATUS_VALUES.md
 ```
 
-When this guide conflicts with a lock file, the lock file governs.
+When this guide conflicts with an accepted ADR or lock, the ADR or lock governs. Contradictions are corrected at the owning contract and every affected consumer.
 
 ---
 
@@ -585,106 +600,95 @@ Framework tests should use a tiny synthetic grammar.
 
 ---
 
-# 15. Debugging map by component
+# 15. Debugging map by owner
 
 | Symptom | First owner to inspect |
 |---|---|
-| wrong defaults | `app/config.py` |
-| wrong merged configuration | `app/bootstrap.py` |
-| invalid model behavior | `app/models.py` |
-| wrong run paths | `RunPaths`, bootstrap, path utilities |
-| unexpected files selected | `app/audit/file_selector.py` |
-| incorrect scan finding | `app/audit/scanner.py`, `app/utils/gf_utils.py` |
-| GF command wrong | `app/audit/compiler.py`, GF adapter |
-| process timeout wrong | `app/utils/process_utils.py` |
-| error text parsed wrong | diagnostic parser / `gf_utils.py` |
-| direct/downstream wrong | `app/audit/classifier.py` |
-| fingerprint unstable | `app/audit/fingerprint.py` |
-| previous run wrong | `app/audit/diff.py` |
-| totals wrong | `app/audit/result_model.py` |
-| orchestration order wrong | `app/audit/audit_core.py` |
-| JSON wrong | `app/reports/report_json.py` |
-| Markdown wrong | `app/reports/report_md.py` |
-| AI packet wrong | `app/reports/report_ai_ready.py` |
-| aggregate logs wrong | `app/reports/report_logs.py` |
-| detail logs wrong | `app/reports/report_details.py` |
-| GUI request wrong | `app/gui/main_window.py`, controller |
-| GUI validation wrong | `app/gui/validators.py`, shared validators |
-| state load/save wrong | bootstrap/state manager |
-| CLI exit code wrong | `app/main_cli.py` |
-| startup crash | `app/main_gui.py` or bootstrap |
-| schema compatibility wrong | migration/serializer owner |
-| manifest wrong | manifest writer/verifier |
+| wrong project identity or project-owned defaults | `projects` module |
+| wrong merged run configuration | application use case and `bootstrap` composition |
+| invalid run lifecycle, paths, totals, or terminal status | `runs` module |
+| unexpected files selected | `validation` file-selection owner |
+| incorrect static finding | `validation` static-scan owner |
+| incorrect GF command or search path | GF anti-corruption adapter and validation request builder |
+| process timeout, cancellation, capture, or containment defect | external-process port and platform process adapter |
+| GF text interpreted incorrectly | `diagnostics` parser |
+| direct/downstream/ambiguous classification wrong | `diagnostics` classifier |
+| source fingerprint unstable | validation fingerprint owner |
+| scenario markers, assertions, normalization, or gold comparison wrong | `validation` scenario owners |
+| previous-run comparison wrong | run comparison owner |
+| JSON, Markdown, AI-ready, detail, or aggregate report wrong | `reporting` module |
+| manifest or artifact integrity wrong | reporting artifact/manifest owner |
+| GUI or CLI request differs | corresponding entrypoint and shared application use case |
+| state load/save wrong | application-state adapter |
+| schema compatibility or migration wrong | persisted-schema owner and migration adapter |
+| registered diagnostic tool runs incorrectly | diagnostics tool registry, adapter, and external-process boundary |
+| startup or dependency composition fails | `bootstrap` |
 
-Do not change a consumer before confirming the producer’s contract.
+Concrete filenames may be inspected after the owner is identified, but filenames
+do not redefine architectural ownership.
+
+Do not change a consumer before confirming the producer's contract.
 
 ---
 
-# 16. Debugging `audit_core`
+# 16. Debugging application orchestration
 
-`audit_core` is the orchestration owner.
+The application use case coordinates modules but does not duplicate their
+domain rules, process mechanics, diagnostic parsing, or report rendering.
 
-It coordinates stages but should not duplicate their internal semantics.
-
-Inspect `audit_core` when:
+Inspect application orchestration when:
 
 - stages execute in the wrong order;
 - one stage receives the wrong result;
 - independent work stops too early;
 - dependent work runs after a fatal prerequisite;
-- finalization is not attempted after an error;
-- reports are written with incomplete results;
-- previous-run comparison changes current results;
-- a GUI and CLI run differ despite equal `RunConfig`;
+- run finalization is not attempted after an error;
+- reports are written from incomplete or stale results;
+- previous-run comparison mutates current results;
+- GUI and CLI runs differ despite equivalent resolved configuration;
 - exceptions disappear;
-- result counts are calculated before classification is final.
+- counts are calculated before classification completes.
 
-### 16.1 Expected orchestration shape
-
-The current audit foundation performs roughly:
+### 16.1 Canonical orchestration shape
 
 ```text
-build run paths
-→ probe GF version
-→ select files
-→ scan
-→ fingerprint
-→ compile
-→ build file results
-→ classify
-→ aggregate counts
-→ compare previous run
-→ write reports
+resolve one active project
+→ build and validate run configuration
+→ create run paths
+→ resolve and probe GF
+→ select files and checkpoints
+→ run static scan
+→ fingerprint sources
+→ compile required targets
+→ classify diagnostics
+→ run native .gfs scenarios
+→ normalize and compare reviewed golds
+→ build required PGF
+→ evaluate release gates
+→ assemble RunResult
+→ write reports and public artifacts
+→ build and verify manifest
+→ finalize the run atomically
 ```
 
-The final pipeline extends this with:
-
-```text
-project loading
-contract preflight
-scenarios
-normalization
-gold comparison
-PGF build
-release gates
-manifest
-atomic finalization
-```
+A mode may omit optional stages, but it cannot reorder or silently bypass
+required dependencies.
 
 ### 16.2 Orchestration debugging questions
 
 ```text
-Was RunConfig finalized before stage execution?
+Was one active project resolved before execution?
+Was RunConfig immutable before stage execution?
 Was the run directory created exactly once?
 Was each selected subject represented?
 Were exceptions converted at the correct boundary?
-Was classification executed only after required compile evidence existed?
+Was classification delayed until required evidence existed?
 Were counts recalculated after classification?
 Was the previous summary loaded read-only?
-Did reporting use the current RunResult?
-Was best-effort reporting allowed for this mode?
+Did reporting consume the terminal RunResult?
+Was best-effort reporting permitted for this mode?
 Did finalization modify overall status?
-Was the final summary regenerated after a late manifest failure?
+Was the summary regenerated after a late manifest failure?
 ```
 
 ### 16.3 Instrumentation
@@ -708,20 +712,20 @@ Do not log complete source text or secrets.
 Symptom:
 
 ```text
-the function raises, but partial reports show success
+the use case raises, but partial reports show success
 ```
 
 Likely causes:
 
 - overall status built before the fatal error;
-- report writer uses stale `RunResult`;
+- report writer uses a stale `RunResult`;
 - exception path does not update counts;
-- GUI interprets “worker finished” as success;
+- GUI interprets worker completion as success;
 - best-effort reporting hides report failure without recording it.
 
-Fix the status and finalization owner.
+Fix the run lifecycle or application-orchestration owner.
 
-Do not patch the summary wording only.
+Do not patch summary wording only.
 
 ---
 
@@ -1416,7 +1420,7 @@ GF path resolver
 when:
 
 - option order changes;
-- source file is not the final argument;
+- source file is not the terminal argument;
 - GF path differs between operations;
 - output directories are missing;
 - CPU flag is always enabled;
@@ -1604,7 +1608,7 @@ Windows path
 POSIX path
 Unicode path
 multiline detail
-unknown future diagnostic
+unknown diagnostic from another GF version
 ```
 
 Do not use only invented one-line messages.
@@ -2092,7 +2096,7 @@ Inspect reports when:
 
 ### 36.1 Report source
 
-All reports derive from one final `RunResult`.
+All reports derive from one terminal `RunResult`.
 
 Verify that report writers do not:
 
@@ -2125,7 +2129,7 @@ empty collections
 
 ### 36.3 Best-effort behavior
 
-The current audit foundation may write reports best-effort after a fatal error.
+Best-effort report generation after a fatal error is permitted only by the resolved run policy.
 
 Debug two questions separately:
 
@@ -2138,11 +2142,11 @@ The secondary failure must not replace the primary cause.
 
 If an aggregate copies a report before that report is finalized, the aggregate becomes stale.
 
-Generate aggregates after their source artifacts are final.
+Generate aggregates after their source artifacts are closed and immutable.
 
 ### 36.5 `ALL_LOGS.TXT`
 
-Final optimized behavior includes operational evidence, not recursive copies of every report.
+The aggregate contains operational evidence, not recursive copies of every report.
 
 If debugging old runs, recognize legacy aggregate composition.
 
@@ -2220,11 +2224,11 @@ Inspect manifest writer/verifier when:
 - report bytes change after hashing;
 - an empty stream is treated as missing.
 
-### 38.1 Final-byte rule
+### 38.1 Immutable-byte rule
 
-Hashes are computed after final writes.
+Hashes are computed after all writes close.
 
-No artifact may be modified after its manifest hash is finalized.
+No artifact may be modified after its manifest hash is recorded.
 
 ### 38.2 Self-reference
 
@@ -2340,7 +2344,7 @@ Expected conceptual categories:
 3 = framework/runtime ERROR
 ```
 
-The final exact mapping is owned by `EXIT_CODES.md`.
+The exact mapping is owned by `EXIT_CODES.md`.
 
 ### 40.2 Stream use
 
@@ -2406,9 +2410,9 @@ Only the GUI thread updates widgets.
 
 External GF execution and broad filesystem work run in a worker.
 
-### 41.2 Current worker baseline
+### 41.2 Worker contract
 
-The existing interface uses a worker object moved to `QThread`, with signals for:
+The GUI uses a worker object moved to `QThread`, with signals for:
 
 ```text
 started
@@ -2416,7 +2420,7 @@ finished
 failed
 ```
 
-The final interface adds structured progress and cancellation.
+The interface exposes structured progress and cancellation.
 
 ### 41.3 Returned failure versus exception
 
@@ -2752,14 +2756,14 @@ absolute POSIX paths
 
 # 48. Debugging contract drift
 
-Run or implement:
+Run:
 
 ```text
 gf-wordbench contracts check
 gf-wordbench contracts check --strict
 ```
 
-Until the checker exists, inspect manually.
+When the checker cannot complete, preserve its evidence and inspect the same contracts manually.
 
 ### 48.1 Interfile drift indicators
 
@@ -2783,7 +2787,10 @@ Until the checker exists, inspect manually.
 - expected artifact no longer checked;
 - normal run rewrites gold;
 - process error reported as source syntax error;
-- scenario passes without markers.
+- scenario passes without markers;
+- an executable tool runs without an ADR-0013 registry entry;
+- project text chooses an executable or interpreter;
+- a process result contains `gf-portfolio` registry or aggregation state.
 
 ### 48.3 Persisted-schema drift indicators
 
@@ -3114,7 +3121,7 @@ Investigate:
 which report failed
 whether summary.json succeeded
 whether master.log recorded the warning
-whether final overall status policy changed
+whether terminal overall-status policy changed
 whether manifest includes only completed artifacts
 whether aggregate generation used partial reports
 ```
@@ -3419,7 +3426,26 @@ Scan scenarios for prohibited shell-escape features according to policy.
 
 Do not execute an untrusted scenario merely to determine whether it is safe.
 
-### 64.3 Redaction test
+### 64.3 Diagnostic-tool registry
+
+For every optional executable tool, verify:
+
+```text
+static registry entry exists
+tool ID is stable
+executable resolution follows the entry
+arguments match allowed templates
+working directory is contained
+timeout and output limits are finite
+mutability and network policy are enforced
+evidence role is declared
+AI output remains optional and non-normative
+```
+
+Arbitrary user-supplied commands and dynamically loaded executable plugins are
+prohibited.
+
+### 64.4 Redaction test
 
 Insert a fake secret into a controlled test environment.
 
@@ -3706,7 +3732,7 @@ Run GUI tests:
 python -m pytest -k "gui or main_window or state" -vv
 ```
 
-Use actual repository test paths once the final test structure is implemented.
+Use the repository's canonical test paths.
 
 ---
 
@@ -3753,39 +3779,53 @@ is not isolated.
 
 ---
 
-# 73. Debugging current-versus-final migration
+# 73. Debugging GF Audit compatibility
 
-The current GF Audit foundation is useful but not yet the full final model.
+GF Audit compatibility is a boundary adapter, not a second architecture.
 
-Known migration areas include:
+Compatibility readers and adapters may accept:
 
 ```text
-all/file modes
-flat application state
-project-owned GUI fields
+all/file mode aliases
+legacy flat application state
+legacy project-owned GUI fields
 FAIL-only file totals
-best-effort report finalization
 combined compile/release assumptions
-no canonical scenario result collection
-no final manifest stage
-limited cancellation
-limited progress events
+legacy report aggregates
+legacy summary shapes and status aliases
 ```
 
-### 73.1 Do not fix final behavior only in documentation
+Canonical writers and runtime models emit only Wordbench contracts.
 
-When final documents declare a behavior not yet implemented:
+### 73.1 Compatibility debugging rules
 
-- label current code as migration baseline;
-- create an implementation issue;
-- add failing or pending contract tests at the appropriate time;
-- update contract status from planned to active only when code and tests agree.
+When a legacy asset or caller behaves incorrectly:
+
+1. preserve the original input unchanged;
+2. identify the registered legacy shape or alias;
+3. convert it through one migration or compatibility owner;
+4. validate the canonical result;
+5. record warnings and semantic losses;
+6. ensure the canonical writer never emits the legacy form;
+7. add a fixture and round-trip or migration test;
+8. keep process execution, scenarios, reports, and schemas on their canonical owners.
+
+Compatibility code must not:
+
+- duplicate the process runner;
+- define a second validation pipeline;
+- silently convert unknown values to success;
+- mutate source assets during read-only loading;
+- bypass one-project-per-workspace rules;
+- introduce `gf-portfolio` runtime dependencies;
+- require coding-progress status transitions in documentation.
 
 ### 73.2 Do not preserve legacy bugs for compatibility
 
-Compatibility means reading old data or accepting old input aliases.
+Compatibility means reading old data or accepting registered old input aliases.
 
-It does not require canonical writers to emit old values.
+It does not require canonical writers to emit old values, preserve incorrect
+semantics, or retain unsafe behavior.
 
 ---
 
@@ -3974,7 +4014,7 @@ Use:
 
 ## Regression test
 
-<planned test name>
+<regression test name>
 ```
 
 ---
@@ -4063,7 +4103,9 @@ The root cause is not “the report displayed the wrong value” when an earlier
 [ ] Migration reviewed
 [ ] Manifest reviewed
 [ ] Locks reviewed
-[ ] Documentation updated
+[ ] Documentation updated without coding-progress labels
+[ ] `gf-portfolio` boundary preserved
+[ ] ADR-0013 registry reviewed when an executable tool is affected
 [ ] Temporary instrumentation removed
 ```
 
@@ -4085,10 +4127,12 @@ Before declaring a framework release ready:
 [ ] GUI FAIL/ERROR rendering verified
 [ ] Paths with spaces verified
 [ ] Required artifacts manifest correctly
-[ ] Finalized hashes verify
+[ ] Published hashes verify
 [ ] Normal validation does not alter gold
 [ ] No report launches GF
 [ ] No active-language identifier in framework defaults
+[ ] No Wordbench runtime dependency on `gf-portfolio`
+[ ] Every optional executable is in the static diagnostic-tool registry
 [ ] Canonical writers emit no legacy aliases
 [ ] Documentation links resolve
 ```
@@ -4117,11 +4161,15 @@ Do not merge a fix that:
 - uses current working directory implicitly;
 - leaves unconditional debug prints or breakpoints;
 - weakens an assertion merely to make the suite pass;
-- marks an unknown cause as direct.
+- marks an unknown cause as direct;
+- adds an executable command outside the static diagnostic-tool registry;
+- allows project text to select an executable or interpreter;
+- introduces a GF Wordbench runtime dependency on `gf-portfolio`;
+- adds coding-progress labels to normative documentation.
 
 ---
 
-# 81. Recommended final test structure
+# 81. Test structure
 
 ```text
 tests/
@@ -4136,6 +4184,7 @@ tests/
 ├── contracts/
 │   ├── interfile/
 │   ├── external_tools/
+│   ├── diagnostic_tool_registry/
 │   ├── schemas/
 │   └── gui_cli/
 ├── integration/
@@ -4153,9 +4202,7 @@ tests/
 └── smoke/
 ```
 
-The current flatter test structure may migrate gradually.
-
-Do not reorganize tests without preserving discoverability and CI commands.
+Tests are organized by responsibility and test level. Repository-specific subdirectories may vary, but discoverability, fixtures, markers, and CI commands remain stable.
 
 ---
 
@@ -4163,27 +4210,30 @@ Do not reorganize tests without preserving discoverability and CI commands.
 
 When two documents conflict:
 
-1. identify each document’s authority;
-2. inspect the applicable lock;
-3. inspect current code and tests;
-4. determine whether code or documentation is ahead;
-5. record the intended final behavior;
-6. update the owner document;
-7. update dependent references;
-8. add a contract test.
+1. identify the accepted ADRs and specialized locks that apply;
+2. apply `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`;
+3. identify the document that owns the specific contract;
+4. inspect code, tests, schemas, and artifacts for the actual violation;
+5. update the owner contract and every affected consumer together;
+6. add or update a contract test;
+7. record any compatibility or migration effect;
+8. update the documentation correction ledger during integration.
 
-Do not silently reconcile by choosing the easiest implementation.
+Do not resolve a contradiction locally in an overview, report, GUI label, or
+single caller.
 
 Examples:
 
 ```text
 lock says ERROR, code emits FAIL
 schema says run-relative, report emits absolute
-GUI reference says four modes, widget still exposes two legacy modes
-raw-log reference says operational-only aggregate, legacy writer embeds reports
+GUI and CLI build different RunConfig values
+raw-log reference says operational-only aggregate, writer embeds reports
+ADR-0013 requires a static registry, adapter launches an arbitrary command
 ```
 
-These are migration tasks until implementation and tests converge.
+A contradiction remains a coordinated contract defect until every owner and
+consumer agrees.
 
 ---
 
@@ -4238,7 +4288,7 @@ When real GF is required:
 
 ---
 
-# 85. Final ownership summary
+# 85. Ownership summary
 
 ```text
 bootstrap/configuration bug
@@ -4294,13 +4344,19 @@ incorrect CLI code
 
 incorrect historical compatibility
 → migration/schema owner
+
+incorrect optional-tool registration or policy
+→ diagnostics registry owner
+
+incorrect Portfolio interoperability artifact
+→ reporting public-artifact owner
 ```
 
 Escalate upward only when the lower owner is correct.
 
 ---
 
-# 86. Final debugging workflow
+# 86. Debugging workflow
 
 ```text
 observe
@@ -4321,7 +4377,7 @@ observe
 
 ---
 
-# 87. Final rule
+# 87. Core rule
 
 A framework defect is corrected only when the system’s evidence, models, execution, reports, and interfaces agree again.
 
