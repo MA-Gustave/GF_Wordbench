@@ -16,7 +16,7 @@ foreach ($rel in $replaceDirs) {
   }
 }
 
-foreach ($rel in @("README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md")) {
+foreach ($rel in @("README.md", "CONTRIBUTING.md", "SECURITY.md")) {
   $target = Join-Path $RepositoryRoot $rel
   if (Test-Path $target) { Move-Item $target (Join-Path $backup $rel) }
 }
@@ -24,7 +24,7 @@ foreach ($rel in @("README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md"
 Copy-Item (Join-Path $source "docs") (Join-Path $RepositoryRoot "docs") -Recurse
 Copy-Item (Join-Path $source "project/docs") (Join-Path $RepositoryRoot "project/docs") -Recurse
 Copy-Item (Join-Path $source "templates/project/docs") (Join-Path $RepositoryRoot "templates/project/docs") -Recurse
-foreach ($rel in @("README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md")) {
+foreach ($rel in @("README.md", "CONTRIBUTING.md", "SECURITY.md")) {
   Copy-Item (Join-Path $source $rel) (Join-Path $RepositoryRoot $rel)
 }
 Write-Host "Documentation replaced. Backup: $backup"

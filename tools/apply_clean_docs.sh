@@ -10,12 +10,12 @@ for rel in docs project/docs templates/project/docs; do
     mv "$repo/$rel" "$backup/$rel"
   fi
 done
-for rel in README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md; do
+for rel in README.md CONTRIBUTING.md SECURITY.md; do
   [ ! -e "$repo/$rel" ] || mv "$repo/$rel" "$backup/$rel"
 done
 cp -R "$source/docs" "$repo/docs"
 mkdir -p "$repo/project" "$repo/templates/project"
 cp -R "$source/project/docs" "$repo/project/docs"
 cp -R "$source/templates/project/docs" "$repo/templates/project/docs"
-for rel in README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md; do cp "$source/$rel" "$repo/$rel"; done
+for rel in README.md CONTRIBUTING.md SECURITY.md; do cp "$source/$rel" "$repo/$rel"; done
 echo "Documentation replaced. Backup: $backup"

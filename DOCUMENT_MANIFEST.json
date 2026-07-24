@@ -443,13 +443,13 @@
     },
     {
       "path": "tools/apply_clean_docs.ps1",
-      "sha256": "fae976d5d3bd80367ac497fa5363e074b7a027a54111daae9b792d870731d6d0",
-      "size": 1350
+      "sha256": "bdc25464a319755de13c32297cd62159026e8f422b8017f4e1502e8c349d0939",
+      "size": 1318
     },
     {
       "path": "tools/apply_clean_docs.sh",
-      "sha256": "7519e3b92c3ab9f3f878c231e3bb833e092314a44774906236fb7b8e209eb883",
-      "size": 910
+      "sha256": "6ff5ea44a068a9213807291eaec91327ce157ce6f84271ff05e9c45028251811",
+      "size": 884
     }
   ]
 }
