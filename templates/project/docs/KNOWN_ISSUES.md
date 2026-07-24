@@ -1,8 +1,11 @@
 # Project Template — Known Issues
 
 **Document ID:** `GF-WB-TEMPLATE-PROJECT-KNOWN-ISSUES`  
-**Status:** Normative project-template document  
-**Template scope:** One future active GF language project  
+**Document role:** Normative project-template document  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
+**Template scope:** One future active GF project  
 **Canonical active-project destination:** `project/docs/KNOWN_ISSUES.md`  
 **Primary project source:** `project/project.toml`  
 **Primary implementation-state source:** `project/docs/STATUS_LEDGER.md`  
@@ -10,14 +13,14 @@
 **Primary coverage source:** `project/docs/TEST_COVERAGE_MATRIX.md`  
 **Primary release source:** `project/docs/RELEASE_CRITERIA.md`  
 **Template owner:** GF Wordbench project-template maintainers  
-**Project owner after initialization:** Active-language maintainers  
-**Last structural review:** 2026-07-22
+**Project owner after initialization:** Active-project maintainers  
+**Last structural review:** `<YYYY-MM-DD>`
 
 ---
 
 ## 1. Purpose
 
-This document is the canonical template for recording known defects, limitations, unresolved risks, compatibility restrictions, accepted behavioral differences, validation weaknesses, and release-relevant problems in an active GF language project.
+This document is the canonical template for recording known defects, limitations, unresolved risks, compatibility restrictions, accepted behavioral differences, validation weaknesses, and release-relevant problems in an active GF project.
 
 Its purpose is to ensure that every known issue is:
 
@@ -2646,7 +2649,7 @@ When creating a new project from this template:
 ```text
 [ ] Replace project summary placeholders
 [ ] Delete template-only issue examples
-[ ] Import known issues from the existing language project
+[ ] Import known issues from the existing GF project
 [ ] Import known toolchain/platform restrictions
 [ ] Link every temporary implementation to STATUS_LEDGER.md
 [ ] Link every contract issue to INTERFILE_CONTRACT_LOCK.md
@@ -3024,7 +3027,7 @@ This template is complete when:
 
 1. it supports all major project issue domains;
 2. placeholders are explicit;
-3. no active-language fact is embedded;
+3. no project-specific fact is embedded;
 4. severity, status, priority, and release impact are distinct;
 5. known issues are separated from implementation status;
 6. contracts, coverage, scenarios, golds, and release gates can be cross-referenced;

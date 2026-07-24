@@ -1,8 +1,11 @@
 # GF Wordbench Project Template — Category and Lincat Contract
 
 **Document ID:** `GF-WB-TEMPLATE-CATEGORY-LINCAT-CONTRACT`  
-**Status:** Normative project template  
-**Applies to:** One initialized active GF language project  
+**Document role:** Normative project template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
+**Applies to:** One initialized active GF project  
 **Template owner:** GF Wordbench maintainers  
 **Project owner:** `<PROJECT_OWNER>`  
 **Language:** `<LANGUAGE_NAME>`  
@@ -22,7 +25,7 @@
 
 This file is a template.
 
-When initializing an active language project:
+When initializing an active GF project:
 
 1. copy it to:
 
@@ -47,7 +50,7 @@ Placeholders are valid in this template only.
 
 ## 2. Purpose
 
-This document defines the public category, `lincat`, record, table, parameter, agreement, lock, helper, and initialization contracts of one active GF language project.
+This document defines the public category, `lincat`, record, table, parameter, agreement, lock, helper, and initialization contracts of one active GF project.
 
 It prevents drift between:
 

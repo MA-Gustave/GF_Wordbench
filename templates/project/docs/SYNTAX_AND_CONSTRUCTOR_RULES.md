@@ -1,9 +1,12 @@
 # GF Wordbench Project Template — Syntax and Constructor Rules
 
 **Document ID:** `GF-WB-PROJECT-TEMPLATE-SYNTAX-CONSTRUCTORS`  
-**Status:** Normative template  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\templates\project\docs\SYNTAX_AND_CONSTRUCTOR_RULES.md`  
-**Applies to:** One active GF language project created from this template  
+**Document role:** Normative template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
+**Target path:** `templates/project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md`  
+**Applies to:** One active GF project created from this template  
 **Template owner:** GF Wordbench maintainers  
 **Project owner after initialization:** `<PROJECT_OWNER>`  
 **Language after initialization:** `<LANGUAGE_NAME>`  
@@ -17,7 +20,7 @@
 
 ## 1. Purpose
 
-This document is the normative project specification for syntax composition and public constructor behavior in one active GF language project.
+This document is the normative project specification for syntax composition and public constructor behavior in one active GF project.
 
 It records how the project combines linguistic values into larger values, including:
 
@@ -94,7 +97,7 @@ After initialization, project maintainers must:
 
 A populated active-project copy must not remain a generic catalogue of possibilities.
 
-It must state what the active language project actually guarantees.
+It must state what the active GF project actually guarantees.
 
 ---
 

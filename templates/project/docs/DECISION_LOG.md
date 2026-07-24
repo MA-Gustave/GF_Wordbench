@@ -1,8 +1,11 @@
 # GF Wordbench Project Template — Decision Log
 
 **Document ID:** `GF-WB-TEMPLATE-PROJECT-DECISION-LOG`  
-**Status:** Normative template  
-**Applies to:** One active GF language project initialized from `templates/project/`  
+**Document role:** Normative template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
+**Applies to:** One active GF project initialized from `templates/project/`  
 **Template owner:** GF Wordbench maintainers  
 **Project owner after initialization:** `<PROJECT_OWNER>`  
 **Language:** `<LANGUAGE_NAME>`  
@@ -15,7 +18,7 @@
 
 ## 1. Purpose
 
-This document records deliberate project decisions that affect the architecture, linguistic behavior, validation contract, release policy, or long-term maintainability of one active GF language project.
+This document records deliberate project decisions that affect the architecture, linguistic behavior, validation contract, release policy, or long-term maintainability of one active GF project.
 
 It exists to preserve:
 
@@ -125,9 +128,10 @@ docs/validation/SCENARIO_VALIDATION.md
 docs/release/VERSIONING_POLICY.md
 docs/release/RELEASE_PROCESS.md
 docs/release/MIGRATION_AND_DEPRECATION.md
-docs/PERSISTED_SCHEMA_LOCK.md
-docs/INTERFILE_CONTRACT_LOCK.md
-docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
+docs/reference/SCHEMA_INDEX.md
+docs/architecture/DEPENDENCY_RULES.md
+docs/architecture/PROCESS_EXECUTION_MODEL.md
+docs/gf/GF_TOOLCHAIN_BOUNDARY.md
 ```
 
 ---
@@ -2039,7 +2043,7 @@ Update the reusable template only when the decision changes how all future proje
 
 A template-level change requires framework/template review.
 
-Do not copy active language decisions back into `templates/project/`.
+Do not copy project-specific decisions back into `templates/project/`.
 
 ---
 
@@ -2492,7 +2496,7 @@ The following are prohibited:
 - citing a historical fixture as current proof;
 - claiming linguistic authority without research or review evidence;
 - retaining an active consumer of a retired decision;
-- copying active-language decisions into the reusable template.
+- copying project-specific decisions into the reusable template.
 
 ---
 
@@ -2907,7 +2911,7 @@ Before reset:
 - preserve release evidence;
 - identify whether reset creates a new project identity.
 
-A genuinely new language project should begin with the generic template, not inherited unrelated decisions.
+A genuinely new GF project should begin with the generic template, not inherited unrelated decisions.
 
 ---
 
@@ -3141,7 +3145,7 @@ are allowed because they belong to the framework/project contract.
 26. Temporary decisions have review triggers.
 27. Deprecated decisions have migration paths.
 28. Retired decisions have no active consumers.
-29. Active-language decisions do not leak into the reusable template.
+29. Project-specific decisions do not leak into the reusable template.
 30. Implementation, contracts, validation, and release evidence must agree with accepted decisions.
 
 ---

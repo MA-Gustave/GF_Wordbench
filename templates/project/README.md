@@ -1,19 +1,22 @@
 # GF Wordbench Project Template
 
 **Document ID:** `GF-WB-TEMPLATE-PROJECT-README`  
-**Status:** Normative template guide  
+**Document role:** Normative template guide  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
 **Template path:** `templates/project/`  
 **Destination:** `project/`  
 **Template owner:** GF Wordbench maintainers  
 **Project owner after initialization:** `<PROJECT_OWNER>`  
 **Template version:** `1.0.0`  
-**Last reviewed:** `2026-07-22`
+**Last reviewed:** `<YYYY-MM-DD>`
 
 ---
 
 ## 1. Purpose
 
-This directory is the canonical starting point for one active GF language project.
+This directory is the canonical starting point for one active GF project.
 
 It provides a language-neutral structure for:
 
@@ -45,7 +48,7 @@ The two directories have different roles.
 | Directory | Role | Placeholder policy | Runtime use |
 |---|---|---|---|
 | `templates/project/` | Generic source for new projects | Placeholders required where project facts are unknown | Never treated as the active project |
-| `project/` | One initialized active language project | Unresolved required placeholders prohibited | Read by GF Wordbench |
+| `project/` | One initialized active GF project | Unresolved required placeholders prohibited | Read by GF Wordbench |
 
 The template may be updated by framework maintainers.
 
@@ -73,8 +76,8 @@ complete enough to initialize
 
 The template MUST NOT contain:
 
-- an active language name;
-- an active language code;
+- the active project's language name;
+- the active project's language code;
 - an active module suffix;
 - another project's module names;
 - another project's source path;
@@ -177,7 +180,7 @@ If `project/` already contains project-owned files:
 - preserve it;
 - choose a new repository copy or perform an explicit migration.
 
-Initialization MUST NOT silently merge two language projects.
+Initialization MUST NOT silently merge two GF projects.
 
 ---
 
@@ -236,7 +239,7 @@ Before replacing placeholders, determine:
 | Minimum GF version | Empty or documented minimum |
 | Release PGF policy | `true` or justified `false` |
 
-Do not infer these values from another language project.
+Do not infer these values from another GF project.
 
 ---
 
@@ -1347,7 +1350,7 @@ The framework test suite should verify:
 all required template files exist
 project.toml parses as a template
 only approved placeholders appear
-no active-language identifier appears
+no project-specific identifier appears
 no absolute machine path appears
 documentation paths are internally coherent
 required validation directories exist
@@ -1544,8 +1547,8 @@ Any detected template drift must be corrected before the template is used for a 
 | Validation modes | `docs/validation/VALIDATION_MODES.md` |
 | File selection | `docs/validation/FILE_SELECTION.md` |
 | Release gates | `docs/validation/RELEASE_GATES.md` |
-| Framework contracts | `docs/INTERFILE_CONTRACT_LOCK.md` |
-| Persisted schemas | `docs/PERSISTED_SCHEMA_LOCK.md` |
+| Framework dependency contracts | `docs/architecture/DEPENDENCY_RULES.md` |
+| Persisted schemas | `docs/reference/SCHEMA_INDEX.md` |
 | Template project lock | `templates/project/docs/INTERFILE_CONTRACT_LOCK.md` |
 | Active project start | `project/docs/00_PROJECT_START_HERE.md` |
 
@@ -1553,7 +1556,7 @@ Any detected template drift must be corrected before the template is used for a 
 
 # 38. Final rule
 
-> The template is generic source material, not an active language project.
+> The template is generic source material, not an active GF project.
 
 It becomes an active project only after identity, source architecture, contracts, scenarios, gold policy, coverage, status, and release criteria have been completed and validated.
 

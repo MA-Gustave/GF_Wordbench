@@ -7,11 +7,11 @@
 # This file is copied to:
 #   project/project.toml
 #
-# It is intentionally generic and is not a runnable active-language
+# It is intentionally generic and is not a runnable active-project
 # configuration until every required placeholder has been replaced.
 #
 # Initialization rules:
-# - keep one active language per GF Wordbench working copy;
+# - keep one active GF project per GF Wordbench workspace;
 # - keep project-owned paths relative to `project.root`;
 # - use `/` as the canonical path separator;
 # - preserve the declared order of path parts, entrypoints, checkpoints
@@ -37,7 +37,7 @@ schema_version = "1.0"
 # Replace before the project is considered initialized.
 id = "<PROJECT_ID>"
 
-# Human-readable active language or grammar-project name.
+# Human-readable active GF project name.
 name = "<LANGUAGE_NAME>"
 
 # Stable project language identifier, normally an ISO language code when
@@ -49,7 +49,7 @@ root = "."
 
 [sources]
 
-# Directory containing the active language `.gf` sources.
+# Directory containing the active project's `.gf` sources.
 #
 # This must be project-relative in canonical project files. When the real
 # GF source tree is external to `project/`, initialization or environment

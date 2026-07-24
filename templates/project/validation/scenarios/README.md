@@ -1,8 +1,11 @@
 # <LANGUAGE_NAME> Validation Scenarios
 
 **Document ID:** `GF-WB-PROJECT-SCENARIOS-README`  
-**Status:** Normative project template  
-**Applies to:** Native GF `.gfs` validation scenarios for one initialized GF Wordbench language project  
+**Document role:** Normative project template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
+**Applies to:** Native GF `.gfs` validation scenarios for one initialized GF Wordbench project  
 **Template owner:** GF Wordbench  
 **Project owner:** `<PROJECT_OWNER>`  
 **Project ID:** `<PROJECT_ID>`  
@@ -36,7 +39,7 @@
 
 ## 1. Purpose
 
-This directory contains native GF shell scenarios used to validate the active language project.
+This directory contains native GF shell scenarios used to validate the active GF project.
 
 A scenario is a source-controlled `.gfs` script executed by GF through GF Wordbench.
 
@@ -299,7 +302,7 @@ optional_scenarios = [...]
 
 ## 8. Recommended initial registry
 
-Replace or extend this table for the active language.
+Replace or extend this table for the active project.
 
 | Scenario ID | Script | Required | Modes | Gold | Purpose |
 |---|---|---:|---|---|---|

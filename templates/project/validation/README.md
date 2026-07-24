@@ -1,14 +1,17 @@
 # GF Wordbench Project Template — Validation
 
 **Document ID:** `GF-WB-TEMPLATE-PROJECT-VALIDATION-README`  
-**Status:** Normative project template  
+**Document role:** Normative project template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
 **Applies to:** `templates/project/validation/` and every active project created from it  
 **Template owner:** GF Wordbench maintainers  
 **Project owner:** `<PROJECT_OWNER>`  
 **Language:** `<LANGUAGE_NAME>`  
 **Language code:** `<LANGUAGE_CODE>`  
 **GF suffix:** `<GF_SUFFIX>`  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\templates\project\validation\README.md`  
+**Target path:** `templates/project/validation/README.md`  
 **Document version:** `1.0.0`  
 **Last reviewed:** `<YYYY-MM-DD>`
 
@@ -16,7 +19,7 @@
 
 ## 1. Purpose
 
-This directory is the validation-asset root for one GF language project.
+This directory is the validation-asset root for one GF project.
 
 It contains the project-owned inputs and expectations used by GF Wordbench to prove that the language implementation behaves as intended.
 
@@ -73,7 +76,7 @@ project/docs/TEST_COVERAGE_MATRIX.md
 
 This file is a reusable template.
 
-When creating an active language project:
+When creating an active GF project:
 
 1. copy `templates/project/` to the active project location;
 2. replace every required placeholder;
@@ -235,7 +238,7 @@ docs/scenarios/SCENARIO_MARKERS_AND_ASSERTIONS.md
 docs/scenarios/OUTPUT_NORMALIZATION.md
 docs/scenarios/GOLDEN_TESTS.md
 docs/scenarios/UPDATING_GOLD_FILES.md
-docs/gf/GF_TOOLCHAIN_INTEGRATION.md
+docs/gf/GF_TOOLCHAIN_BOUNDARY.md
 docs/reports/REPORTING_OVERVIEW.md
 ```
 
@@ -1908,7 +1911,7 @@ A gate must not depend only on human report prose.
 | `validation/gold/README.md` | expected-output management |
 | `docs/VALIDATION_SPEC.md` | project validation design and inventory |
 | `docs/TEST_COVERAGE_MATRIX.md` | feature-to-evidence mapping |
-| `docs/INTERFILE_CONTRACT_LOCK.md` | cross-file validation contracts |
+| `docs/architecture/DEPENDENCY_RULES.md` | framework dependency contracts |
 | `docs/RELEASE_CRITERIA.md` | release acceptance |
 | `docs/STATUS_LEDGER.md` | incomplete/temporary validation |
 | `docs/KNOWN_ISSUES.md` | unresolved user-visible validation issues |
@@ -1920,7 +1923,7 @@ Do not duplicate the authoritative full scenario registry in every README.
 
 # 57. Template validation examples
 
-A new language project should normally begin with a small set of representative validation families.
+A new GF project should normally begin with a small set of representative validation families.
 
 Possible examples:
 
@@ -1936,7 +1939,7 @@ release-smoke
 
 These are examples.
 
-Remove or rename them according to the active language.
+Remove or rename them according to the active project.
 
 Do not claim an example scenario exists until the file and registry entry exist.
 
@@ -2341,10 +2344,10 @@ Changes to this reusable README must remain language-neutral.
 Do not add:
 
 ```text
-active-language module names
-active-language scenario IDs
-active-language gold output
-active-language paths
+project-specific module names
+project-specific scenario IDs
+project-specific gold output
+project-specific paths
 specific linguistic assumptions
 developer-local environment paths
 ```
@@ -2386,7 +2389,7 @@ templates/project/validation/gold/README.md
 
 ```text
 [ ] Replace every required placeholder
-[ ] Confirm one active language identity
+[ ] Confirm one active project identity
 [ ] Configure source directory
 [ ] Configure GF path additions
 [ ] Configure entrypoints

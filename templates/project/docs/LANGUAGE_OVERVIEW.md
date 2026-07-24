@@ -1,8 +1,11 @@
 # GF Wordbench Project — Language Overview
 
 **Document ID:** `GF-WB-PROJECT-LANGUAGE-OVERVIEW`  
-**Status:** Normative template  
-**Applies to:** One active GF language project  
+**Document role:** Normative template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
+**Applies to:** One active GF project  
 **Template owner:** GF Wordbench  
 **Project owner:** `<PROJECT_OWNER>`  
 **Language:** `<LANGUAGE_NAME>`  
@@ -16,7 +19,7 @@
 
 ## 1. Purpose
 
-This document gives the authoritative high-level description of the active language project.
+This document gives the authoritative high-level description of the active GF project.
 
 It tells a maintainer, reviewer, contributor, or validation operator:
 
@@ -52,7 +55,7 @@ project/docs/INTERFILE_CONTRACT_LOCK.md
 
 The central rule is:
 
-> This overview states what the language project is and what it currently claims to support; specialized project documents define how those claims are implemented and validated.
+> This overview states what the GF project is and what it currently claims to support; specialized project documents define how those claims are implemented and validated.
 
 ---
 
@@ -171,9 +174,9 @@ project/docs/RELEASE_CRITERIA.md
 
 ---
 
-## 6. One-active-language invariant
+## 6. One-project-specific invariant
 
-This project describes exactly one active language project.
+This document describes exactly one active GF project.
 
 The active identity must not depend on:
 
@@ -1218,7 +1221,7 @@ Use this checklist for every review.
 
 ```text
 [ ] Project identity is current
-[ ] One active language is described
+[ ] One active GF project is described
 [ ] Primary variety is explicit
 [ ] Orthography policy is explicit
 [ ] Scope and non-goals are distinct
@@ -1329,7 +1332,7 @@ Removing one of these sections requires an explicit reason in project documentat
 The active `LANGUAGE_OVERVIEW.md` is complete when:
 
 ```text
-[ ] It describes exactly one active language project
+[ ] It describes exactly one active GF project
 [ ] Identity agrees with project.toml
 [ ] No required placeholder remains
 [ ] Variety and orthography are explicit
@@ -1357,4 +1360,4 @@ It must be readable without becoming a duplicate technical specification.
 
 Therefore:
 
-> No active language project may claim a language feature, maturity level, compatibility range, or release capability in `LANGUAGE_OVERVIEW.md` unless that claim agrees with project configuration, current GF source, the specialized project contracts, and current validation evidence.
+> No active GF project may claim a language feature, maturity level, compatibility range, or release capability in `LANGUAGE_OVERVIEW.md` unless that claim agrees with project configuration, current GF source, the specialized project contracts, and current validation evidence.

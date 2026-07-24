@@ -1,8 +1,11 @@
 # GF Wordbench Project — Research Evidence Register
 
 **Document ID:** `GF-WB-PROJECT-RESEARCH-EVIDENCE`  
-**Status:** Normative template  
-**Applies to:** One active GF language project  
+**Document role:** Normative template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
+**Applies to:** One active GF project  
 **Template owner:** GF Wordbench  
 **Project owner:** `<PROJECT_OWNER>`  
 **Language:** `<LANGUAGE_NAME>`  
@@ -2506,7 +2509,7 @@ Removing one of these elements requires a documented project reason.
 The active `RESEARCH_EVIDENCE.md` is structurally complete when:
 
 ```text
-[ ] It describes one active language project
+[ ] It describes one active GF project
 [ ] No required placeholder remains
 [ ] Core sources are registered
 [ ] Core claims are registered
@@ -2583,4 +2586,4 @@ It is the traceability layer connecting external language knowledge, project cho
 
 Therefore:
 
-> No active language project may present an externally testable linguistic statement as established project truth unless the statement has a stable claim record, appropriately scoped reviewed evidence, explicit treatment of counterevidence and uncertainty, and—when implemented—traceable GF and validation mappings.
+> No active GF project may present an externally testable linguistic statement as established project truth unless the statement has a stable claim record, appropriately scoped reviewed evidence, explicit treatment of counterevidence and uncertainty, and—when implemented—traceable GF and validation mappings.

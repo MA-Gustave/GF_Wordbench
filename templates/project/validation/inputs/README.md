@@ -1,7 +1,10 @@
 # GF Wordbench Project Template — Validation Inputs
 
 **Document ID:** `GF-WB-TEMPLATE-VALIDATION-INPUTS-README`  
-**Status:** Normative template guide  
+**Document role:** Normative template guide  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
 **Template path:** `templates/project/validation/inputs/README.md`  
 **Active-project destination:** `project/validation/inputs/README.md`  
 **Template owner:** GF Wordbench maintainers  
@@ -95,7 +98,7 @@ The initialized active directory is project-specific.
 
 The template MUST NOT contain:
 
-- active-language phrases;
+- project-specific phrases;
 - another project's trees;
 - another project's lexical items;
 - copied negative examples;
@@ -1276,7 +1279,7 @@ unregistered files
 unused files
 gold-impact mapping
 license metadata when required
-active-language identifier consistency
+project-specific identifier consistency
 ```
 
 Until the command exists, equivalent checks must be covered by tests or release review.
@@ -1394,8 +1397,8 @@ The framework template tests should verify:
 ```text
 this README exists
 only approved placeholders appear
-no active-language phrase appears
-no active language code appears
+no project-specific phrase appears
+no project-specific language code appears
 no local absolute path appears
 no canonical project input data appears
 fenced blocks are balanced

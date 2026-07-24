@@ -1,8 +1,11 @@
 # <LANGUAGE_NAME> — Module Dependency Map
 
 **Document ID:** `GF-WB-PROJECT-MODULE-DEPENDENCY-MAP`  
-**Status:** Normative project template  
-**Applies to:** One initialized GF Wordbench language project  
+**Document role:** Normative project template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
+**Applies to:** One initialized GF Wordbench project  
 **Template owner:** GF Wordbench  
 **Project owner:** `<PROJECT_OWNER>`  
 **Project ID:** `<PROJECT_ID>`  
@@ -1325,7 +1328,7 @@ A decision record is required for:
 - module split/merge affecting consumers;
 - removal of public provider;
 - new test-only dependency in release path;
-- active-language module suffix migration.
+- project-specific module suffix migration.
 
 ---
 

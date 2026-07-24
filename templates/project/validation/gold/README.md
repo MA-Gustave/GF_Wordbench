@@ -1,6 +1,11 @@
 # GF Wordbench Project Template — Golden Scenario Outputs
 
-**Status:** Normative project template  
+**Document ID:** `GF-WB-TEMPLATE-GOLD-README`  
+
+**Document role:** Normative project template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
 **Scope:** `project/validation/gold/` after project initialization  
 **Applies to:** Reviewed expected scenario output, normalization contracts, scenario registration, gold comparison, explicit gold updates, checkpoint validation, release validation, migrations, backups, and project maintenance  
 **Template owner:** GF Wordbench maintainers  
@@ -2241,7 +2246,7 @@ docs/scenarios/SCENARIO_MARKERS_AND_ASSERTIONS.md
 docs/scenarios/OUTPUT_NORMALIZATION.md
 docs/scenarios/GOLDEN_TESTS.md
 docs/scenarios/UPDATING_GOLD_FILES.md
-docs/PERSISTED_SCHEMA_LOCK.md
+docs/reference/SCHEMA_INDEX.md
 docs/operations/CLEANUP_BACKUP_AND_RECOVERY.md
 ```
 

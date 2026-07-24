@@ -1,7 +1,10 @@
 # GF Wordbench Project Template — Morphology Specification
 
 **Document ID:** `GF-WB-TEMPLATE-MORPHOLOGY-SPEC`  
-**Status:** Normative template  
+**Document role:** Normative template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
 **Template path:** `templates/project/docs/MORPHOLOGY_SPEC.md`  
 **Active-project destination:** `project/docs/MORPHOLOGY_SPEC.md`  
 **Template owner:** GF Wordbench maintainers  
@@ -17,7 +20,7 @@
 
 ## 1. Purpose
 
-This document defines the morphological contract for one initialized GF language project.
+This document defines the morphological contract for one initialized GF project.
 
 It records:
 
@@ -540,7 +543,7 @@ Allomorph selection must be documented under morphophonology or the relevant par
 
 # 15. Nominal morphology
 
-Remove this section only when the language project has no nominal category.
+Remove this section only when the GF project has no nominal category.
 
 ## 15.1 Nominal dimensions
 
@@ -1768,7 +1771,7 @@ The GF Wordbench template test suite should verify:
 ```text
 this file exists
 approved placeholders are present
-no active language identity appears
+no active-project identity appears
 no active project path appears
 no local tool path appears
 all fenced blocks are balanced

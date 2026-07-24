@@ -1,15 +1,18 @@
 # GF Wordbench Project Template — Language Architecture
 
 **Document ID:** `GF-WB-TEMPLATE-LANGUAGE-ARCHITECTURE`  
-**Status:** Normative project template  
-**Applies to:** One language project created from `templates/project/`  
+**Document role:** Normative project template  
+**Decision status:** Accepted template contract  
+**Implementation status:** Template available; active-project implementation depends on initialization  
+**Verification status:** Requires placeholder, source, contract and validation checks after initialization  
+**Applies to:** One GF project created from `templates/project/`  
 **Template owner:** GF Wordbench maintainers  
 **Project owner:** `<PROJECT_OWNER>`  
 **Language:** `<LANGUAGE_NAME>`  
 **Language code:** `<LANGUAGE_CODE>`  
 **GF suffix:** `<GF_SUFFIX>`  
 **Source directory:** `<SOURCE_DIR>`  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\templates\project\docs\LANGUAGE_ARCHITECTURE.md`  
+**Target path:** `templates/project/docs/LANGUAGE_ARCHITECTURE.md`  
 **Document version:** `1.0.0`  
 **Last reviewed:** `<YYYY-MM-DD>`
 
@@ -17,7 +20,7 @@
 
 ## 1. Purpose
 
-This document defines the intended architecture of one GF language project created from the GF Wordbench project template.
+This document defines the intended architecture of one GF project created from the GF Wordbench project template.
 
 It must be instantiated for the selected language before the project is treated as initialized.
 
@@ -151,7 +154,7 @@ Fill this table during initialization.
 
 ## 4.1 Identity invariants
 
-The project represents one active language.
+The workspace contains one active GF project.
 
 The following must agree:
 
@@ -2733,7 +2736,7 @@ Create the active project from:
 templates/project/
 ```
 
-Do not edit the reusable template to hold active-language facts.
+Do not edit the reusable template to hold project-specific facts.
 
 ## Step 2 — Set identity
 
@@ -2926,7 +2929,7 @@ Changes to this reusable template must remain language-neutral.
 
 Template changes must not:
 
-- add an active-language module name;
+- add an project-specific module name;
 - assume a particular case/gender system;
 - assume a particular word order;
 - assume a particular RGL family is implemented;
@@ -3026,7 +3029,7 @@ templates/project/validation/gold/README.md
 
 # 90. Final enforcement rule
 
-A language project is architecturally initialized only when its source graph, configuration, contracts, validation, and documentation describe the same system.
+A GF project is architecturally initialized only when its source graph, configuration, contracts, validation, and documentation describe the same system.
 
 > Every public responsibility must have one provider, every consumer must depend only on documented contracts, every dependency must flow in an approved direction, and every release-significant boundary must have evidence.
 
