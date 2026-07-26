@@ -1,0 +1,49 @@
+{
+  "schema": "wordbench.minidiag.config.v1",
+  "app_name": "GF Wordbench Mini Diagnostics",
+  "artifact_dir": ".wordbench-diagnostics",
+  "project_root": "project",
+  "output_root": "",
+  "gf_executable": "gf",
+  "rgl_root": "",
+  "wordbench_command": [
+    "{python}",
+    "-m",
+    "gf_wordbench"
+  ],
+  "required_paths": [
+    "pyproject.toml",
+    "src/gf_wordbench",
+    "tests",
+    "scripts",
+    "project"
+  ],
+  "summary_globs": [
+    "runs/run_*/summary.json",
+    "run_*/summary.json",
+    "project/runs/run_*/summary.json",
+    "project/run_*/summary.json"
+  ],
+  "timeouts": {
+    "short": 30,
+    "normal": 180,
+    "tests": 1200,
+    "quick": 900,
+    "release": 7200
+  },
+  "runtime_smoke": {
+    "run_quick": false,
+    "target": "",
+    "strict": false
+  },
+  "release": {
+    "require_pgf": null,
+    "required_files": [
+      "summary.json",
+      "summary.md",
+      "AI_READY.md",
+      "top_errors.txt",
+      "manifest.json"
+    ]
+  }
+}
