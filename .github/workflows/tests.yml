@@ -1,0 +1,305 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+  QT_QPA_PLATFORM: offscreen
+
+jobs:
+  unit-component:
+    name: Unit, component, and fake-process coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out the exact workflow revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up minimum supported Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+
+      - name: Record test provenance
+        shell: bash
+        run: |
+          {
+            echo "## Unit and component test provenance"
+            echo
+            echo "- Repository: \`${GITHUB_REPOSITORY}\`"
+            echo "- Revision: \`${GITHUB_SHA}\`"
+            echo "- Ref: \`${GITHUB_REF}\`"
+            echo "- Trigger: \`${GITHUB_EVENT_NAME}\`"
+            echo "- Attempt: \`${GITHUB_RUN_ATTEMPT}\`"
+            echo "- Runner OS: \`${RUNNER_OS}\`"
+            echo "- Python: \`$(python --version 2>&1)\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Install declared development dependencies
+        shell: bash
+        run: |
+          python -m pip install --no-cache-dir -e ".[dev]"
+          python -m pip check
+          python -m pip freeze --all > resolved-python-packages.txt
+
+      - name: Run unit, component, and fake-process integration tests
+        shell: bash
+        run: |
+          mkdir -p evidence/unit-component coverage
+          python -m pytest \
+            tests/unit \
+            tests/components \
+            tests/integration/cli \
+            tests/integration/process \
+            tests/integration/gui \
+            -m "not gf and not e2e" \
+            --junitxml=evidence/unit-component/junit.xml \
+            --cov=gf_wordbench \
+            --cov-branch \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage/coverage.xml \
+            --cov-fail-under=85
+
+      - name: Upload unit and coverage evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unit-component-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            evidence/unit-component/junit.xml
+            coverage/coverage.xml
+            resolved-python-packages.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
+
+  contracts-schemas:
+    name: Contracts, schemas, migrations, and anti-drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out the exact workflow revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up minimum supported Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+
+      - name: Install declared development dependencies
+        shell: bash
+        run: |
+          python -m pip install --no-cache-dir -e ".[dev]"
+          python -m pip check
+
+      - name: Run contract, schema, migration, and anti-drift tests
+        shell: bash
+        run: |
+          mkdir -p evidence/contracts-schemas
+          python -m pytest \
+            tests/contracts \
+            tests/schemas \
+            tests/migrations \
+            tests/release/test_architecture_manifest.py \
+            tests/release/test_documentation_alignment.py \
+            -m "not gf" \
+            --junitxml=evidence/contracts-schemas/junit.xml
+
+      - name: Run the canonical contract checker
+        shell: bash
+        run: >-
+          python scripts/validate_contracts.py
+          --workspace-root .
+          --strict
+
+      - name: Run the canonical schema checker
+        shell: bash
+        run: >-
+          python scripts/validate_schemas.py
+          --root .
+          --strict
+
+      - name: Upload contract and schema evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: contracts-schemas-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/contracts-schemas/junit.xml
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
+
+  platform:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: POSIX / Python 3.11 minimum
+            os: ubuntu-24.04
+            python: "3.11"
+          - label: POSIX / Python 3.14 latest
+            os: ubuntu-24.04
+            python: "3.14"
+          - label: Windows / Python 3.11 minimum
+            os: windows-2022
+            python: "3.11"
+          - label: Windows / Python 3.14 latest
+            os: windows-2022
+            python: "3.14"
+
+    steps:
+      - name: Check out the exact workflow revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up supported Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install declared development dependencies
+        shell: bash
+        run: |
+          python -m pip install --no-cache-dir -e ".[dev]"
+          python -m pip check
+
+      - name: Run the platform suite without real GF or E2E
+        shell: bash
+        run: |
+          mkdir -p evidence/platform
+          python -m pytest \
+            -m "not gf and not e2e" \
+            --junitxml="evidence/platform/junit-${{ runner.os }}-py${{ matrix.python }}.xml"
+
+      - name: Upload platform evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: platform-${{ runner.os }}-py${{ matrix.python }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/platform/*.xml
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
+
+  fake-e2e:
+    name: Fake-GF E2E / ${{ matrix.os_name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os_name: POSIX
+            os: ubuntu-24.04
+          - os_name: Windows
+            os: windows-2022
+
+    steps:
+      - name: Check out the exact workflow revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up minimum supported Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+
+      - name: Install declared development dependencies
+        shell: bash
+        run: |
+          python -m pip install --no-cache-dir -e ".[dev]"
+          python -m pip check
+
+      - name: Run fake-GF end-to-end tests
+        shell: bash
+        run: |
+          mkdir -p evidence/fake-e2e
+          python -m pytest \
+            -m "e2e and not gf" \
+            --junitxml="evidence/fake-e2e/junit-${{ runner.os }}.xml"
+
+      - name: Upload fake-GF E2E evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fake-e2e-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/fake-e2e/*.xml
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
+
+  tests-gate:
+    name: Tests gate
+    if: always()
+    needs:
+      - unit-component
+      - contracts-schemas
+      - platform
+      - fake-e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Apply the authoritative test gate
+        shell: bash
+        env:
+          UNIT_COMPONENT_RESULT: ${{ needs.unit-component.result }}
+          CONTRACTS_SCHEMAS_RESULT: ${{ needs.contracts-schemas.result }}
+          PLATFORM_RESULT: ${{ needs.platform.result }}
+          FAKE_E2E_RESULT: ${{ needs.fake-e2e.result }}
+        run: |
+          {
+            echo "## Tests gate"
+            echo
+            echo "- Unit/component/coverage: \`${UNIT_COMPONENT_RESULT}\`"
+            echo "- Contracts/schemas/migrations: \`${CONTRACTS_SCHEMAS_RESULT}\`"
+            echo "- Platform matrix: \`${PLATFORM_RESULT}\`"
+            echo "- Fake-GF E2E: \`${FAKE_E2E_RESULT}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          for result in \
+            "${UNIT_COMPONENT_RESULT}" \
+            "${CONTRACTS_SCHEMAS_RESULT}" \
+            "${PLATFORM_RESULT}" \
+            "${FAKE_E2E_RESULT}"
+          do
+            if [[ "${result}" != "success" ]]; then
+              echo "A required test stage did not succeed: ${result}" >&2
+              exit 1
+            fi
+          done

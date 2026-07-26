@@ -1,0 +1,326 @@
+{
+  "generated_at": "2026-07-24T18:21:35",
+  "source_root": "C:\\Users\\rejea\\Downloads\\Messy2",
+  "destination_root": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench",
+  "records": [
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\pyproject(11).toml",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\pyproject.toml",
+      "canonical_target": "pyproject.toml"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\version.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\version.py",
+      "canonical_target": "src/gf_wordbench/version.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\__init__(224).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\__init__.py",
+      "canonical_target": "src/gf_wordbench/__init__.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\py.typed",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\py.typed",
+      "canonical_target": "src/gf_wordbench/py.typed"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\errors(10).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\kernel\\errors.py",
+      "canonical_target": "src/gf_wordbench/kernel/errors.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\events.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\kernel\\events.py",
+      "canonical_target": "src/gf_wordbench/kernel/events.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\ids.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\kernel\\ids.py",
+      "canonical_target": "src/gf_wordbench/kernel/ids.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\paths(8).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\kernel\\paths.py",
+      "canonical_target": "src/gf_wordbench/kernel/paths.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\serialization.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\kernel\\serialization.py",
+      "canonical_target": "src/gf_wordbench/kernel/serialization.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\statuses.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\kernel\\statuses.py",
+      "canonical_target": "src/gf_wordbench/kernel/statuses.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\__init__(225).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\kernel\\__init__.py",
+      "canonical_target": "src/gf_wordbench/kernel/__init__.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\models(23).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\config\\models.py",
+      "canonical_target": "src/gf_wordbench/config/models.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\defaults.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\config\\defaults.py",
+      "canonical_target": "src/gf_wordbench/config/defaults.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\environment.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\config\\environment.py",
+      "canonical_target": "src/gf_wordbench/config/environment.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\precedence.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\config\\precedence.py",
+      "canonical_target": "src/gf_wordbench/config/precedence.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\resolver.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\config\\resolver.py",
+      "canonical_target": "src/gf_wordbench/config/resolver.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\__init__(226).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\config\\__init__.py",
+      "canonical_target": "src/gf_wordbench/config/__init__.py"
+    },
+    {
+      "action": "archive_duplicates",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\__init__(226) (1).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\_organizer_archive\\20260724_182135\\duplicates\\src__gf_wordbench__config____init__.py\\__init__(226) (1).py",
+      "canonical_target": "src/gf_wordbench/config/__init__.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\atomic_io(1).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\atomic_io.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/atomic_io.py"
+    },
+    {
+      "action": "archive_conflicts",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\atomic_io.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\_organizer_archive\\20260724_182135\\conflicts\\src__gf_wordbench__infrastructure__atomic_io.py\\atomic_io.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/atomic_io.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\environment(1).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\environment.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/environment.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\filesystem.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\filesystem.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/filesystem.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\json_io.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\json_io.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/json_io.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\logging.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\logging.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/logging.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\time.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\time.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/time.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\toml_io.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\toml_io.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/toml_io.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\__init__(227).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\__init__.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/__init__.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\models(24).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\process\\models.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/process/models.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\requests.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\process\\requests.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/process/requests.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\streams.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\process\\streams.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/process/streams.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\launcher.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\process\\launcher.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/process/launcher.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\termination.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\process\\termination.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/process/termination.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\runner.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\process\\runner.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/process/runner.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\__init__(228).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\infrastructure\\process\\__init__.py",
+      "canonical_target": "src/gf_wordbench/infrastructure/process/__init__.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\models(25).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\models.py",
+      "canonical_target": "src/gf_wordbench/projects/models.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\paths(9).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\paths.py",
+      "canonical_target": "src/gf_wordbench/projects/paths.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\policies(14).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\policies.py",
+      "canonical_target": "src/gf_wordbench/projects/policies.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\ports(14).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\ports.py",
+      "canonical_target": "src/gf_wordbench/projects/ports.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\schema.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\schema.py",
+      "canonical_target": "src/gf_wordbench/projects/schema.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\toml_adapter.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\toml_adapter.py",
+      "canonical_target": "src/gf_wordbench/projects/toml_adapter.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\filesystem_adapter.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\filesystem_adapter.py",
+      "canonical_target": "src/gf_wordbench/projects/filesystem_adapter.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\loader.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\loader.py",
+      "canonical_target": "src/gf_wordbench/projects/loader.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\validator.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\validator.py",
+      "canonical_target": "src/gf_wordbench/projects/validator.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\initializer.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\initializer.py",
+      "canonical_target": "src/gf_wordbench/projects/initializer.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\resetter.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\resetter.py",
+      "canonical_target": "src/gf_wordbench/projects/resetter.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\migrator.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\migrator.py",
+      "canonical_target": "src/gf_wordbench/projects/migrator.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\public.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\public.py",
+      "canonical_target": "src/gf_wordbench/projects/public.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\__init__(229).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\projects\\__init__.py",
+      "canonical_target": "src/gf_wordbench/projects/__init__.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\models(26).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\state\\models.py",
+      "canonical_target": "src/gf_wordbench/state/models.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\schema(1).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\state\\schema.py",
+      "canonical_target": "src/gf_wordbench/state/schema.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\migrations(14).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\state\\migrations.py",
+      "canonical_target": "src/gf_wordbench/state/migrations.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\repository.py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\state\\repository.py",
+      "canonical_target": "src/gf_wordbench/state/repository.py"
+    },
+    {
+      "action": "move",
+      "source": "C:\\Users\\rejea\\Downloads\\Messy2\\__init__(230).py",
+      "destination": "C:\\mycode\\Grammatical_Framework\\GF_Wordbench\\GF_Wordbench\\src\\gf_wordbench\\state\\__init__.py",
+      "canonical_target": "src/gf_wordbench/state/__init__.py"
+    }
+  ],
+  "errors": []
+}

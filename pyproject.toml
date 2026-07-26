@@ -1,0 +1,219 @@
+[build-system]
+requires = ["hatchling>=1.31,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gf-wordbench"
+dynamic = ["version"]
+description = "Development, validation, diagnostics, regression-testing, and release-readiness workbench for one active Grammatical Framework language project."
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.11,<3.15"
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE.md"]
+authors = [
+  { name = "Gustave (Mécanismes Abstraits par Gustave)" },
+]
+maintainers = [
+  { name = "GF Wordbench maintainers" },
+]
+keywords = [
+  "grammatical-framework",
+  "gf",
+  "grammar",
+  "linguistics",
+  "validation",
+  "diagnostics",
+  "regression-testing",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Environment :: Win32 (MS Windows)",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: English",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Build Tools",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
+  "Private :: Do Not Upload",
+]
+dependencies = [
+  "PySide6>=6.8,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.5,<2",
+  "mypy>=2.3,<3",
+  "pytest>=9.1,<10",
+  "pytest-cov>=7.1,<8",
+  "ruff>=0.16,<0.17",
+]
+
+[project.scripts]
+gf-wordbench = "gf_wordbench.entrypoints.cli.main:main"
+
+[project.gui-scripts]
+gf-wordbench-gui = "gf_wordbench.entrypoints.gui.main:main"
+
+[tool.hatch.version]
+path = "src/gf_wordbench/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gf_wordbench"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/.github",
+  "/docs",
+  "/project",
+  "/scripts",
+  "/src",
+  "/templates",
+  "/tests",
+  "/*.bat",
+  "/*.json",
+  "/*.md",
+  "/.gitignore",
+  "/pyproject.toml",
+]
+exclude = [
+  "/.coverage",
+  "/.mypy_cache",
+  "/.pytest_cache",
+  "/.ruff_cache",
+  "/.venv",
+  "/build",
+  "/coverage",
+  "/dist",
+  "/htmlcov",
+  "/run_*",
+  "/.gf_wordbench_state.json",
+  "**/__pycache__",
+  "**/*.py[cod]",
+]
+
+[tool.pytest.ini_options]
+minversion = "9.1"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+  "-ra",
+  "--strict-markers",
+  "--strict-config",
+]
+xfail_strict = true
+markers = [
+  "gf: requires a real GF executable",
+  "gui: requires GUI dependencies or display support",
+  "windows: Windows-specific behavior",
+  "posix: POSIX-specific behavior",
+  "slow: intentionally slower than the normal suite",
+  "e2e: full application workflow",
+  "contract: architectural contract validation",
+  "schema: persisted-schema validation",
+  "migration: legacy migration validation",
+  "security: security or containment behavior",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests", "scripts"]
+extend-exclude = [
+  ".venv",
+  "build",
+  "coverage",
+  "dist",
+  "htmlcov",
+  "project",
+  "run_*",
+  "templates",
+]
+
+[tool.ruff.lint]
+select = [
+  "B",
+  "C4",
+  "DTZ",
+  "E4",
+  "E7",
+  "E9",
+  "F",
+  "I",
+  "ISC",
+  "LOG",
+  "PIE",
+  "PT",
+  "RUF",
+  "SIM",
+  "TCH",
+  "UP",
+]
+ignore = [
+  "ISC001",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["gf_wordbench"]
+combine-as-imports = true
+force-sort-within-sections = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/gf_wordbench", "tests", "scripts"]
+mypy_path = "src"
+strict = true
+pretty = true
+show_error_codes = true
+show_error_context = true
+warn_unreachable = true
+warn_unused_configs = true
+explicit_package_bases = true
+exclude = "(^|/)(project|templates|docs|run_[^/]+)(/|$)"
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["gf_wordbench"]
+omit = [
+  "src/gf_wordbench/version.py",
+]
+
+[tool.coverage.paths]
+source = [
+  "src/gf_wordbench",
+  "*/site-packages/gf_wordbench",
+]
+
+[tool.coverage.report]
+fail_under = 85
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+  "@overload",
+]
+
+[tool.coverage.xml]
+output = "coverage/coverage.xml"
+
+[tool.coverage.html]
+directory = "htmlcov"

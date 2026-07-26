@@ -1,0 +1,66 @@
+# Python bytecode and interpreter caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*$py.class
+
+# Repository-local virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test, lint, type-check, and tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.pyre/
+.tox/
+.nox/
+
+# Coverage and retained test reports
+.coverage
+.coverage.*
+coverage/
+coverage.xml
+htmlcov/
+junit.xml
+
+# Python packaging and build output
+build/
+dist/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+
+# GF Wordbench local state and generated run evidence
+.gf_wordbench_state.json
+.gf_wordbench_state.json.*
+runs/
+run_*/
+_gf_wordbench/
+_gf_wordbench_backups/
+
+# Generated GF compiler artifacts
+*.gfo
+*.pgf
+
+# Temporary, backup, and editor swap files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# Editor and operating-system metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project-owned scenarios, inputs, gold files, sources, and documentation
+# are intentionally not ignored.

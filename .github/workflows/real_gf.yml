@@ -1,0 +1,352 @@
+name: Real GF
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Real .gfs scenarios are executable GF-shell input. This workflow therefore
+# runs only for trusted repository events on an explicitly approved runner.
+concurrency:
+  group: real-gf-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+  GF_WORDBENCH_TEST_GF_EXE: ${{ vars.GF_WORDBENCH_TEST_GF_EXE }}
+  GF_WORDBENCH_TEST_RGL_ROOT: ${{ vars.GF_WORDBENCH_TEST_RGL_ROOT }}
+
+jobs:
+  real-gf:
+    name: Real-GF integration and diagnostic validation
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - gf-wordbench-real-gf
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out the exact workflow revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+          cache: ""
+
+      - name: Initialize isolated evidence paths
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $evidenceRoot = Join-Path `
+            $env:RUNNER_TEMP `
+            "gf-wordbench-real-gf-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $pytestRoot = Join-Path $evidenceRoot "pytest"
+          $validationRoot = Join-Path $evidenceRoot "validation"
+          $metadataRoot = Join-Path $evidenceRoot "metadata"
+
+          New-Item -ItemType Directory -Force -Path $pytestRoot | Out-Null
+          New-Item -ItemType Directory -Force -Path $validationRoot | Out-Null
+          New-Item -ItemType Directory -Force -Path $metadataRoot | Out-Null
+
+          "CI_EVIDENCE_ROOT=$evidenceRoot" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PYTEST_EVIDENCE_ROOT=$pytestRoot" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VALIDATION_OUTPUT_ROOT=$validationRoot" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CI_METADATA_ROOT=$metadataRoot" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Validate and record the GF environment
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          if ([string]::IsNullOrWhiteSpace($env:GF_WORDBENCH_TEST_GF_EXE)) {
+            throw "Repository variable GF_WORDBENCH_TEST_GF_EXE is required."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:GF_WORDBENCH_TEST_RGL_ROOT)) {
+            throw "Repository variable GF_WORDBENCH_TEST_RGL_ROOT is required."
+          }
+          if (-not (Test-Path -LiteralPath $env:GF_WORDBENCH_TEST_GF_EXE -PathType Leaf)) {
+            throw "Configured GF executable does not exist."
+          }
+          if (-not (Test-Path -LiteralPath $env:GF_WORDBENCH_TEST_RGL_ROOT -PathType Container)) {
+            throw "Configured RGL root does not exist."
+          }
+
+          $gfExecutable = (Resolve-Path -LiteralPath $env:GF_WORDBENCH_TEST_GF_EXE).Path
+          $rglRoot = (Resolve-Path -LiteralPath $env:GF_WORDBENCH_TEST_RGL_ROOT).Path
+          $projectRoot = (Resolve-Path -LiteralPath "project").Path
+
+          "GF_WORDBENCH_TEST_GF_EXE=$gfExecutable" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "GF_WORDBENCH_TEST_RGL_ROOT=$rglRoot" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "GF_WORDBENCH_CI_PROJECT_ROOT=$projectRoot" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          $gfVersionOutput = & $gfExecutable --version 2>&1
+          $gfVersionExit = $LASTEXITCODE
+          $gfVersionOutput | Set-Content `
+            -LiteralPath (Join-Path $env:CI_METADATA_ROOT "gf-version.txt") `
+            -Encoding utf8
+          if ($gfVersionExit -ne 0) {
+            throw "GF version probe failed with exit code $gfVersionExit."
+          }
+
+          $rglIdentityPath = Join-Path $env:CI_METADATA_ROOT "rgl-identity.txt"
+          if (Test-Path -LiteralPath (Join-Path $rglRoot ".git") -PathType Container) {
+            $rglRevision = git -C $rglRoot rev-parse HEAD
+            if ($LASTEXITCODE -ne 0) {
+              throw "Unable to resolve the RGL Git revision."
+            }
+            @(
+              "path=$rglRoot"
+              "revision=$rglRevision"
+            ) | Set-Content -LiteralPath $rglIdentityPath -Encoding utf8
+          }
+          else {
+            "path=$rglRoot" | Set-Content -LiteralPath $rglIdentityPath -Encoding utf8
+          }
+
+          @(
+            "repository=$env:GITHUB_REPOSITORY"
+            "revision=$env:GITHUB_SHA"
+            "ref=$env:GITHUB_REF"
+            "trigger=$env:GITHUB_EVENT_NAME"
+            "attempt=$env:GITHUB_RUN_ATTEMPT"
+            "runner_os=$env:RUNNER_OS"
+            "runner_name=$env:RUNNER_NAME"
+            "python=$(python --version 2>&1)"
+            "gf_executable=$gfExecutable"
+            "rgl_root=$rglRoot"
+            "project_root=$projectRoot"
+          ) | Set-Content `
+            -LiteralPath (Join-Path $env:CI_METADATA_ROOT "provenance.txt") `
+            -Encoding utf8
+
+          @(
+            "## Real-GF provenance"
+            ""
+            "- Repository: ``$env:GITHUB_REPOSITORY``"
+            "- Revision: ``$env:GITHUB_SHA``"
+            "- Ref: ``$env:GITHUB_REF``"
+            "- Trigger: ``$env:GITHUB_EVENT_NAME``"
+            "- Attempt: ``$env:GITHUB_RUN_ATTEMPT``"
+            "- Runner: ``$env:RUNNER_NAME`` / ``$env:RUNNER_OS``"
+            "- Python: ``$(python --version 2>&1)``"
+            "- GF executable: ``$gfExecutable``"
+            "- RGL root: ``$rglRoot``"
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Install declared development dependencies
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pip install --no-cache-dir -e ".[dev]"
+          python -m pip check
+          python -m pip freeze --all | Set-Content `
+            -LiteralPath (Join-Path $env:CI_METADATA_ROOT "python-packages.txt") `
+            -Encoding utf8
+
+      - name: Run project and scenario preflight
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          & gf-wordbench project check `
+            --project-root $env:GF_WORDBENCH_CI_PROJECT_ROOT `
+            --gf-exe $env:GF_WORDBENCH_TEST_GF_EXE `
+            --rgl-root $env:GF_WORDBENCH_TEST_RGL_ROOT `
+            --probe-gf `
+            --quiet
+          $projectExit = $LASTEXITCODE
+          $projectExit | Set-Content `
+            -LiteralPath (Join-Path $env:CI_METADATA_ROOT "project-check-exit.txt") `
+            -Encoding ascii
+
+          & gf-wordbench scenarios check `
+            --project-root $env:GF_WORDBENCH_CI_PROJECT_ROOT `
+            --strict `
+            --quiet
+          $scenarioExit = $LASTEXITCODE
+          $scenarioExit | Set-Content `
+            -LiteralPath (Join-Path $env:CI_METADATA_ROOT "scenarios-check-exit.txt") `
+            -Encoding ascii
+
+          if ($projectExit -ne 0 -or $scenarioExit -ne 0) {
+            throw "Project or scenario preflight failed."
+          }
+
+      - name: Run the marked real-GF test suite
+        id: real_gf_tests
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $junitPath = Join-Path $env:PYTEST_EVIDENCE_ROOT "junit.xml"
+          $baseTemp = Join-Path $env:PYTEST_EVIDENCE_ROOT "tmp"
+          New-Item -ItemType Directory -Force -Path $baseTemp | Out-Null
+
+          & python -m pytest `
+            -m gf `
+            -ra `
+            --durations=25 `
+            --junitxml=$junitPath `
+            --basetemp=$baseTemp
+          $testExit = $LASTEXITCODE
+          $testExit | Set-Content `
+            -LiteralPath (Join-Path $env:CI_METADATA_ROOT "pytest-exit.txt") `
+            -Encoding ascii
+
+          # Preserve evidence collection and apply the authoritative gate later.
+          exit 0
+
+      - name: Run diagnostic validation through the public CLI
+        id: diagnostic_validation
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $arguments = @(
+            "validate"
+            "--mode", "diagnostic"
+            "--strict"
+            "--project-root", $env:GF_WORDBENCH_CI_PROJECT_ROOT
+            "--gf-exe", $env:GF_WORDBENCH_TEST_GF_EXE
+            "--rgl-root", $env:GF_WORDBENCH_TEST_RGL_ROOT
+            "--out-root", $env:VALIDATION_OUTPUT_ROOT
+            "--compile-timeout", "120"
+            "--scenario-timeout", "120"
+            "--quiet"
+          )
+
+          & gf-wordbench @arguments
+          $validationExit = $LASTEXITCODE
+          $validationExit | Set-Content `
+            -LiteralPath (Join-Path $env:CI_METADATA_ROOT "validation-exit.txt") `
+            -Encoding ascii
+
+          # Preserve evidence collection and apply the authoritative gate later.
+          exit 0
+
+      - name: Resolve and verify structured run evidence
+        id: verify_evidence
+        if: always()
+        run: |
+          $ErrorActionPreference = "Stop"
+          $verificationExitPath = Join-Path $env:CI_METADATA_ROOT "reports-check-exit.txt"
+          $runPathRecord = Join-Path $env:CI_METADATA_ROOT "run-path.txt"
+
+          if (-not (Test-Path -LiteralPath $env:VALIDATION_OUTPUT_ROOT -PathType Container)) {
+            "2" | Set-Content -LiteralPath $verificationExitPath -Encoding ascii
+            throw "The validation output root was not created."
+          }
+
+          $runDirectories = @(
+            Get-ChildItem -LiteralPath $env:VALIDATION_OUTPUT_ROOT -Directory -Force
+          )
+          if ($runDirectories.Count -ne 1) {
+            "2" | Set-Content -LiteralPath $verificationExitPath -Encoding ascii
+            throw "Expected exactly one run directory beneath the unique output root; found $($runDirectories.Count)."
+          }
+
+          $runDirectory = $runDirectories[0].FullName
+          $runDirectory | Set-Content -LiteralPath $runPathRecord -Encoding utf8
+
+          & gf-wordbench reports check $runDirectory --quiet
+          $reportsExit = $LASTEXITCODE
+          $reportsExit | Set-Content -LiteralPath $verificationExitPath -Encoding ascii
+
+          if ($reportsExit -ne 0) {
+            throw "Structured report or manifest verification failed."
+          }
+
+      - name: Upload bounded real-GF evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: real-gf-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CI_EVIDENCE_ROOT }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
+
+      - name: Apply the real-GF workflow gate
+        if: always()
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          function Read-RequiredExitCode([string] $Name) {
+            $path = Join-Path $env:CI_METADATA_ROOT $Name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Required status record is missing: $Name"
+            }
+            return [int](Get-Content -LiteralPath $path -Raw).Trim()
+          }
+
+          $projectExit = Read-RequiredExitCode "project-check-exit.txt"
+          $scenarioExit = Read-RequiredExitCode "scenarios-check-exit.txt"
+          $pytestExit = Read-RequiredExitCode "pytest-exit.txt"
+          $validationExit = Read-RequiredExitCode "validation-exit.txt"
+          $reportsExit = Read-RequiredExitCode "reports-check-exit.txt"
+
+          $junitPath = Join-Path $env:PYTEST_EVIDENCE_ROOT "junit.xml"
+          if (-not (Test-Path -LiteralPath $junitPath -PathType Leaf)) {
+            throw "The real-GF JUnit report is missing."
+          }
+
+          [xml]$junit = Get-Content -LiteralPath $junitPath -Raw
+          $skipped = 0
+          foreach ($suite in @($junit.testsuites.testsuite)) {
+            if ($null -ne $suite.skipped -and "$($suite.skipped)" -ne "") {
+              $skipped += [int]$suite.skipped
+            }
+          }
+
+          @(
+            ""
+            "## Real-GF gate"
+            ""
+            "- Project preflight exit: ``$projectExit``"
+            "- Scenario preflight exit: ``$scenarioExit``"
+            "- Real-GF pytest exit: ``$pytestExit``"
+            "- Unexpected GF-test skips: ``$skipped``"
+            "- Diagnostic validation exit: ``$validationExit``"
+            "- Structured report verification exit: ``$reportsExit``"
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+          if ($projectExit -ne 0) {
+            throw "Project preflight failed with exit code $projectExit."
+          }
+          if ($scenarioExit -ne 0) {
+            throw "Scenario preflight failed with exit code $scenarioExit."
+          }
+          if ($pytestExit -ne 0) {
+            throw "The real-GF test suite failed with exit code $pytestExit."
+          }
+          if ($skipped -ne 0) {
+            throw "The required real-GF suite unexpectedly skipped $skipped test(s)."
+          }
+          if ($validationExit -ne 0) {
+            throw "Diagnostic validation failed with exit code $validationExit."
+          }
+          if ($reportsExit -ne 0) {
+            throw "Structured report verification failed with exit code $reportsExit."
+          }
