@@ -11,9 +11,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
+from gf_wordbench.infrastructure.process.models import ProcessResult
 from gf_wordbench.kernel.statuses import (
     ErrorKind,
     ExecutionState,
+    ValidationMode,
     ValidationStatus,
 )
 
@@ -272,6 +274,76 @@ class CompileTarget:
     @property
     def is_pgf(self) -> bool:
         return self.kind is CompileTargetKind.PGF
+
+
+@dataclass(frozen=True, slots=True)
+class CompilePlan:
+    """Deterministic immutable compilation plan."""
+
+    mode: str
+    targets: tuple[CompileTarget, ...]
+    clean_build: bool
+    fail_fast: bool
+    gf_version_required: bool
+
+    def __post_init__(self) -> None:
+        mode = _require_text(self.mode, field_name="mode")
+        object.__setattr__(self, "mode", str(mode))
+
+        if isinstance(self.targets, (str, bytes)):
+            raise TypeError("targets must be an iterable of CompileTarget values")
+
+        normalized_targets: list[CompileTarget] = []
+        seen_target_ids: set[str] = set()
+        previous_order: int | None = None
+
+        try:
+            raw_targets = iter(self.targets)
+        except TypeError as exc:
+            raise TypeError(
+                "targets must be an iterable of CompileTarget values"
+            ) from exc
+
+        for index, target in enumerate(raw_targets):
+            if not isinstance(target, CompileTarget):
+                raise TypeError(
+                    f"targets[{index}] must be a CompileTarget"
+                )
+            if target.target_id in seen_target_ids:
+                raise ValueError(
+                    f"duplicate compile target ID: {target.target_id}"
+                )
+            if (
+                previous_order is not None
+                and target.declared_order < previous_order
+            ):
+                raise ValueError(
+                    "compile targets must preserve deterministic declared order"
+                )
+            seen_target_ids.add(target.target_id)
+            previous_order = target.declared_order
+            normalized_targets.append(target)
+
+        _require_bool(self.clean_build, field_name="clean_build")
+        _require_bool(self.fail_fast, field_name="fail_fast")
+        _require_bool(
+            self.gf_version_required,
+            field_name="gf_version_required",
+        )
+
+        object.__setattr__(self, "targets", tuple(normalized_targets))
+
+    @property
+    def target_ids(self) -> tuple[str, ...]:
+        return tuple(target.target_id for target in self.targets)
+
+    @property
+    def required_targets(self) -> tuple[CompileTarget, ...]:
+        return tuple(target for target in self.targets if target.required)
+
+    @property
+    def optional_targets(self) -> tuple[CompileTarget, ...]:
+        return tuple(target for target in self.targets if not target.required)
 
 
 @dataclass(frozen=True, slots=True)
@@ -741,6 +813,488 @@ class GFVersionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class CompileSummary:
+    """Interpreted process and artifact evidence for one compile target."""
+
+    target_id: str
+    target_kind: CompileTargetKind
+    status: ValidationStatus
+    command: tuple[str, ...]
+    working_directory: Path
+    exit_code: int | None
+    launched: bool
+    timed_out: bool
+    cancelled: bool
+    duration_ms: int
+    error_kind: ErrorKind
+    first_error: str
+    error_detail: str
+    stdout_path: Path | None
+    stderr_path: Path | None
+    expected_artifacts: tuple[Path, ...]
+    produced_artifacts: tuple[Path, ...]
+    artifact_checks_passed: bool
+    skipped_reason: str = ""
+
+    def __post_init__(self) -> None:
+        _require_text(self.target_id, field_name="target_id")
+
+        target_kind = self.target_kind
+        if not isinstance(target_kind, CompileTargetKind):
+            try:
+                target_kind = CompileTargetKind(target_kind)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "target_kind must be source, checkpoint, entrypoint, or pgf"
+                ) from exc
+
+        if not isinstance(self.status, ValidationStatus):
+            raise TypeError("status must be a ValidationStatus")
+
+        command = _normalize_strings(
+            self.command,
+            field_name="command",
+            allow_empty_items=True,
+        )
+        working_directory = _normalize_path(
+            self.working_directory,
+            field_name="working_directory",
+        )
+
+        if self.exit_code is not None and (
+            isinstance(self.exit_code, bool)
+            or not isinstance(self.exit_code, int)
+        ):
+            raise TypeError("exit_code must be an integer or None")
+
+        for field_name in (
+            "launched",
+            "timed_out",
+            "cancelled",
+            "artifact_checks_passed",
+        ):
+            _require_bool(
+                getattr(self, field_name),
+                field_name=field_name,
+            )
+
+        _require_non_negative_int(
+            self.duration_ms,
+            field_name="duration_ms",
+        )
+
+        if not isinstance(self.error_kind, ErrorKind):
+            raise TypeError("error_kind must be an ErrorKind")
+
+        _require_text(
+            self.first_error,
+            field_name="first_error",
+            allow_empty=True,
+        )
+        _require_text(
+            self.error_detail,
+            field_name="error_detail",
+            allow_empty=True,
+        )
+        _require_text(
+            self.skipped_reason,
+            field_name="skipped_reason",
+            allow_empty=True,
+        )
+
+        stdout_path = _normalize_optional_path(
+            self.stdout_path,
+            field_name="stdout_path",
+        )
+        stderr_path = _normalize_optional_path(
+            self.stderr_path,
+            field_name="stderr_path",
+        )
+        if (
+            stdout_path is not None
+            and stderr_path is not None
+            and stdout_path == stderr_path
+        ):
+            raise ValueError(
+                "stdout_path and stderr_path must be distinct"
+            )
+
+        expected_artifacts = _normalize_paths(
+            self.expected_artifacts,
+            field_name="expected_artifacts",
+        )
+        produced_artifacts = _normalize_paths(
+            self.produced_artifacts,
+            field_name="produced_artifacts",
+        )
+
+        if self.timed_out and self.cancelled:
+            raise ValueError(
+                "a compile summary cannot be both timed out and cancelled"
+            )
+        if (self.timed_out or self.cancelled) and not self.launched:
+            raise ValueError(
+                "timeout or cancellation requires a launched process"
+            )
+        if not self.launched and self.exit_code is not None:
+            raise ValueError(
+                "an unlaunched compile cannot have an exit code"
+            )
+
+        object.__setattr__(self, "target_kind", target_kind)
+        object.__setattr__(self, "command", command)
+        object.__setattr__(
+            self,
+            "working_directory",
+            working_directory,
+        )
+        object.__setattr__(self, "stdout_path", stdout_path)
+        object.__setattr__(self, "stderr_path", stderr_path)
+        object.__setattr__(
+            self,
+            "expected_artifacts",
+            expected_artifacts,
+        )
+        object.__setattr__(
+            self,
+            "produced_artifacts",
+            produced_artifacts,
+        )
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status is ValidationStatus.OK
+
+    @property
+    def skipped(self) -> bool:
+        return self.status is ValidationStatus.SKIPPED
+
+
+@dataclass(frozen=True, slots=True)
+class PgfBuildRequest:
+    """Resolved request for one run-owned PGF construction."""
+
+    request_id: str
+    project_id: str
+    run_id: str
+    mode: ValidationMode
+    required: bool
+    optimize: bool
+    runtime_verification_required: bool
+    gf_executable: Path
+    project_root: Path
+    artifact_root: Path
+    expected_pgf_path: Path
+    stdout_path: Path
+    stderr_path: Path
+
+    def __post_init__(self) -> None:
+        for field_name in ("request_id", "project_id", "run_id"):
+            _require_text(getattr(self, field_name), field_name=field_name)
+
+        if not isinstance(self.mode, ValidationMode):
+            raise TypeError("mode must be a ValidationMode")
+
+        for field_name in (
+            "required",
+            "optimize",
+            "runtime_verification_required",
+        ):
+            _require_bool(
+                getattr(self, field_name),
+                field_name=field_name,
+            )
+
+        normalized_paths = {
+            field_name: _normalize_path(
+                getattr(self, field_name),
+                field_name=field_name,
+            )
+            for field_name in (
+                "gf_executable",
+                "project_root",
+                "artifact_root",
+                "expected_pgf_path",
+                "stdout_path",
+                "stderr_path",
+            )
+        }
+
+        expected_pgf_path = normalized_paths["expected_pgf_path"]
+        artifact_root = normalized_paths["artifact_root"]
+        if expected_pgf_path.suffix.casefold() != ".pgf":
+            raise ValueError("expected_pgf_path must identify a .pgf artifact")
+        if (
+            expected_pgf_path == artifact_root
+            or not expected_pgf_path.is_relative_to(artifact_root)
+        ):
+            raise ValueError(
+                "expected_pgf_path must be strictly inside artifact_root"
+            )
+        if normalized_paths["stdout_path"] == normalized_paths["stderr_path"]:
+            raise ValueError(
+                "stdout_path and stderr_path must be distinct"
+            )
+
+        for field_name, value in normalized_paths.items():
+            object.__setattr__(self, field_name, value)
+
+
+@dataclass(frozen=True, slots=True)
+class PgfArtifactEvidence:
+    """Observed evidence for the PGF artifact produced by one request."""
+
+    path: Path
+    exists: bool
+    is_file: bool
+    readable: bool
+    size_bytes: int | None
+    sha256: str | None
+    current_request: bool
+    identity_matches: bool
+    runtime_verified: bool | None
+    catalogued: bool
+
+    def __post_init__(self) -> None:
+        path = _normalize_path(self.path, field_name="path")
+
+        for field_name in (
+            "exists",
+            "is_file",
+            "readable",
+            "current_request",
+            "identity_matches",
+            "catalogued",
+        ):
+            _require_bool(
+                getattr(self, field_name),
+                field_name=field_name,
+            )
+
+        if self.runtime_verified is not None:
+            _require_bool(
+                self.runtime_verified,
+                field_name="runtime_verified",
+            )
+
+        if self.size_bytes is not None:
+            _require_non_negative_int(
+                self.size_bytes,
+                field_name="size_bytes",
+            )
+
+        digest = self.sha256
+        if digest is not None:
+            digest = _require_text(
+                digest,
+                field_name="sha256",
+            ).casefold()
+            if _SHA256_RE.fullmatch(digest) is None:
+                raise ValueError(
+                    "sha256 must contain exactly 64 lowercase hexadecimal characters"
+                )
+
+        if not self.exists and (
+            self.is_file
+            or self.readable
+            or self.size_bytes is not None
+            or digest is not None
+        ):
+            raise ValueError(
+                "a missing PGF artifact cannot have file, size, or hash evidence"
+            )
+        if self.is_file and not self.exists:
+            raise ValueError("is_file requires exists")
+        if self.readable and not self.is_file:
+            raise ValueError("readable requires is_file")
+        if digest is not None and not self.is_file:
+            raise ValueError("sha256 requires a regular file")
+
+        object.__setattr__(self, "path", path)
+        object.__setattr__(self, "sha256", digest)
+
+
+@dataclass(frozen=True, slots=True)
+class PgfBuildExecution:
+    """Raw process, artifact, and diagnostic evidence from the GF boundary."""
+
+    process_result: ProcessResult
+    artifact: PgfArtifactEvidence
+    error_kind: ErrorKind
+    first_error: str
+    error_detail: str
+    fatal_diagnostic: bool
+    gf_version: str | None
+    warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.process_result, ProcessResult):
+            raise TypeError("process_result must be a ProcessResult")
+        if not isinstance(self.artifact, PgfArtifactEvidence):
+            raise TypeError("artifact must be PgfArtifactEvidence")
+        if not isinstance(self.error_kind, ErrorKind):
+            raise TypeError("error_kind must be an ErrorKind")
+        _require_text(
+            self.first_error,
+            field_name="first_error",
+            allow_empty=True,
+        )
+        _require_text(
+            self.error_detail,
+            field_name="error_detail",
+            allow_empty=True,
+        )
+        _require_bool(
+            self.fatal_diagnostic,
+            field_name="fatal_diagnostic",
+        )
+
+        gf_version = self.gf_version
+        if gf_version is not None:
+            gf_version = _require_text(
+                gf_version,
+                field_name="gf_version",
+            )
+        warnings = _normalize_strings(
+            self.warnings,
+            field_name="warnings",
+        )
+
+        object.__setattr__(self, "gf_version", gf_version)
+        object.__setattr__(self, "warnings", warnings)
+
+
+@dataclass(frozen=True, slots=True)
+class PgfBuildResult:
+    """Interpreted result of one requested PGF construction stage."""
+
+    request_id: str
+    project_id: str
+    run_id: str
+    mode: ValidationMode
+    required: bool
+    status: ValidationStatus
+    execution_state: ExecutionState | None
+    process_result: ProcessResult | None
+    artifact: PgfArtifactEvidence | None
+    error_kind: ErrorKind
+    first_error: str
+    error_detail: str
+    gf_version: str | None
+    release_evidence_eligible: bool
+    warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for field_name in ("request_id", "project_id", "run_id"):
+            _require_text(getattr(self, field_name), field_name=field_name)
+
+        if not isinstance(self.mode, ValidationMode):
+            raise TypeError("mode must be a ValidationMode")
+        _require_bool(self.required, field_name="required")
+        if not isinstance(self.status, ValidationStatus):
+            raise TypeError("status must be a ValidationStatus")
+        if (
+            self.execution_state is not None
+            and not isinstance(self.execution_state, ExecutionState)
+        ):
+            raise TypeError(
+                "execution_state must be an ExecutionState or None"
+            )
+        if (
+            self.process_result is not None
+            and not isinstance(self.process_result, ProcessResult)
+        ):
+            raise TypeError(
+                "process_result must be a ProcessResult or None"
+            )
+        if (
+            self.artifact is not None
+            and not isinstance(self.artifact, PgfArtifactEvidence)
+        ):
+            raise TypeError(
+                "artifact must be PgfArtifactEvidence or None"
+            )
+        if not isinstance(self.error_kind, ErrorKind):
+            raise TypeError("error_kind must be an ErrorKind")
+
+        _require_text(
+            self.first_error,
+            field_name="first_error",
+            allow_empty=True,
+        )
+        _require_text(
+            self.error_detail,
+            field_name="error_detail",
+            allow_empty=True,
+        )
+        gf_version = self.gf_version
+        if gf_version is not None:
+            gf_version = _require_text(
+                gf_version,
+                field_name="gf_version",
+            )
+        _require_bool(
+            self.release_evidence_eligible,
+            field_name="release_evidence_eligible",
+        )
+        warnings = _normalize_strings(
+            self.warnings,
+            field_name="warnings",
+            unique=True,
+        )
+
+        if self.process_result is None:
+            if self.execution_state is not None:
+                raise ValueError(
+                    "execution_state requires process_result evidence"
+                )
+        elif self.execution_state is not self.process_result.execution_state:
+            raise ValueError(
+                "execution_state must agree with process_result"
+            )
+
+        if self.status is ValidationStatus.SKIPPED:
+            if self.process_result is not None or self.artifact is not None:
+                raise ValueError(
+                    "a skipped PGF build cannot contain process or artifact evidence"
+                )
+            if self.error_kind is not ErrorKind.OK:
+                raise ValueError("a skipped PGF build must use ErrorKind.OK")
+            if not self.first_error:
+                raise ValueError("a skipped PGF build requires a reason")
+        elif self.status is ValidationStatus.OK:
+            if self.error_kind is not ErrorKind.OK:
+                raise ValueError("an OK PGF build must use ErrorKind.OK")
+            if self.process_result is None or self.artifact is None:
+                raise ValueError(
+                    "an OK PGF build requires process and artifact evidence"
+                )
+            if self.execution_state is not ExecutionState.COMPLETED:
+                raise ValueError(
+                    "an OK PGF build must complete normally"
+                )
+        elif self.error_kind is ErrorKind.OK:
+            raise ValueError(
+                "a failed PGF build requires a non-OK error kind"
+            )
+
+        if self.release_evidence_eligible:
+            if (
+                self.status is not ValidationStatus.OK
+                or self.mode is not ValidationMode.RELEASE
+                or not self.required
+                or self.artifact is None
+            ):
+                raise ValueError(
+                    "release evidence eligibility requires a successful "
+                    "required release build"
+                )
+
+        object.__setattr__(self, "gf_version", gf_version)
+        object.__setattr__(self, "warnings", warnings)
+
+
+@dataclass(frozen=True, slots=True)
 class CompileResult:
     target: CompileTarget
     status: ValidationStatus
@@ -1015,10 +1569,16 @@ class CompileResult:
 __all__ = (
     "ArtifactCheck",
     "ArtifactCheckItem",
+    "CompilePlan",
     "CompileRequest",
     "CompileResult",
+    "CompileSummary",
     "CompileTarget",
     "CompileTargetKind",
     "GFVersionResult",
+    "PgfArtifactEvidence",
+    "PgfBuildExecution",
+    "PgfBuildRequest",
+    "PgfBuildResult",
     "StringMap",
 )

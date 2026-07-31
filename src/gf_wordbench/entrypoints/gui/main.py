@@ -1,4 +1,9 @@
-"""Canonical PySide6 entrypoint for the GF Wordbench desktop GUI."""
+"""Canonical PySide6 entrypoint for the GF Wordbench desktop GUI.
+
+The entrypoint owns only Qt process lifecycle and fatal-error reporting. The
+bootstrap-owned startup runtime owns the introduction window, path-resolved
+language selection, and the transition to the main language runtime.
+"""
 
 from __future__ import annotations
 
@@ -31,20 +36,34 @@ _SECRET_PATTERN: Final[re.Pattern[str]] = re.compile(
     r")\b(\s*[:=]\s*)([^\s,;]+)"
 )
 
+# When ``main`` is invoked inside a process that already owns a QApplication,
+# the event loop outlives this function call. Retaining the runtime here keeps
+# its controller, introduction window, workers, and transition callbacks alive
+# until the host application emits ``aboutToQuit``.
+_EMBEDDED_RUNTIMES: dict[int, GuiRuntime] = {}
+
 
 @runtime_checkable
 class GuiRuntime(Protocol):
-    """Bootstrap-owned GUI composition returned to the entrypoint."""
+    """Bootstrap-owned two-phase GUI runtime returned to the entrypoint.
+
+    The initial ``window`` is the introduction surface. The runtime may compose
+    and replace it with the main Wordbench window only after one path-resolved
+    language context has been validated.
+    """
 
     @property
     def window(self) -> object:
-        """Return the top-level Qt window."""
+        """Return the current top-level Qt window."""
+
+    def start(self) -> None:
+        """Connect startup behavior without starting the Qt event loop."""
 
     def shutdown(self) -> None:
         """Release GUI-owned resources without starting new work."""
 
 
-GuiRuntimeFactory = Callable[[object], GuiRuntime]
+GuiRuntimeFactory = Callable[[object, tuple[str, ...]], GuiRuntime]
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,8 +199,12 @@ class FatalErrorReporter:
             return
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Create the Qt application, bootstrap the GUI, and run its event loop."""
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    runtime_factory: GuiRuntimeFactory | None = None,
+) -> int:
+    """Create Qt, show the introduction runtime, and run the event loop."""
 
     arguments = _normalize_argv(argv)
 
@@ -196,18 +219,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     previous_hooks = install_exception_hooks(reporter)
 
     runtime: GuiRuntime | None = None
+    runtime_owned_by_main = True
     result = EXIT_RUNTIME_ERROR
 
     try:
-        runtime = _default_runtime_factory(application)
+        factory = runtime_factory or _default_runtime_factory
+        runtime = factory(application, arguments)
         _validate_runtime(runtime)
+        runtime.start()
         _show_window(runtime.window)
 
         if not owns_application:
+            _retain_embedded_runtime(application, runtime, reporter)
+            runtime_owned_by_main = False
+            runtime = None
             return EXIT_OK
 
-        qt_result = application.exec()
-        result = EXIT_OK if int(qt_result) == 0 else EXIT_RUNTIME_ERROR
+        result = _coerce_qt_exit_code(application.exec())
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
             raise
@@ -219,7 +247,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         result = EXIT_RUNTIME_ERROR
     finally:
-        if runtime is not None:
+        if runtime is not None and runtime_owned_by_main:
             try:
                 runtime.shutdown()
             except Exception as exc:
@@ -287,10 +315,18 @@ def restore_exception_hooks(state: ExceptionHookState) -> None:
     threading.excepthook = state.thread_hook
 
 
-def _default_runtime_factory(application: object) -> GuiRuntime:
-    from gf_wordbench.bootstrap import build_gui_runtime
+def _default_runtime_factory(
+    application: object,
+    argv: tuple[str, ...],
+) -> GuiRuntime:
+    """Compose the startup runtime without constructing a language runtime."""
 
-    runtime = build_gui_runtime(application)
+    from gf_wordbench.bootstrap import build_gui_startup_runtime
+
+    runtime = build_gui_startup_runtime(
+        application=application,
+        argv=argv,
+    )
     return runtime
 
 
@@ -331,8 +367,10 @@ def _configure_application(application: object) -> None:
 def _validate_runtime(runtime: object) -> None:
     if not isinstance(runtime, GuiRuntime):
         raise TypeError(
-            "build_gui_runtime() must return an object satisfying GuiRuntime"
+            "build_gui_startup_runtime() must return an object "
+            "satisfying GuiRuntime"
         )
+    _require_callable_member(runtime, "start")
     _require_callable_member(runtime.window, "show")
     _require_callable_member(runtime, "shutdown")
 
@@ -348,6 +386,45 @@ def _show_window(window: object) -> None:
     activate = getattr(window, "activateWindow", None)
     if callable(activate):
         activate()
+
+
+def _retain_embedded_runtime(
+    application: object,
+    runtime: GuiRuntime,
+    reporter: FatalErrorReporter,
+) -> None:
+    """Transfer runtime lifetime to an already-running QApplication."""
+
+    key = id(application)
+    if key in _EMBEDDED_RUNTIMES:
+        raise RuntimeError(
+            "A GF Wordbench GUI runtime is already attached to this "
+            "QApplication."
+        )
+
+    _EMBEDDED_RUNTIMES[key] = runtime
+
+    signal = getattr(application, "aboutToQuit", None)
+    connect = getattr(signal, "connect", None)
+    if not callable(connect):
+        return
+
+    def release() -> None:
+        owned_runtime = _EMBEDDED_RUNTIMES.pop(key, None)
+        if owned_runtime is None:
+            return
+        try:
+            owned_runtime.shutdown()
+        except Exception as exc:
+            reporter.report(
+                type(exc),
+                exc,
+                exc.__traceback__,
+                title="GF Wordbench GUI shutdown failed",
+                show_dialog=False,
+            )
+
+    connect(release)
 
 
 def _require_callable_member(
@@ -378,6 +455,12 @@ def _normalize_argv(
     if not result:
         result.append("gf-wordbench-gui")
     return tuple(result)
+
+
+def _coerce_qt_exit_code(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError("QApplication.exec() must return an integer exit code")
+    return value
 
 
 def _application_log_directory() -> Path:

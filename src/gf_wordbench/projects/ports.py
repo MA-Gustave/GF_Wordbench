@@ -1,8 +1,8 @@
 """Mechanism-neutral ports owned by the active-project module.
 
 These interfaces isolate TOML transport, filesystem access, template
-materialization, archive creation, lifecycle locking, and clock access from
-project-domain and application services.
+materialization, archive creation, lifecycle locking, migration workspace
+operations, and clock access from project-domain and application services.
 
 They remain language-neutral and never infer project identity from application
 state, previous runs, process-global working directories, or external portfolio
@@ -20,6 +20,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from gf_wordbench.projects.migrator import (
+        ProjectMigrationDestinationInspection,
+        ProjectMigrationPlan,
+        ProjectMigrationSourceInspection,
+        ProjectMigrationStrategy,
+        ProjectMigrationVerification,
+        ProjectMigrationWriteReceipt,
+    )
     from gf_wordbench.projects.models import ProjectConfig
 
 __all__ = (
@@ -33,6 +41,7 @@ __all__ = (
     "ProjectConfigWriter",
     "ProjectFilesystem",
     "ProjectLifecycleLock",
+    "ProjectMigrationWorkspacePort",
     "ProjectTemplateSource",
     "TreeEntry",
     "TreeEntryKind",
@@ -401,6 +410,62 @@ class ProjectLifecycleLock(Protocol):
         request: LifecycleLockRequest,
     ) -> AbstractContextManager[LifecycleLease]:
         """Acquire the lock or fail explicitly and release it on exit."""
+        ...
+
+
+@runtime_checkable
+class ProjectMigrationWorkspacePort(Protocol):
+    """Provide explicit, mechanism-neutral project-migration operations.
+
+    Planning methods are read-only. Publication, verification, and rollback
+    remain explicit so the migration service can preserve atomicity and
+    evidence without depending on a concrete filesystem implementation.
+    """
+
+    def inspect_source(
+        self,
+        source_root: Path,
+    ) -> ProjectMigrationSourceInspection:
+        """Return read-only facts discovered from the migration source."""
+        ...
+
+    def inspect_destination(
+        self,
+        *,
+        project_root: Path,
+        migration_id: str,
+        project_id: str,
+        language_code: str,
+        source_directory: Path,
+        source_root: Path,
+        strategy: ProjectMigrationStrategy,
+    ) -> ProjectMigrationDestinationInspection:
+        """Return read-only facts about the requested destination."""
+        ...
+
+    def is_cancelled(self) -> bool:
+        """Return whether controlled cancellation has been requested."""
+        ...
+
+    def apply(
+        self,
+        plan: ProjectMigrationPlan,
+    ) -> ProjectMigrationWriteReceipt:
+        """Publish one migration plan and return its durable write receipt."""
+        ...
+
+    def verify(
+        self,
+        plan: ProjectMigrationPlan,
+    ) -> ProjectMigrationVerification:
+        """Verify the published destination against the migration plan."""
+        ...
+
+    def rollback(
+        self,
+        receipt: ProjectMigrationWriteReceipt,
+    ) -> str | None:
+        """Roll back a failed publication and return an optional warning."""
         ...
 
 

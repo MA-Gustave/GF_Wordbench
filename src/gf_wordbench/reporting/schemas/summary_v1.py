@@ -639,6 +639,23 @@ def validate_summary_v1(
     return tuple(sorted(set(issues)))
 
 
+
+def validate_summary_document(document: object) -> None:
+    """Strictly validate one canonical persisted summary document.
+
+    This writer-facing entry point rejects schema issues, non-canonical
+    collection ordering, unknown fields, and values that cannot be represented
+    safely as JSON.  Use :func:`validate_summary_v1` when callers need the
+    issue-producing validation result instead of an exception.
+    """
+    require_summary_v1(
+        document,
+        strict=True,
+        check_ordering=True,
+    )
+    assert_summary_v1_json_safe(document)
+
+
 def require_summary_v1(
     document: object,
     *,
@@ -2257,5 +2274,6 @@ __all__ = (
     "parse_schema_version",
     "require_summary_v1",
     "schema_identity",
+    "validate_summary_document",
     "validate_summary_v1",
 )

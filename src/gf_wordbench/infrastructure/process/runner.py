@@ -11,8 +11,9 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from types import MappingProxyType
-from typing import Final, Literal, cast
+from typing import BinaryIO, Final, Literal, Protocol, cast
 
 from ...kernel.statuses import ExecutionState
 from ..environment import PreparedEnvironment, build_child_environment
@@ -31,7 +32,7 @@ from .models import (
     ProcessResult,
 )
 from .requests import render_command_for_display, validate_process_request
-from .streams import CaptureSession, open_capture_session
+from .streams import CaptureSummary, ProcessStreamCapture
 from .termination import (
     CancellationToken,
     ContainmentKind,
@@ -45,6 +46,7 @@ __all__ = ("run_process",)
 _LOGGER = logging.getLogger(__name__)
 
 _POLL_INTERVAL_SEC: Final[float] = 0.05
+_CAPTURE_DRAIN_TIMEOUT_SEC: Final[float] = 5.0
 _MAX_ERROR_MESSAGE_CHARS: Final[int] = 1_000
 
 _TerminalCause = Literal[
@@ -53,6 +55,158 @@ _TerminalCause = Literal[
     "cancelled",
     "output_limit",
 ]
+
+
+
+class CaptureSession(Protocol):
+    """Minimal capture surface consumed by the runner."""
+
+    stdout: BinaryIO
+    stderr: BinaryIO
+
+    @property
+    def output_limit_exceeded(self) -> bool: ...
+
+    def flush(self) -> None: ...
+
+    def finalize(self) -> CaptureSummary: ...
+
+
+@dataclass(slots=True)
+class _PipeCaptureSession:
+    """Bridge ``ProcessStreamCapture`` to the launcher's file-handle API."""
+
+    capture: ProcessStreamCapture
+    stdout_reader: BinaryIO
+    stdout: BinaryIO
+    stderr_reader: BinaryIO
+    stderr: BinaryIO
+    started: bool = False
+    summary: CaptureSummary | None = None
+
+    @property
+    def output_limit_exceeded(self) -> bool:
+        return self.capture.output_limit_exceeded
+
+    def start(self) -> None:
+        if self.started:
+            raise RuntimeError("process capture session has already started")
+
+        try:
+            self.capture.start(
+                self.stdout_reader,
+                self.stderr_reader,
+            )
+            self.started = True
+        finally:
+            # Popen owns duplicated child-side handles after launch. Closing the
+            # parent copies is required for readers to observe EOF.
+            _close_binary_stream(self.stdout)
+            _close_binary_stream(self.stderr)
+
+    def flush(self) -> None:
+        # ProcessStreamCapture writes to unbuffered sinks. This method preserves
+        # the runner's capture-session protocol without introducing fake flushes.
+        return
+
+    def finalize(self) -> CaptureSummary:
+        if self.summary is not None:
+            return self.summary
+
+        _close_binary_stream(self.stdout)
+        _close_binary_stream(self.stderr)
+
+        if not self.started:
+            _close_binary_stream(self.stdout_reader)
+            _close_binary_stream(self.stderr_reader)
+
+        try:
+            self.summary = self.capture.finalize(
+                drain_timeout_sec=_CAPTURE_DRAIN_TIMEOUT_SEC,
+            )
+            return self.summary
+        finally:
+            _close_binary_stream(self.stdout_reader)
+            _close_binary_stream(self.stderr_reader)
+
+
+@contextmanager
+def open_capture_session(
+    *,
+    stdout_path: os.PathLike[str] | str,
+    stderr_path: os.PathLike[str] | str,
+    output_limit_bytes: int,
+) -> Iterator[CaptureSession]:
+    """Open one bounded stdout/stderr capture session.
+
+    The child receives distinct pipe write handles. ``ProcessStreamCapture``
+    concurrently drains the read handles into separate bounded evidence files.
+    """
+
+    capture = ProcessStreamCapture(
+        Path(stdout_path),
+        Path(stderr_path),
+        output_limit_bytes,
+    )
+    capture.open()
+
+    stdout_reader: BinaryIO | None = None
+    stdout_writer: BinaryIO | None = None
+    stderr_reader: BinaryIO | None = None
+    stderr_writer: BinaryIO | None = None
+    session: _PipeCaptureSession | None = None
+
+    try:
+        stdout_reader, stdout_writer = _open_binary_pipe()
+        stderr_reader, stderr_writer = _open_binary_pipe()
+        session = _PipeCaptureSession(
+            capture=capture,
+            stdout_reader=stdout_reader,
+            stdout=stdout_writer,
+            stderr_reader=stderr_reader,
+            stderr=stderr_writer,
+        )
+        yield session
+    finally:
+        if session is not None:
+            session.finalize()
+        else:
+            for stream in (
+                stdout_reader,
+                stdout_writer,
+                stderr_reader,
+                stderr_writer,
+            ):
+                _close_binary_stream(stream)
+            capture.finalize(drain_timeout_sec=0.0)
+
+
+def _open_binary_pipe() -> tuple[BinaryIO, BinaryIO]:
+    read_fd, write_fd = os.pipe()
+    try:
+        reader = os.fdopen(read_fd, "rb", buffering=0)
+    except BaseException:
+        os.close(read_fd)
+        os.close(write_fd)
+        raise
+
+    try:
+        writer = os.fdopen(write_fd, "wb", buffering=0)
+    except BaseException:
+        reader.close()
+        os.close(write_fd)
+        raise
+
+    return reader, writer
+
+
+def _close_binary_stream(stream: BinaryIO | None) -> None:
+    if stream is None or stream.closed:
+        return
+    try:
+        stream.close()
+    except OSError:
+        _LOGGER.debug("failed to close process capture stream", exc_info=True)
 
 
 @dataclass(slots=True)
@@ -80,6 +234,34 @@ class _ExecutionFacts:
         )
 
 
+
+def _build_environment(request: ProcessRequest) -> PreparedEnvironment:
+    """Build the child environment, including explicit key removals."""
+
+    if not request.env_removals:
+        return build_child_environment(
+            policy=request.environment_policy,
+            overrides=request.env_overrides,
+            sensitive_keys=request.sensitive_env_keys,
+        )
+
+    removed = {
+        key.upper() if os.name == "nt" else key
+        for key in request.env_removals
+    }
+    parent = {
+        key: value
+        for key, value in os.environ.items()
+        if (key.upper() if os.name == "nt" else key) not in removed
+    }
+    return build_child_environment(
+        policy=request.environment_policy,
+        parent=parent,
+        overrides=request.env_overrides,
+        sensitive_keys=request.sensitive_env_keys,
+    )
+
+
 def run_process(
     request: ProcessRequest,
     *,
@@ -94,11 +276,7 @@ def run_process(
 
     validate_process_request(request)
 
-    environment = build_child_environment(
-        policy=request.environment_policy,
-        overrides=request.env_overrides,
-        sensitive_keys=request.sensitive_env_keys,
-    )
+    environment = _build_environment(request)
 
     _emit_event(event_sink, request, "request_validated")
     _log_start(request)
@@ -125,7 +303,6 @@ def run_process(
                 request,
                 capture,
                 environment,
-                started_clock=started_clock,
                 cancellation_token=cancellation_token,
                 event_sink=event_sink,
             )
@@ -200,7 +377,6 @@ def _launch_and_monitor(
     capture: CaptureSession,
     environment: PreparedEnvironment,
     *,
-    started_clock: float,
     cancellation_token: CancellationToken | None,
     event_sink: ProcessEventSink | None,
 ) -> _ExecutionFacts:
@@ -234,25 +410,28 @@ def _launch_and_monitor(
 
         containment = _containment_for(process)
 
-        _emit_event(
-            event_sink,
-            request,
-            "process_started",
-            pid=process.pid,
-            details={
-                "containment_kind": containment.kind.value,
-                "process_tree_contained": (
-                    containment.process_tree_contained
-                ),
-            },
-        )
-
         try:
+            _start_capture(capture)
+            monitor_started_clock = time.monotonic()
+
+            _emit_event(
+                event_sink,
+                request,
+                "process_started",
+                pid=process.pid,
+                details={
+                    "containment_kind": containment.kind.value,
+                    "process_tree_contained": (
+                        containment.process_tree_contained
+                    ),
+                },
+            )
+
             terminal_cause = _monitor_process(
                 process,
                 capture,
                 timeout_sec=request.timeout_sec,
-                started_clock=started_clock,
+                started_clock=monitor_started_clock,
                 cancellation_token=cancellation_token,
             )
 
@@ -311,6 +490,15 @@ def _launch_and_monitor(
             raise
 
 
+
+def _start_capture(capture: CaptureSession) -> None:
+    """Start an adapter-backed capture session when it exposes a start hook."""
+
+    starter = getattr(capture, "start", None)
+    if callable(starter):
+        starter()
+
+
 def _monitor_process(
     process: ProcessHandle,
     capture: CaptureSession,
@@ -322,14 +510,16 @@ def _monitor_process(
     deadline = started_clock + timeout_sec
 
     while True:
-        if process.poll() is not None:
-            return "completed"
+        # Output exhaustion is checked before natural completion so a process
+        # cannot race past the configured evidence budget and appear successful.
+        if capture.output_limit_exceeded:
+            return "output_limit"
 
         if _is_cancelled(cancellation_token):
             return "cancelled"
 
-        if capture.output_limit_exceeded:
-            return "output_limit"
+        if process.poll() is not None:
+            return "completed"
 
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -482,7 +672,8 @@ def _open_standard_input(
         return
 
     if process_input.kind is ProcessInputKind.TEXT:
-        assert process_input.text is not None
+        if process_input.text is None:
+            raise ValueError("text process input requires text content")
 
         with tempfile.TemporaryFile(mode="w+b") as stream:
             stream.write(
@@ -493,7 +684,8 @@ def _open_standard_input(
 
         return
 
-    assert process_input.path is not None
+    if process_input.path is None:
+        raise ValueError("file process input requires a source path")
 
     with process_input.path.open("rb") as stream:
         yield stream

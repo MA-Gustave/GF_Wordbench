@@ -2,7 +2,8 @@
 
 The canonical state schema owns identity, defaults, validation, serialization,
 and version support. This module only converts the supported unversioned flat
-legacy representation into a canonical payload supplied by that schema.
+legacy representation into the current path-resolved canonical payload supplied
+by that schema.
 
 No filesystem operation is performed here. Publication, atomic replacement,
 verification, and preservation of the legacy source belong to the state
@@ -28,13 +29,32 @@ _CANONICAL_GROUPS: Final[tuple[str, ...]] = (
 )
 
 _LEGACY_PATH_FIELDS: Final[dict[str, tuple[str, str, bool]]] = {
-    "selected_project_root": ("environment", "project_root", True),
-    "selected_rgl_root": ("environment", "rgl_root", True),
+    "selected_scan_dir": (
+        "environment",
+        "last_selected_language_path",
+        True,
+    ),
+    "selected_rgl_root": ("environment", "last_rgl_root", True),
     "selected_gf_exe": ("environment", "gf_executable", True),
     "selected_out_root": ("environment", "output_root", True),
     "selected_target_file": ("selection", "target_file", False),
     "last_run_dir": ("last_run", "run_dir", True),
     "last_summary_path": ("last_run", "summary_path", True),
+}
+
+_LEGACY_PROJECT_ROOT_FIELD: Final[str] = "selected_project_root"
+
+_LEGACY_PATH_NOTICES: Final[dict[str, tuple[str, str]]] = {
+    "selected_scan_dir": (
+        "legacy_scan_dir_mapped_to_language_candidate",
+        "Legacy scan directory was retained as a selected-language-path candidate "
+        "and must be revalidated before use.",
+    ),
+    "selected_rgl_root": (
+        "legacy_rgl_root_mapped_to_hint",
+        "Legacy RGL root was retained as a path-resolution hint and must be "
+        "revalidated against the selected language path.",
+    ),
 }
 
 _LEGACY_BOOLEAN_FIELDS: Final[dict[str, tuple[str, str]]] = {
@@ -52,7 +72,6 @@ _LEGACY_INTEGER_FIELDS: Final[dict[str, tuple[str, str, int]]] = {
 
 _DISCARDED_LEGACY_FIELDS: Final[frozenset[str]] = frozenset(
     {
-        "selected_scan_dir",
         "selected_scan_glob",
         "selected_gf_path",
         "selected_include_regex",
@@ -66,6 +85,11 @@ _DISCARDED_LEGACY_FIELDS: Final[frozenset[str]] = frozenset(
         "project_id",
         "project_name",
         "project_registry",
+        "last_language_id",
+        "selected_language_id",
+        "catalog_path",
+        "last_catalog_entry",
+        "resolved_language_context",
         "audit_results",
         "file_results",
         "scenario_results",
@@ -75,6 +99,7 @@ _DISCARDED_LEGACY_FIELDS: Final[frozenset[str]] = frozenset(
 _RECOGNIZED_LEGACY_FIELDS: Final[frozenset[str]] = frozenset(
     {
         *_LEGACY_PATH_FIELDS,
+        _LEGACY_PROJECT_ROOT_FIELD,
         *_LEGACY_BOOLEAN_FIELDS,
         *_LEGACY_INTEGER_FIELDS,
         "selected_mode",
@@ -137,6 +162,10 @@ class _MigrationBuilder:
             raise StateMigrationError(
                 f"Canonical defaults group {group!r} must be a JSON object"
             )
+        if field not in group_value:
+            raise StateMigrationError(
+                f"Canonical defaults group {group!r} is missing field {field!r}"
+            )
         group_value[field] = value
 
     def warn(self, code: str, field: str, message: str) -> None:
@@ -157,8 +186,9 @@ def migrate_legacy_state(
     mapping is deep-copied before legacy values are applied, so neither input is
     mutated. Invalid legacy convenience values retain their canonical default
     and produce a bounded warning. Unknown fields are ignored. Fields whose
-    authority belongs to project configuration, runtime execution, or run
-    evidence are discarded and never copied into the canonical payload.
+    authority belongs to the resolved language context, validation-profile
+    policy, runtime execution, or run evidence are discarded and never copied into
+    the canonical payload. Migrated paths remain untrusted convenience candidates.
     """
 
     if not isinstance(legacy_state, Mapping):
@@ -183,6 +213,7 @@ def migrate_legacy_state(
     )
 
     _migrate_paths(legacy_state, builder)
+    _migrate_project_root_candidate(legacy_state, builder)
     _migrate_mode(legacy_state, builder)
     _migrate_integers(legacy_state, builder)
     _migrate_booleans(legacy_state, builder)
@@ -283,6 +314,44 @@ def _migrate_paths(
             )
             continue
         builder.set_value(group, field, normalized)
+        notice = _LEGACY_PATH_NOTICES.get(legacy_key)
+        if notice is not None and normalized is not None:
+            code, message = notice
+            builder.warn(code, legacy_key, message)
+
+
+def _migrate_project_root_candidate(
+    legacy_state: Mapping[str, object],
+    builder: _MigrationBuilder,
+) -> None:
+    key = _LEGACY_PROJECT_ROOT_FIELD
+    if key not in legacy_state:
+        return
+
+    builder.consumed.add(key)
+    normalized = _coerce_legacy_path(legacy_state[key], nullable=True)
+    if normalized is _INVALID:
+        builder.warn(
+            "invalid_legacy_project_root",
+            key,
+            "Legacy project root was ignored and the canonical default was retained.",
+        )
+        return
+    if normalized is None:
+        return
+
+    candidate = _legacy_project_profile_candidate(normalized)
+    builder.set_value(
+        "environment",
+        "last_selected_validation_profile",
+        candidate,
+    )
+    builder.warn(
+        "legacy_project_root_mapped_to_profile_candidate",
+        key,
+        "Legacy project root was converted to a validation-profile candidate and "
+        "must be resolved explicitly and checked against the selected language.",
+    )
 
 
 def _migrate_mode(
@@ -418,7 +487,8 @@ def _record_discarded_fields(
         builder.warn(
             "discarded_legacy_field",
             key,
-            "Legacy field is runtime-only or owned by project/run configuration.",
+            "Legacy field is runtime-only or owned by the resolved language "
+            "context, validation-profile policy, or run evidence.",
         )
 
 
@@ -460,6 +530,16 @@ class _InvalidValue:
 
 
 _INVALID: Final[_InvalidValue] = _InvalidValue()
+
+
+def _legacy_project_profile_candidate(project_root: str) -> str:
+    normalized = project_root.rstrip("/")
+    suffix = "/project/project.toml"
+    if normalized.casefold().endswith(suffix.casefold()):
+        return normalized
+    if normalized == "":
+        return suffix.removeprefix("/")
+    return f"{normalized}{suffix}"
 
 
 def _coerce_legacy_path(

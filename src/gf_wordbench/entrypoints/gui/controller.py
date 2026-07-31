@@ -26,6 +26,7 @@ class ControllerPhase(StrEnum):
     CANCELLING = "cancelling"
     FINISHING = "finishing"
     CLOSING = "closing"
+    SWITCHING = "switching"
     CLOSED = "closed"
 @unique
 class RunRequestDisposition(StrEnum):
@@ -41,6 +42,13 @@ class CloseDisposition(StrEnum):
     WAITING_FOR_RUN = "waiting_for_run"
     STAY_OPEN = "stay_open"
     ALREADY_CLOSED = "already_closed"
+@unique
+class LanguageSwitchDisposition(StrEnum):
+    READY = "ready"
+    BUSY = "busy"
+    REJECTED = "rejected"
+    FAILED = "failed"
+    CLOSED = "closed"
 @dataclass(frozen=True, slots=True)
 class ControllerSnapshot:
     phase: ControllerPhase
@@ -64,6 +72,13 @@ class ControllerSnapshot:
             and not self.cancellation_requested
             and self.phase
             in {ControllerPhase.STARTING, ControllerPhase.RUNNING}
+        )
+    @property
+    def can_switch_language(self) -> bool:
+        return (
+            self.phase is ControllerPhase.IDLE
+            and not self.has_active_worker
+            and not self.close_pending
         )
 @dataclass(frozen=True, slots=True)
 class ControllerError:
@@ -125,6 +140,7 @@ class GuiControllerServices(
     ]
     record_completed_run: Callable[[ResultT], None] | None = None
     persist_state: Callable[[], None] | None = None
+    request_language_switch: Callable[[], bool | None] | None = None
     error_from_exception: Callable[[Exception], ControllerError] | None = None
     def __post_init__(self) -> None:
         required = (
@@ -137,6 +153,7 @@ class GuiControllerServices(
         optional = (
             "record_completed_run",
             "persist_state",
+            "request_language_switch",
             "error_from_exception",
         )
         for name in required:
@@ -152,6 +169,10 @@ class GuiController(
     """Toolkit-neutral GUI/application coordinator.
     Worker adapters may use Qt signals, but callbacks supplied here must reach
     this controller through the injected UI dispatcher before touching views.
+
+    Language switching is coordinated here only as a lifecycle transition. The
+    injected callback owns disposal of the current runtime and return to the
+    language-introduction surface; this controller never probes paths itself.
     """
     __slots__ = (
         "_view",
@@ -348,7 +369,10 @@ class GuiController(
         return True
     def request_close(self) -> CloseDisposition:
         with self._lock:
-            if self._phase is ControllerPhase.CLOSED:
+            if self._phase in {
+                ControllerPhase.CLOSED,
+                ControllerPhase.SWITCHING,
+            }:
                 return CloseDisposition.ALREADY_CLOSED
             active = self._worker is not None
         if not active:
@@ -387,6 +411,36 @@ class GuiController(
             else:
                 self._phase = ControllerPhase.RUNNING
         self._publish()
+    def request_language_switch(self) -> LanguageSwitchDisposition:
+        with self._lock:
+            if self._phase is ControllerPhase.CLOSED:
+                return LanguageSwitchDisposition.CLOSED
+            if not self.snapshot.can_switch_language:
+                return LanguageSwitchDisposition.BUSY
+            callback = self._services.request_language_switch
+            if callback is None:
+                return LanguageSwitchDisposition.REJECTED
+            self._phase = ControllerPhase.SWITCHING
+        self._publish()
+        self._persist()
+        try:
+            accepted = callback()
+            if accepted is not None and type(accepted) is not bool:
+                raise TypeError(
+                    "request_language_switch must return bool or None"
+                )
+        except Exception as exc:
+            with self._lock:
+                if self._phase is ControllerPhase.SWITCHING:
+                    self._phase = ControllerPhase.IDLE
+            self._present_exception(exc, "LANGUAGE_SWITCH")
+            self._publish()
+            return LanguageSwitchDisposition.FAILED
+        if accepted is False:
+            self._set_phase(ControllerPhase.IDLE)
+            return LanguageSwitchDisposition.REJECTED
+        self._set_phase(ControllerPhase.CLOSED)
+        return LanguageSwitchDisposition.READY
     def save_state(self) -> bool:
         return self._persist()
     def _worker_started(self, generation: int) -> None:
@@ -583,6 +637,7 @@ __all__ = (
     "GuiController",
     "GuiControllerServices",
     "GuiControllerView",
+    "LanguageSwitchDisposition",
     "RunRequestDisposition",
     "UiAction",
     "UiDispatcher",

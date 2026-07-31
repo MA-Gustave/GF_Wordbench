@@ -1,5 +1,8 @@
+"""Safe, deterministic console presentation for the GF Wordbench CLI."""
+
 from __future__ import annotations
 
+import re
 import sys
 import traceback
 from collections import Counter
@@ -13,13 +16,21 @@ from gf_wordbench.version import __version__
 
 if TYPE_CHECKING:
     from gf_wordbench.kernel.events import LifecycleEvent, ProgressEvent
-    from gf_wordbench.runs.models.results import RunResult
 
 _MAX_CONSOLE_LINE: Final[int] = 4_096
 _MAX_CONSOLE_MESSAGE: Final[int] = 8_192
 _MAX_TRACEBACK: Final[int] = 64_000
+_MAX_RESULT_ITEMS: Final[int] = 100
 _APPLICATION_NAME: Final[str] = "GF Wordbench"
 _STATUS_ORDER: Final[tuple[str, ...]] = ("OK", "FAIL", "ERROR", "SKIPPED")
+_STDERR_STATUSES: Final[frozenset[str]] = frozenset(
+    {"WARN", "WARNING", "FAIL", "FAILED", "ERROR", "FATAL", "INVALID"}
+)
+_ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:\x1B\][^\x07\x1B]*(?:\x07|\x1B\\))"
+    r"|(?:\x1B\[[0-?]*[ -/]*[@-~])"
+    r"|(?:\x1B[@-_])"
+)
 _CHANGE_ORDER: Final[tuple[str, ...]] = (
     "regressed",
     "new",
@@ -49,10 +60,12 @@ class ConsoleStreams:
     stderr: TextIO
 
     def __post_init__(self) -> None:
-        if not hasattr(self.stdout, "write") or not hasattr(self.stdout, "flush"):
-            raise TypeError("stdout must be a writable text stream")
-        if not hasattr(self.stderr, "write") or not hasattr(self.stderr, "flush"):
-            raise TypeError("stderr must be a writable text stream")
+        for field_name in ("stdout", "stderr"):
+            stream = getattr(self, field_name)
+            if not callable(getattr(stream, "write", None)):
+                raise TypeError(f"{field_name} must expose callable write()")
+            if not callable(getattr(stream, "flush", None)):
+                raise TypeError(f"{field_name} must expose callable flush()")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +73,7 @@ class ConsoleMessage:
     text: str
     channel: ConsoleChannel = ConsoleChannel.STDOUT
     end: str = "\n"
+    preserve_newlines: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.text, str):
@@ -70,6 +84,8 @@ class ConsoleMessage:
             raise TypeError("end must be a string")
         if "\x00" in self.end:
             raise ValueError("end must not contain NUL")
+        if type(self.preserve_newlines) is not bool:
+            raise TypeError("preserve_newlines must be bool")
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +125,8 @@ class RunSummaryView:
             "status",
         ):
             _require_text(getattr(self, field_name), field=field_name)
+        if self.status not in _STATUS_ORDER:
+            raise ValueError(f"unsupported run status: {self.status!r}")
         for field_name in (
             "files_ok",
             "files_fail",
@@ -230,6 +248,7 @@ class ConsolePresenter:
             message.text,
             redactor=self._redactor,
             max_length=_MAX_CONSOLE_MESSAGE,
+            preserve_newlines=message.preserve_newlines,
         )
         stream = (
             self._streams.stdout
@@ -241,21 +260,35 @@ class ConsolePresenter:
         if self._flush:
             stream.flush()
 
-    def stdout(self, text: object = "", *, end: str = "\n") -> None:
+    def stdout(
+        self,
+        text: object = "",
+        *,
+        end: str = "\n",
+        preserve_newlines: bool = False,
+    ) -> None:
         self.write(
             ConsoleMessage(
                 text=_coerce_message(text),
                 channel=ConsoleChannel.STDOUT,
                 end=end,
+                preserve_newlines=preserve_newlines,
             )
         )
 
-    def stderr(self, text: object = "", *, end: str = "\n") -> None:
+    def stderr(
+        self,
+        text: object = "",
+        *,
+        end: str = "\n",
+        preserve_newlines: bool = False,
+    ) -> None:
         self.write(
             ConsoleMessage(
                 text=_coerce_message(text),
                 channel=ConsoleChannel.STDERR,
                 end=end,
+                preserve_newlines=preserve_newlines,
             )
         )
 
@@ -285,9 +318,9 @@ class ConsolePresenter:
             cancelled=cancelled,
             debug=debug,
             traceback_text=traceback_text,
-            redactor=self._redactor,
+            redactor=None,
         ):
-            self.stderr(line)
+            self.stderr(line, preserve_newlines="\n" in line)
 
     def run_summary(
         self,
@@ -318,6 +351,38 @@ class ConsolePresenter:
         for warning in warnings:
             self.warning(warning)
         return warnings
+
+    def result(
+        self,
+        result: object,
+        *,
+        request: object | None = None,
+        application_version: str = __version__,
+        existing_artifacts_only: bool = False,
+    ) -> object:
+        """Present one canonical command result."""
+
+        if isinstance(result, RunResultLike):
+            _present_request_warnings_not_in_result(self, request, result)
+            return self.run_summary(
+                result,
+                application_version=application_version,
+                existing_artifacts_only=existing_artifacts_only,
+            )
+
+        for warning in _request_warnings(request):
+            self.warning(warning)
+
+        lines = format_result(
+            result,
+            verbose=self._verbosity is ConsoleVerbosity.VERBOSE,
+        )
+        if self._verbosity is ConsoleVerbosity.QUIET:
+            lines = lines[:1]
+        writer = self.stderr if _result_uses_stderr(result) else self.stdout
+        for line in lines:
+            writer(line, preserve_newlines="\n" in line)
+        return result
 
     def progress(self, event: object) -> None:
         severity = _event_severity(event)
@@ -466,6 +531,73 @@ def present_run_summary(
     )
 
 
+
+def format_result(
+    result: object,
+    *,
+    verbose: bool = False,
+) -> tuple[str, ...]:
+    """Return a bounded text projection for a non-run command result."""
+
+    if type(verbose) is not bool:
+        raise TypeError("verbose must be bool")
+    if result is None or type(result) is int:
+        return ()
+    if isinstance(result, str):
+        return (result,)
+    if isinstance(result, Path):
+        return (str(result),)
+    if type(result) is bool:
+        return (f"Status: {'OK' if result else 'FAIL'}",)
+    if isinstance(result, Mapping):
+        return _mapping_lines(result, verbose=verbose)
+    if isinstance(result, Sequence) and not isinstance(
+        result,
+        (str, bytes, bytearray),
+    ):
+        return _sequence_lines(result, verbose=verbose)
+    return _object_lines(result, verbose=verbose)
+
+
+def present_result(
+    result: object,
+    *,
+    request: object | None = None,
+    quiet: bool | None = None,
+    verbose: bool | None = None,
+    stdout: TextIO | None = None,
+    stderr: TextIO | None = None,
+    redactor: TextRedactor | None = None,
+    application_version: str = __version__,
+    existing_artifacts_only: bool = False,
+) -> object:
+    """Present a command result using request verbosity when available."""
+
+    request_quiet, request_verbose = _request_verbosity(request)
+    resolved_quiet = (
+        request_quiet
+        if quiet is None
+        else _require_bool(quiet, field="quiet")
+    )
+    resolved_verbose = (
+        request_verbose
+        if verbose is None
+        else _require_bool(verbose, field="verbose")
+    )
+    presenter = _presenter(
+        quiet=resolved_quiet,
+        verbose=resolved_verbose,
+        stdout=stdout,
+        stderr=stderr,
+        redactor=redactor,
+    )
+    return presenter.result(
+        result,
+        request=request,
+        application_version=application_version,
+        existing_artifacts_only=existing_artifacts_only,
+    )
+
 def format_error(
     error: object,
     *,
@@ -554,7 +686,7 @@ def present_error(
     redactor: TextRedactor | None = None,
 ) -> None:
     presenter = ConsolePresenter(
-        streams=ConsoleStreams(sys.stdout, stderr or sys.stderr),
+        streams=ConsoleStreams(sys.stdout, _stream_or_default(stderr, sys.stderr)),
         redactor=redactor,
     )
     presenter.error(
@@ -577,7 +709,7 @@ def present_warning(
     redactor: TextRedactor | None = None,
 ) -> None:
     ConsolePresenter(
-        streams=ConsoleStreams(sys.stdout, stderr or sys.stderr),
+        streams=ConsoleStreams(sys.stdout, _stream_or_default(stderr, sys.stderr)),
         redactor=redactor,
     ).warning(message)
 
@@ -614,8 +746,8 @@ def present_progress(
 ) -> None:
     ConsolePresenter(
         streams=ConsoleStreams(
-            stdout or sys.stdout,
-            stderr or sys.stderr,
+            _stream_or_default(stdout, sys.stdout),
+            _stream_or_default(stderr, sys.stderr),
         ),
         verbosity=(
             ConsoleVerbosity.VERBOSE
@@ -636,8 +768,8 @@ def present_lifecycle_event(
 ) -> None:
     ConsolePresenter(
         streams=ConsoleStreams(
-            stdout or sys.stdout,
-            stderr or sys.stderr,
+            _stream_or_default(stdout, sys.stdout),
+            _stream_or_default(stderr, sys.stderr),
         ),
         verbosity=(
             ConsoleVerbosity.VERBOSE
@@ -657,8 +789,8 @@ def build_progress_sink(
 ) -> Callable[[ProgressEvent], None]:
     presenter = ConsolePresenter(
         streams=ConsoleStreams(
-            stdout or sys.stdout,
-            stderr or sys.stderr,
+            _stream_or_default(stdout, sys.stdout),
+            _stream_or_default(stderr, sys.stderr),
         ),
         verbosity=(
             ConsoleVerbosity.VERBOSE
@@ -679,8 +811,8 @@ def build_lifecycle_sink(
 ) -> Callable[[LifecycleEvent], None]:
     presenter = ConsolePresenter(
         streams=ConsoleStreams(
-            stdout or sys.stdout,
-            stderr or sys.stderr,
+            _stream_or_default(stdout, sys.stdout),
+            _stream_or_default(stderr, sys.stderr),
         ),
         verbosity=(
             ConsoleVerbosity.VERBOSE
@@ -762,9 +894,11 @@ def safe_console_text(
         text = " ".join(text.split())
     else:
         text = "\n".join(line.rstrip() for line in text.splitlines())
-    if len(text) > max_length:
-        return f"{text[: max_length - 3]}..."
-    return text
+    if len(text) <= max_length:
+        return text
+    if max_length <= 3:
+        return "." * max_length
+    return f"{text[: max_length - 3]}..."
 
 
 def print_error(error: object, **kwargs: object) -> None:
@@ -802,8 +936,8 @@ def _presenter(
     )
     return ConsolePresenter(
         streams=ConsoleStreams(
-            stdout or sys.stdout,
-            stderr or sys.stderr,
+            _stream_or_default(stdout, sys.stdout),
+            _stream_or_default(stderr, sys.stderr),
         ),
         verbosity=verbosity,
         redactor=redactor,
@@ -821,6 +955,8 @@ def _change_counts(values: Iterable[object]) -> Mapping[str, int]:
         if kind is None:
             raise TypeError("diff entry must expose change_kind")
         canonical = _enum_text(kind, field="diff_entry.change_kind").lower()
+        if canonical not in _CHANGE_ORDER:
+            raise ValueError(f"unknown diff change kind: {canonical!r}")
         counts[canonical] += 1
     return {kind: counts[kind] for kind in _CHANGE_ORDER}
 
@@ -944,6 +1080,208 @@ def _string_sequence(value: object, *, field: str) -> tuple[str, ...]:
     )
 
 
+
+def _request_verbosity(request: object | None) -> tuple[bool, bool]:
+    if request is None:
+        return False, False
+    arguments = getattr(request, "arguments", None)
+    if isinstance(arguments, Mapping):
+        quiet = arguments.get("quiet", False)
+        verbose = arguments.get("verbose", False)
+    else:
+        quiet = getattr(request, "quiet", False)
+        verbose = getattr(request, "verbose", False)
+    resolved_quiet = _optional_bool(quiet, field="request.quiet")
+    resolved_verbose = _optional_bool(verbose, field="request.verbose")
+    if resolved_quiet and resolved_verbose:
+        raise ValueError("quiet and verbose are mutually exclusive")
+    return resolved_quiet, resolved_verbose
+
+
+def _request_warnings(request: object | None) -> tuple[str, ...]:
+    if request is None:
+        return ()
+    return _string_sequence(
+        getattr(request, "compatibility_warnings", ()),
+        field="request.compatibility_warnings",
+    )
+
+
+def _present_request_warnings_not_in_result(
+    presenter: ConsolePresenter,
+    request: object | None,
+    run_result: object,
+) -> None:
+    run_config = getattr(run_result, "run_config", None)
+    existing = set(
+        _string_sequence(
+            getattr(run_config, "compatibility_warnings", ()),
+            field="run_config.compatibility_warnings",
+        )
+    )
+    for warning in _request_warnings(request):
+        if warning not in existing:
+            presenter.warning(warning)
+
+
+def _mapping_lines(
+    result: Mapping[object, object],
+    *,
+    verbose: bool,
+) -> tuple[str, ...]:
+    lines: list[str] = []
+    for key, value in result.items():
+        if not isinstance(key, str) or not key or key.startswith("_"):
+            continue
+        rendered = _scalar_text(value)
+        if rendered is not None:
+            lines.append(f"{_label(key)}: {rendered}")
+        elif isinstance(value, Sequence) and not isinstance(
+            value,
+            (str, bytes, bytearray),
+        ):
+            lines.append(f"{_label(key)}: {len(value)}")
+            if verbose:
+                lines.extend(
+                    f"  - {_detail_text(item)}"
+                    for item in value[:_MAX_RESULT_ITEMS]
+                )
+        elif isinstance(value, Mapping):
+            lines.append(f"{_label(key)}: {len(value)}")
+    if not lines:
+        raise TypeError("result mapping has no printable public values")
+    return tuple(lines)
+
+
+def _sequence_lines(
+    result: Sequence[object],
+    *,
+    verbose: bool,
+) -> tuple[str, ...]:
+    if not result:
+        return ()
+    if not verbose:
+        return (f"Items: {len(result)}",)
+    return tuple(
+        _detail_text(item)
+        for item in result[:_MAX_RESULT_ITEMS]
+    )
+
+
+def _object_lines(
+    result: object,
+    *,
+    verbose: bool,
+) -> tuple[str, ...]:
+    title = _label(type(result).__name__.removesuffix("Result"))
+    status = _first_attribute(result, "overall_status", "status", "outcome")
+    rendered_status = _scalar_text(status)
+    ok = getattr(result, "ok", None)
+    message = getattr(result, "message", None)
+
+    if rendered_status is None and type(ok) is bool:
+        rendered_status = "OK" if ok else "FAIL"
+
+    if rendered_status is not None:
+        lines = [f"{title}: {rendered_status}"]
+        if isinstance(message, str) and message.strip():
+            lines.append(f"Message: {message}")
+    elif isinstance(message, str) and message.strip():
+        lines = [f"{title}: {message}"]
+    else:
+        lines = [title]
+
+    for field_name in (
+        "run_dir",
+        "summary_path",
+        "manifest_path",
+        "project_root",
+        "project_file",
+        "state_path",
+        "destination",
+        "destination_path",
+    ):
+        rendered = _scalar_text(getattr(result, field_name, None))
+        if rendered is not None:
+            lines.append(f"{_label(field_name)}: {rendered}")
+
+    for field_name in ("errors", "warnings", "issues", "diagnostics"):
+        value = getattr(result, field_name, None)
+        if not isinstance(value, Sequence) or isinstance(
+            value,
+            (str, bytes, bytearray),
+        ):
+            continue
+        lines.append(f"{_label(field_name)}: {len(value)}")
+        if verbose:
+            lines.extend(
+                f"  - {_detail_text(item)}"
+                for item in value[:_MAX_RESULT_ITEMS]
+            )
+    return tuple(lines)
+
+
+def _result_uses_stderr(result: object) -> bool:
+    status = _first_attribute(result, "overall_status", "status", "outcome")
+    rendered = _scalar_text(status)
+    if rendered is not None:
+        return rendered.strip().upper() in _STDERR_STATUSES
+    ok = getattr(result, "ok", None)
+    return type(ok) is bool and not ok
+
+
+def _first_attribute(result: object, *names: str) -> object | None:
+    for name in names:
+        value = getattr(result, name, None)
+        if value is not None:
+            return value
+    return None
+
+
+def _scalar_text(value: object) -> str | None:
+    if value is None:
+        return None
+    candidate = getattr(value, "value", value)
+    if isinstance(candidate, Path):
+        return str(candidate)
+    if isinstance(candidate, str):
+        return candidate
+    if type(candidate) in {bool, int, float}:
+        return str(candidate)
+    return None
+
+
+def _detail_text(value: object) -> str:
+    if isinstance(value, (str, Path)):
+        return str(value)
+    for field_name in ("message", "reason", "path", "id", "code"):
+        rendered = _scalar_text(getattr(value, field_name, None))
+        if rendered:
+            return rendered
+    return _coerce_message(value)
+
+
+def _label(value: str) -> str:
+    text = re.sub(r"(?<!^)(?=[A-Z])", " ", value.replace("_", " "))
+    normalized = " ".join(text.split())
+    return normalized[:1].upper() + normalized[1:] if normalized else "Result"
+
+
+def _stream_or_default(stream: TextIO | None, default: TextIO) -> TextIO:
+    return default if stream is None else stream
+
+
+def _require_bool(value: object, *, field: str) -> bool:
+    if type(value) is not bool:
+        raise TypeError(f"{field} must be bool")
+    return value
+
+
+def _optional_bool(value: object, *, field: str) -> bool:
+    if value is None:
+        return False
+    return _require_bool(value, field=field)
+
 def _coerce_verbosity(
     value: ConsoleVerbosity | str,
 ) -> ConsoleVerbosity:
@@ -996,11 +1334,14 @@ def _strip_terminal_controls(
     *,
     preserve_newlines: bool,
 ) -> str:
+    cleaned = _ANSI_ESCAPE_RE.sub("", value)
     result: list[str] = []
-    for character in value:
+    for character in cleaned:
         codepoint = ord(character)
         if character == "\n" and preserve_newlines:
             result.append(character)
+        elif character == "\r" and preserve_newlines:
+            continue
         elif character == "\t":
             result.append(" ")
         elif codepoint < 32 or codepoint == 127:
@@ -1008,6 +1349,7 @@ def _strip_terminal_controls(
         else:
             result.append(character)
     return "".join(result)
+
 
 
 __all__ = (
@@ -1025,11 +1367,13 @@ __all__ = (
     "format_error",
     "format_lifecycle_event",
     "format_progress_event",
+    "format_result",
     "format_run_summary",
     "present_error",
     "present_failure",
     "present_lifecycle_event",
     "present_progress",
+    "present_result",
     "present_run_summary",
     "present_warning",
     "print_error",

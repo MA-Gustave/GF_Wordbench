@@ -1,10 +1,16 @@
-"""Read-only active-project presentation panel for the desktop GUI."""
+"""Read-only active-language presentation panel for the desktop GUI.
+
+The canonical product terminology is language context, not active project.  The
+legacy ``ProjectPanel`` and ``ProjectConfigurationStatus`` import names remain
+exported as compatibility aliases while the surrounding GUI is migrated to
+ADR-0015.
+"""
 
 from __future__ import annotations
 
 from enum import StrEnum, unique
 from pathlib import Path
-from typing import Final
+from typing import Final, Iterable
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -21,42 +27,45 @@ from PySide6.QtWidgets import (
 )
 
 __all__ = (
+    "LanguageContextStatus",
+    "LanguageContextPanel",
     "ProjectConfigurationStatus",
     "ProjectPanel",
 )
 
 _EMPTY_VALUE: Final[str] = "—"
 _MAX_TEXT_LENGTH: Final[int] = 4_096
+_MAX_SEQUENCE_ITEMS: Final[int] = 10_000
 
 
 @unique
-class ProjectConfigurationStatus(StrEnum):
-    """Presentation states for the canonical active-project configuration."""
+class LanguageContextStatus(StrEnum):
+    """Presentation states for one path-resolved language context."""
 
     UNSELECTED = "unselected"
-    LOADING = "loading"
-    VALID = "valid"
+    PROBING = "probing"
+    READY = "ready"
     INVALID = "invalid"
-    UNINITIALIZED = "uninitialized"
+    UNSUPPORTED = "unsupported"
     MISSING = "missing"
 
 
-_STATUS_TITLES: Final[dict[ProjectConfigurationStatus, str]] = {
-    ProjectConfigurationStatus.UNSELECTED: "No active project selected",
-    ProjectConfigurationStatus.LOADING: "Loading project configuration",
-    ProjectConfigurationStatus.VALID: "Configuration valid",
-    ProjectConfigurationStatus.INVALID: "Configuration invalid",
-    ProjectConfigurationStatus.UNINITIALIZED: "Project not initialized",
-    ProjectConfigurationStatus.MISSING: "Previously selected project is missing",
+_STATUS_TITLES: Final[dict[LanguageContextStatus, str]] = {
+    LanguageContextStatus.UNSELECTED: "No language selected",
+    LanguageContextStatus.PROBING: "Resolving language context",
+    LanguageContextStatus.READY: "Language context ready",
+    LanguageContextStatus.INVALID: "Language selection invalid",
+    LanguageContextStatus.UNSUPPORTED: "Source layout unsupported",
+    LanguageContextStatus.MISSING: "Previously selected language is missing",
 }
 
-_STATUS_ICONS: Final[dict[ProjectConfigurationStatus, QStyle.StandardPixmap]] = {
-    ProjectConfigurationStatus.UNSELECTED: QStyle.StandardPixmap.SP_MessageBoxInformation,
-    ProjectConfigurationStatus.LOADING: QStyle.StandardPixmap.SP_MessageBoxInformation,
-    ProjectConfigurationStatus.VALID: QStyle.StandardPixmap.SP_DialogApplyButton,
-    ProjectConfigurationStatus.INVALID: QStyle.StandardPixmap.SP_MessageBoxCritical,
-    ProjectConfigurationStatus.UNINITIALIZED: QStyle.StandardPixmap.SP_MessageBoxWarning,
-    ProjectConfigurationStatus.MISSING: QStyle.StandardPixmap.SP_MessageBoxWarning,
+_STATUS_ICONS: Final[dict[LanguageContextStatus, QStyle.StandardPixmap]] = {
+    LanguageContextStatus.UNSELECTED: QStyle.StandardPixmap.SP_MessageBoxInformation,
+    LanguageContextStatus.PROBING: QStyle.StandardPixmap.SP_MessageBoxInformation,
+    LanguageContextStatus.READY: QStyle.StandardPixmap.SP_DialogApplyButton,
+    LanguageContextStatus.INVALID: QStyle.StandardPixmap.SP_MessageBoxCritical,
+    LanguageContextStatus.UNSUPPORTED: QStyle.StandardPixmap.SP_MessageBoxWarning,
+    LanguageContextStatus.MISSING: QStyle.StandardPixmap.SP_MessageBoxWarning,
 }
 
 
@@ -74,33 +83,35 @@ class _ValueLabel(QLabel):
         self.setToolTip("" if rendered == _EMPTY_VALUE else rendered)
 
 
-class ProjectPanel(QGroupBox):
-    """Display one active project and emit project-related user intent.
+class LanguageContextPanel(QGroupBox):
+    """Display one immutable active-language context and emit user intent.
 
-    The panel performs no project discovery, TOML parsing, filesystem mutation,
-    validation orchestration, or external-process work. A GUI controller supplies
-    resolved presentation values and handles all emitted actions.
+    The panel performs no filesystem discovery, recursive enumeration, source
+    parsing, GF-path construction, preflight, external-process work, profile
+    loading or state persistence.  A GUI controller supplies resolved
+    presentation values and handles every emitted action.
     """
 
-    select_project_requested = Signal()
-    check_project_requested = Signal()
-    open_configuration_requested = Signal(object)
-    configuration_valid_changed = Signal(bool)
+    select_language_requested = Signal()
+    recheck_language_requested = Signal()
+    open_validation_profile_requested = Signal(object)
+    language_ready_changed = Signal(bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__("Project", parent)
+        super().__init__("Language", parent)
 
-        self._status = ProjectConfigurationStatus.UNSELECTED
-        self._configuration_valid = False
+        self._status = LanguageContextStatus.UNSELECTED
+        self._language_ready = False
         self._busy = False
         self._run_active = False
-        self._project_root: Path | None = None
-        self._project_file: Path | None = None
+        self._selected_path: Path | None = None
+        self._language_directory: Path | None = None
+        self._validation_profile: Path | None = None
 
         self._status_icon = QLabel(self)
         self._status_icon.setFixedSize(20, 20)
         self._status_icon.setScaledContents(True)
-        self._status_icon.setAccessibleName("Project configuration status icon")
+        self._status_icon.setAccessibleName("Language context status icon")
 
         self._status_title = QLabel(self)
         self._status_title.setTextFormat(Qt.TextFormat.PlainText)
@@ -118,32 +129,35 @@ class ProjectPanel(QGroupBox):
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
         )
-        self._status_message.setAccessibleName("Project configuration details")
+        self._status_message.setAccessibleName("Language context details")
 
-        self._name = _ValueLabel(self)
-        self._project_id = _ValueLabel(self)
-        self._language_code = _ValueLabel(self)
-        self._project_root_value = _ValueLabel(self)
-        self._project_file_status = _ValueLabel(self)
-        self._source_root = _ValueLabel(self)
-        self._entrypoint_count = _ValueLabel(self)
-        self._checkpoint_count = _ValueLabel(self)
-        self._required_scenario_count = _ValueLabel(self)
+        self._language_key = _ValueLabel(self)
+        self._module_suffix = _ValueLabel(self)
+        self._selected_path_value = _ValueLabel(self)
+        self._language_directory_value = _ValueLabel(self)
+        self._selected_path_kind = _ValueLabel(self)
+        self._rgl_source_root = _ValueLabel(self)
+        self._rgl_root = _ValueLabel(self)
+        self._focused_target = _ValueLabel(self)
+        self._entrypoints = _ValueLabel(self)
+        self._source_count = _ValueLabel(self)
+        self._capabilities = _ValueLabel(self)
+        self._profile_status = _ValueLabel(self)
 
-        self._select_button = QPushButton("Select Project…", self)
-        self._select_button.setAccessibleName("Select active project")
-        self._select_button.clicked.connect(self.select_project_requested.emit)
+        self._select_button = QPushButton("Change Language…", self)
+        self._select_button.setAccessibleName("Choose language directory or GF file")
+        self._select_button.clicked.connect(self.select_language_requested.emit)
 
-        self._check_button = QPushButton("Check Project", self)
-        self._check_button.setAccessibleName("Check active project configuration")
-        self._check_button.clicked.connect(self.check_project_requested.emit)
+        self._recheck_button = QPushButton("Recheck Language", self)
+        self._recheck_button.setAccessibleName("Revalidate selected language path")
+        self._recheck_button.clicked.connect(self.recheck_language_requested.emit)
 
-        self._open_configuration_button = QPushButton("Open project.toml", self)
-        self._open_configuration_button.setAccessibleName(
-            "Open active project configuration"
+        self._open_profile_button = QPushButton("Open Validation Profile", self)
+        self._open_profile_button.setAccessibleName(
+            "Open optional validation profile"
         )
-        self._open_configuration_button.clicked.connect(
-            self._emit_open_configuration_requested
+        self._open_profile_button.clicked.connect(
+            self._emit_open_validation_profile_requested
         )
 
         status_layout = QHBoxLayout()
@@ -162,21 +176,24 @@ class ProjectPanel(QGroupBox):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        form.addRow("Project name", self._name)
-        form.addRow("Project ID", self._project_id)
-        form.addRow("Language code", self._language_code)
-        form.addRow("Project root", self._project_root_value)
-        form.addRow("project.toml status", self._project_file_status)
-        form.addRow("Source directory", self._source_root)
-        form.addRow("Entrypoints", self._entrypoint_count)
-        form.addRow("Checkpoints", self._checkpoint_count)
-        form.addRow("Required scenarios", self._required_scenario_count)
+        form.addRow("Language key", self._language_key)
+        form.addRow("Module suffix", self._module_suffix)
+        form.addRow("Selected path", self._selected_path_value)
+        form.addRow("Selection kind", self._selected_path_kind)
+        form.addRow("Language directory", self._language_directory_value)
+        form.addRow("RGL source root", self._rgl_source_root)
+        form.addRow("RGL root", self._rgl_root)
+        form.addRow("Focused target", self._focused_target)
+        form.addRow("Entrypoint candidates", self._entrypoints)
+        form.addRow("Eligible GF sources", self._source_count)
+        form.addRow("Capabilities", self._capabilities)
+        form.addRow("Validation profile", self._profile_status)
 
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
         actions.addWidget(self._select_button)
-        actions.addWidget(self._check_button)
-        actions.addWidget(self._open_configuration_button)
+        actions.addWidget(self._recheck_button)
+        actions.addWidget(self._open_profile_button)
         actions.addStretch(1)
 
         layout = QVBoxLayout(self)
@@ -186,154 +203,221 @@ class ProjectPanel(QGroupBox):
         layout.addSpacing(4)
         layout.addLayout(actions)
 
-        self.set_status(ProjectConfigurationStatus.UNSELECTED)
+        self.set_status(LanguageContextStatus.UNSELECTED)
 
     @property
-    def status(self) -> ProjectConfigurationStatus:
+    def status(self) -> LanguageContextStatus:
         return self._status
 
     @property
-    def configuration_valid(self) -> bool:
-        return self._configuration_valid
+    def language_ready(self) -> bool:
+        return self._language_ready
 
     @property
-    def project_root(self) -> Path | None:
-        return self._project_root
+    def selected_path(self) -> Path | None:
+        return self._selected_path
 
     @property
-    def project_file(self) -> Path | None:
-        return self._project_file
+    def language_directory(self) -> Path | None:
+        return self._language_directory
 
-    def show_project(
+    @property
+    def validation_profile(self) -> Path | None:
+        return self._validation_profile
+
+    def show_language(
         self,
         *,
-        name: str,
-        project_id: str,
-        language_code: str,
-        project_root: Path,
-        project_file: Path,
-        source_root: Path,
-        entrypoint_count: int,
-        checkpoint_count: int,
-        required_scenario_count: int,
-        configuration_message: str = "The active project configuration is valid.",
+        language_key: str,
+        selected_path: Path,
+        selected_path_kind: str,
+        language_directory: Path,
+        rgl_source_root: Path,
+        rgl_root: Path | None,
+        module_suffix: str | None,
+        focused_target: Path | None,
+        entrypoints: Iterable[Path | str],
+        source_count: int,
+        capabilities: Iterable[str],
+        validation_profile: Path | None = None,
+        resolution_message: str = "The selected language context is ready.",
     ) -> None:
-        """Present a fully resolved and valid active project."""
+        """Present one fully resolved base language context."""
 
-        root = _absolute_path(project_root, field="project_root")
-        config_file = _absolute_path(project_file, field="project_file")
-        source = _absolute_path(source_root, field="source_root")
+        selected = _absolute_path(selected_path, field="selected_path")
+        language_dir = _absolute_path(
+            language_directory,
+            field="language_directory",
+        )
+        path_kind = _selected_path_kind(selected_path_kind)
+        source_root = _absolute_path(rgl_source_root, field="rgl_source_root")
+        repository_root = (
+            None if rgl_root is None else _absolute_path(rgl_root, field="rgl_root")
+        )
+        target = (
+            None
+            if focused_target is None
+            else _absolute_path(focused_target, field="focused_target")
+        )
+        profile = (
+            None
+            if validation_profile is None
+            else _absolute_path(validation_profile, field="validation_profile")
+        )
 
-        if config_file.name != "project.toml":
-            raise ValueError("project_file must name project.toml")
-        if config_file.parent != root:
-            raise ValueError("project_file must equal project_root/project.toml")
-
-        self._project_root = root
-        self._project_file = config_file
-        self._name.set_value(_required_text(name, field="name"))
-        self._project_id.set_value(_required_text(project_id, field="project_id"))
-        self._language_code.set_value(
-            _required_text(language_code, field="language_code")
-        )
-        self._project_root_value.set_value(root)
-        self._project_file_status.set_value("Valid")
-        self._source_root.set_value(source)
-        self._entrypoint_count.set_value(
-            _non_negative_count(entrypoint_count, field="entrypoint_count")
-        )
-        self._checkpoint_count.set_value(
-            _non_negative_count(checkpoint_count, field="checkpoint_count")
-        )
-        self._required_scenario_count.set_value(
-            _non_negative_count(
-                required_scenario_count,
-                field="required_scenario_count",
+        if repository_root is not None:
+            _require_descendant_or_equal(
+                source_root,
+                repository_root,
+                field="rgl_source_root",
+                root_field="rgl_root",
             )
+        _require_descendant_or_equal(
+            language_dir,
+            source_root,
+            field="language_directory",
+            root_field="rgl_source_root",
         )
+        _require_descendant_or_equal(
+            selected,
+            language_dir,
+            field="selected_path",
+            root_field="language_directory",
+        )
+        if path_kind == "file" and selected.suffix.lower() != ".gf":
+            raise ValueError("selected_path file must use the .gf extension")
+        if path_kind == "directory" and selected != language_dir:
+            raise ValueError(
+                "directory selected_path must equal language_directory"
+            )
+        if target is not None:
+            _require_descendant_or_equal(
+                target,
+                language_dir,
+                field="focused_target",
+                root_field="language_directory",
+            )
+            if target.suffix.lower() != ".gf":
+                raise ValueError("focused_target must use the .gf extension")
+
+        rendered_entrypoints = _render_sequence(
+            entrypoints,
+            field="entrypoints",
+            empty_text="None detected",
+        )
+        rendered_capabilities = _render_sequence(
+            capabilities,
+            field="capabilities",
+            empty_text="source-ready",
+        )
+
+        self._selected_path = selected
+        self._language_directory = language_dir
+        self._validation_profile = profile
+        self._language_key.set_value(
+            _required_text(language_key, field="language_key")
+        )
+        self._module_suffix.set_value(
+            None
+            if module_suffix is None
+            else _required_text(module_suffix, field="module_suffix")
+        )
+        self._selected_path_value.set_value(selected)
+        self._selected_path_kind.set_value(path_kind)
+        self._language_directory_value.set_value(language_dir)
+        self._rgl_source_root.set_value(source_root)
+        self._rgl_root.set_value(repository_root)
+        self._focused_target.set_value(target)
+        self._entrypoints.set_value(rendered_entrypoints)
+        self._source_count.set_value(
+            _non_negative_count(source_count, field="source_count")
+        )
+        self._capabilities.set_value(rendered_capabilities)
+        self._profile_status.set_value(profile if profile is not None else "Not loaded")
         self.set_status(
-            ProjectConfigurationStatus.VALID,
-            message=configuration_message,
+            LanguageContextStatus.READY,
+            message=resolution_message,
         )
 
-    def show_invalid_project(
+    def show_invalid_language(
         self,
         *,
-        project_root: Path | None,
+        selected_path: Path | None,
         message: str,
-        project_file: Path | None = None,
     ) -> None:
-        """Present precise active-project configuration errors."""
+        """Present a selected path that could not produce a valid context."""
 
-        self._prepare_unresolved_project(
-            project_root=project_root,
-            project_file=project_file,
-        )
-        self._project_file_status.set_value("Invalid")
-        self.set_status(ProjectConfigurationStatus.INVALID, message=message)
+        self._prepare_unresolved_language(selected_path=selected_path)
+        self.set_status(LanguageContextStatus.INVALID, message=message)
 
-    def show_uninitialized_project(
+    def show_unsupported_language(
         self,
         *,
-        project_root: Path,
-        message: str = "The project template contains unresolved required placeholders.",
-        project_file: Path | None = None,
+        selected_path: Path,
+        message: str,
     ) -> None:
-        """Present a template or project that is not initialized."""
+        """Present a valid path whose source layout requires explicit input."""
 
-        self._prepare_unresolved_project(
-            project_root=project_root,
-            project_file=project_file,
-        )
-        self._project_file_status.set_value("Uninitialized")
-        self.set_status(ProjectConfigurationStatus.UNINITIALIZED, message=message)
+        self._prepare_unresolved_language(selected_path=selected_path)
+        self.set_status(LanguageContextStatus.UNSUPPORTED, message=message)
 
-    def show_missing_project(
+    def show_missing_language(
         self,
         *,
-        project_root: Path,
-        message: str = "The previously selected project could not be found.",
+        selected_path: Path,
+        message: str = "The previously selected language path could not be found.",
     ) -> None:
-        """Present a missing previous selection without selecting another root."""
+        """Present a stale remembered path without searching for a replacement."""
 
-        root = _absolute_path(project_root, field="project_root")
-        self._clear_project_values()
-        self._project_root = root
-        self._project_file = root / "project.toml"
-        self._project_root_value.set_value(root)
-        self._project_file_status.set_value("Missing")
-        self.set_status(ProjectConfigurationStatus.MISSING, message=message)
+        selected = _absolute_path(selected_path, field="selected_path")
+        self._clear_language_values()
+        self._selected_path = selected
+        self._selected_path_value.set_value(selected)
+        self.set_status(LanguageContextStatus.MISSING, message=message)
 
-    def show_loading(self, project_root: Path | None = None) -> None:
-        """Present bounded project-loading activity."""
+    def show_probing(self, selected_path: Path | None = None) -> None:
+        """Present bounded language-probe activity."""
 
-        if project_root is not None:
-            root = _absolute_path(project_root, field="project_root")
-            self._project_root = root
-            self._project_file = root / "project.toml"
-            self._project_root_value.set_value(root)
-            self._project_file_status.set_value("Loading")
-        self.set_status(ProjectConfigurationStatus.LOADING)
+        if selected_path is not None:
+            selected = _absolute_path(selected_path, field="selected_path")
+            self._selected_path = selected
+            self._selected_path_value.set_value(selected)
+        self.set_status(LanguageContextStatus.PROBING)
 
-    def clear_project(
+    def clear_language(
         self,
-        message: str = "Select a workspace containing project/project.toml.",
+        message: str = "Choose a GF language directory or a .gf file.",
     ) -> None:
-        """Clear project-derived presentation values."""
+        """Clear all resolved-language presentation values."""
 
-        self._project_root = None
-        self._project_file = None
-        self._clear_project_values()
-        self.set_status(ProjectConfigurationStatus.UNSELECTED, message=message)
+        self._selected_path = None
+        self._language_directory = None
+        self._validation_profile = None
+        self._clear_language_values()
+        self.set_status(LanguageContextStatus.UNSELECTED, message=message)
+
+    def set_validation_profile(self, profile: Path | None) -> None:
+        """Update only the optional validation-profile presentation."""
+
+        resolved = (
+            None
+            if profile is None
+            else _absolute_path(profile, field="validation_profile")
+        )
+        self._validation_profile = resolved
+        self._profile_status.set_value(
+            resolved if resolved is not None else "Not loaded"
+        )
+        self._refresh_actions()
 
     def set_status(
         self,
-        status: ProjectConfigurationStatus,
+        status: LanguageContextStatus,
         *,
         message: str | None = None,
     ) -> None:
-        if not isinstance(status, ProjectConfigurationStatus):
-            raise TypeError("status must be ProjectConfigurationStatus")
+        if not isinstance(status, LanguageContextStatus):
+            raise TypeError("status must be LanguageContextStatus")
 
         rendered_message = (
             _STATUS_TITLES[status]
@@ -351,10 +435,10 @@ class ProjectPanel(QGroupBox):
         )
         self._status_icon.setToolTip(_STATUS_TITLES[status])
 
-        valid = status is ProjectConfigurationStatus.VALID
-        if valid != self._configuration_valid:
-            self._configuration_valid = valid
-            self.configuration_valid_changed.emit(valid)
+        ready = status is LanguageContextStatus.READY
+        if ready != self._language_ready:
+            self._language_ready = ready
+            self.language_ready_changed.emit(ready)
 
         self._refresh_actions()
 
@@ -365,105 +449,97 @@ class ProjectPanel(QGroupBox):
         self._refresh_actions()
 
     def set_run_active(self, active: bool) -> None:
-        """Prevent project switching while a validation run is active."""
+        """Prevent language replacement while a validation run is active."""
 
         if type(active) is not bool:
             raise TypeError("active must be bool")
         self._run_active = active
         self._refresh_actions()
 
-    def _prepare_unresolved_project(
+    def _prepare_unresolved_language(
         self,
         *,
-        project_root: Path | None,
-        project_file: Path | None,
+        selected_path: Path | None,
     ) -> None:
-        self._clear_project_values()
-
-        root = (
+        self._clear_language_values()
+        selected = (
             None
-            if project_root is None
-            else _absolute_path(project_root, field="project_root")
+            if selected_path is None
+            else _absolute_path(selected_path, field="selected_path")
         )
-        config_file = (
-            None
-            if project_file is None
-            else _absolute_path(project_file, field="project_file")
-        )
+        self._selected_path = selected
+        self._language_directory = None
+        self._validation_profile = None
+        self._selected_path_value.set_value(selected)
 
-        if config_file is not None and config_file.name != "project.toml":
-            raise ValueError("project_file must name project.toml")
-        if root is not None and config_file is not None and config_file.parent != root:
-            raise ValueError("project_file must equal project_root/project.toml")
-
-        self._project_root = root
-        self._project_file = config_file or (
-            None if root is None else root / "project.toml"
-        )
-        self._project_root_value.set_value(root)
-
-    def _clear_project_values(self) -> None:
+    def _clear_language_values(self) -> None:
         for label in (
-            self._name,
-            self._project_id,
-            self._language_code,
-            self._project_root_value,
-            self._project_file_status,
-            self._source_root,
-            self._entrypoint_count,
-            self._checkpoint_count,
-            self._required_scenario_count,
+            self._language_key,
+            self._module_suffix,
+            self._selected_path_value,
+            self._selected_path_kind,
+            self._language_directory_value,
+            self._rgl_source_root,
+            self._rgl_root,
+            self._focused_target,
+            self._entrypoints,
+            self._source_count,
+            self._capabilities,
+            self._profile_status,
         ):
             label.set_value(None)
 
     def _refresh_actions(self) -> None:
-        can_change_project = not self._busy and not self._run_active
-        has_project_root = self._project_root is not None
-        has_project_file = self._project_file is not None
+        can_change_language = not self._busy and not self._run_active
+        has_selected_path = self._selected_path is not None
+        has_profile = self._validation_profile is not None
 
-        self._select_button.setEnabled(can_change_project)
-        self._check_button.setEnabled(can_change_project and has_project_root)
-        self._open_configuration_button.setEnabled(
-            can_change_project and has_project_file
-        )
+        self._select_button.setEnabled(can_change_language)
+        self._recheck_button.setEnabled(can_change_language and has_selected_path)
+        self._open_profile_button.setEnabled(can_change_language and has_profile)
 
         if self._run_active:
-            reason = "Project switching is disabled while a run is active."
+            reason = "Language switching is disabled while a run is active."
             self._select_button.setToolTip(reason)
-            self._check_button.setToolTip(reason)
+            self._recheck_button.setToolTip(reason)
         elif self._busy:
-            reason = "Project controls are temporarily unavailable."
+            reason = "Language controls are temporarily unavailable."
             self._select_button.setToolTip(reason)
-            self._check_button.setToolTip(reason)
+            self._recheck_button.setToolTip(reason)
         else:
             self._select_button.setToolTip(
-                "Select the workspace containing the canonical active project."
+                "Choose a GF language directory or a focused .gf file."
             )
-            self._check_button.setToolTip(
-                "Run the shared read-only active-project checker."
-                if has_project_root
-                else "Select a project before checking it."
+            self._recheck_button.setToolTip(
+                "Revalidate the selected path through the shared language probe."
+                if has_selected_path
+                else "Choose a language path before rechecking it."
             )
 
-        self._open_configuration_button.setToolTip(
-            "Open project.toml through the configured project workflow."
-            if has_project_file and can_change_project
-            else "No active project configuration is available."
+        self._open_profile_button.setToolTip(
+            "Open the explicitly loaded validation profile."
+            if has_profile and can_change_language
+            else "No optional validation profile is loaded."
         )
 
-    def _emit_open_configuration_requested(self) -> None:
-        if self._project_file is not None and not self._busy and not self._run_active:
-            self.open_configuration_requested.emit(self._project_file)
+    def _emit_open_validation_profile_requested(self) -> None:
+        if (
+            self._validation_profile is not None
+            and not self._busy
+            and not self._run_active
+        ):
+            self.open_validation_profile_requested.emit(self._validation_profile)
+
+
+# Compatibility aliases.  New code should use the language-context names.
+ProjectConfigurationStatus = LanguageContextStatus
+ProjectPanel = LanguageContextPanel
 
 
 def _display_text(value: object | None) -> str:
     if value is None:
         return _EMPTY_VALUE
-    if isinstance(value, Path):
-        rendered = str(value)
-    else:
-        rendered = str(value)
-    rendered = rendered.strip()
+    rendered = str(value).strip()
     return rendered if rendered else _EMPTY_VALUE
 
 
@@ -498,9 +574,61 @@ def _absolute_path(value: object, *, field: str) -> Path:
     return value
 
 
+
+def _selected_path_kind(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError("selected_path_kind must be a string")
+    normalized = value.strip().lower()
+    if normalized not in {"file", "directory"}:
+        raise ValueError("selected_path_kind must be 'file' or 'directory'")
+    return normalized
+
+def _require_descendant_or_equal(
+    value: Path,
+    root: Path,
+    *,
+    field: str,
+    root_field: str,
+) -> None:
+    if value != root and root not in value.parents:
+        raise ValueError(f"{field} must remain inside {root_field}")
+
+
 def _non_negative_count(value: object, *, field: str) -> int:
     if type(value) is not int:
         raise TypeError(f"{field} must be an integer")
     if value < 0:
         raise ValueError(f"{field} must be non-negative")
     return value
+
+
+def _render_sequence(
+    values: Iterable[Path | str],
+    *,
+    field: str,
+    empty_text: str,
+) -> str:
+    try:
+        items = list(values)
+    except TypeError as exc:
+        raise TypeError(f"{field} must be iterable") from exc
+    if len(items) > _MAX_SEQUENCE_ITEMS:
+        raise ValueError(f"{field} contains too many items")
+
+    rendered: list[str] = []
+    seen: set[str] = set()
+    for index, item in enumerate(items):
+        if isinstance(item, Path):
+            value = item.name if item.name else str(item)
+        elif isinstance(item, str):
+            value = _required_text(item, field=f"{field}[{index}]")
+        else:
+            raise TypeError(f"{field}[{index}] must be pathlib.Path or str")
+        value = value.strip()
+        if not value:
+            raise ValueError(f"{field}[{index}] must not be empty")
+        if value not in seen:
+            seen.add(value)
+            rendered.append(value)
+
+    return ", ".join(rendered) if rendered else empty_text

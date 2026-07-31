@@ -3,11 +3,11 @@
 **Document ID:** `GF-WB-REF-EXIT-CODES`  
 **Status:** Normative CLI and automation reference  
 **Applies to:** GF Wordbench CLI commands, automation wrappers, Windows launchers, CI jobs, migration commands, contract checks and release checks  
-**Owner:** CLI entrypoint and shared application result model  
-**Reference version:** `2.0`  
-**Last reviewed:** `2026-07-24`  
+**Owner:** CLI entrypoint and shared exit-code registry  
+**Reference version:** `2.1`  
+**Last reviewed:** `2026-07-29`  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
-**Related references:** `docs/reference/STATUS_VALUES.md`, `docs/reference/DIAGNOSTIC_KINDS.md`, `docs/architecture/ERROR_HANDLING_MODEL.md`
+**Related references:** `docs/usage/CLI_REFERENCE.md`, `docs/reference/STATUS_VALUES.md`, `docs/reference/DIAGNOSTIC_KINDS.md`, `docs/architecture/ERROR_HANDLING_MODEL.md`
 
 ---
 
@@ -89,6 +89,33 @@ EXIT_CANCELLED = 4
 ```
 
 Numeric values `0` through `3` remain compatible with the predecessor GF Audit command contract.
+
+
+### 4.1 Implementation ownership
+
+The canonical implementation owner is:
+
+```text
+src/gf_wordbench/entrypoints/cli/exit_codes.py
+```
+
+That module owns:
+
+- `EXIT_OK`;
+- `EXIT_VALIDATION_FAILED`;
+- `EXIT_USAGE_ERROR`;
+- `EXIT_RUNTIME_ERROR`;
+- `EXIT_CANCELLED`;
+- `ExitCode`;
+- complete-result mapping;
+- exception-to-exit-code mapping.
+
+CLI adapters, automation entrypoints, project commands, launchers and diagnostic tools consume this registry. They must not define an independent copy of the allocated values.
+
+New code uses `EXIT_USAGE_ERROR`. The historical name `EXIT_USAGE_OR_CONFIG` is not canonical. It may exist only as an explicitly deprecated compatibility alias in isolated compatibility code.
+
+`CancellationRequested` maps to `EXIT_CANCELLED` when cancellation is contained and required evidence is preserved. A failure while containing cancellation maps to `EXIT_RUNTIME_ERROR`.
+
 
 ---
 
@@ -492,18 +519,30 @@ CI treats `4` as unsuccessful, while retaining the distinction for operator repo
 
 The CLI selects one code for the complete command.
 
-Conceptual mapping:
+Canonical complete-result mapping:
 
 ```python
-def determine_exit_code(command_result: CommandResult) -> int:
-    if command_result.overall_status == "ERROR":
+def determine_exit_code(
+    command_result: HasOverallStatus,
+    *,
+    cancelled: bool = False,
+    runtime_error: bool = False,
+    cancellation_error: bool = False,
+) -> int:
+    if (
+        runtime_error
+        or cancellation_error
+        or command_result.overall_status == "ERROR"
+    ):
         return EXIT_RUNTIME_ERROR
-    if command_result.cancelled:
+    if cancelled:
         return EXIT_CANCELLED
     if command_result.overall_status == "FAIL":
         return EXIT_VALIDATION_FAILED
     return EXIT_OK
 ```
+
+The shared implementation may coerce the public status enum, but it preserves this precedence and these numeric results.
 
 Usage and configuration errors are handled before a valid `CommandResult` exists.
 
@@ -991,7 +1030,11 @@ It must not rewrite an unknown observed value to `3` after the process has ended
 
 ## 21. Public constants
 
-One shared source owns the constants.
+One shared source owns the constants and mappings:
+
+```text
+src/gf_wordbench/entrypoints/cli/exit_codes.py
+```
 
 Canonical definitions:
 
@@ -1029,9 +1072,12 @@ Legacy source aliases may be accepted by isolated compatibility code:
 ```python
 EXIT_AUDIT_FAILURES = EXIT_VALIDATION_FAILED
 EXIT_INVALID_ARGS = EXIT_USAGE_ERROR
+EXIT_USAGE_OR_CONFIG = EXIT_USAGE_ERROR  # deprecated compatibility only
 ```
 
 Canonical documentation, public APIs and new code use the Wordbench names.
+
+`EXIT_USAGE_OR_CONFIG` must not be imported by new CLI, automation, project-command or diagnostic code. A compatibility alias does not create a sixth outcome and does not change the meaning of code `2`.
 
 Aliases do not define different behavior.
 
@@ -1129,6 +1175,22 @@ Verify:
 
 Verify launchers propagate `0`, `1`, `2`, `3` and `4` without collapsing or masking them.
 
+
+### Shared-registry integration
+
+Verify:
+
+- `project_commands.py` imports `EXIT_USAGE_ERROR` and `EXIT_CANCELLED` from the shared registry;
+- a completed noncompliant `project check` returns `EXIT_VALIDATION_FAILED`;
+- malformed project-check input or rejected pre-execution configuration returns `EXIT_USAGE_ERROR`;
+- controlled project-check cancellation returns `EXIT_CANCELLED`;
+- `automation.py` imports the shared constants instead of redefining them;
+- automation result validation accepts every canonical value from `0` through `4`;
+- controlled automation cancellation returns `EXIT_CANCELLED`;
+- cancellation-handling failure returns `EXIT_RUNTIME_ERROR`;
+- non-compatibility modules do not import `EXIT_USAGE_OR_CONFIG`.
+
+
 ---
 
 ## 24. Drift indicators
@@ -1146,7 +1208,10 @@ Exit-code drift exists when:
 - help returns non-zero;
 - strict check violations return `0`;
 - an expected negative scenario returns the child code;
-- constants are duplicated with different values;
+- constants or mapping functions are redefined outside the shared registry;
+- new code imports or exports `EXIT_USAGE_OR_CONFIG` as canonical;
+- controlled cancellation is grouped with ordinary runtime exceptions;
+- a completed noncompliant check returns usage error instead of validation failure;
 - a numeric value changes without contract review;
 - GUI behavior is treated as the automation contract;
 - external termination is labeled as controlled cancellation;
@@ -1161,11 +1226,15 @@ Any drift indicator requires coordinated correction.
 
 ```text
 [ ] canonical values are 0, 1, 2, 3 and 4
+[ ] `src/gf_wordbench/entrypoints/cli/exit_codes.py` is the sole implementation owner
+[ ] new code uses `EXIT_USAGE_ERROR`, not `EXIT_USAGE_OR_CONFIG`
 [ ] success maps to 0
 [ ] completed required failure maps to 1
 [ ] invalid invocation or pre-execution configuration maps to 2
 [ ] runtime or framework error maps to 3
 [ ] controlled cancellation maps to 4
+[ ] automation accepts and preserves code 4
+[ ] completed noncompliant checks map to 1 rather than 2
 [ ] child codes are recorded but not forwarded
 [ ] help and version return 0
 [ ] parser errors return 2
@@ -1207,6 +1276,9 @@ Any drift indicator requires coordinated correction.
 19. Numeric values `0` through `3` remain compatible with predecessor automation.
 20. Numeric changes require contract review.
 21. Exit-code semantics do not depend on `gf-portfolio`.
+22. The shared exit-code registry is the sole implementation owner.
+23. `EXIT_USAGE_OR_CONFIG` is a deprecated compatibility alias, not a canonical public name.
+24. Project and automation adapters preserve controlled cancellation as code `4`.
 
 ---
 

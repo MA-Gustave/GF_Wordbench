@@ -1,13 +1,24 @@
-"""GF Wordbench composition root and run-configuration bootstrap.
+"""GF Wordbench composition root and bootstrap boundaries.
 
-This module composes framework defaults, one active project, disposable
-application state, machine-local environment values, explicit invocation
-values, preflight checks, execution planning, and collision-safe run paths.
-Importing it performs no I/O and starts no validation work.
+This module owns two deliberately separate composition paths:
+
+* desktop startup delegates path-resolved language selection to the GUI startup
+  application service defined by ADR-0015;
+* language, profile, and scenario checks accept explicit path-resolved language
+  input and an optional or required validation profile according to their CLI
+  contract;
+* run bootstrap preserves the existing explicit ``project.toml`` profile path
+  during the compatibility period while consuming a resolved language context
+  whenever one is supplied.
+
+The composition root wires public services only.  It does not enumerate GF
+files, infer language identity, construct GF command lines, show dialogs, or
+execute validation while being imported.
 """
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import os
 import shutil
@@ -16,7 +27,14 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, TypeAlias, cast
+from typing import (
+    TYPE_CHECKING,
+    Final,
+    Protocol,
+    TypeAlias,
+    cast,
+    runtime_checkable,
+)
 
 from gf_wordbench.config.defaults import (
     DEFAULT_AGGREGATE_LOGS,
@@ -58,12 +76,13 @@ from gf_wordbench.config.resolver import resolve_configuration
 from gf_wordbench.kernel.errors import (
     ConfigurationError,
     ContractViolationError,
+    GFWordbenchError,
     ProjectConfigurationError,
 )
 from gf_wordbench.kernel.ids import RunId, validate_run_id
 from gf_wordbench.kernel.paths import normalize_environment_path
 from gf_wordbench.kernel.serialization import ProducerInfo
-from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
+from gf_wordbench.kernel.statuses import OverallStatus, TargetKind, ValidationMode
 from gf_wordbench.projects.models import ProjectConfig
 from gf_wordbench.projects.paths import PROJECT_CONFIG_FILENAME
 from gf_wordbench.projects.policies import enforce_project_invariants
@@ -86,10 +105,42 @@ from gf_wordbench.state.repository import StateRepository
 from gf_wordbench.state.schema import default_app_state
 from gf_wordbench.version import __version__
 
+if TYPE_CHECKING:
+    from gf_wordbench.entrypoints.cli.maintenance_commands import (
+        GoldUpdateCliApplication,
+        GoldUpdateCommandRequest,
+    )
+
 PathInput: TypeAlias = str | os.PathLike[str] | Path
 ProjectDocument: TypeAlias = Mapping[str, object]
 SourceValues: TypeAlias = Mapping[ConfigurationSource, Mapping[str, object]]
 Clock: TypeAlias = Callable[[], datetime]
+AuditWorkflow: TypeAlias = Callable[..., object]
+GoldUpdateWorkflow: TypeAlias = Callable[["GoldUpdateCommandRequest"], object]
+_LanguageProbeWorkflow: TypeAlias = Callable[[object], object]
+_ProjectCheckWorkflow: TypeAlias = Callable[[object], object]
+_ProjectProbeWorkflow: TypeAlias = Callable[[object, ProjectConfig], None]
+_ScenarioCheckWorkflow: TypeAlias = Callable[[object], object]
+
+
+@runtime_checkable
+class GuiRuntime(Protocol):
+    """Bootstrap-owned desktop runtime returned to the GUI entrypoint.
+
+    The entrypoint depends only on this structural contract.  The concrete
+    startup window, language probe, state repository and main runtime remain
+    owned by their functional modules.
+    """
+
+    @property
+    def window(self) -> object:
+        """Return the top-level startup or main window."""
+
+    def shutdown(self) -> None:
+        """Release runtime resources without starting new work."""
+
+
+GuiRuntimeFactory: TypeAlias = Callable[[object], GuiRuntime]
 
 _APPLICATION_NAME: Final[str] = "gf-wordbench"
 _LEGACY_MODE_ALIASES: Final[Mapping[str, ValidationMode]] = MappingProxyType(
@@ -108,6 +159,10 @@ _INVOCATION_SOURCES: Final[frozenset[ConfigurationSource]] = frozenset(
 _MAX_SCENARIO_FILTERS: Final[int] = 4096
 _MAX_BOOTSTRAP_WARNINGS: Final[int] = 256
 _MAX_COLLISION_ATTEMPTS: Final[int] = 10_000
+_AUDIT_PROVIDER_CANDIDATES: Final[tuple[tuple[str, str], ...]] = (
+    ("gf_wordbench.runs.application", "run_validation"),
+    ("gf_wordbench.audit_core", "run_validation"),
+)
 
 
 def _utc_now() -> datetime:
@@ -120,6 +175,8 @@ class InvocationRequest:
 
     source: ConfigurationSource
     workspace_root: PathInput | None = None
+    language_path: PathInput | None = None
+    validation_profile: PathInput | None = None
     project_root: PathInput | None = None
     project_file: PathInput | None = None
     gf_executable: PathInput | None = None
@@ -155,6 +212,8 @@ class InvocationRequest:
 
         for name in (
             "workspace_root",
+            "language_path",
+            "validation_profile",
             "project_root",
             "project_file",
             "gf_executable",
@@ -785,6 +844,957 @@ def _paths_overlap(left: Path, right: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+
+@dataclass(frozen=True, slots=True)
+class _ComposedAuditApplication:
+    """Application adapter composed for canonical validation execution."""
+
+    workflow: AuditWorkflow
+
+    def __post_init__(self) -> None:
+        if not callable(self.workflow):
+            raise TypeError("workflow must be callable")
+
+    def run_validation(
+        self,
+        request: object,
+        *,
+        cancellation_check: Callable[[], None] | None = None,
+        event_sink: Callable[[object], None] | None = None,
+    ) -> object:
+        if cancellation_check is not None and not callable(
+            cancellation_check
+        ):
+            raise TypeError(
+                "cancellation_check must be callable or None"
+            )
+        if event_sink is not None and not callable(event_sink):
+            raise TypeError("event_sink must be callable or None")
+
+        return self.workflow(
+            request,
+            cancellation_check=cancellation_check,
+            event_sink=event_sink,
+        )
+
+
+def build_audit_application(
+    *,
+    workflow: AuditWorkflow | None = None,
+) -> object:
+    """Compose the shared CLI and GUI validation application boundary.
+
+    ``workflow`` is the explicit test and embedding seam.  The default path
+    resolves the canonical run-application service lazily, so importing this
+    composition root never imports execution stages or starts validation.
+    """
+
+    active_workflow = workflow or _default_audit_workflow
+    if not callable(active_workflow):
+        raise TypeError("workflow must be callable or None")
+    return _ComposedAuditApplication(active_workflow)
+
+
+def _default_audit_workflow(
+    request: object,
+    *,
+    cancellation_check: Callable[[], None] | None = None,
+    event_sink: Callable[[object], None] | None = None,
+) -> object:
+    """Delegate one validation request to the canonical application service."""
+
+    workflow = _load_audit_workflow()
+    return workflow(
+        request,
+        cancellation_check=cancellation_check,
+        event_sink=event_sink,
+    )
+
+
+def _load_audit_workflow() -> AuditWorkflow:
+    """Load the reviewed validation application without eager imports."""
+
+    unavailable: list[str] = []
+
+    for module_name, symbol_name in _AUDIT_PROVIDER_CANDIDATES:
+        try:
+            module = importlib.import_module(module_name)
+        except ModuleNotFoundError as exc:
+            if exc.name == module_name or (
+                exc.name is not None
+                and module_name.startswith(f"{exc.name}.")
+            ):
+                unavailable.append(module_name)
+                continue
+            raise ConfigurationError(
+                "The audit application service could not be imported.",
+                code="GF-WB-CONFIG-912",
+                detail=(
+                    f"{module_name}: {type(exc).__name__}: "
+                    f"{_bounded_message(exc)}"
+                ),
+                stage="bootstrap",
+                operation="load-audit-application",
+                subject=module_name,
+            ) from exc
+        except ImportError as exc:
+            raise ConfigurationError(
+                "The audit application service could not be imported.",
+                code="GF-WB-CONFIG-912",
+                detail=(
+                    f"{module_name}: {type(exc).__name__}: "
+                    f"{_bounded_message(exc)}"
+                ),
+                stage="bootstrap",
+                operation="load-audit-application",
+                subject=module_name,
+            ) from exc
+
+        workflow = getattr(module, symbol_name, None)
+        if not callable(workflow):
+            raise ContractViolationError(
+                "Audit application provider must expose callable "
+                f"{symbol_name}().",
+                code="GF-WB-CONTRACT-006",
+                stage="bootstrap",
+                operation="load-audit-application",
+                subject=f"{module_name}.{symbol_name}",
+            )
+        return cast(AuditWorkflow, workflow)
+
+    expected = ", ".join(
+        f"{module_name}.{symbol_name}"
+        for module_name, symbol_name in _AUDIT_PROVIDER_CANDIDATES
+    )
+    detail = (
+        "No canonical audit application provider is installed. "
+        f"Expected one of: {expected}."
+    )
+    if unavailable:
+        detail += " Missing modules: " + ", ".join(unavailable) + "."
+
+    raise ConfigurationError(
+        "The audit application service is not configured.",
+        code="GF-WB-CONFIG-913",
+        detail=detail,
+        stage="bootstrap",
+        operation="load-audit-application",
+        subject="validate",
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _ComposedLanguageProbeApplication:
+    """Application adapter composed for path-resolved language probing."""
+
+    workflow: _LanguageProbeWorkflow
+
+    def __post_init__(self) -> None:
+        if not callable(self.workflow):
+            raise TypeError("workflow must be callable")
+
+    def probe_language(self, request: object) -> object:
+        return self.workflow(request)
+
+
+@dataclass(frozen=True, slots=True)
+class _ComposedProjectCheckApplication:
+    """Application adapter composed for the read-only project checker."""
+
+    workflow: _ProjectCheckWorkflow
+
+    def __post_init__(self) -> None:
+        if not callable(self.workflow):
+            raise TypeError("workflow must be callable")
+
+    def check_project(self, request: object) -> object:
+        return self.workflow(request)
+
+
+@dataclass(frozen=True, slots=True)
+class _ComposedScenarioCheckApplication:
+    """Application adapter composed for the read-only scenario checker."""
+
+    workflow: _ScenarioCheckWorkflow
+
+    def __post_init__(self) -> None:
+        if not callable(self.workflow):
+            raise TypeError("workflow must be callable")
+
+    def check_scenarios(self, request: object) -> object:
+        return self.workflow(request)
+
+    def check_scenario_contracts(self, request: object) -> object:
+        """Expose the alternate protocol spelling used by older adapters."""
+
+        return self.workflow(request)
+
+
+def build_gui_runtime(
+    application: object,
+    *,
+    runtime_factory: GuiRuntimeFactory | None = None,
+) -> GuiRuntime:
+    """Compose the desktop startup runtime used by ``entrypoints.gui.main``.
+
+    The default factory is imported lazily so importing :mod:`bootstrap` never
+    imports Qt.  ``entrypoints.gui.startup`` owns the introduction window and
+    path-resolved language-selection workflow; this composition root only
+    validates and returns its runtime.
+
+    ``runtime_factory`` is an explicit test and embedding seam.  It must return
+    an object with a ``window`` exposing ``show()`` and a callable
+    ``shutdown()`` method.
+    """
+
+    if application is None:
+        raise TypeError("application must not be None")
+    if runtime_factory is not None and not callable(runtime_factory):
+        raise TypeError("runtime_factory must be callable or None")
+
+    factory = runtime_factory or _default_gui_runtime_factory
+    try:
+        runtime = factory(application)
+    except (ConfigurationError, ContractViolationError):
+        raise
+    except Exception as exc:
+        raise ConfigurationError(
+            "GF Wordbench GUI runtime could not be composed.",
+            code="GF-WB-CONFIG-910",
+            detail=f"{type(exc).__name__}: {_bounded_message(exc)}",
+            stage="bootstrap",
+            operation="build-gui-runtime",
+        ) from exc
+
+    return _require_gui_runtime(runtime)
+
+
+def _default_gui_runtime_factory(application: object) -> GuiRuntime:
+    """Load the path-resolved GUI startup factory without eager Qt imports."""
+
+    try:
+        from gf_wordbench.entrypoints.gui.startup import build_startup_runtime
+    except ImportError as exc:
+        raise ConfigurationError(
+            "The path-resolved GUI startup module is not installed.",
+            code="GF-WB-CONFIG-911",
+            detail=(
+                "Expected gf_wordbench.entrypoints.gui.startup.build_startup_runtime. "
+                f"Import failed: {_bounded_message(exc)}. "
+                "Install or implement the ADR-0015 startup module before "
+                "launching the desktop application."
+            ),
+            stage="bootstrap",
+            operation="load-gui-startup-factory",
+            subject="gf_wordbench.entrypoints.gui.startup",
+        ) from exc
+
+    if not callable(build_startup_runtime):
+        raise ContractViolationError(
+            "GUI startup factory must be callable.",
+            code="GF-WB-CONTRACT-002",
+            stage="bootstrap",
+            operation="load-gui-startup-factory",
+            subject="build_startup_runtime",
+        )
+    return cast(GuiRuntime, build_startup_runtime(application))
+
+
+def _require_gui_runtime(runtime: object) -> GuiRuntime:
+    """Validate the small structural runtime contract at the composition edge."""
+
+    if not isinstance(runtime, GuiRuntime):
+        raise ContractViolationError(
+            "GUI startup factory returned an invalid runtime.",
+            code="GF-WB-CONTRACT-003",
+            detail=(
+                "The runtime must expose a window property and a callable "
+                "shutdown() method."
+            ),
+            stage="bootstrap",
+            operation="validate-gui-runtime",
+        )
+
+    window = runtime.window
+    show = getattr(window, "show", None)
+    if not callable(show):
+        raise ContractViolationError(
+            "GUI runtime window must expose show().",
+            code="GF-WB-CONTRACT-004",
+            stage="bootstrap",
+            operation="validate-gui-runtime",
+            subject=type(window).__name__,
+        )
+    if not callable(runtime.shutdown):
+        raise ContractViolationError(
+            "GUI runtime must expose shutdown().",
+            code="GF-WB-CONTRACT-005",
+            stage="bootstrap",
+            operation="validate-gui-runtime",
+            subject=type(runtime).__name__,
+        )
+    return cast(GuiRuntime, runtime)
+
+
+def build_language_probe_application(
+    *,
+    workflow: _LanguageProbeWorkflow | None = None,
+) -> object:
+    """Compose the public application boundary for ``language probe``.
+
+    The default workflow delegates bounded source discovery to the existing
+    path-resolved language probe.  It may validate one explicitly supplied
+    ``project.toml`` profile against the resolved language directory, but it
+    does not execute GF, allocate a run, persist state, or write reports.
+    """
+
+    active_workflow = workflow or _run_language_probe
+    if not callable(active_workflow):
+        raise TypeError("workflow must be callable or None")
+    return _ComposedLanguageProbeApplication(active_workflow)
+
+
+def build_project_check_application(
+    *,
+    services: BootstrapServices | None = None,
+    workflow: _ProjectCheckWorkflow | None = None,
+    probe_workflow: _ProjectProbeWorkflow | None = None,
+) -> object:
+    """Compose the public application boundary for ``project check``.
+
+    Bootstrap loads one explicit ``project.toml`` validation profile and, when
+    ``language_path`` is supplied, verifies that the profile source root matches
+    the resolved language directory. The optional GF probe remains separately
+    injected behind the approved process boundary.
+    """
+
+    active_services = services or BootstrapServices()
+    if not isinstance(active_services, BootstrapServices):
+        raise TypeError("services must be BootstrapServices or None")
+    if workflow is not None:
+        if not callable(workflow):
+            raise TypeError("workflow must be callable or None")
+        if probe_workflow is not None:
+            raise ValueError(
+                "probe_workflow cannot be combined with a custom workflow"
+            )
+        return _ComposedProjectCheckApplication(workflow)
+    if probe_workflow is not None and not callable(probe_workflow):
+        raise TypeError("probe_workflow must be callable or None")
+
+    def execute(request: object) -> object:
+        return _run_project_check(
+            request,
+            services=active_services,
+            probe_workflow=probe_workflow,
+        )
+
+    return _ComposedProjectCheckApplication(execute)
+
+
+def build_scenario_check_application(
+    *,
+    services: BootstrapServices | None = None,
+    workflow: _ScenarioCheckWorkflow | None = None,
+) -> object:
+    """Compose the public application boundary for ``scenarios check``.
+
+    The default workflow requires one explicit language path and one explicit
+    ``project.toml`` validation profile, verifies their compatibility, selects
+    registered scenario IDs, and delegates static ``.gfs`` validation to the
+    scenario parser. It never launches GF, updates gold, or allocates a run.
+    """
+
+    active_services = services or BootstrapServices()
+    if not isinstance(active_services, BootstrapServices):
+        raise TypeError("services must be BootstrapServices or None")
+    if workflow is not None:
+        if not callable(workflow):
+            raise TypeError("workflow must be callable or None")
+        return _ComposedScenarioCheckApplication(workflow)
+
+    def execute(request: object) -> object:
+        return _run_scenario_check(
+            request,
+            services=active_services,
+        )
+
+    return _ComposedScenarioCheckApplication(execute)
+
+
+def _run_language_probe(request: object) -> object:
+    from gf_wordbench.projects.languages.public import probe_language_path
+
+    selected_path = _check_required_path_value(
+        request,
+        names=("language_path", "selected_path", "path"),
+        role="language_path",
+        message="language probe requires an explicit language path",
+    )
+    explicit_rgl_root = _check_optional_path_value(
+        request,
+        names=("rgl_root", "explicit_rgl_root"),
+        role="rgl_root",
+    )
+    strict = _check_request_bool(request, "strict", default=False)
+    max_ancestor_depth = _check_request_int(
+        request,
+        "max_ancestor_depth",
+        default=16,
+        minimum=1,
+        maximum=256,
+    )
+
+    result = probe_language_path(
+        selected_path,
+        explicit_rgl_root=explicit_rgl_root,
+        max_ancestor_depth=max_ancestor_depth,
+        require_unambiguous_suffix=strict,
+    )
+
+    context = _require_resolved_probe_context(
+        result,
+        selected_path=selected_path,
+    )
+    profile_file = _check_validation_profile_file(request, required=False)
+    if profile_file is not None:
+        project = load_active_project(
+            profile_file,
+            strict=strict,
+        )
+        _require_profile_language_compatibility(project, context)
+
+    return result
+
+
+def _run_project_check(
+    request: object,
+    *,
+    services: BootstrapServices,
+    probe_workflow: _ProjectProbeWorkflow | None,
+) -> object:
+    from gf_wordbench.projects.filesystem_adapter import (
+        ProjectFilesystemAdapter,
+    )
+    from gf_wordbench.projects.models import (
+        ProjectCheckScope,
+        ProjectValidationResult,
+    )
+    from gf_wordbench.projects.public import check_project
+
+    strict = _check_request_bool(request, "strict", default=False)
+    language_context = _check_resolved_language_context(
+        request,
+        required=False,
+        strict=strict,
+    )
+    project_file = _check_validation_profile_file(request, required=True)
+    assert project_file is not None
+    project = load_active_project(
+        project_file,
+        strict=strict,
+        services=services,
+    )
+    if language_context is not None:
+        _require_profile_language_compatibility(project, language_context)
+
+    result = check_project(
+        project,
+        ProjectFilesystemAdapter(),
+        scope=ProjectCheckScope.NORMAL,
+        strict=strict,
+    )
+    if not isinstance(result, ProjectValidationResult):
+        raise TypeError(
+            "check_project must return ProjectValidationResult"
+        )
+
+    if _check_request_bool(request, "probe_gf", default=False):
+        if probe_workflow is None:
+            raise ConfigurationError(
+                "GF probing is not configured for project check.",
+                code="GF-WB-CONFIG-902",
+                detail=(
+                    "Provide a reviewed probe_workflow that resolves GF, "
+                    "runs the version probe through the process boundary, "
+                    "checks compatibility, and validates the RGL root."
+                ),
+                stage="bootstrap",
+                operation="project-check-probe",
+                subject=str(project.project_file),
+            )
+        probe_workflow(request, project)
+
+    return result
+
+
+def _run_scenario_check(
+    request: object,
+    *,
+    services: BootstrapServices,
+) -> object:
+    from gf_wordbench.entrypoints.cli.project_commands import (
+        ScenarioCheckCommandResult,
+        ScenarioCheckIssue,
+    )
+    from gf_wordbench.kernel.ids import validate_scenario_id
+    from gf_wordbench.projects.paths import (
+        resolve_project_paths,
+        resolve_scenario_path,
+    )
+    from gf_wordbench.validation.scenarios.parser import (
+        validate_scenario_file,
+    )
+
+    strict = _check_request_bool(request, "strict", default=False)
+    language_context = _check_resolved_language_context(
+        request,
+        required=True,
+        strict=strict,
+    )
+    assert language_context is not None
+    profile_file = _check_validation_profile_file(request, required=True)
+    assert profile_file is not None
+    project = load_active_project(
+        profile_file,
+        strict=strict,
+        services=services,
+    )
+    _require_profile_language_compatibility(project, language_context)
+
+    project_paths = resolve_project_paths(project)
+    registered = tuple(project.validation.all_scenarios)
+    registered_set = set(registered)
+    selected_ids = _check_scenario_ids(request, registered)
+    checked: list[str] = []
+    issues: list[ScenarioCheckIssue] = []
+
+    for scenario_id in selected_ids:
+        validated_id = validate_scenario_id(scenario_id)
+        if validated_id not in registered_set:
+            raise ConfigurationError(
+                "Scenario selection contains an unregistered ID.",
+                code="GF-WB-CONFIG-903",
+                detail=f"scenario_id={validated_id}",
+                stage="bootstrap",
+                operation="scenarios-check",
+                subject=str(validated_id),
+            )
+
+        scenario_path = resolve_scenario_path(project_paths, validated_id)
+        checked.append(str(validated_id))
+        try:
+            validate_scenario_file(
+                scenario_path,
+                scenario_id=validated_id,
+            )
+        except (GFWordbenchError, OSError, ValueError) as exc:
+            issues.append(
+                ScenarioCheckIssue(
+                    severity="error",
+                    code=str(
+                        getattr(exc, "code", None)
+                        or "GF-WB-SCENARIO-001"
+                    ),
+                    message=_bounded_message(exc),
+                    path=scenario_path,
+                    scenario_id=str(validated_id),
+                    line=_positive_optional_int(getattr(exc, "line", None)),
+                )
+            )
+
+    overall_status = OverallStatus.FAIL if issues else OverallStatus.OK
+    message = (
+        f"Scenario contract check failed with {len(issues)} issue(s)."
+        if issues
+        else "Scenario contracts are valid."
+    )
+    return ScenarioCheckCommandResult(
+        overall_status=overall_status,
+        project_root=project.project_root,
+        checked_scenarios=tuple(checked),
+        issues=tuple(issues),
+        message=message,
+    )
+
+
+def _check_validation_profile_file(
+    request: object,
+    *,
+    required: bool,
+) -> Path | None:
+    raw_profile = _first_check_request_value(
+        request,
+        ("validation_profile", "profile", "project_file"),
+        None,
+    )
+    if raw_profile is not None:
+        return _require_regular_file(
+            _project_file_path(cast(PathInput, raw_profile)),
+            role="validation profile",
+        )
+
+    raw_root = _first_check_request_value(
+        request,
+        ("legacy_project_root", "project_root"),
+        None,
+    )
+    if raw_root is not None:
+        return _legacy_profile_from_root(cast(PathInput, raw_root))
+
+    if not required:
+        return None
+    raise ConfigurationError(
+        "An explicit validation profile is required.",
+        code="GF-WB-CONFIG-904",
+        detail=(
+            "Supply --profile <project.toml>. The legacy --project-root "
+            "mapping is accepted only during the migration period."
+        ),
+        stage="bootstrap",
+        operation="select-validation-profile",
+        subject="validation_profile",
+    )
+
+
+def _legacy_profile_from_root(value: PathInput) -> Path:
+    root = _absolute_path(value, role="legacy_project_root")
+    _require_directory(root, role="legacy project root")
+
+    direct = root / PROJECT_CONFIG_FILENAME
+    nested = root / "project" / PROJECT_CONFIG_FILENAME
+    if direct.is_file():
+        return direct
+    if nested.is_file():
+        return nested
+
+    expected = direct if root.name.casefold() == "project" else nested
+    return _require_regular_file(
+        expected,
+        role="validation profile",
+    )
+
+
+def _check_project_file(request: object) -> Path:
+    """Compatibility wrapper for callers still using the former helper."""
+
+    profile = _check_validation_profile_file(request, required=True)
+    assert profile is not None
+    return profile
+
+
+def _check_resolved_language_context(
+    request: object,
+    *,
+    required: bool,
+    strict: bool,
+) -> object | None:
+    raw_selected = _first_check_request_value(
+        request,
+        ("language_path", "selected_path"),
+        None,
+    )
+    if raw_selected is None:
+        if not required:
+            return None
+        raise ConfigurationError(
+            "An explicit language path is required.",
+            code="GF-WB-CONFIG-905",
+            detail="Supply --language-path <directory-or-gf-file>.",
+            stage="bootstrap",
+            operation="resolve-language-context",
+            subject="language_path",
+        )
+
+    selected_path = _absolute_path(
+        cast(PathInput, raw_selected),
+        role="language_path",
+    )
+    explicit_rgl_root = _check_optional_path_value(
+        request,
+        names=("rgl_root", "explicit_rgl_root"),
+        role="rgl_root",
+    )
+    max_ancestor_depth = _check_request_int(
+        request,
+        "max_ancestor_depth",
+        default=16,
+        minimum=1,
+        maximum=256,
+    )
+
+    from gf_wordbench.projects.languages.public import probe_language_path
+
+    result = probe_language_path(
+        selected_path,
+        explicit_rgl_root=explicit_rgl_root,
+        max_ancestor_depth=max_ancestor_depth,
+        require_unambiguous_suffix=strict,
+    )
+    return _require_resolved_probe_context(
+        result,
+        selected_path=selected_path,
+    )
+
+
+def _require_resolved_probe_context(
+    result: object,
+    *,
+    selected_path: Path,
+) -> object:
+    context = getattr(result, "context", None)
+    resolved = bool(getattr(result, "resolved", False))
+    status = getattr(result, "status", None)
+    status_value = getattr(status, "value", status)
+    if context is not None and (resolved or status_value == "resolved"):
+        return context
+
+    diagnostics = getattr(result, "diagnostics", ())
+    first = (
+        diagnostics[0]
+        if isinstance(diagnostics, Sequence) and diagnostics
+        else None
+    )
+    detail = _bounded_message(first) if first is not None else f"status={status_value}"
+    raise ConfigurationError(
+        "The selected language path could not be resolved.",
+        code="GF-WB-CONFIG-906",
+        detail=detail,
+        stage="bootstrap",
+        operation="resolve-language-context",
+        subject=str(selected_path),
+    )
+
+
+def _require_profile_language_compatibility(
+    project: ProjectConfig,
+    language_context: object,
+) -> None:
+    language_directory = getattr(language_context, "language_directory", None)
+    if not isinstance(language_directory, Path):
+        raise ContractViolationError(
+            "Resolved language context does not expose language_directory.",
+            code="GF-WB-CONTRACT-006",
+            stage="bootstrap",
+            operation="validate-profile-language-compatibility",
+        )
+
+    profile_source = project.source_root.resolve(strict=False)
+    resolved_language = language_directory.resolve(strict=False)
+    if profile_source != resolved_language:
+        raise ProjectConfigurationError(
+            "Validation profile does not belong to the selected language.",
+            code="GF-WB-PROJECT-006",
+            detail=(
+                f"profile source_root={profile_source}; "
+                f"resolved language_directory={resolved_language}"
+            ),
+            stage="bootstrap",
+            operation="validate-profile-language-compatibility",
+            subject=str(project.project_file),
+        )
+
+
+def _check_scenario_ids(
+    request: object,
+    registered: tuple[str, ...],
+) -> tuple[str, ...]:
+    raw = _check_request_value(request, "scenario_ids", None)
+    if raw is None:
+        raw = _check_request_value(request, "scenarios", None)
+    if raw is None:
+        return registered
+    if isinstance(raw, (str, bytes, bytearray)):
+        raise TypeError("scenario_ids must be a sequence of strings")
+
+    try:
+        values = tuple(raw)
+    except TypeError as exc:
+        raise TypeError(
+            "scenario_ids must be a sequence of strings"
+        ) from exc
+
+    if not values:
+        return registered
+    return _unique_text_tuple(
+        values,
+        field_name="scenario_ids",
+        maximum=_MAX_SCENARIO_FILTERS,
+    )
+
+
+def _check_request_bool(
+    request: object,
+    name: str,
+    *,
+    default: bool,
+) -> bool:
+    value = _check_request_value(request, name, default)
+    if type(value) is not bool:
+        raise TypeError(f"{name} must be a bool")
+    return cast(bool, value)
+
+
+def _check_request_value(
+    request: object,
+    name: str,
+    default: object,
+) -> object:
+    if request is None:
+        raise TypeError("request must not be None")
+
+    if hasattr(request, name):
+        return getattr(request, name)
+
+    getter = getattr(request, "get", None)
+    if callable(getter):
+        return getter(name, default)
+
+    arguments = getattr(request, "arguments", None)
+    if isinstance(arguments, Mapping):
+        return arguments.get(name, default)
+
+    return default
+
+
+def _first_check_request_value(
+    request: object,
+    names: Sequence[str],
+    default: object,
+) -> object:
+    for name in names:
+        value = _check_request_value(request, name, None)
+        if value is not None:
+            return value
+    return default
+
+
+def _check_required_path_value(
+    request: object,
+    *,
+    names: Sequence[str],
+    role: str,
+    message: str,
+) -> Path:
+    value = _first_check_request_value(request, names, None)
+    if value is None:
+        raise ConfigurationError(
+            message,
+            code="GF-WB-CONFIG-907",
+            stage="bootstrap",
+            operation="resolve-request-path",
+            subject=role,
+        )
+    return _absolute_path(cast(PathInput, value), role=role)
+
+
+def _check_optional_path_value(
+    request: object,
+    *,
+    names: Sequence[str],
+    role: str,
+) -> Path | None:
+    value = _first_check_request_value(request, names, None)
+    if value is None:
+        return None
+    return _absolute_path(cast(PathInput, value), role=role)
+
+
+def _check_request_int(
+    request: object,
+    name: str,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    value = _check_request_value(request, name, default)
+    if type(value) is not int:
+        raise TypeError(f"{name} must be an integer")
+    checked = cast(int, value)
+    if checked < minimum or checked > maximum:
+        raise ValueError(
+            f"{name} must be between {minimum} and {maximum}"
+        )
+    return checked
+
+
+def _positive_optional_int(value: object) -> int | None:
+    if type(value) is int and cast(int, value) > 0:
+        return cast(int, value)
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class _ComposedGoldUpdateApplication:
+    """Small adapter that keeps the CLI boundary outside bootstrap internals."""
+
+    workflow: GoldUpdateWorkflow
+
+    def __post_init__(self) -> None:
+        if not callable(self.workflow):
+            raise TypeError("workflow must be callable")
+
+    def execute_gold_update(
+        self,
+        request: "GoldUpdateCommandRequest",
+    ) -> object:
+        return self.workflow(request)
+
+
+def build_gold_update_application(
+    *,
+    workflow: GoldUpdateWorkflow | None = None,
+) -> "GoldUpdateCliApplication":
+    """Compose the CLI gold-update application boundary.
+
+    The current repository snapshot exposes the low-level, atomic gold-update
+    primitives but does not yet expose the higher-level application use case
+    that executes scenarios and gathers review evidence. Callers and tests may
+    inject that application workflow explicitly. Without one, execution fails
+    closed with a structured configuration error rather than bypassing review.
+    """
+
+    active_workflow = workflow or _unconfigured_gold_update_workflow
+    if not callable(active_workflow):
+        raise TypeError("workflow must be callable or None")
+
+    return cast(
+        "GoldUpdateCliApplication",
+        _ComposedGoldUpdateApplication(active_workflow),
+    )
+
+
+def _unconfigured_gold_update_workflow(
+    request: "GoldUpdateCommandRequest",
+) -> object:
+    """Reject gold mutation until the reviewed application use case is wired."""
+
+    from gf_wordbench.entrypoints.cli.maintenance_commands import (
+        GoldUpdateCommandRequest,
+    )
+
+    if not isinstance(request, GoldUpdateCommandRequest):
+        raise TypeError("request must be GoldUpdateCommandRequest")
+
+    raise ConfigurationError(
+        "Gold update application workflow is not configured.",
+        code="GF-WB-CONFIG-901",
+        detail=(
+            "The current source snapshot provides atomic gold-update "
+            "primitives, but no application use case that validates selected "
+            "registrations, executes scenarios, preserves raw and normalized "
+            "evidence, presents the diff, records maintainer review metadata, "
+            "and invokes the atomic writer. Inject that workflow through "
+            "build_gold_update_application(workflow=...)."
+        ),
+        stage="bootstrap",
+        operation="execute-gold-update",
+        subject="gold.update",
+    )
+
 
 def build_framework_defaults() -> AppConfig:
     """Build the language-neutral framework default configuration."""
@@ -1658,9 +2668,18 @@ def _bounded_message(error: BaseException) -> str:
 __all__ = (
     "BootstrapContext",
     "BootstrapServices",
+    "GoldUpdateWorkflow",
+    "GuiRuntime",
+    "GuiRuntimeFactory",
     "InvocationRequest",
     "bootstrap_run",
+    "build_audit_application",
     "build_framework_defaults",
+    "build_gold_update_application",
+    "build_gui_runtime",
+    "build_language_probe_application",
+    "build_project_check_application",
+    "build_scenario_check_application",
     "load_active_project",
     "preview_run",
     "resolve_run_configuration",

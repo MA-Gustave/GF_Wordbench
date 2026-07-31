@@ -58,6 +58,18 @@ _REQUIRED_PUBLIC_SYMBOLS: Final[Mapping[str, frozenset[str]]] = {
             "RunConfig",
         }
     ),
+    "gf_wordbench.config.precedence": frozenset(
+        {
+            "ConfigurationDomain",
+            "ConfigurationSource",
+            "OverrideClass",
+            "PrecedencePolicy",
+            "PrecedenceValues",
+            "PrecedenceResolution",
+            "policy_for",
+            "resolve_precedence",
+        }
+    ),
     "gf_wordbench.infrastructure.process.models": frozenset(
         {
             "ProcessInput",
@@ -86,6 +98,17 @@ _REQUIRED_PUBLIC_SYMBOLS: Final[Mapping[str, frozenset[str]]] = {
             "ProjectConfig",
             "ProjectDiagnostic",
             "ProjectValidationResult",
+        }
+    ),
+    "gf_wordbench.projects.languages.models": frozenset(
+        {
+            "LanguagePathKind",
+            "LanguageProbeStatus",
+            "LanguageProbeRequest",
+            "LanguageCandidate",
+            "LanguageProbeDiagnostic",
+            "ResolvedLanguageContext",
+            "LanguageProbeResult",
         }
     ),
     "gf_wordbench.projects.paths": frozenset({"ProjectPaths"}),
@@ -224,9 +247,32 @@ _REQUIRED_PUBLIC_SYMBOLS: Final[Mapping[str, frozenset[str]]] = {
 
 _FORBIDDEN_OWNER_DEFINITIONS: Final[Mapping[str, frozenset[str]]] = {
     "gf_wordbench.config.models": frozenset(
-        {"ProducerInfo", "ValidationMode", "TargetKind"}
+        {
+            "ProducerInfo",
+            "ValidationMode",
+            "TargetKind",
+            "LanguagePathKind",
+            "LanguageProbeStatus",
+            "LanguageProbeRequest",
+            "LanguageCandidate",
+            "LanguageProbeDiagnostic",
+            "ResolvedLanguageContext",
+            "LanguageProbeResult",
+        }
     ),
-    "gf_wordbench.state.models": frozenset({"ProducerInfo", "ValidationMode"}),
+    "gf_wordbench.state.models": frozenset(
+        {
+            "ProducerInfo",
+            "ValidationMode",
+            "LanguagePathKind",
+            "LanguageProbeStatus",
+            "LanguageProbeRequest",
+            "LanguageCandidate",
+            "LanguageProbeDiagnostic",
+            "ResolvedLanguageContext",
+            "LanguageProbeResult",
+        }
+    ),
     "gf_wordbench.infrastructure.process.models": frozenset(
         {"CancellationToken", "ProcessCapture"}
     ),
@@ -242,6 +288,13 @@ _FORBIDDEN_OWNER_DEFINITIONS: Final[Mapping[str, frozenset[str]]] = {
             "ProjectMigrationRequest",
             "ProjectMigrationPlan",
             "ProjectMigrationResult",
+            "LanguagePathKind",
+            "LanguageProbeStatus",
+            "LanguageProbeRequest",
+            "LanguageCandidate",
+            "LanguageProbeDiagnostic",
+            "ResolvedLanguageContext",
+            "LanguageProbeResult",
         }
     ),
 }
@@ -551,6 +604,108 @@ def test_shared_kernel_model_identity_is_preserved_by_consumers() -> None:
     assert "TargetKind" not in config_models.__all__
 
 
+def test_path_resolved_language_models_have_their_documented_owner() -> None:
+    module = import_module("gf_wordbench.projects.languages.models")
+    expected_names = (
+        "LanguagePathKind",
+        "LanguageProbeStatus",
+        "LanguageProbeRequest",
+        "LanguageCandidate",
+        "LanguageProbeDiagnostic",
+        "ResolvedLanguageContext",
+        "LanguageProbeResult",
+    )
+
+    for name in expected_names:
+        model = getattr(module, name)
+        assert name in module.__all__
+        assert model.__module__ == "gf_wordbench.projects.languages.models"
+
+
+def test_language_probe_enums_have_exact_locked_values() -> None:
+    module = import_module("gf_wordbench.projects.languages.models")
+
+    assert _enum_values(module.LanguagePathKind) == ("directory", "file")
+    assert _enum_values(module.LanguageProbeStatus) == (
+        "resolved",
+        "needs_user_input",
+        "invalid_selection",
+        "unsupported_layout",
+        "capability_unavailable",
+        "internal_error",
+    )
+
+
+def test_path_resolved_configuration_precedence_dimensions_are_locked() -> None:
+    module = import_module("gf_wordbench.config.precedence")
+
+    assert _enum_values(module.ConfigurationSource) == (
+        "package_metadata",
+        "framework_default",
+        "validation_profile",
+        "project_toml",
+        "application_state",
+        "environment_variable",
+        "path_discovery",
+        "language_probe",
+        "selection_service",
+        "cli",
+        "gui",
+        "automation",
+        "startup_option",
+        "runtime_derived",
+        "legacy_migration",
+    )
+    assert _enum_values(module.ConfigurationDomain) == (
+        "selected_language_path",
+        "validation_profile",
+        "gf_executable",
+        "rgl_root",
+        "output_root",
+        "state_path",
+        "profile_field",
+        "mode",
+        "project_root",
+        "project_field",
+        "target",
+        "timeout",
+        "run_option",
+    )
+    assert _enum_values(module.OverrideClass) == (
+        "strengthening",
+        "neutral",
+        "weakening",
+    )
+
+
+def test_configuration_resolution_request_uses_language_context_and_optional_profile() -> None:
+    module = import_module("gf_wordbench.config.models")
+    request_fields = frozenset(
+        field.name for field in fields(module.ConfigurationResolutionRequest)
+    )
+
+    assert "language_context" in request_fields
+    assert "validation_profile" in request_fields
+    assert "project" not in request_fields
+
+
+def test_application_state_remembers_paths_without_owning_language_truth() -> None:
+    module = import_module("gf_wordbench.state.models")
+    environment_fields = frozenset(
+        field.name for field in fields(module.EnvironmentState)
+    )
+
+    assert {
+        "last_selected_language_path",
+        "last_selected_validation_profile",
+        "gf_executable",
+        "output_root",
+    }.issubset(environment_fields)
+    assert "project_root" not in environment_fields
+    assert "language_key" not in environment_fields
+    assert "resolved_language_context" not in environment_fields
+
+
 def test_shared_status_dimensions_have_exact_locked_values() -> None:
     expected: Mapping[type[StrEnum], tuple[str, ...]] = {
         ValidationStatus: ("OK", "FAIL", "ERROR", "SKIPPED"),
@@ -584,7 +739,7 @@ def test_shared_status_dimensions_have_exact_locked_values() -> None:
             "checkpoint",
             "entrypoint",
             "scenario",
-            "project",
+            "language",
             "regression",
         ),
     }
@@ -625,7 +780,7 @@ def test_run_result_mutability_is_limited_to_the_accepted_adr_models() -> None:
     assert "__dict__" not in vars(run_totals)
 
 
-def test_project_lifecycle_models_remain_with_their_use_case_owners() -> None:
+def test_optional_profile_lifecycle_models_remain_with_their_use_case_owners() -> None:
     project_models = import_module("gf_wordbench.projects.models")
     project_model_names = frozenset(vars(project_models))
 
@@ -641,6 +796,17 @@ def test_project_lifecycle_models_remain_with_their_use_case_owners() -> None:
             "ProjectMigrationResult",
         }
     )
+
+
+def test_language_runtime_models_are_not_redefined_by_project_profile_models() -> None:
+    language_models = import_module("gf_wordbench.projects.languages.models")
+    project_models = import_module("gf_wordbench.projects.models")
+    language_names = frozenset(language_models.__all__)
+
+    assert not language_names.intersection(_defined_names(_parse(_module_path(
+        "gf_wordbench.projects.models"
+    ))))
+    assert "ResolvedLanguageContext" not in project_models.__all__
 
 
 def test_model_owner_modules_do_not_depend_on_portfolio() -> None:

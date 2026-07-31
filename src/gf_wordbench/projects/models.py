@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path, PureWindowsPath
-import re
 from typing import Final
 
 from gf_wordbench.kernel.ids import (
@@ -465,6 +465,18 @@ def _require_relative_path(
     field: str,
     allow_dot: bool,
 ) -> Path:
+    """Validate and normalize one runtime-native relative path.
+
+    Persisted path strings are validated by ``schema.py`` before conversion.
+    Once a value is a ``Path``, its original separator spelling is no longer
+    portable information: Windows renders native paths with ``\\`` while
+    ``Path.as_posix()`` renders the same path with ``/``.
+
+    Parse the runtime value with Windows-aware path semantics to detect drives,
+    rooted paths, UNC paths, and traversal consistently on every host. Return
+    a native ``Path`` assembled from the validated relative components.
+    """
+
     if not isinstance(value, Path):
         raise TypeError(
             f"{field} must be pathlib.Path, got {type(value).__name__}."
@@ -475,25 +487,30 @@ def _require_relative_path(
         raise ValueError(
             f"{field} must not be empty or contain NUL bytes."
         )
-    if "\\" in str(value):
-        raise ValueError(
-            f"{field} must use canonical '/' separators."
-        )
 
-    windows_path = PureWindowsPath(text)
-    if value.is_absolute() or windows_path.is_absolute() or windows_path.drive:
+    portable = PureWindowsPath(text)
+    if (
+        value.is_absolute()
+        or portable.is_absolute()
+        or bool(portable.drive)
+        or bool(portable.root)
+    ):
         raise ValueError(
             f"{field} must be project-relative, got {text!r}."
         )
-    if any(part == ".." for part in value.parts):
+
+    parts = portable.parts
+    if any(part == ".." for part in parts):
         raise ValueError(
             f"{field} must not contain parent traversal ('..')."
         )
-    if not allow_dot and text == ".":
+
+    normalized = Path(*parts) if parts else Path(".")
+    if not allow_dot and normalized == Path("."):
         raise ValueError(
             f"{field} must identify a non-root relative path."
         )
-    return value
+    return normalized
 
 
 def _require_absolute_path(value: object, *, field: str) -> Path:

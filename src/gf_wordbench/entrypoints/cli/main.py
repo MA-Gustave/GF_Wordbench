@@ -1,11 +1,25 @@
-"""GF Wordbench command-line entrypoint."""
+"""GF Wordbench command-line entrypoint.
+
+This module owns process-level concerns only:
+
+- argument normalization and parsing;
+- canonical command dispatch;
+- result presentation;
+- exit-code mapping;
+- bounded fallback error reporting.
+
+Command-specific CLI wrappers remain in their owning adapter modules.
+Concrete dependency composition belongs to ``gf_wordbench.bootstrap``.
+Every public CLI wrapper accepts one :class:`CliRequest` and returns a
+structured result exposing ``overall_status``.
+"""
 
 from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Sequence
 from enum import Enum
-from typing import Final, Protocol, TypeAlias
+from typing import Final, Literal, TypeAlias
 
 from gf_wordbench.kernel.errors import (
     CancellationRequested,
@@ -15,182 +29,324 @@ from gf_wordbench.kernel.errors import (
     PathSecurityError,
 )
 
-from .exit_codes import EXIT_RUNTIME_ERROR, EXIT_USAGE_OR_CONFIG, exit_code_for_result
+from .exit_codes import (
+    EXIT_CANCELLED,
+    EXIT_RUNTIME_ERROR,
+    EXIT_USAGE_ERROR,
+    HasOverallStatus,
+    determine_exit_code,
+    normalize_parser_exit_code,
+)
 from .output import present_error, present_result
-from .parser import CliUsageError, parse_cli_request
+from .parser import (
+    CliCommand,
+    CliRequest,
+    CliUsageError,
+    parse_cli_request,
+)
 
-CommandResult: TypeAlias = object
-CommandHandler: TypeAlias = Callable[["CliRequest"], CommandResult]
+CommandResult: TypeAlias = HasOverallStatus
+CommandHandler: TypeAlias = Callable[[CliRequest], CommandResult]
+ErrorCategory: TypeAlias = Literal[
+    "usage",
+    "configuration",
+    "runtime",
+]
 
-_CANONICAL_COMMANDS: Final[frozenset[str]] = frozenset(
-    {
-        "validate",
-        "project",
-        "scenarios",
-        "gold",
-        "schemas",
-        "reports",
-    }
+_CANONICAL_COMMANDS: Final[tuple[str, ...]] = tuple(
+    command.value for command in CliCommand
 )
 _MAX_FALLBACK_ERROR_LENGTH: Final[int] = 2_000
-
-
-class CliRequest(Protocol):
-    """Minimum parsed-request contract consumed by the dispatcher."""
-
-    command: str | Enum
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the canonical GF Wordbench CLI and return its stable exit code."""
 
-    arguments = _normalize_argv(argv)
-
     try:
-        request = parse_cli_request(arguments)
+        request = parse_cli_request(_normalize_argv(argv))
     except SystemExit as exc:
         return _parser_exit_code(exc)
     except CliUsageError as exc:
-        _present_error_safely(exc, category="usage")
-        return EXIT_USAGE_OR_CONFIG
-    except (ConfigurationError, ContractViolationError, PathSecurityError) as exc:
-        _present_error_safely(exc, category="configuration")
-        return EXIT_USAGE_OR_CONFIG
+        return _report_error(
+            exc,
+            category="usage",
+            exit_code=EXIT_USAGE_ERROR,
+        )
+    except (
+        ConfigurationError,
+        ContractViolationError,
+        PathSecurityError,
+    ) as exc:
+        return _report_error(
+            exc,
+            category="configuration",
+            exit_code=EXIT_USAGE_ERROR,
+        )
+    except (TypeError, ValueError) as exc:
+        return _report_error(
+            exc,
+            category="usage",
+            exit_code=EXIT_USAGE_ERROR,
+        )
     except KeyboardInterrupt:
-        _present_error_safely(
+        return _report_error(
             CancellationRequested("command-line parsing was cancelled"),
             category="runtime",
+            exit_code=EXIT_CANCELLED,
         )
-        return EXIT_RUNTIME_ERROR
     except Exception as exc:
-        _present_error_safely(exc, category="runtime")
-        return EXIT_RUNTIME_ERROR
+        return _report_error(
+            exc,
+            category="runtime",
+            exit_code=EXIT_RUNTIME_ERROR,
+        )
+
+    return _execute_request(request)
+
+
+def _execute_request(request: CliRequest) -> int:
+    """Dispatch, present, and map one canonical request to an exit code."""
+
+    if not isinstance(request, CliRequest):
+        raise TypeError("request must be CliRequest")
 
     try:
         result = dispatch_cli_request(request)
+
+        if not isinstance(result, HasOverallStatus):
+            raise TypeError(
+                "command handler must return a structured result "
+                "exposing overall_status"
+            )
+
         present_result(result, request=request)
-        return exit_code_for_result(result)
+        return determine_exit_code(result)
+
     except CliUsageError as exc:
-        _present_error_safely(exc, category="usage")
-        return EXIT_USAGE_OR_CONFIG
-    except (ConfigurationError, ContractViolationError, PathSecurityError) as exc:
-        _present_error_safely(exc, category="configuration")
-        return EXIT_USAGE_OR_CONFIG
+        return _report_error(
+            exc,
+            category="usage",
+            exit_code=EXIT_USAGE_ERROR,
+        )
+    except (
+        ConfigurationError,
+        ContractViolationError,
+        PathSecurityError,
+    ) as exc:
+        return _report_error(
+            exc,
+            category="configuration",
+            exit_code=EXIT_USAGE_ERROR,
+        )
     except CancellationRequested as exc:
-        _present_error_safely(exc, category="runtime")
-        return EXIT_RUNTIME_ERROR
+        return _report_error(
+            exc,
+            category="runtime",
+            exit_code=EXIT_CANCELLED,
+        )
     except KeyboardInterrupt:
-        _present_error_safely(
+        return _report_error(
             CancellationRequested("operation cancelled by user"),
             category="runtime",
+            exit_code=EXIT_CANCELLED,
         )
-        return EXIT_RUNTIME_ERROR
-    except GFWordbenchError as exc:
-        _present_error_safely(exc, category="runtime")
-        return EXIT_RUNTIME_ERROR
     except BrokenPipeError:
         return EXIT_RUNTIME_ERROR
+    except GFWordbenchError as exc:
+        return _report_error(
+            exc,
+            category="runtime",
+            exit_code=EXIT_RUNTIME_ERROR,
+        )
+    except (TypeError, ValueError) as exc:
+        return _report_error(
+            exc,
+            category="runtime",
+            exit_code=EXIT_RUNTIME_ERROR,
+        )
     except Exception as exc:
-        _present_error_safely(exc, category="runtime")
-        return EXIT_RUNTIME_ERROR
+        return _report_error(
+            exc,
+            category="runtime",
+            exit_code=EXIT_RUNTIME_ERROR,
+        )
 
 
 def dispatch_cli_request(request: CliRequest) -> CommandResult:
-    """Dispatch one parsed request to its owning application adapter."""
+    """Dispatch one parsed request to its owning CLI adapter."""
 
-    command = _command_name(request)
-    handler = _command_handler(command)
-    return handler(request)
+    if not isinstance(request, CliRequest):
+        raise TypeError("request must be CliRequest")
+
+    return _command_handler(request.command)(request)
 
 
-def _command_handler(command: str) -> CommandHandler:
-    if command == "validate":
-        from .audit_commands import execute_validate_command
+def _command_handler(command: object) -> CommandHandler:
+    """Resolve one canonical command handler without eager adapter imports."""
 
-        return execute_validate_command
+    command_name = _normalize_command(command)
 
-    if command == "project":
-        from .project_commands import execute_project_check_command
+    match command_name:
+        case CliCommand.LANGUAGE_PROBE:
+            from .language_commands import execute_language_probe_command
 
-        return execute_project_check_command
+            return execute_language_probe_command
 
-    if command == "scenarios":
-        from .project_commands import execute_scenarios_check_command
+        case CliCommand.VALIDATE:
+            from .audit_commands import execute_validate_cli_command
 
-        return execute_scenarios_check_command
+            return execute_validate_cli_command
 
-    if command == "gold":
-        from .maintenance_commands import execute_gold_update_command
+        case CliCommand.PROJECT_CHECK:
+            from .project_commands import execute_project_check_command
 
-        return execute_gold_update_command
+            return execute_project_check_command
 
-    if command == "schemas":
-        from .maintenance_commands import execute_schemas_check_command
+        case CliCommand.SCENARIOS_CHECK:
+            from .project_commands import execute_scenarios_check_command
 
-        return execute_schemas_check_command
+            return execute_scenarios_check_command
 
-    if command == "reports":
-        from .maintenance_commands import execute_reports_check_command
+        case CliCommand.GOLD_UPDATE:
+            from .maintenance_commands import execute_gold_update_command
 
-        return execute_reports_check_command
+            return execute_gold_update_command
 
-    supported = ", ".join(sorted(_CANONICAL_COMMANDS))
-    raise CliUsageError(
-        f"unsupported command {command!r}; expected one of: {supported}"
+        case CliCommand.SCHEMAS_CHECK:
+            from .maintenance_commands import execute_schemas_check_command
+
+            return execute_schemas_check_command
+
+        case CliCommand.REPORTS_CHECK:
+            from .maintenance_commands import execute_reports_check_command
+
+            return execute_reports_check_command
+
+    raise AssertionError(
+        f"unhandled canonical command: {command_name.value}"
     )
 
 
-def _command_name(request: CliRequest) -> str:
-    value = getattr(request, "command", None)
+def _normalize_command(value: object) -> CliCommand:
+    """Normalize a command value to the canonical typed command enum."""
+
+    if isinstance(value, CliCommand):
+        return value
+
     if isinstance(value, Enum):
         value = value.value
+
     if not isinstance(value, str):
-        raise CliUsageError("parsed request does not define a command")
+        raise CliUsageError(
+            "parsed request does not define a command"
+        )
 
-    command = value.strip().lower()
-    if not command or "\x00" in command:
-        raise CliUsageError("parsed request contains an invalid command")
-    return command
+    candidate = value.strip().lower()
+    if not candidate or "\x00" in candidate:
+        raise CliUsageError(
+            "parsed request contains an invalid command"
+        )
+
+    try:
+        return CliCommand(candidate)
+    except ValueError as exc:
+        supported = ", ".join(_CANONICAL_COMMANDS)
+        raise CliUsageError(
+            f"unsupported command {candidate!r}; "
+            f"expected one of: {supported}"
+        ) from exc
 
 
-def _normalize_argv(argv: Sequence[str] | None) -> tuple[str, ...]:
+def _normalize_argv(
+    argv: Sequence[str] | None,
+) -> tuple[str, ...]:
+    """Return a validated immutable argument sequence."""
+
     if argv is None:
         return tuple(sys.argv[1:])
+
     if isinstance(argv, (str, bytes, bytearray)):
-        raise TypeError("argv must be a sequence of argument strings")
+        raise TypeError(
+            "argv must be a sequence of argument strings"
+        )
 
     arguments = tuple(argv)
+
     for index, argument in enumerate(arguments):
         if not isinstance(argument, str):
-            raise TypeError(f"argv[{index}] must be a string")
+            raise TypeError(
+                f"argv[{index}] must be a string"
+            )
         if "\x00" in argument:
-            raise ValueError(f"argv[{index}] must not contain NUL")
+            raise ValueError(
+                f"argv[{index}] must not contain NUL"
+            )
+
     return arguments
 
 
 def _parser_exit_code(exc: SystemExit) -> int:
+    """Normalize argparse help, version, and usage termination."""
+
     code = exc.code
-    if code is None:
-        return 0
-    if type(code) is int:
-        return 0 if code == 0 else EXIT_USAGE_OR_CONFIG
-    _present_error_safely(CliUsageError(str(code)), category="usage")
-    return EXIT_USAGE_OR_CONFIG
+
+    if code is not None and type(code) is not int:
+        _present_error_safely(
+            CliUsageError(str(code)),
+            category="usage",
+        )
+
+    return normalize_parser_exit_code(code)
 
 
-def _present_error_safely(error: BaseException, *, category: str) -> None:
+def _report_error(
+    error: BaseException,
+    *,
+    category: ErrorCategory,
+    exit_code: int,
+) -> int:
+    """Present an error without allowing presentation failure to escape."""
+
+    _present_error_safely(
+        error,
+        category=category,
+    )
+    return exit_code
+
+
+def _present_error_safely(
+    error: BaseException,
+    *,
+    category: ErrorCategory,
+) -> None:
+    """Present one error, falling back to bounded stderr output."""
+
     try:
-        present_error(error, category=category)
+        present_error(
+            error,
+            category=category,
+        )
     except Exception:
         _write_fallback_error(error)
 
 
 def _write_fallback_error(error: BaseException) -> None:
-    text = " ".join(str(error).replace("\x00", "\\x00").split())
+    """Write a bounded fallback message when presentation itself fails."""
+
+    text = " ".join(
+        str(error)
+        .replace("\x00", "\\x00")
+        .split()
+    )
+
     if not text:
         text = type(error).__name__
+
     if len(text) > _MAX_FALLBACK_ERROR_LENGTH:
-        text = f"{text[: _MAX_FALLBACK_ERROR_LENGTH - 3]}..."
+        text = (
+            f"{text[: _MAX_FALLBACK_ERROR_LENGTH - 3]}..."
+        )
+
     try:
         sys.stderr.write(f"ERROR: {text}\n")
         sys.stderr.flush()
@@ -199,7 +355,6 @@ def _write_fallback_error(error: BaseException) -> None:
 
 
 __all__ = (
-    "CliRequest",
     "CommandHandler",
     "CommandResult",
     "dispatch_cli_request",

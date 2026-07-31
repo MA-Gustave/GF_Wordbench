@@ -1,4 +1,9 @@
-"""Explicit validation-target resolution for GF Wordbench file selection."""
+"""Explicit validation-target resolution for path-resolved language selection.
+
+This module resolves source-backed validation targets inside one validated
+language directory. It does not discover the active language, construct the GF
+search path, parse GF imports, or load validation profiles.
+"""
 
 from __future__ import annotations
 
@@ -55,16 +60,22 @@ def is_source_target_kind(kind: TargetKind) -> bool:
 def format_target_identity(
     target: ValidationTarget,
     *,
-    project_id: str | None = None,
+    language_key: str | None = None,
 ) -> str:
-    """Render the canonical explicit identity of a validation target."""
+    """Render the canonical explicit identity of a validation target.
+
+    ``TargetKind.PROJECT`` remains a compatibility enum value until the target
+    model is migrated. When its value is absent, ``language_key`` supplies the
+    resolved portable language identity. The serialized target-kind token stays
+    unchanged here so persisted-schema migration remains owned elsewhere.
+    """
 
     if not isinstance(target, ValidationTarget):
         raise TypeError("target must be a ValidationTarget")
 
     value = target.value
     if target.kind is TargetKind.PROJECT and value is None:
-        value = _require_text(project_id, field="project_id")
+        value = _require_text(language_key, field="language_key")
     elif value is None:
         raise ContractViolationError(
             f"{target.kind.value} target requires an explicit value"
@@ -74,76 +85,59 @@ def format_target_identity(
     return f"{target.kind.value}:{canonical_value}"
 
 
-def canonical_project_relative_target(
+def canonical_language_relative_target(
     file_path: Path,
     *,
-    project_root: Path,
+    language_directory: Path,
 ) -> PurePosixPath:
-    """Return a canonical project-relative path for a resolved target."""
+    """Return a canonical language-directory-relative target path."""
 
-    root = _resolve_directory(project_root, field="project_root")
+    language = _resolve_language_directory(language_directory)
     resolved = _resolve_existing_path(file_path, field="file_path")
     _require_contained(
         resolved,
-        root=root,
+        root=language,
         field="file_path",
         allow_root=False,
     )
-    return PurePosixPath(resolved.relative_to(root).as_posix())
+    return PurePosixPath(resolved.relative_to(language).as_posix())
 
 
-def canonical_source_relative_target(
-    file_path: Path,
-    *,
-    source_root: Path,
-) -> PurePosixPath:
-    """Return a canonical source-root-relative path for a resolved target."""
-
-    root = _resolve_directory(source_root, field="source_root")
-    resolved = _resolve_existing_path(file_path, field="file_path")
-    _require_contained(
-        resolved,
-        root=root,
-        field="file_path",
-        allow_root=False,
-    )
-    return PurePosixPath(resolved.relative_to(root).as_posix())
+# Temporary compatibility aliases.
+#
+# Both names intentionally refer to the same function object. They do not retain
+# the obsolete project-root or source-root contracts; callers must provide the
+# canonical ``language_directory`` keyword argument.
+canonical_project_relative_target = canonical_language_relative_target
+canonical_source_relative_target = canonical_language_relative_target
 
 
 def resolve_quick_target(
     target: ValidationTarget | str | Path,
     *,
-    project_root: Path,
-    source_root: Path,
+    language_directory: Path,
 ) -> Path:
-    """Resolve one quick-mode file or module target through canonical precedence."""
+    """Resolve one quick-mode file or module inside the active language."""
 
-    project, source = _resolve_roots(
-        project_root=project_root,
-        source_root=source_root,
-    )
+    language = _resolve_language_directory(language_directory)
     target_kind, raw_value = _coerce_quick_target(target)
     target_path = _target_path_value(target_kind, raw_value)
 
-    direct_candidates = _quick_direct_candidates(
+    for candidate in _quick_direct_candidates(
         target_path,
-        project_root=project,
-        source_root=source,
-    )
-    for candidate in direct_candidates:
+        language_directory=language,
+    ):
         if _path_exists(candidate, field="quick target"):
             return _require_source_file(
                 candidate,
-                project_root=project,
-                source_root=source,
+                language_directory=language,
                 field="quick target",
             )
 
     if _is_basename_only(target_path):
         return _resolve_unique_basename(
             target_path.name,
-            project_root=project,
-            source_root=source,
+            language_directory=language,
         )
 
     raise ProjectConfigurationError(
@@ -157,23 +151,18 @@ def resolve_quick_target(
 def resolve_configured_target(
     target_path: str | Path,
     *,
-    project_root: Path,
-    source_root: Path,
+    language_directory: Path,
     field: str = "configured target",
 ) -> Path:
-    """Resolve one checkpoint or entrypoint as an exact source-relative path."""
+    """Resolve one profile target as an exact language-relative path."""
 
-    project, source = _resolve_roots(
-        project_root=project_root,
-        source_root=source_root,
-    )
+    language = _resolve_language_directory(language_directory)
     raw = _require_path_text(target_path, field=field)
     portable = _require_portable_relative_path(raw, field=field)
-    candidate = source.joinpath(*portable.parts)
+    candidate = language.joinpath(*portable.parts)
     return _require_source_file(
         candidate,
-        project_root=project,
-        source_root=source,
+        language_directory=language,
         field=field,
     )
 
@@ -181,19 +170,15 @@ def resolve_configured_target(
 def resolve_configured_targets(
     target_paths: Iterable[str | Path],
     *,
-    project_root: Path,
-    source_root: Path,
+    language_directory: Path,
     field: str = "configured targets",
 ) -> tuple[Path, ...]:
-    """Resolve an ordered configured target list and deduplicate filesystem identity."""
+    """Resolve an ordered target list and deduplicate filesystem identity."""
 
     if isinstance(target_paths, (str, bytes, Path)):
         raise TypeError(f"{field} must be an iterable of paths")
 
-    project, source = _resolve_roots(
-        project_root=project_root,
-        source_root=source_root,
-    )
+    language = _resolve_language_directory(language_directory)
 
     resolved: list[Path] = []
     identities: set[str] = set()
@@ -206,8 +191,7 @@ def resolve_configured_targets(
         item_field = f"{field}[{index}]"
         candidate = resolve_configured_target(
             target_path,
-            project_root=project,
-            source_root=source,
+            language_directory=language,
             field=item_field,
         )
         identity = _filesystem_identity(candidate)
@@ -223,21 +207,18 @@ def resolve_release_targets(
     checkpoints: Iterable[str | Path],
     entrypoints: Iterable[str | Path],
     *,
-    project_root: Path,
-    source_root: Path,
+    language_directory: Path,
 ) -> tuple[Path, ...]:
     """Resolve the release ordered union: checkpoints, then new entrypoints."""
 
     checkpoint_targets = resolve_configured_targets(
         checkpoints,
-        project_root=project_root,
-        source_root=source_root,
+        language_directory=language_directory,
         field="checkpoints",
     )
     entrypoint_targets = resolve_configured_targets(
         entrypoints,
-        project_root=project_root,
-        source_root=source_root,
+        language_directory=language_directory,
         field="entrypoints",
     )
 
@@ -255,8 +236,7 @@ def resolve_release_targets(
 def resolve_source_target(
     target: ValidationTarget,
     *,
-    project_root: Path,
-    source_root: Path,
+    language_directory: Path,
 ) -> Path:
     """Resolve one source-backed typed target without mode inference."""
 
@@ -274,14 +254,12 @@ def resolve_source_target(
     if target.kind in {TargetKind.FILE, TargetKind.MODULE}:
         return resolve_quick_target(
             target,
-            project_root=project_root,
-            source_root=source_root,
+            language_directory=language_directory,
         )
 
     return resolve_configured_target(
         _target_path_value(target.kind, target.value),
-        project_root=project_root,
-        source_root=source_root,
+        language_directory=language_directory,
         field=f"{target.kind.value} target",
     )
 
@@ -312,32 +290,17 @@ def _target_path_value(kind: TargetKind, value: str) -> Path:
 def _quick_direct_candidates(
     target_path: Path,
     *,
-    project_root: Path,
-    source_root: Path,
+    language_directory: Path,
 ) -> tuple[Path, ...]:
-    candidates: list[Path] = []
     if target_path.is_absolute():
-        candidates.append(target_path)
-    else:
-        candidates.append(project_root / target_path)
-        candidates.append(source_root / target_path)
-
-    unique: list[Path] = []
-    identities: set[str] = set()
-    for candidate in candidates:
-        identity = _lexical_identity(candidate)
-        if identity in identities:
-            continue
-        identities.add(identity)
-        unique.append(candidate)
-    return tuple(unique)
+        return (target_path,)
+    return (language_directory / target_path,)
 
 
 def _resolve_unique_basename(
     filename: str,
     *,
-    project_root: Path,
-    source_root: Path,
+    language_directory: Path,
 ) -> Path:
     if Path(filename).suffix.casefold() != _GF_SUFFIX:
         raise ProjectConfigurationError(
@@ -348,10 +311,10 @@ def _resolve_unique_basename(
         )
 
     try:
-        discovered = tuple(source_root.rglob(filename))
+        discovered = tuple(language_directory.rglob(filename))
     except OSError as exc:
         raise EvidenceIOError(
-            f"Unable to search the source root for quick target {filename!r}",
+            f"Unable to search the language directory for quick target {filename!r}",
             stage="selection",
             operation="resolve_quick_target",
             subject=filename,
@@ -363,8 +326,7 @@ def _resolve_unique_basename(
         try:
             resolved = _require_source_file(
                 candidate,
-                project_root=project_root,
-                source_root=source_root,
+                language_directory=language_directory,
                 field="quick basename match",
             )
         except (ProjectConfigurationError, PathSecurityError, EvidenceIOError):
@@ -375,7 +337,12 @@ def _resolve_unique_basename(
         identities.add(identity)
         valid.append(resolved)
 
-    valid.sort(key=lambda path: _portable_sort_key(path, root=source_root))
+    valid.sort(
+        key=lambda path: _portable_sort_key(
+            path,
+            root=language_directory,
+        )
+    )
     if not valid:
         raise ProjectConfigurationError(
             f"Quick target was not found: {filename!r}",
@@ -385,7 +352,7 @@ def _resolve_unique_basename(
         )
     if len(valid) > 1:
         matches = ", ".join(
-            path.relative_to(source_root).as_posix() for path in valid
+            path.relative_to(language_directory).as_posix() for path in valid
         )
         raise ProjectConfigurationError(
             f"Quick target {filename!r} is ambiguous; matches: {matches}",
@@ -399,8 +366,7 @@ def _resolve_unique_basename(
 def _require_source_file(
     candidate: Path,
     *,
-    project_root: Path,
-    source_root: Path,
+    language_directory: Path,
     field: str,
 ) -> Path:
     path = _require_path_value(candidate, field=field)
@@ -439,13 +405,7 @@ def _require_source_file(
     resolved = _resolve_existing_path(path, field=field)
     _require_contained(
         resolved,
-        root=project_root,
-        field=field,
-        allow_root=False,
-    )
-    _require_contained(
-        resolved,
-        root=source_root,
+        root=language_directory,
         field=field,
         allow_root=False,
     )
@@ -460,20 +420,8 @@ def _require_source_file(
     return resolved
 
 
-def _resolve_roots(
-    *,
-    project_root: Path,
-    source_root: Path,
-) -> tuple[Path, Path]:
-    project = _resolve_directory(project_root, field="project_root")
-    source = _resolve_directory(source_root, field="source_root")
-    _require_contained(
-        source,
-        root=project,
-        field="source_root",
-        allow_root=False,
-    )
-    return project, source
+def _resolve_language_directory(value: Path) -> Path:
+    return _resolve_directory(value, field="language_directory")
 
 
 def _resolve_directory(value: Path, *, field: str) -> Path:
@@ -511,14 +459,16 @@ def _require_contained(
         relative = candidate.relative_to(root)
     except ValueError as exc:
         raise PathSecurityError(
-            f"{field} escapes the approved root {root!s}: {candidate!s}",
+            f"{field} escapes the approved language directory {root!s}: "
+            f"{candidate!s}",
             stage="selection",
             operation="resolve_target",
             subject=str(candidate),
         ) from exc
     if not allow_root and not relative.parts:
         raise PathSecurityError(
-            f"{field} must be inside, not equal to, the approved root {root!s}",
+            f"{field} must be inside, not equal to, the approved language "
+            f"directory {root!s}",
             stage="selection",
             operation="resolve_target",
             subject=str(candidate),
@@ -529,12 +479,14 @@ def _require_portable_relative_path(value: str, *, field: str) -> PurePosixPath:
     text = _require_text(value, field=field)
     if "\\" in text:
         raise ProjectConfigurationError(
-            f"{field} must use '/' as the project path separator"
+            f"{field} must use '/' as the portable path separator"
         )
     windows = PureWindowsPath(text)
     portable = PurePosixPath(text)
     if windows.is_absolute() or windows.drive or portable.is_absolute():
-        raise ProjectConfigurationError(f"{field} must be source-root-relative")
+        raise ProjectConfigurationError(
+            f"{field} must be language-directory-relative"
+        )
     if portable in {PurePosixPath("."), PurePosixPath("..")}:
         raise ProjectConfigurationError(f"{field} must name a source file")
     if any(part in {"", ".", ".."} for part in portable.parts):
@@ -548,7 +500,12 @@ def _require_portable_relative_path(value: str, *, field: str) -> PurePosixPath:
 
 def _canonical_identity_value(kind: TargetKind, value: str) -> str:
     text = _require_text(value, field=f"{kind.value} target value")
-    if kind in {TargetKind.FILE, TargetKind.MODULE, TargetKind.CHECKPOINT, TargetKind.ENTRYPOINT}:
+    if kind in {
+        TargetKind.FILE,
+        TargetKind.MODULE,
+        TargetKind.CHECKPOINT,
+        TargetKind.ENTRYPOINT,
+    }:
         path = PurePath(text)
         if isinstance(path, PureWindowsPath):
             return path.as_posix()
@@ -596,19 +553,15 @@ def _path_exists(path: Path, *, field: str) -> bool:
 
 
 def _is_basename_only(path: Path) -> bool:
-    return not path.is_absolute() and path.parent == Path(".") and path.name not in {"", ".", ".."}
+    return (
+        not path.is_absolute()
+        and path.parent == Path(".")
+        and path.name not in {"", ".", ".."}
+    )
 
 
 def _filesystem_identity(path: Path) -> str:
     return os.path.normcase(os.path.normpath(os.fspath(path)))
-
-
-def _lexical_identity(path: Path) -> str:
-    try:
-        normalized = path.absolute()
-    except OSError:
-        normalized = path
-    return _filesystem_identity(normalized)
 
 
 def _portable_sort_key(path: Path, *, root: Path) -> tuple[str, str]:
@@ -617,6 +570,7 @@ def _portable_sort_key(path: Path, *, root: Path) -> tuple[str, str]:
 
 
 __all__ = (
+    "canonical_language_relative_target",
     "canonical_project_relative_target",
     "canonical_source_relative_target",
     "extract_module_name",

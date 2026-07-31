@@ -23,25 +23,19 @@ from gf_wordbench.entrypoints.gui.view_model import (
     GuiRunRequest,
     GuiSnapshot,
     GuiViewModel,
+    LanguageView,
     ProgressView,
-    ProjectView,
     ResultView,
     RunPresentationState,
     StatusCounts,
-    project_view_from_config,
+    language_view_from_context,
 )
 from gf_wordbench.kernel.events import EventLevel, ProgressEvent
 from gf_wordbench.kernel.serialization import ProducerInfo
 from gf_wordbench.kernel.statuses import ValidationMode
-from gf_wordbench.projects.models import (
-    GFProjectConfig,
-    ModuleTargets,
-    PROJECT_SCHEMA_ID,
-    PROJECT_SCHEMA_VERSION,
-    ProjectConfig,
-    ProjectIdentity,
-    SourceConfig,
-    ValidationPolicy,
+from gf_wordbench.projects.languages.models import (
+    ResolvedLanguageContext,
+    SelectedPathKind,
 )
 from gf_wordbench.state.models import (
     AppState,
@@ -56,7 +50,7 @@ from gf_wordbench.state.schema import (
 
 pytestmark = pytest.mark.unit
 
-_FIXED_TIME: Final[datetime] = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
+_FIXED_TIME: Final[datetime] = datetime(2026, 7, 31, 10, 0, tzinfo=UTC)
 
 
 def _state() -> AppState:
@@ -68,14 +62,17 @@ def _state() -> AppState:
             version="1.0.0",
         ),
         environment=EnvironmentState(
-            project_root="C:/work/GF_Wordbench/project",
-            rgl_root="C:/gf/rgl",
+            last_selected_language_path=(
+                "C:/gf/gf-rgl/src/example/GrammarEx.gf"
+            ),
+            last_selected_validation_profile=None,
+            rgl_root="C:/gf/gf-rgl",
             gf_executable="C:/gf/bin/gf.exe",
             output_root="C:/work/GF_Wordbench/runs",
         ),
         selection=SelectionState(
-            mode=ValidationMode.CHECKPOINT,
-            target_file="lib/src/example/GrammarEx.gf",
+            mode=ValidationMode.QUICK,
+            target_file="GrammarEx.gf",
             timeout_sec=90,
             max_files=25,
             keep_ok_details=True,
@@ -94,40 +91,56 @@ def _state() -> AppState:
     )
 
 
-def _project(tmp_path: Path) -> ProjectConfig:
-    root = (tmp_path / "project").resolve()
-    source_directory = Path("lib/src/example")
-    return ProjectConfig(
-        schema_id=PROJECT_SCHEMA_ID,
-        schema_version=PROJECT_SCHEMA_VERSION,
-        identity=ProjectIdentity(
-            id="example",
-            name="Example Language",
-            language_code="ex",
-            root=Path("."),
+def _language_context(tmp_path: Path) -> ResolvedLanguageContext:
+    rgl_root = (tmp_path / "gf-rgl").resolve()
+    rgl_source_root = rgl_root / "src"
+    language_directory = rgl_source_root / "example"
+    selected_file = language_directory / "GrammarEx.gf"
+    common_directory = rgl_source_root / "common"
+
+    for directory in (language_directory, common_directory):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    source_inventory = (
+        language_directory / "AllEx.gf",
+        language_directory / "GrammarEx.gf",
+        language_directory / "LangEx.gf",
+        language_directory / "MorphologyEx.gf",
+    )
+    for source in source_inventory:
+        source.write_text(
+            f"resource {source.stem} = {{}} ;\n",
+            encoding="utf-8",
+        )
+
+    return ResolvedLanguageContext(
+        language_key="example",
+        selected_path=selected_file,
+        selected_path_kind=SelectedPathKind.FILE,
+        language_directory=language_directory,
+        rgl_source_root=rgl_source_root,
+        rgl_root=rgl_root,
+        selected_file=selected_file,
+        focused_target=Path("GrammarEx.gf"),
+        module_suffix="Ex",
+        available_entrypoints=(
+            Path("LangEx.gf"),
+            Path("GrammarEx.gf"),
+            Path("AllEx.gf"),
         ),
-        sources=SourceConfig(
-            directory=source_directory,
-            glob="*.gf",
-            include_regex=r".*\.gf$",
-            exclude_regex=r"(?:^|/)attic(?:/|$)",
+        source_inventory=source_inventory,
+        gf_path_requirements=(
+            language_directory,
+            common_directory,
         ),
-        gf=GFProjectConfig(
-            path_parts=("lib/src/example", "lib/src/common"),
-            minimum_version="3.11",
+        structural_diagnostics=(),
+        capability_statuses=MappingProxyType(
+            {
+                "source-ready": True,
+                "scan-ready": True,
+            }
         ),
-        modules=ModuleTargets(
-            entrypoints=(Path("GrammarEx.gf"),),
-            checkpoints=(Path("MorphologyEx.gf"),),
-        ),
-        validation=ValidationPolicy(
-            required_scenarios=("smoke",),
-            optional_scenarios=("regression",),
-            release_requires_pgf=True,
-        ),
-        project_file=root / "project.toml",
-        project_root=root,
-        source_root=root / source_directory,
+        resolution_provenance=(),
     )
 
 
@@ -160,11 +173,7 @@ def _required_dataclass_kwargs(
             values[name] = 1
         elif lowered in {"ok", "fail", "error", "skipped"}:
             values[name] = 0
-        elif lowered == "direct":
-            values[name] = 0
-        elif lowered == "downstream":
-            values[name] = 0
-        elif lowered == "ambiguous":
+        elif lowered in {"direct", "downstream", "ambiguous"}:
             values[name] = 0
         elif lowered == "stage":
             values[name] = "compile"
@@ -173,7 +182,7 @@ def _required_dataclass_kwargs(
         elif lowered == "message":
             values[name] = "Compiling GrammarEx.gf"
         elif lowered == "run_id":
-            values[name] = "run_20260725T120000Z_example"
+            values[name] = "run_20260731T100000Z_example"
         elif lowered.endswith("_path") or lowered.endswith("_dir"):
             values[name] = Path("/tmp/gf-wordbench")
         elif lowered.endswith("_id"):
@@ -240,7 +249,7 @@ def _call_begin_run(model: GuiViewModel) -> None:
 
     for parameter in signature.parameters.values():
         if parameter.name == "run_id":
-            value: object = "run_20260725T120000Z_example"
+            value: object = "run_20260731T100000Z_example"
         elif parameter.name in {"started_at", "timestamp", "now"}:
             value = _FIXED_TIME
         elif parameter.name in {"message", "status_message"}:
@@ -261,6 +270,20 @@ def _call_begin_run(model: GuiViewModel) -> None:
     model.begin_run(*positional, **keywords)
 
 
+def _flatten_dataclass(value: object) -> tuple[object, ...]:
+    flattened: list[object] = []
+    for item in fields(value):
+        member = getattr(value, item.name)
+        if isinstance(member, Mapping):
+            flattened.extend(member.keys())
+            flattened.extend(member.values())
+        elif isinstance(member, tuple):
+            flattened.extend(member)
+        else:
+            flattened.append(member)
+    return tuple(flattened)
+
+
 def test_gui_request_round_trips_only_permitted_application_state() -> None:
     state = _state()
 
@@ -268,6 +291,18 @@ def test_gui_request_round_trips_only_permitted_application_state() -> None:
 
     assert request.environment_state() == state.environment
     assert request.selection_state() == state.selection
+
+    forbidden_language_truth = {
+        "language_key",
+        "language_directory",
+        "module_suffix",
+        "source_inventory",
+        "available_entrypoints",
+        "capability_statuses",
+    }
+    assert forbidden_language_truth.isdisjoint(
+        {item.name for item in fields(request)}
+    )
 
     for item in fields(request):
         value = getattr(request, item.name)
@@ -284,9 +319,12 @@ def test_gui_request_is_immutable_and_normalizes_state_paths() -> None:
         request.target_file = "changed.gf"  # type: ignore[misc]
 
     environment = request.environment_state()
-    assert environment.project_root == "C:/work/GF_Wordbench/project"
+    assert environment.last_selected_language_path == (
+        "C:/gf/gf-rgl/src/example/GrammarEx.gf"
+    )
+    assert environment.last_selected_validation_profile is None
     assert environment.gf_executable == "C:/gf/bin/gf.exe"
-    assert environment.rgl_root == "C:/gf/rgl"
+    assert environment.rgl_root == "C:/gf/gf-rgl"
     assert environment.output_root == "C:/work/GF_Wordbench/runs"
 
 
@@ -306,10 +344,7 @@ def test_progress_view_exposes_known_and_indeterminate_progress() -> None:
 
 @pytest.mark.parametrize("cls", (StatusCounts, FailureCounts))
 def test_count_views_reject_negative_counts(cls: type[Any]) -> None:
-    kwargs = {
-        item.name: 0
-        for item in fields(cls)
-    }
+    kwargs = {item.name: 0 for item in fields(cls)}
     assert cls(**kwargs) is not None
 
     first = fields(cls)[0].name
@@ -321,7 +356,7 @@ def test_count_views_reject_negative_counts(cls: type[Any]) -> None:
 def test_presentation_value_objects_are_frozen_and_slotted() -> None:
     public_values = (
         GuiRunRequest,
-        ProjectView,
+        LanguageView,
         ProgressView,
         StatusCounts,
         FailureCounts,
@@ -338,45 +373,46 @@ def test_presentation_value_objects_are_frozen_and_slotted() -> None:
         assert hasattr(cls, "__slots__")
 
 
-def test_project_view_comes_only_from_project_configuration(
+def test_language_context_does_not_embed_validation_profile_policy() -> None:
+    field_names = {item.name for item in fields(ResolvedLanguageContext)}
+
+    assert "validation_profile" not in field_names
+    assert "required_scenarios" not in field_names
+    assert "checkpoints" not in field_names
+    assert "release_gates" not in field_names
+
+
+def test_language_view_comes_only_from_resolved_language_context(
     tmp_path: Path,
 ) -> None:
-    project = _project(tmp_path)
+    context = _language_context(tmp_path)
 
-    view = project_view_from_config(project)
+    view = language_view_from_context(context)
 
-    assert isinstance(view, ProjectView)
-    values = {
-        item.name: getattr(view, item.name)
-        for item in fields(view)
-    }
-    flattened: list[object] = []
-    for value in values.values():
-        if isinstance(value, tuple):
-            flattened.extend(value)
-        else:
-            flattened.append(value)
+    assert isinstance(view, LanguageView)
+    flattened = _flatten_dataclass(view)
 
-    assert project.identity.id in flattened
-    assert project.identity.name in flattened
-    assert project.identity.language_code in flattened
+    assert context.language_key in flattened
+    assert context.module_suffix in flattened
     assert any(
         value in {
-            project.project_root,
-            project.project_root.as_posix(),
+            context.language_directory,
+            context.language_directory.as_posix(),
         }
         for value in flattened
     )
     assert any(
         value in {
-            project.source_root,
-            project.source_root.as_posix(),
+            context.rgl_source_root,
+            context.rgl_source_root.as_posix(),
         }
         for value in flattened
     )
+    for entrypoint in context.available_entrypoints:
+        assert entrypoint in flattened or entrypoint.as_posix() in flattened
 
 
-def test_initial_snapshot_is_idle_and_preserves_last_completed_run() -> None:
+def test_initial_snapshot_is_idle_without_loaded_language() -> None:
     state = _state()
     model = _view_model(state)
 
@@ -388,7 +424,7 @@ def test_initial_snapshot_is_idle_and_preserves_last_completed_run() -> None:
     assert isinstance(snapshot, GuiSnapshot)
     assert snapshot.request == model.request
     assert snapshot.run_state is RunPresentationState.IDLE
-    assert snapshot.project is None
+    assert snapshot.language is None
     assert snapshot.progress is None
     assert snapshot.result is None
     assert snapshot.artifact_actions == ()
@@ -396,21 +432,21 @@ def test_initial_snapshot_is_idle_and_preserves_last_completed_run() -> None:
     assert snapshot.notices == ()
 
 
-def test_request_and_project_changes_are_allowed_only_while_idle(
+def test_request_and_language_changes_are_allowed_only_while_idle(
     tmp_path: Path,
 ) -> None:
     model = _view_model(_state())
-    project = _project(tmp_path)
+    context = _language_context(tmp_path)
 
     updated = replace(
         model.request,
-        target_file="lib/src/example/MorphologyEx.gf",
+        target_file="MorphologyEx.gf",
     )
     model.update_request(updated)
     assert model.request == updated
 
-    model.load_project(project)
-    assert model.snapshot().project == project_view_from_config(project)
+    model.load_language_context(context)
+    assert model.snapshot().language == language_view_from_context(context)
 
     _call_begin_run(model)
 
@@ -420,18 +456,37 @@ def test_request_and_project_changes_are_allowed_only_while_idle(
 
     with pytest.raises(RuntimeError):
         model.update_request(
-            replace(updated, target_file="lib/src/example/Other.gf")
+            replace(updated, target_file="OtherEx.gf")
         )
 
     with pytest.raises(RuntimeError):
-        model.clear_project()
+        model.clear_language_context()
+
+    with pytest.raises(RuntimeError):
+        model.load_language_context(context)
+
+
+def test_clearing_language_context_does_not_erase_remembered_path(
+    tmp_path: Path,
+) -> None:
+    state = _state()
+    model = _view_model(state)
+    model.load_language_context(_language_context(tmp_path))
+
+    model.clear_language_context()
+
+    snapshot = model.snapshot()
+    assert snapshot.language is None
+    assert model.persistable_state().environment.last_selected_language_path == (
+        state.environment.last_selected_language_path
+    )
 
 
 def test_structured_progress_updates_snapshot_and_bounded_activity(
     tmp_path: Path,
 ) -> None:
     model = _view_model(_state())
-    model.load_project(_project(tmp_path))
+    model.load_language_context(_language_context(tmp_path))
     _call_begin_run(model)
 
     for index in range(5):
@@ -444,7 +499,7 @@ def test_structured_progress_updates_snapshot_and_bounded_activity(
                     if index == 3
                     else EventLevel.INFO
                 ),
-                run_id="run_20260725T120000Z_example",
+                run_id="run_20260731T100000Z_example",
                 stage="compile",
                 subject=f"Module{index}.gf",
                 completed=index + 1,
@@ -472,7 +527,7 @@ def test_cancellation_request_is_idempotent_and_disables_repeat_request(
     tmp_path: Path,
 ) -> None:
     model = _view_model(_state())
-    model.load_project(_project(tmp_path))
+    model.load_language_context(_language_context(tmp_path))
     _call_begin_run(model)
 
     first = model.request_cancellation()

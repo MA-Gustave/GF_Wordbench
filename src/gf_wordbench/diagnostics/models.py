@@ -10,7 +10,13 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Final, TypeAlias
 
-from gf_wordbench.kernel.statuses import ErrorKind, ExecutionState, ValidationStatus
+from gf_wordbench.kernel.serialization import ProducerInfo
+from gf_wordbench.kernel.statuses import (
+    DiagnosticClass,
+    ErrorKind,
+    ExecutionState,
+    ValidationStatus,
+)
 
 _MAX_IDENTIFIER: Final[int] = 256
 _MAX_MESSAGE: Final[int] = 8_192
@@ -656,6 +662,200 @@ class DiagnosticRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class DiagnosticMatchResult:
+    """Immutable result returned by diagnostic stream matching."""
+
+    records: tuple[DiagnosticRecord, ...] = ()
+    warnings: tuple[str, ...] = ()
+    patterns_considered: int = 0
+    patterns_matched: int = 0
+    unknown_lines: int = 0
+    limits_reached: bool = False
+    parse_complete: bool = True
+    contract_error: bool = False
+
+    def __post_init__(self) -> None:
+        records = _typed_tuple(self.records, DiagnosticRecord, "records")
+        warnings = _plain_text_tuple(
+            self.warnings,
+            "warnings",
+            _MAX_MESSAGE,
+        )
+        for name in (
+            "patterns_considered",
+            "patterns_matched",
+            "unknown_lines",
+        ):
+            _nonnegative_int(getattr(self, name), name)
+        if self.patterns_matched > self.patterns_considered:
+            raise ValueError(
+                "patterns_matched must not exceed patterns_considered"
+            )
+        for name in (
+            "limits_reached",
+            "parse_complete",
+            "contract_error",
+        ):
+            _bool(getattr(self, name), name)
+        record_ids = tuple(record.record_id for record in records)
+        if len(record_ids) != len(set(record_ids)):
+            raise ValueError("records contain duplicate record_id values")
+        object.__setattr__(self, "records", records)
+        object.__setattr__(self, "warnings", warnings)
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceRef:
+    """Portable reference to evidence supporting one diagnostic finding."""
+
+    role: str
+    path: str
+    stream: str | None = None
+    line: int | None = None
+    column: int | None = None
+    excerpt: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "role",
+            _text(self.role, "role", _MAX_IDENTIFIER),
+        )
+        object.__setattr__(
+            self,
+            "path",
+            _text(self.path, "path", _MAX_DETAIL),
+        )
+        object.__setattr__(
+            self,
+            "stream",
+            _optional_text(self.stream, "stream", _MAX_IDENTIFIER),
+        )
+        _optional_positive_int(self.line, "line")
+        _optional_positive_int(self.column, "column")
+        object.__setattr__(
+            self,
+            "excerpt",
+            _optional_plain_text(self.excerpt, "excerpt", _MAX_EXCERPT),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Finding:
+    """Immutable structured finding produced by diagnostics or static scanning."""
+
+    finding_id: str
+    severity: str
+    diagnostic_class: DiagnosticClass | None
+    error_kind: ErrorKind | None
+    kind: str
+    message: str
+    target: str
+    evidence_refs: tuple[EvidenceRef, ...]
+    producer: ProducerInfo
+    rule_id: str | None = None
+    blocking: bool = False
+    metadata: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "finding_id",
+            _text(self.finding_id, "finding_id", _MAX_IDENTIFIER),
+        )
+        object.__setattr__(
+            self,
+            "severity",
+            _text(self.severity, "severity", _MAX_IDENTIFIER),
+        )
+        if self.diagnostic_class is not None and not isinstance(
+            self.diagnostic_class,
+            DiagnosticClass,
+        ):
+            raise TypeError(
+                "diagnostic_class must be DiagnosticClass or None"
+            )
+        if self.error_kind is not None and not isinstance(
+            self.error_kind,
+            ErrorKind,
+        ):
+            raise TypeError("error_kind must be ErrorKind or None")
+        object.__setattr__(
+            self,
+            "kind",
+            _text(self.kind, "kind", _MAX_IDENTIFIER),
+        )
+        object.__setattr__(
+            self,
+            "message",
+            _text(self.message, "message", _MAX_MESSAGE),
+        )
+        object.__setattr__(
+            self,
+            "target",
+            _text(self.target, "target", _MAX_DETAIL),
+        )
+        object.__setattr__(
+            self,
+            "evidence_refs",
+            _typed_tuple(self.evidence_refs, EvidenceRef, "evidence_refs"),
+        )
+        if not isinstance(self.producer, ProducerInfo):
+            raise TypeError("producer must be ProducerInfo")
+        object.__setattr__(
+            self,
+            "rule_id",
+            _optional_text(self.rule_id, "rule_id", _MAX_IDENTIFIER),
+        )
+        _bool(self.blocking, "blocking")
+        if not isinstance(self.metadata, Mapping):
+            raise TypeError("metadata must be a mapping")
+        normalized_metadata: dict[str, str] = {}
+        for key, value in self.metadata.items():
+            canonical_key = _text(
+                key,
+                "metadata key",
+                _MAX_IDENTIFIER,
+            )
+            canonical_value = _plain_text(
+                value,
+                f"metadata[{canonical_key!r}]",
+                _MAX_DETAIL,
+            )
+            normalized_metadata[canonical_key] = canonical_value
+        object.__setattr__(
+            self,
+            "metadata",
+            MappingProxyType(
+                dict(
+                    sorted(
+                        normalized_metadata.items(),
+                        key=lambda item: (
+                            item[0].casefold(),
+                            item[0],
+                        ),
+                    )
+                )
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TopError:
+    """Canonical top-error aggregation record.
+
+    Validation and canonical ordering are owned by
+    ``diagnostics.classification.top_errors`` so invalid candidate records can
+    still be constructed and rejected explicitly by that service.
+    """
+
+    error_kind: ErrorKind
+    message: str
+    count: int
+    subject_kinds: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class DiagnosticPattern:
     pattern_id: str
     operations: frozenset[str]
@@ -772,72 +972,234 @@ class DiagnosticParseWarning:
         object.__setattr__(self, "metadata", _freeze_metadata(self.metadata))
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class DiagnosticParseResult:
+    """Immutable public result of diagnostic parsing.
+
+    ``operation_kind`` is canonical. The legacy ``operation`` keyword and
+    property remain as a compatibility alias for existing callers.
+    """
+
     parser_version: str
     status: ValidationStatus | str
     gf_version: str | None
-    operation: str
+    operation_kind: str
     records: tuple[DiagnosticRecord, ...]
-    warnings: tuple[DiagnosticParseWarning, ...] = ()
-    primary_record_id: str | None = None
-    fatal_detected: bool = False
-    unknown_failure_output: bool = False
-    stdout_truncated: bool = False
-    stderr_truncated: bool = False
-    decoding_lossy: bool = False
-    parse_complete: bool = True
-    metadata: Metadata = field(default_factory=dict)
+    warnings: tuple[DiagnosticParseWarning | str, ...]
+    primary_record_id: str | None
+    primary_error_kind: ErrorKind | str | None
+    primary_message: str
+    primary_detail: str
+    fatal_detected: bool
+    unknown_failure_output: bool
+    stdout_truncated: bool
+    stderr_truncated: bool
+    decoding_lossy: bool
+    parse_complete: bool
+    patterns_considered: int
+    patterns_matched: int
+    records_emitted: int
+    unknown_lines: int
+    limits_reached: bool
+    metadata: Metadata
 
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
+    def __init__(
+        self,
+        parser_version: str,
+        status: ValidationStatus | str,
+        gf_version: str | None,
+        operation_kind: str | None = None,
+        records: Iterable[DiagnosticRecord] = (),
+        warnings: Iterable[DiagnosticParseWarning | str] = (),
+        primary_record_id: str | None = None,
+        primary_error_kind: ErrorKind | str | None = None,
+        primary_message: str = "",
+        primary_detail: str = "",
+        fatal_detected: bool = False,
+        unknown_failure_output: bool = False,
+        stdout_truncated: bool = False,
+        stderr_truncated: bool = False,
+        decoding_lossy: bool = False,
+        parse_complete: bool = True,
+        patterns_considered: int = 0,
+        patterns_matched: int = 0,
+        records_emitted: int | None = None,
+        unknown_lines: int = 0,
+        limits_reached: bool = False,
+        metadata: Metadata | None = None,
+        *,
+        operation: str | None = None,
+    ) -> None:
+        if operation_kind is None:
+            operation_kind = operation
+        elif operation is not None and operation != operation_kind:
+            raise ValueError(
+                "operation and operation_kind must identify the same operation"
+            )
+        if operation_kind is None:
+            raise TypeError("operation_kind is required")
+
+        parser_version_value = _text(
+            parser_version,
             "parser_version",
-            _text(self.parser_version, "parser_version", 64),
+            64,
         )
-        object.__setattr__(
-            self,
+        status_value = _enum_or_string(
+            status,
+            ValidationStatus,
             "status",
-            _enum_or_string(self.status, ValidationStatus, "status"),
         )
-        object.__setattr__(
-            self,
+        gf_version_value = _optional_text(
+            gf_version,
             "gf_version",
-            _optional_text(self.gf_version, "gf_version", _MAX_IDENTIFIER),
+            _MAX_IDENTIFIER,
         )
-        object.__setattr__(self, "operation", _text(self.operation, "operation", _MAX_IDENTIFIER))
-        records = _typed_tuple(self.records, DiagnosticRecord, "records")
-        warnings = _typed_tuple(self.warnings, DiagnosticParseWarning, "warnings")
-        ids = tuple(record.record_id for record in records)
-        if len(ids) != len(set(ids)):
+        operation_value = _text(
+            operation_kind,
+            "operation_kind",
+            _MAX_IDENTIFIER,
+        )
+        record_values = _typed_tuple(
+            records,
+            DiagnosticRecord,
+            "records",
+        )
+        warning_values = _diagnostic_warning_tuple(warnings)
+
+        record_ids = tuple(record.record_id for record in record_values)
+        if len(record_ids) != len(set(record_ids)):
             raise ValueError("records contain duplicate record_id values")
-        primary_id = self.primary_record_id
-        if primary_id is not None:
-            if primary_id not in set(ids):
-                raise ValueError("primary_record_id does not identify a record")
-        elif records:
-            primary_id = records[0].record_id
-        for name in (
-            "fatal_detected",
-            "unknown_failure_output",
-            "stdout_truncated",
-            "stderr_truncated",
-            "decoding_lossy",
-            "parse_complete",
+
+        selected_primary_id = primary_record_id
+        if selected_primary_id is not None:
+            selected_primary_id = _text(
+                selected_primary_id,
+                "primary_record_id",
+                _MAX_IDENTIFIER,
+            )
+            if selected_primary_id not in set(record_ids):
+                raise ValueError(
+                    "primary_record_id does not identify a record"
+                )
+        elif record_values:
+            selected_primary_id = record_values[0].record_id
+
+        primary_record = next(
+            (
+                record
+                for record in record_values
+                if record.record_id == selected_primary_id
+            ),
+            None,
+        )
+
+        if primary_error_kind is None:
+            if primary_record is not None:
+                primary_error_kind_value: ErrorKind | str | None = (
+                    primary_record.error_kind
+                )
+            elif status_value is ValidationStatus.OK:
+                primary_error_kind_value = ErrorKind.OK
+            else:
+                primary_error_kind_value = None
+        else:
+            primary_error_kind_value = _enum_or_string(
+                primary_error_kind,
+                ErrorKind,
+                "primary_error_kind",
+            )
+
+        primary_message_value = _plain_text(
+            primary_message,
+            "primary_message",
+            _MAX_MESSAGE,
+        )
+        primary_detail_value = _plain_text(
+            primary_detail,
+            "primary_detail",
+            _MAX_DETAIL,
+        )
+        if primary_record is not None:
+            if not primary_message_value:
+                primary_message_value = primary_record.message
+            if not primary_detail_value:
+                primary_detail_value = primary_record.detail
+
+        for name, value in (
+            ("fatal_detected", fatal_detected),
+            ("unknown_failure_output", unknown_failure_output),
+            ("stdout_truncated", stdout_truncated),
+            ("stderr_truncated", stderr_truncated),
+            ("decoding_lossy", decoding_lossy),
+            ("parse_complete", parse_complete),
+            ("limits_reached", limits_reached),
         ):
-            _bool(getattr(self, name), name)
-        if any(record.is_fatal for record in records) and not self.fatal_detected:
-            object.__setattr__(self, "fatal_detected", True)
-        if any(record.is_unknown for record in records) and not self.unknown_failure_output:
-            object.__setattr__(self, "unknown_failure_output", True)
-        object.__setattr__(self, "records", records)
-        object.__setattr__(self, "warnings", warnings)
-        object.__setattr__(self, "primary_record_id", primary_id)
-        object.__setattr__(self, "metadata", _freeze_metadata(self.metadata))
+            _bool(value, name)
+
+        for name, value in (
+            ("patterns_considered", patterns_considered),
+            ("patterns_matched", patterns_matched),
+            ("unknown_lines", unknown_lines),
+        ):
+            _nonnegative_int(value, name)
+        if patterns_matched > patterns_considered:
+            raise ValueError(
+                "patterns_matched must not exceed patterns_considered"
+            )
+
+        if records_emitted is None:
+            records_emitted_value = len(record_values)
+        else:
+            _nonnegative_int(records_emitted, "records_emitted")
+            records_emitted_value = records_emitted
+            if records_emitted_value != len(record_values):
+                raise ValueError(
+                    "records_emitted must equal the number of records"
+                )
+
+        fatal_value = fatal_detected or any(
+            record.is_fatal for record in record_values
+        )
+        unknown_value = unknown_failure_output or any(
+            record.is_unknown for record in record_values
+        )
+
+        metadata_value = _freeze_metadata(
+            {} if metadata is None else metadata
+        )
+
+        values = {
+            "parser_version": parser_version_value,
+            "status": status_value,
+            "gf_version": gf_version_value,
+            "operation_kind": operation_value,
+            "records": record_values,
+            "warnings": warning_values,
+            "primary_record_id": selected_primary_id,
+            "primary_error_kind": primary_error_kind_value,
+            "primary_message": primary_message_value,
+            "primary_detail": primary_detail_value,
+            "fatal_detected": fatal_value,
+            "unknown_failure_output": unknown_value,
+            "stdout_truncated": stdout_truncated,
+            "stderr_truncated": stderr_truncated,
+            "decoding_lossy": decoding_lossy,
+            "parse_complete": parse_complete,
+            "patterns_considered": patterns_considered,
+            "patterns_matched": patterns_matched,
+            "records_emitted": records_emitted_value,
+            "unknown_lines": unknown_lines,
+            "limits_reached": limits_reached,
+            "metadata": metadata_value,
+        }
+        for name, value in values.items():
+            object.__setattr__(self, name, value)
 
     @property
-    def operation_kind(self) -> str:
-        return self.operation
+    def operation(self) -> str:
+        """Legacy alias for the canonical operation kind."""
+
+        return self.operation_kind
 
     @property
     def primary(self) -> DiagnosticRecord | None:
@@ -853,7 +1215,11 @@ class DiagnosticParseResult:
         primary = self.primary
         if primary is None:
             return self.records
-        return tuple(record for record in self.records if record.record_id != primary.record_id)
+        return tuple(
+            record
+            for record in self.records
+            if record.record_id != primary.record_id
+        )
 
     @property
     def references(self) -> tuple[str, ...]:
@@ -868,19 +1234,12 @@ class DiagnosticParseResult:
 
     @property
     def parse_warnings(self) -> tuple[str, ...]:
-        return tuple(warning.message for warning in self.warnings)
-
-    @property
-    def primary_error_kind(self) -> ErrorKind | str | None:
-        return None if self.primary is None else self.primary.error_kind
-
-    @property
-    def primary_message(self) -> str:
-        return "" if self.primary is None else self.primary.message
-
-    @property
-    def primary_detail(self) -> str:
-        return "" if self.primary is None else self.primary.detail
+        return tuple(
+            warning.message
+            if isinstance(warning, DiagnosticParseWarning)
+            else warning
+            for warning in self.warnings
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -982,6 +1341,30 @@ def records_from_matches(
             raise ValueError("too many diagnostic records")
     return tuple(result)
 
+
+
+def _diagnostic_warning_tuple(
+    value: Iterable[DiagnosticParseWarning | str],
+) -> tuple[DiagnosticParseWarning | str, ...]:
+    if isinstance(value, (str, bytes, bytearray, Mapping)):
+        raise TypeError(
+            "warnings must be an iterable of DiagnosticParseWarning or str"
+        )
+    result: list[DiagnosticParseWarning | str] = []
+    for item in value:
+        if isinstance(item, DiagnosticParseWarning):
+            result.append(item)
+        elif isinstance(item, str):
+            result.append(
+                _plain_text(item, "warning", _MAX_MESSAGE)
+            )
+        else:
+            raise TypeError(
+                "warnings must contain DiagnosticParseWarning or str values"
+            )
+        if len(result) > _MAX_ITEMS:
+            raise ValueError("warnings exceeds the supported limit")
+    return tuple(result)
 
 def _scope_accepts(scope: frozenset[str], value: str) -> bool:
     normalized = value.strip().lower().replace("-", "_")
@@ -1200,6 +1583,7 @@ __all__ = (
     "DiagnosticEvidence",
     "DiagnosticLine",
     "DiagnosticLocation",
+    "DiagnosticMatchResult",
     "DiagnosticParseResult",
     "DiagnosticParseWarning",
     "DiagnosticPattern",
@@ -1208,6 +1592,8 @@ __all__ = (
     "DiagnosticSeverity",
     "DiagnosticStream",
     "DiagnosticStreamEvidence",
+    "EvidenceRef",
+    "Finding",
     "LineClassification",
     "Metadata",
     "MetadataValue",
@@ -1216,6 +1602,7 @@ __all__ = (
     "PatternMatch",
     "PatternMatcher",
     "StreamScope",
+    "TopError",
     "build_record_id",
     "normalized_diagnostic_signature",
     "records_from_matches",

@@ -5,20 +5,21 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass, replace
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, cast, runtime_checkable
 
 from gf_wordbench.kernel.errors import ContractViolationError
-from gf_wordbench.kernel.statuses import DiagnosticClass, ValidationStatus
+from gf_wordbench.kernel.statuses import (
+    DiagnosticClass,
+    ErrorKind,
+    ValidationStatus,
+)
 
-from .blockers import BlockerGraphResolution, collapse_blocker_graph
-from .causality import CausalityEvidence, classify_causality
+from .causality import CausalityFacts, classify_causality
 from .relationships import (
-    ResultIndexes,
-    build_result_indexes,
-    collect_structured_references,
-    normalize_subject_identity,
-    resolve_references,
-    result_identity,
+    build_blocker_graph,
+    collapse_blocker_graph,
+    normalize_blocker_identity,
 )
 
 if TYPE_CHECKING:
@@ -79,6 +80,21 @@ class ClassificationBatch(Generic[_ResultT]):
     @property
     def ok(self) -> bool:
         return not self.issues
+
+
+@dataclass(frozen=True, slots=True)
+class _ResultIndexes:
+    by_identity: Mapping[str, DiagnosticResult]
+    canonical_identity: Mapping[str, str]
+    aliases: Mapping[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class _ReferenceResolution:
+    resolved_subjects: tuple[str, ...]
+    unresolved_references: tuple[str, ...]
+    self_referenced: bool
+    has_subject_local_evidence: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,11 +189,11 @@ def classify_single_result(
     references_by_subject: Mapping[str, Iterable[str]] | None = None,
     strict: bool = True,
 ) -> FileResult:
-    target_identity = result_identity(file_result)
+    target_identity = _result_identity(file_result)
     matches = [
         index
         for index, candidate in enumerate(file_results)
-        if result_identity(candidate) == target_identity
+        if _result_identity(candidate) == target_identity
     ]
     if len(matches) != 1:
         raise _contract_error(
@@ -199,14 +215,14 @@ def resolve_blocked_by(
     references_by_subject: Mapping[str, Iterable[str]] | None = None,
     strict: bool = True,
 ) -> list[str]:
-    target_identity = result_identity(file_result)
+    target_identity = _result_identity(file_result)
     all_results: tuple[DiagnosticResult, ...] = tuple(file_results)
-    indexes = build_result_indexes(all_results, strict=strict)
+    indexes = _build_result_indexes(all_results, strict=strict)
     references = _references_for(
         file_result,
         references_by_subject=references_by_subject,
     )
-    resolution = resolve_references(
+    resolution = _resolve_references(
         file_result,
         references,
         indexes,
@@ -219,12 +235,24 @@ def resolve_blocked_by(
     if not blockers:
         return []
     classifications = {
-        result_identity(result): _diagnostic_class(result)
+        _result_identity(result): _diagnostic_class(result)
         for result in all_results
     }
     initial_edges = {target_identity: blockers}
-    graph = collapse_blocker_graph(classifications, initial_edges)
-    return list(graph.blockers_by_subject.get(target_identity, ()))
+    graph = build_blocker_graph(
+        initial_edges,
+        known_subjects=classifications,
+    )
+    resolution = collapse_blocker_graph(
+        graph,
+        root_subjects=(
+            identity
+            for identity, diagnostic_class in classifications.items()
+            if diagnostic_class is DiagnosticClass.DIRECT
+        ),
+        terminal_subjects_are_roots=False,
+    )
+    return list(resolution.root_blockers.get(target_identity, ()))
 
 
 def classify_diagnostic_results(
@@ -238,21 +266,22 @@ def classify_diagnostic_results(
     owned_results = tuple(results)
     peers = tuple(peer_results)
     combined: tuple[DiagnosticResult, ...] = (*owned_results, *peers)
+    owned_object_ids = frozenset(id(result) for result in owned_results)
 
     if not owned_results:
         return ClassificationBatch(())
 
-    indexes = build_result_indexes(combined, strict=strict)
+    indexes = _build_result_indexes(combined, strict=strict)
     normalized_noise = frozenset(
-        normalize_subject_identity(value) for value in noise_subjects
+        _normalize_subject_identity(value) for value in noise_subjects
     )
     issues: list[ClassificationIssue] = []
     initial_classes: dict[str, DiagnosticClass] = {}
     initial_blockers: dict[str, tuple[str, ...]] = {}
 
     for result in combined:
-        identity = result_identity(result)
-        if result not in owned_results:
+        identity = _result_identity(result)
+        if id(result) not in owned_object_ids:
             initial_classes[identity] = _diagnostic_class(result)
             initial_blockers[identity] = _normalized_existing_blockers(result)
             continue
@@ -262,32 +291,33 @@ def classify_diagnostic_results(
                 result,
                 references_by_subject=references_by_subject,
             )
-            resolved = resolve_references(result, references, indexes)
+            resolved = _resolve_references(result, references, indexes)
             failed_blockers = _failed_blocker_identities(
                 identity,
                 resolved.resolved_subjects,
                 indexes,
             )
-            evidence = CausalityEvidence(
-                subject_id=identity,
-                failed_blockers=failed_blockers,
-                self_referenced=resolved.self_referenced,
-                unresolved_references=resolved.unresolved_references,
-                has_subject_local_evidence=resolved.has_subject_local_evidence,
+            status = _validation_status(result)
+            error_kind = _error_kind(result)
+            retained_noise = (
+                _normalize_subject_identity(identity) in normalized_noise
             )
-            diagnostic_class = classify_causality(
-                result,
-                evidence,
-                retained_noise=(
-                    normalize_subject_identity(identity) in normalized_noise
+            decision = classify_causality(
+                subject_id=identity,
+                status=status,
+                error_kind=error_kind,
+                facts=_causality_facts(
+                    result,
+                    status=status,
+                    error_kind=error_kind,
+                    failed_blockers=failed_blockers,
+                    resolved=resolved,
+                    indexes=indexes,
+                    retained_noise=retained_noise,
                 ),
             )
-            initial_classes[identity] = diagnostic_class
-            initial_blockers[identity] = (
-                failed_blockers
-                if diagnostic_class is DiagnosticClass.DOWNSTREAM
-                else ()
-            )
+            initial_classes[identity] = decision.diagnostic_class
+            initial_blockers[identity] = decision.blocked_by
         except Exception as exc:
             if strict:
                 raise
@@ -301,16 +331,34 @@ def classify_diagnostic_results(
                 )
             )
 
-    graph = collapse_blocker_graph(initial_classes, initial_blockers)
+    graph = build_blocker_graph(
+        initial_blockers,
+        known_subjects=initial_classes,
+    )
+    resolution = collapse_blocker_graph(
+        graph,
+        root_subjects=(
+            identity
+            for identity, diagnostic_class in initial_classes.items()
+            if diagnostic_class is DiagnosticClass.DIRECT
+        ),
+        terminal_subjects_are_roots=False,
+    )
     classified: list[_ResultT] = []
 
     for result in owned_results:
-        identity = result_identity(result)
-        diagnostic_class = graph.classifications.get(
+        identity = _result_identity(result)
+        diagnostic_class = initial_classes.get(
             identity,
             DiagnosticClass.AMBIGUOUS,
         )
-        blockers = graph.blockers_by_subject.get(identity, ())
+        blockers = (
+            resolution.root_blockers.get(identity, ())
+            if diagnostic_class is DiagnosticClass.DOWNSTREAM
+            else ()
+        )
+        if diagnostic_class is DiagnosticClass.DOWNSTREAM and not blockers:
+            diagnostic_class = DiagnosticClass.AMBIGUOUS
         try:
             updated = _with_classification(
                 result,
@@ -364,30 +412,257 @@ def enforce_classification_coherence(result: DiagnosticResult) -> None:
     if diagnostic_class not in allowed[status]:
         raise _contract_error(
             f"{status.value} is incompatible with {diagnostic_class.value}",
-            subject=result_identity(result),
+            subject=_result_identity(result),
         )
     if diagnostic_class is DiagnosticClass.DIRECT:
         if not is_direct or blockers:
             raise _contract_error(
                 "direct classification requires is_direct=true and no blockers",
-                subject=result_identity(result),
+                subject=_result_identity(result),
             )
     elif is_direct:
         raise _contract_error(
             "is_direct must be derived only from direct classification",
-            subject=result_identity(result),
+            subject=_result_identity(result),
         )
     if diagnostic_class is DiagnosticClass.DOWNSTREAM:
         if not blockers:
             raise _contract_error(
                 "downstream classification requires at least one blocker",
-                subject=result_identity(result),
+                subject=_result_identity(result),
             )
     elif blockers:
         raise _contract_error(
             "blocked_by must be empty for non-downstream classifications",
-            subject=result_identity(result),
+            subject=_result_identity(result),
         )
+
+
+def _build_result_indexes(
+    results: Sequence[DiagnosticResult],
+    *,
+    strict: bool,
+) -> _ResultIndexes:
+    by_identity: dict[str, DiagnosticResult] = {}
+    canonical_identity: dict[str, str] = {}
+    aliases: dict[str, str] = {}
+
+    for result in results:
+        identity = _result_identity(result)
+        normalized = _normalize_subject_identity(identity)
+        previous = by_identity.get(normalized)
+        if previous is not None and previous is not result:
+            if strict:
+                raise _contract_error(
+                    "duplicate diagnostic result identity",
+                    subject=identity,
+                )
+            continue
+
+        by_identity[normalized] = result
+        canonical_identity[normalized] = identity
+        for alias in _result_aliases(result, identity):
+            alias_key = _normalize_subject_identity(alias)
+            previous_identity = aliases.get(alias_key)
+            if previous_identity is not None and previous_identity != normalized:
+                if strict:
+                    raise _contract_error(
+                        "diagnostic result alias resolves to multiple subjects",
+                        subject=alias,
+                    )
+                continue
+            aliases[alias_key] = normalized
+
+    return _ResultIndexes(
+        by_identity=by_identity,
+        canonical_identity=canonical_identity,
+        aliases=aliases,
+    )
+
+
+def _resolve_references(
+    result: DiagnosticResult,
+    references: Iterable[str],
+    indexes: _ResultIndexes,
+) -> _ReferenceResolution:
+    identity = _result_identity(result)
+    subject_key = _normalize_subject_identity(identity)
+    resolved: dict[str, str] = {}
+    unresolved: dict[str, str] = {}
+    self_referenced = False
+
+    for reference in references:
+        reference_key = _normalize_subject_identity(reference)
+        if reference_key == subject_key:
+            self_referenced = True
+            continue
+
+        canonical_key = indexes.aliases.get(reference_key)
+        if canonical_key is None:
+            unresolved.setdefault(reference_key, reference_key)
+            continue
+
+        canonical = indexes.canonical_identity[canonical_key]
+        resolved.setdefault(canonical_key, canonical)
+
+    return _ReferenceResolution(
+        resolved_subjects=tuple(
+            resolved[key] for key in sorted(resolved)
+        ),
+        unresolved_references=tuple(
+            unresolved[key] for key in sorted(unresolved)
+        ),
+        self_referenced=self_referenced,
+        has_subject_local_evidence=_has_subject_local_evidence(result),
+    )
+
+
+def _causality_facts(
+    result: DiagnosticResult,
+    *,
+    status: ValidationStatus,
+    error_kind: ErrorKind,
+    failed_blockers: tuple[str, ...],
+    resolved: _ReferenceResolution,
+    indexes: _ResultIndexes,
+    retained_noise: bool,
+) -> CausalityFacts:
+    successful_reference = any(
+        _validation_status(indexes.by_identity[_normalize_subject_identity(value)])
+        in {ValidationStatus.OK, ValidationStatus.SKIPPED}
+        for value in resolved.resolved_subjects
+        if _normalize_subject_identity(value) in indexes.by_identity
+    )
+
+    return CausalityFacts(
+        confirmed_blockers=failed_blockers,
+        self_reference=resolved.self_referenced,
+        local_location=resolved.has_subject_local_evidence,
+        local_artifact_failure=_local_artifact_failure(result),
+        unknown_external_reference=bool(resolved.unresolved_references),
+        successful_external_reference=successful_reference,
+        timeout=(
+            error_kind is ErrorKind.TIMEOUT
+            or _bool_attribute(result, "timed_out")
+        ),
+        parser_failure=_bool_attribute(result, "parser_failure"),
+        output_truncated=any(
+            _bool_attribute(result, name)
+            for name in ("output_truncated", "stdout_truncated", "stderr_truncated")
+        ),
+        combined_inputs=_bool_attribute(result, "combined_inputs"),
+        policy_skip=(
+            status is ValidationStatus.SKIPPED and not retained_noise
+        ),
+        excluded_noise=(
+            retained_noise and status is ValidationStatus.SKIPPED
+        ),
+    )
+
+
+def _result_identity(result: DiagnosticResult) -> str:
+    for field_name in (
+        "subject_id",
+        "file_path",
+        "scenario_id",
+        "target_id",
+        "script_path",
+        "module_name",
+        "name",
+    ):
+        value = getattr(result, field_name, None)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return _normalize_subject_identity(text)
+    raise _contract_error(
+        "result does not expose a stable subject identity",
+        subject=None,
+    )
+
+
+def _result_aliases(
+    result: DiagnosticResult,
+    identity: str,
+) -> tuple[str, ...]:
+    aliases: list[str] = [identity]
+    for field_name in (
+        "subject_id",
+        "file_path",
+        "scenario_id",
+        "target_id",
+        "script_path",
+        "module_name",
+    ):
+        value = getattr(result, field_name, None)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        try:
+            aliases.append(_normalize_subject_identity(text))
+        except (TypeError, ValueError):
+            continue
+    return _unique_strings(aliases)
+
+
+def _collect_structured_references(
+    result: DiagnosticResult,
+) -> tuple[str, ...]:
+    collected: list[object] = []
+    for field_name in (
+        "references",
+        "dependencies",
+        "dependency_ids",
+        "imports",
+        "prerequisites",
+        "required_subjects",
+        "referenced_subjects",
+    ):
+        value = getattr(result, field_name, None)
+        if value is None:
+            continue
+        if isinstance(value, (str, bytes, Path)):
+            collected.append(value)
+            continue
+        try:
+            collected.extend(value)
+        except TypeError:
+            continue
+    return _unique_strings(collected)
+
+
+def _normalize_subject_identity(value: object) -> str:
+    if isinstance(value, Path):
+        value = value.as_posix()
+    return normalize_blocker_identity(str(value).strip())
+
+
+def _has_subject_local_evidence(result: DiagnosticResult) -> bool:
+    for field_name in (
+        "source_path",
+        "diagnostic_path",
+        "location_path",
+        "evidence_path",
+    ):
+        if getattr(result, field_name, None) is not None:
+            return True
+    return False
+
+
+def _local_artifact_failure(result: DiagnosticResult) -> bool:
+    value = getattr(result, "artifact_checks_passed", None)
+    if value is None:
+        summary = getattr(result, "compile_summary", None)
+        value = getattr(summary, "artifact_checks_passed", None)
+    return value is False
+
+
+def _bool_attribute(result: DiagnosticResult, field_name: str) -> bool:
+    value = getattr(result, field_name, False)
+    return value if type(value) is bool else False
 
 
 def _references_for(
@@ -395,27 +670,27 @@ def _references_for(
     *,
     references_by_subject: Mapping[str, Iterable[str]] | None,
 ) -> tuple[str, ...]:
-    identity = result_identity(result)
+    identity = _result_identity(result)
     explicit: Iterable[str] = ()
     if references_by_subject is not None:
         explicit = (
             references_by_subject.get(identity)
-            or references_by_subject.get(normalize_subject_identity(identity))
+            or references_by_subject.get(_normalize_subject_identity(identity))
             or ()
         )
-    collected = collect_structured_references(result)
+    collected = _collect_structured_references(result)
     return _unique_strings((*collected, *tuple(explicit)))
 
 
 def _failed_blocker_identities(
     subject_id: str,
     candidates: Iterable[str],
-    indexes: ResultIndexes,
+    indexes: _ResultIndexes,
 ) -> tuple[str, ...]:
-    normalized_subject = normalize_subject_identity(subject_id)
+    normalized_subject = _normalize_subject_identity(subject_id)
     blockers: set[str] = set()
     for candidate in candidates:
-        normalized = normalize_subject_identity(candidate)
+        normalized = _normalize_subject_identity(candidate)
         if normalized == normalized_subject:
             continue
         peer = indexes.by_identity.get(normalized)
@@ -426,8 +701,8 @@ def _failed_blocker_identities(
             ValidationStatus.ERROR,
         }:
             continue
-        blockers.add(result_identity(peer))
-    return tuple(sorted(blockers, key=normalize_subject_identity))
+        blockers.add(_result_identity(peer))
+    return tuple(sorted(blockers, key=_normalize_subject_identity))
 
 
 def _with_classification(
@@ -439,12 +714,12 @@ def _with_classification(
     normalized_blockers = tuple(
         sorted(
             {
-                normalize_subject_identity(value): value
+                _normalize_subject_identity(value): value
                 for value in blocked_by
-                if value and normalize_subject_identity(value)
-                != normalize_subject_identity(result_identity(result))
+                if value and _normalize_subject_identity(value)
+                != _normalize_subject_identity(_result_identity(result))
             }.values(),
-            key=normalize_subject_identity,
+            key=_normalize_subject_identity,
         )
     )
     if diagnostic_class is not DiagnosticClass.DOWNSTREAM:
@@ -494,7 +769,7 @@ def _with_classification(
             return cast(_ResultT, replace(result, **replacement_values))
         raise _contract_error(
             "result does not expose writable classification-owned fields",
-            subject=result_identity(result),
+            subject=_result_identity(result),
         )
 
 
@@ -519,7 +794,35 @@ def _validation_status(result: DiagnosticResult) -> ValidationStatus:
     except (TypeError, ValueError) as exc:
         raise _contract_error(
             f"unsupported validation status: {raw!r}",
-            subject=result_identity(result),
+            subject=_result_identity(result),
+        ) from exc
+
+
+def _error_kind(result: DiagnosticResult) -> ErrorKind:
+    value = getattr(result, "error_kind", None)
+    if value is None:
+        compile_summary = getattr(result, "compile_summary", None)
+        value = getattr(compile_summary, "error_kind", None)
+
+    if isinstance(value, ErrorKind):
+        return value
+
+    status = _validation_status(result)
+    if value is None and status in {
+        ValidationStatus.OK,
+        ValidationStatus.SKIPPED,
+    }:
+        return ErrorKind.OK
+    if value is None:
+        return ErrorKind.OTHER
+
+    raw = value.value if isinstance(value, Enum) else value
+    try:
+        return ErrorKind(str(raw))
+    except (TypeError, ValueError) as exc:
+        raise _contract_error(
+            f"unsupported error kind: {raw!r}",
+            subject=_result_identity(result),
         ) from exc
 
 
@@ -552,16 +855,16 @@ def _normalized_existing_blockers(
     if isinstance(value, (str, bytes)):
         raise _contract_error(
             "blocked_by must be a collection of stable identities",
-            subject=result_identity(result),
+            subject=_result_identity(result),
         )
     return tuple(
         sorted(
             {
-                normalize_subject_identity(str(item)): str(item)
+                _normalize_subject_identity(str(item)): str(item)
                 for item in value
                 if str(item).strip()
             }.values(),
-            key=normalize_subject_identity,
+            key=_normalize_subject_identity,
         )
     )
 
@@ -591,7 +894,7 @@ def _unique_strings(values: Iterable[object]) -> tuple[str, ...]:
         text = str(value).strip()
         if not text:
             continue
-        normalized.setdefault(normalize_subject_identity(text), text)
+        normalized.setdefault(_normalize_subject_identity(text), text)
     return tuple(
         normalized[key]
         for key in sorted(normalized)

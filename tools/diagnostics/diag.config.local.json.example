@@ -1,15 +1,16 @@
 {
-  "schema": "wordbench.minidiag.config.v1",
-  "project_root": "project",
-  "output_root": "C:/path/to/wordbench-runs",
-  "gf_executable": "C:/path/to/gf.exe",
-  "rgl_root": "C:/path/to/gf-rgl",
-  "runtime_smoke": {
-    "run_quick": true,
-    "target": "project/src/YourConcrete.gf",
-    "strict": false
-  },
-  "release": {
-    "require_pgf": true
-  }
+"schema": "wordbench.minidiag.config.v2",
+"language_path": "C:/path/to/gf-rgl/src/english",
+"validation_profile": "C:/path/to/GF_Wordbench/project/project.toml",
+"output_root": "C:/path/to/wordbench-runs",
+"gf_executable": "C:/path/to/gf.exe",
+"rgl_root": "C:/path/to/gf-rgl",
+"runtime_smoke": {
+"run_quick": true,
+"target": "C:/path/to/gf-rgl/src/english/LangEng.gf",
+"strict": false
+},
+"release": {
+"require_pgf": true
+}
 }

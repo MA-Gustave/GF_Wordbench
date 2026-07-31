@@ -1,4 +1,10 @@
-"""Architecture tests for GF Wordbench dependency directions."""
+"""Architecture tests for GF Wordbench dependency directions.
+
+The ADR-0015 checks keep path-resolved language startup inside reviewed
+application boundaries: entrypoints collect intent, bootstrap composes concrete
+adapters, the projects language probe coordinates passive ports, and existing
+selection/GF services retain ownership of their mechanisms.
+"""
 
 from __future__ import annotations
 
@@ -32,6 +38,64 @@ _ALLOWED_FUNCTIONAL_DEPENDENCIES: Final[Mapping[str, frozenset[str]]] = {
 _APPROVED_PROCESS_CREATION_MODULE: Final[str] = (
     "gf_wordbench.infrastructure.process.launcher"
 )
+_LANGUAGE_PROBE_PREFIX: Final[str] = (
+    "gf_wordbench.projects.languages.probe"
+)
+_RUNTIME_STARTUP_PREFIXES: Final[tuple[str, ...]] = (
+    "gf_wordbench.bootstrap",
+    "gf_wordbench.config.environment",
+    "gf_wordbench.config.precedence",
+    "gf_wordbench.config.resolver",
+    "gf_wordbench.entrypoints.cli",
+    "gf_wordbench.entrypoints.gui",
+    "gf_wordbench.state.repository",
+)
+_REQUIRED_PATH_RESOLVED_MODULES: Final[frozenset[str]] = frozenset(
+    {
+        "gf_wordbench.entrypoints.gui.startup",
+        "gf_wordbench.projects.languages.models",
+        "gf_wordbench.projects.languages.ports",
+        "gf_wordbench.projects.languages.probe",
+    }
+)
+_FORBIDDEN_LANGUAGE_PROBE_PREFIXES: Final[tuple[str, ...]] = (
+    "PySide6",
+    "tkinter",
+    "subprocess",
+    "gf_wordbench.bootstrap",
+    "gf_wordbench.config.environment",
+    "gf_wordbench.config.resolver",
+    "gf_wordbench.diagnostics",
+    "gf_wordbench.entrypoints",
+    "gf_wordbench.infrastructure",
+    "gf_wordbench.reporting",
+    "gf_wordbench.runs",
+    "gf_wordbench.state",
+    "gf_wordbench.validation",
+)
+_RUNTIME_CATALOG_TOKENS: Final[frozenset[str]] = frozenset(
+    {
+        "catalog",
+        "rgl_language_catalog",
+        "rgl-language-catalog",
+    }
+)
+_FORBIDDEN_STARTUP_LITERALS: Final[frozenset[str]] = frozenset(
+    {
+        "rgl-language-catalog.json",
+        "wordbench/languages/",
+        "wordbench\\languages\\",
+    }
+)
+_LANGUAGE_SPECIFIC_LITERALS: Final[frozenset[str]] = frozenset(
+    {
+        "LangEng.gf",
+        "GrammarEng.gf",
+        "AllEng.gf",
+        "src/english",
+        "src\\english",
+    }
+)
 _FORBIDDEN_KERNEL_PREFIXES: Final[tuple[str, ...]] = (
     "gf_wordbench.bootstrap",
     "gf_wordbench.config",
@@ -53,21 +117,29 @@ _FORBIDDEN_REPORTING_EXECUTION_PREFIXES: Final[tuple[str, ...]] = (
     "gf_wordbench.validation.compilation.service",
     "gf_wordbench.validation.compilation.version_probe",
     "gf_wordbench.validation.pipeline",
+    "gf_wordbench.validation.selection.service",
+    "gf_wordbench.validation.selection.targets",
     "gf_wordbench.validation.scanning.service",
     "gf_wordbench.validation.scenarios.execution",
     "gf_wordbench.validation.scenarios.service",
 )
 _FORBIDDEN_ENTRYPOINT_PREFIXES: Final[tuple[str, ...]] = (
+    "gf_wordbench.config.environment",
+    "gf_wordbench.config.resolver",
     "gf_wordbench.infrastructure.atomic_io",
     "gf_wordbench.infrastructure.filesystem",
     "gf_wordbench.infrastructure.process",
     "gf_wordbench.projects.filesystem_adapter",
+    "gf_wordbench.projects.languages.probe",
     "gf_wordbench.projects.toml_adapter",
+    "gf_wordbench.state.repository",
     "gf_wordbench.validation.compilation.gf_adapter",
     "gf_wordbench.validation.compilation.module_compile",
     "gf_wordbench.validation.compilation.pgf_build",
     "gf_wordbench.validation.compilation.service",
     "gf_wordbench.validation.pipeline",
+    "gf_wordbench.validation.selection.service",
+    "gf_wordbench.validation.selection.targets",
     "gf_wordbench.validation.scanning.service",
     "gf_wordbench.validation.scenarios.execution",
     "gf_wordbench.validation.scenarios.service",
@@ -80,9 +152,13 @@ _FORBIDDEN_PASSIVE_PREFIXES: Final[tuple[str, ...]] = (
     "tkinter",
     "subprocess",
     "gf_wordbench.bootstrap",
+    "gf_wordbench.config.environment",
+    "gf_wordbench.config.resolver",
     "gf_wordbench.entrypoints",
     "gf_wordbench.infrastructure.process.launcher",
     "gf_wordbench.infrastructure.process.runner",
+    "gf_wordbench.state.repository",
+    "gf_wordbench.validation.selection.service",
 )
 _PROCESS_CALLS: Final[frozenset[tuple[str, str]]] = frozenset(
     {
@@ -285,6 +361,58 @@ def _format_edges(edges: Iterable[ImportEdge]) -> str:
     return "\n".join(rendered)
 
 
+def _module_matches(module_name: str, prefix: str) -> bool:
+    return module_name == prefix or module_name.startswith(f"{prefix}.")
+
+
+def _is_runtime_startup_module(module_name: str) -> bool:
+    return any(
+        _module_matches(module_name, prefix)
+        for prefix in _RUNTIME_STARTUP_PREFIXES
+    )
+
+
+def _contains_catalog_token(value: str) -> bool:
+    normalized = value.replace("-", "_").casefold()
+    return any(
+        token.replace("-", "_") in normalized
+        for token in _RUNTIME_CATALOG_TOKENS
+    )
+
+
+def _string_constants(module: SourceModule) -> Iterator[tuple[int, str]]:
+    for node in ast.walk(module.tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            yield node.lineno, node.value
+
+
+def _recursive_inventory_call(node: ast.Call) -> str | None:
+    function = node.func
+    if not isinstance(function, ast.Attribute):
+        return None
+
+    if function.attr == "rglob":
+        return "rglob"
+
+    if function.attr == "glob" and node.args:
+        pattern = node.args[0]
+        if (
+            isinstance(pattern, ast.Constant)
+            and isinstance(pattern.value, str)
+            and "**" in pattern.value
+        ):
+            return f"glob({pattern.value!r})"
+
+    if (
+        function.attr == "walk"
+        and isinstance(function.value, ast.Name)
+        and function.value.id == "os"
+    ):
+        return "os.walk"
+
+    return None
+
+
 def _strongly_connected_components(
     graph: Mapping[str, frozenset[str]],
 ) -> tuple[frozenset[str], ...]:
@@ -345,6 +473,15 @@ def _call_name(node: ast.Call) -> tuple[str, str] | None:
     if not isinstance(function.value, ast.Name):
         return None
     return function.value.id, function.attr
+
+
+def test_path_resolved_startup_contract_modules_exist() -> None:
+    available = {module.name for module in _source_modules()}
+    missing = sorted(_REQUIRED_PATH_RESOLVED_MODULES - available)
+    assert not missing, (
+        "ADR-0015 path-resolved startup requires these production modules: "
+        + ", ".join(missing)
+    )
 
 
 def test_functional_module_dependencies_follow_the_normative_matrix() -> None:
@@ -448,6 +585,93 @@ def test_entrypoints_do_not_import_concrete_mechanisms_or_stages() -> None:
     assert not violations, (
         "Entrypoints must use bootstrap or public application contracts:\n"
         f"{_format_edges(violations)}"
+    )
+
+
+def test_language_probe_uses_ports_instead_of_concrete_outer_services() -> None:
+    violations = [
+        edge
+        for edge in _import_edges(_source_modules())
+        if _module_matches(edge.importer, _LANGUAGE_PROBE_PREFIX)
+        and _starts_with_any(
+            edge.imported,
+            _FORBIDDEN_LANGUAGE_PROBE_PREFIXES,
+        )
+    ]
+    assert not violations, (
+        "ADR-0015 language probing must depend on passive local contracts "
+        "and injected ports, not GUI, configuration, state, validation, "
+        "diagnostic, reporting, process, or run implementations:\n"
+        f"{_format_edges(violations)}"
+    )
+
+
+def test_language_probe_does_not_reimplement_recursive_source_inventory() -> None:
+    violations: list[str] = []
+
+    for module in _source_modules():
+        if not _module_matches(module.name, _LANGUAGE_PROBE_PREFIX):
+            continue
+        for node in ast.walk(module.tree):
+            if not isinstance(node, ast.Call):
+                continue
+            operation = _recursive_inventory_call(node)
+            if operation is not None:
+                violations.append(
+                    f"{module.path}:{node.lineno}: "
+                    f"language probe performs {operation}"
+                )
+
+    assert not violations, (
+        "The language probe must delegate recursive source inventory to "
+        "the existing selection service through an injected port:\n"
+        + "\n".join(sorted(violations))
+    )
+
+
+def test_runtime_startup_does_not_import_catalog_authority() -> None:
+    violations: list[str] = []
+
+    for edge in _import_edges(_source_modules()):
+        if not _is_runtime_startup_module(edge.importer):
+            continue
+        imported_values = (edge.imported, *edge.imported_names)
+        if any(_contains_catalog_token(value) for value in imported_values):
+            violations.append(edge.render())
+
+    for module in _source_modules():
+        if not _is_runtime_startup_module(module.name):
+            continue
+        for line, value in _string_constants(module):
+            if any(literal in value for literal in _FORBIDDEN_STARTUP_LITERALS):
+                violations.append(
+                    f"{module.path}:{line}: runtime startup references "
+                    f"catalog/bundle authority {value!r}"
+                )
+
+    assert not violations, (
+        "ADR-0015 normal startup must not import or reference the retired "
+        "catalog/bundle authority:\n"
+        + "\n".join(sorted(set(violations)))
+    )
+
+
+def test_generic_production_code_has_no_hard_coded_language_defaults() -> None:
+    violations: list[str] = []
+
+    for module in _source_modules():
+        for line, value in _string_constants(module):
+            for literal in _LANGUAGE_SPECIFIC_LITERALS:
+                if literal in value:
+                    violations.append(
+                        f"{module.path}:{line}: {literal!r} in {value!r}"
+                    )
+
+    assert not violations, (
+        "Generic production code must derive language identity, directories, "
+        "suffixes, and entrypoint candidates from the selected source "
+        "context rather than English defaults:\n"
+        + "\n".join(sorted(set(violations)))
     )
 
 

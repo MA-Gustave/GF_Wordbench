@@ -2,13 +2,14 @@
 
 **Document ID:** `GF-WB-GUI-REFERENCE`  
 **Status:** Normative user-interface and interaction reference  
-**Applies to:** GF Wordbench desktop GUI, shared application services, application state and generated run artifacts  
+**Applies to:** GF Wordbench desktop GUI, shared language-probe and validation services, application state, optional validation profiles and generated run artifacts  
 **Owner:** GF Wordbench maintainers  
-**Document version:** `2.0.0`  
-**Last reviewed:** `2026-07-24`  
+**Document version:** `3.0.0`  
+**Last reviewed:** `2026-07-30`  
 **Primary platform:** Windows  
 **GUI toolkit:** PySide6 / Qt Widgets  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
+**Related decisions:** `docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md`, `docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`  
 **Related locks:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`
 
 ---
@@ -20,9 +21,11 @@ This document defines the GF Wordbench desktop graphical interface.
 It specifies:
 
 - GUI responsibilities and limits;
-- startup and shutdown;
-- main-window information architecture;
-- active-project and environment selection;
+- path-resolved language startup;
+- introduction, language-probe and main-window flows;
+- one active resolved language context per session;
+- optional validation-profile selection;
+- capability presentation;
 - validation modes and run options;
 - resolved-plan preview;
 - input validation and confirmation;
@@ -36,21 +39,31 @@ It specifies:
 
 The GUI is an entrypoint into the shared GF Wordbench application.
 
-It is not a separate validation engine.
+It is not a separate language detector, file selector, GF path resolver, validation engine or reporting engine.
 
 ---
 
 ## 2. Product boundary
 
-One GUI session controls one active GF language project.
+One GUI session has either:
+
+```text
+no loaded language
+or
+exactly one immutable ResolvedLanguageContext
+```
+
+One ordinary validation run records exactly one language identity and one resolved source context.
 
 The GUI does not provide:
 
-- several simultaneously active projects;
+- several simultaneously active languages;
 - a multilingual workspace registry;
-- cross-workspace aggregation;
+- cross-language result aggregation;
 - portfolio readiness or comparison;
 - `gf-portfolio` storage or services.
+
+The user may replace the active language when no run is active. Replacement disposes the previous runtime and resolves a new language context.
 
 The independent product `gf-portfolio` may open or consume public versioned Wordbench artifacts.
 
@@ -63,6 +76,8 @@ GF Wordbench GUI functionality remains complete when `gf-portfolio` is absent.
 Read this document with:
 
 ```text
+docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
+docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md
 docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
@@ -71,12 +86,14 @@ docs/architecture/ARCHITECTURE_OVERVIEW.md
 docs/architecture/PRODUCT_BOUNDARIES.md
 docs/architecture/EXECUTION_FLOW.md
 docs/architecture/ERROR_HANDLING_MODEL.md
+docs/validation/FILE_SELECTION.md
 docs/validation/VALIDATION_PIPELINE.md
 docs/validation/VALIDATION_MODES.md
 docs/configuration/CONFIGURATION_OVERVIEW.md
 docs/configuration/PROJECT_TOML_REFERENCE.md
 docs/configuration/APPLICATION_STATE_REFERENCE.md
 docs/configuration/ENVIRONMENT_AND_PATHS.md
+docs/gf/GF_PATH_RESOLUTION.md
 docs/usage/CLI_REFERENCE.md
 docs/reports/REPORTING_OVERVIEW.md
 docs/reports/RAW_LOGS_REFERENCE.md
@@ -84,78 +101,109 @@ docs/reports/RAW_LOGS_REFERENCE.md
 
 Specialized locks and owner documents govern their respective contracts.
 
+Where an older document still makes the catalog, a language bundle or `project/project.toml` mandatory for startup, ADR-0015 and this reference govern the GUI behavior until the coordinated documentation update is complete.
+
 ---
 
 ## 4. Core GUI rule
 
-> The GUI collects user intent, calls shared application services, displays structured progress and results, and opens owned artifacts.
+> The GUI collects user intent, calls shared application services, displays structured language resolution, progress and results, and opens owned artifacts.
 
 The GUI must not:
 
+- enumerate GF language sources independently;
+- infer language identity inside widgets;
+- construct an independent GF path;
 - compile GF modules directly;
 - execute `.gfs` scenarios directly;
 - construct an independent GF command model;
 - implement separate file-selection or status aggregation;
+- parse raw GF output independently when canonical diagnostics exist;
 - parse Markdown reports to discover run results;
 - reclassify diagnostics;
 - normalize scenario output;
 - update gold files during normal validation;
-- silently rewrite `project.toml`;
-- store project facts only in GUI state;
+- silently create or rewrite a catalog;
+- silently create or rewrite a language bundle;
+- silently rewrite a validation profile;
+- store resolved language facts only in GUI state;
 - use different defaults or semantics from the CLI;
 - depend on `gf-portfolio`.
 
-Equivalent GUI and CLI inputs produce equivalent resolved run configuration and pipeline behavior.
+Equivalent GUI and CLI inputs produce equivalent language-probe results, resolved language contexts, run configurations and pipeline behavior after canonical normalization.
 
 ---
 
 ## 5. Information model
 
-The GUI presents three distinct layers.
+The GUI presents four distinct layers.
 
-### 5.1 Project
+### 5.1 Selected language intent
 
-Portable project facts come from:
+The user supplies exactly one primary path:
 
 ```text
-project/project.toml
+a GF language directory
+or
+a .gf file inside a GF language directory
 ```
 
 Examples:
 
-- project name and ID;
-- language code;
-- project root and source directory;
-- entrypoints and checkpoints;
-- required and optional scenarios;
-- release artifact policy.
+```text
+C:/mycode/Grammatical_Framework/gf-rgl/src/english
+C:/mycode/Grammatical_Framework/gf-rgl/src/english/LangEng.gf
+C:/mycode/Grammatical_Framework/gf-rgl/src/english/AdjectiveEng.gf
+```
 
-Project facts are read-only in the ordinary run screen.
+The selected path is machine-local intent. It is not by itself the portable language identity.
 
-### 5.2 Environment
+### 5.2 Resolved language context
+
+Portable and runtime language facts come from `ResolvedLanguageContext`, including:
+
+- portable language key;
+- selected path kind;
+- language directory;
+- RGL source root;
+- RGL root when resolved;
+- focused file when selected;
+- module suffix when unambiguous;
+- available entrypoint candidates;
+- selected source inventory or stable inventory reference;
+- GF path requirements and provenance;
+- structural diagnostics;
+- capability statuses;
+- optional validation-profile identity and digest.
+
+These facts are read-only in ordinary run controls.
+
+### 5.3 Environment
 
 Machine-local values include:
 
 - GF executable;
-- RGL root;
 - output root;
-- approved local path overrides.
+- approved explicit path overrides;
+- optional nonstandard-layout root hints.
+
+The RGL root is normally derived from the selected language path. An explicit override is used only when the standard structure cannot be resolved or a supported nonstandard layout requires one.
 
 These values may be stored in versioned local application state.
 
-### 5.3 Run request
+### 5.4 Run request
 
 Run-specific choices include:
 
 - validation mode;
 - target file;
-- checkpoint;
-- scenario scope;
+- checkpoint when a profile declares checkpoints;
+- scenario scope when scenarios are configured;
 - timeout override;
 - diagnostic options;
 - previous-run comparison.
 
-Widgets collect a request. Bootstrap resolves the canonical run configuration.
+Widgets collect a request. Shared application services resolve the canonical run configuration.
 
 ---
 
@@ -167,7 +215,7 @@ Widgets collect a request. Bootstrap resolves the canonical run configuration.
 - widget state;
 - file and directory dialogs;
 - user confirmation;
-- local validation feedback;
+- local presentation validation;
 - background-worker lifecycle;
 - progress presentation;
 - cancellation requests;
@@ -175,10 +223,21 @@ Widgets collect a request. Bootstrap resolves the canonical run configuration.
 - artifact-opening actions;
 - application-state synchronization.
 
+### Language-probe application service owns
+
+- selected-path interpretation;
+- bounded source-root discovery;
+- coordination of existing file-selection services;
+- standard RGL candidate classification;
+- ambiguity and remediation results;
+- capability computation;
+- construction of `ResolvedLanguageContext`.
+
 ### Bootstrap and application services own
 
 - framework defaults;
-- project loading;
+- dependency composition;
+- optional validation-profile loading;
 - configuration precedence;
 - environment resolution;
 - canonical run configuration;
@@ -190,6 +249,7 @@ Widgets collect a request. Bootstrap resolves the canonical run configuration.
 
 - file selection;
 - static scanning;
+- GF path resolution through the GF boundary;
 - GF compilation;
 - diagnostics;
 - scenario execution;
@@ -221,7 +281,7 @@ Dependency direction:
 ```text
 Qt widgets
     → GUI controller/presenter
-    → application use cases
+    → language-probe and validation application use cases
     → ports
     → adapters
 ```
@@ -231,18 +291,22 @@ The GUI does not import validation-stage implementations directly.
 Conceptual placement:
 
 ```text
-app/
+src/gf_wordbench/
 ├── entrypoints/
 │   └── gui/
-├── application/
-├── ports/
-├── adapters/
-└── bootstrap/
+├── projects/
+│   └── languages/
+├── validation/
+├── runs/
+├── diagnostics/
+├── reporting/
+├── state/
+└── bootstrap.py
 ```
 
 Internal filenames may vary while dependency direction remains fixed.
 
-Worker code contains transport and lifecycle logic, not validation business rules.
+Worker code contains transport and lifecycle logic, not language-resolution or validation business rules.
 
 ---
 
@@ -252,30 +316,72 @@ Canonical launch forms may include:
 
 ```text
 launch_gui.bat
-python -m app.main_gui
+python -m gf_wordbench.entrypoints.gui.main
 ```
 
 All launch methods call one GUI entrypoint.
 
-Startup sequence:
+### 8.1 Canonical startup sequence
 
 ```text
 create QApplication
 → install top-level exception handling
-→ build application configuration
+→ build startup-only dependencies
 → load versioned local state
 → import supported legacy state when present
-→ load the active project
+→ show the introduction window
+→ obtain one explicit language path or explicit “Open last language” action
+→ run LanguageProbeService
+→ present blocking diagnostics or ambiguity when required
+→ publish one immutable ResolvedLanguageContext
+→ compose the main runtime
 → create the main window
-→ restore safe presentation and selection state
-→ validate passive environment hints
-→ show the window
+→ restore compatible presentation and run-selection state
+→ persist the successful selected path as local convenience state
+→ show the main window
 → enter the Qt event loop
 ```
 
+The full main runtime does not exist before a resolved language context is available.
+
 Startup does not automatically launch a validation run.
 
-Passive checks are read-only, bounded and do not create a completed run.
+Language probing and passive environment checks are read-only, bounded and do not create a completed run.
+
+### 8.2 Introduction actions
+
+The introduction window provides at least:
+
+```text
+Open Last Language
+Choose Language Directory
+Choose GF File
+Settings
+Quit
+```
+
+`Open Last Language` is enabled only when local state contains a previously successful selected path.
+
+Using that action reruns complete path and containment validation. It does not restore a previously serialized runtime context.
+
+### 8.3 Source-ready startup
+
+The main window may open when the context is `source-ready`, even when:
+
+- GF is not installed;
+- GF cannot be launched;
+- no scenarios are configured;
+- no gold files exist;
+- no validation profile is loaded;
+- release requirements are unavailable.
+
+Unavailable capabilities are shown explicitly and only their dependent controls are disabled.
+
+### 8.4 Fatal and nonfatal startup errors
+
+A malformed application installation or unrecoverable bootstrap failure is fatal.
+
+An invalid selected language path is not a fatal application error. It produces a structured probe result and returns to the introduction window.
 
 Fatal startup errors show:
 
@@ -297,7 +403,8 @@ On close:
 3. retain completed-run pointers;
 4. close dialogs;
 5. release worker resources;
-6. exit the Qt event loop.
+6. dispose the active language runtime;
+7. exit the Qt event loop.
 
 ### Close during an active run
 
@@ -311,8 +418,8 @@ Cancel the run and close GF Wordbench?
 Choices:
 
 ```text
-Continue running
-Cancel and close
+Continue Running
+Cancel and Close
 ```
 
 When cancellation is requested, the GUI:
@@ -330,16 +437,20 @@ When cancellation is requested, the GUI:
 
 The main window lets the user:
 
-1. identify the active project;
-2. validate the local GF environment;
-3. choose a validation mode;
-4. set mode-relevant options;
-5. inspect the resolved plan;
-6. start or cancel a run;
-7. observe structured progress;
-8. understand the run outcome;
-9. open generated artifacts;
-10. inspect recent compatible runs.
+1. identify the active resolved language;
+2. inspect the selected source context;
+3. understand available capabilities;
+4. validate the local GF environment;
+5. optionally load or inspect a validation profile;
+6. choose a validation mode;
+7. set mode-relevant options;
+8. inspect the resolved plan;
+9. start or cancel a run;
+10. observe structured progress;
+11. understand the run outcome;
+12. open generated artifacts;
+13. inspect recent compatible runs;
+14. replace the active language when no run is active.
 
 Advanced controls remain collapsed or placed in a dedicated dialog.
 
@@ -349,26 +460,29 @@ Advanced controls remain collapsed or placed in a dedicated dialog.
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
-│ GF Wordbench — <Project Name>                             <App Version>     │
+│ GF Wordbench — <Language>                                  <App Version>    │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Project                                                                  │
-│ Name | Language | Project root | Configuration status                    │
+│ Language                                                                  │
+│ Key | Source directory | Focused file | Profile | Resolution status       │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Environment                                                              │
-│ GF executable | GF version | RGL root | Output root                       │
+│ Capabilities                                                              │
+│ Source | Scan | Compile | Scenario | Release                              │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Validation                                                               │
+│ Environment                                                               │
+│ GF executable | GF version | RGL source root | Output root                │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Validation                                                                │
 │ Mode | Target/checkpoint | Scenario scope | Main options                  │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Resolved Plan                                                            │
-│ Files | Entrypoints | Scenarios | PGF | Previous-run comparison           │
+│ Resolved Plan                                                             │
+│ Files | Entrypoints | GF path | Scenarios | PGF | Previous comparison     │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ [Run Validation] [Cancel] [Open Last Run] [Open Reports]                  │
+│ [Run Validation] [Cancel] [Change Language] [Open Last Run] [Reports]      │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Progress                                                                 │
+│ Progress                                                                  │
 │ Status | Stage | Subject | Progress | Elapsed time                        │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Results / Activity                                                       │
+│ Results / Activity                                                        │
 │ Summary, diagnostics, warnings and bounded activity                       │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -379,61 +493,163 @@ Information ownership and semantics are normative.
 
 ---
 
-## 12. Project section
+## 12. Language section
 
 Display:
 
 ```text
-Project name
-Project ID
-Language code
-Project root
-project.toml status
-Source directory
-Entrypoint count
-Checkpoint count
-Required scenario count
+Language key
+Display name
+Module suffix, when available
+Selected path
+Selected path kind
+Language directory
+RGL source root
+Focused GF file, when applicable
+Detected entrypoint candidates
+Resolution status
+Validation-profile status
 ```
 
-Project identity is read-only in the validation screen.
+Resolved language identity and paths are read-only in the validation screen.
 
-A dedicated project-configuration workflow may edit project facts.
+### 12.1 Language selection
 
-### Project selection
-
-A selected root must resolve the canonical active project configuration:
+The introduction window accepts:
 
 ```text
-project/project.toml
+one directory
+or
+one .gf file
 ```
 
-An invalid project shows precise configuration errors and disables validation.
+The GUI passes the path unchanged as user intent to `LanguageProbeService`, subject only to platform path normalization required by the public request contract.
 
-A template containing unresolved placeholders is shown as uninitialized.
+The GUI does not enumerate the directory, derive a suffix or identify entrypoints itself.
 
-The GUI does not guess project or language identifiers.
+### 12.2 Probe result
 
-### Project switching
+A successful probe displays:
 
-Only one project is active in one session.
+- portable language key;
+- language directory;
+- RGL source root;
+- focused target if one was selected;
+- detected module suffix when unique;
+- detected entrypoint candidates;
+- capability statuses;
+- nonblocking warnings;
+- resolution provenance.
 
-Switching:
+A probe requiring input displays exact candidate choices and the reason a choice is required.
+
+### 12.3 Focused file
+
+Selecting a file such as:
+
+```text
+AdjectiveEng.gf
+```
+
+keeps that file as the focused target.
+
+Detected `LangEng.gf`, `GrammarEng.gf` or `AllEng.gf` files may be offered as additional candidates. The GUI does not silently replace the user-selected file.
+
+### 12.4 Language replacement
+
+Only one language is active in one session.
+
+Replacement:
 
 1. requires no active run;
-2. loads the new project configuration;
-3. clears incompatible project-derived choices;
-4. retains compatible machine-local preferences;
-5. updates the window;
-6. rebuilds the run plan;
-7. does not modify the previous project.
+2. asks for confirmation when unsaved UI-only edits would be discarded;
+3. disposes the current runtime and workers;
+4. returns to the introduction window;
+5. resolves another explicit selected path;
+6. clears language-derived choices and previous-run eligibility;
+7. retains compatible machine-local preferences;
+8. creates a new runtime only after successful resolution;
+9. does not modify the previous source tree.
 
-A missing previously selected project produces a nonfatal notice. The GUI does not select an unrelated directory automatically.
+A missing previously selected path produces a nonfatal notice. The GUI does not select an unrelated directory automatically.
 
 ---
 
-## 13. Environment section
+## 13. Capability section
 
-### GF executable
+The GUI displays five independent capability states:
+
+```text
+Source Ready
+Scan Ready
+Compile Ready
+Scenario Ready
+Release Ready
+```
+
+Each capability is one of:
+
+```text
+Ready
+Unavailable
+Warning
+Checking
+Unknown
+```
+
+These presentation states are not run validation statuses.
+
+### 13.1 Source Ready
+
+Enables:
+
+- source browsing;
+- target selection;
+- metadata display;
+- source fingerprinting.
+
+### 13.2 Scan Ready
+
+Enables deterministic static scanning without requiring GF.
+
+### 13.3 Compile Ready
+
+Requires:
+
+- a resolved GF executable;
+- valid effective GF path;
+- at least one explicit compile target;
+- successful compilation preflight.
+
+### 13.4 Scenario Ready
+
+Requires an explicit scenario registry or validation profile with valid scenario inputs.
+
+### 13.5 Release Ready
+
+Requires an explicit validation profile with complete release targets, required stages, scenarios, golds and artifact policy.
+
+### 13.6 Isolation
+
+An unavailable capability disables only dependent controls.
+
+Examples:
+
+```text
+GF unavailable
+→ browsing and static scan remain available
+→ compilation, scenarios and release are unavailable
+
+No validation profile
+→ quick source validation remains available
+→ checkpoint, scenario and release controls may be unavailable
+```
+
+---
+
+## 14. Environment section
+
+### 14.1 GF executable
 
 Display:
 
@@ -444,7 +660,7 @@ detected GF version
 compatibility result
 ```
 
-Before a required run:
+Before a required GF-backed run:
 
 - the path or command resolves;
 - the selection is not a directory;
@@ -453,18 +669,33 @@ Before a required run:
 
 After confirmation, the GUI does not silently substitute another installation.
 
-### RGL root
+### 14.2 RGL source root
+
+Display the RGL source root resolved from the selected path.
 
 Validate:
 
 - path exists;
 - path is a directory;
-- project-required subpaths resolve;
+- it contains the active language directory;
+- resolved shared paths remain contained;
 - compatibility policy is satisfied.
 
-A missing required RGL root blocks the run.
+An unresolved RGL source root does not necessarily prevent an unrelated source-ready operation on a standalone GF directory, but it blocks operations whose path policy requires the standard RGL layout.
 
-### Output root
+### 14.3 Explicit root override
+
+An override is available only for supported nonstandard layouts or failed standard-root detection.
+
+It:
+
+- is clearly marked;
+- is validated through shared path services;
+- appears in resolution provenance and run evidence;
+- never rewrites source files;
+- is not silently reused for an unrelated selected language.
+
+### 14.4 Output root
 
 Requirements:
 
@@ -474,36 +705,76 @@ Requirements:
 - source directories are protected;
 - a run directory is never overwritten.
 
-### Environment presentation state
-
-UI-only states may include:
-
-```text
-Ready
-Warning
-Invalid
-Checking
-Unknown
-```
-
-These are not run validation statuses.
-
-Detailed reasons remain accessible.
-
-### Test Environment
+### 14.5 Test Environment
 
 A bounded environment check may:
 
 - resolve and probe GF;
-- validate the RGL root;
+- validate the resolved source root;
+- validate the effective GF path;
 - validate output access;
 - show compatibility.
 
-It does not compile active project files unless an explicit smoke operation is selected.
+It does not compile active sources unless an explicit GF verification or smoke operation is selected.
 
 ---
 
-## 14. Validation modes
+## 15. Optional validation profile
+
+A validation profile may define:
+
+```text
+source filters
+entrypoints
+checkpoints
+GF path requirements
+scenarios
+inputs
+golds
+PGF targets
+release gates
+expected artifacts
+project-specific documentation
+```
+
+An existing `project/project.toml` may be loaded explicitly as such a profile.
+
+The profile is not required for basic startup, browsing, source selection, static scan or focused compilation.
+
+### 15.1 Profile actions
+
+The GUI may provide:
+
+```text
+Load Validation Profile
+Remove Validation Profile
+Open Validation Profile
+Validate Profile
+```
+
+### 15.2 Profile conflicts
+
+A profile is rejected when it conflicts with the active language context, including:
+
+- source root outside the selected context;
+- language identity disagreement;
+- target or scenario path escape;
+- GF path selecting another language directory;
+- gold or release assets belonging to another language.
+
+### 15.3 Profile change
+
+Changing or removing a profile:
+
+- requires no active run;
+- triggers complete context re-resolution;
+- recreates the main runtime;
+- clears incompatible choices;
+- does not modify the profile unless an explicit editor workflow is used.
+
+---
+
+## 16. Validation modes
 
 The GUI exposes exactly:
 
@@ -534,9 +805,11 @@ all  → diagnostic
 
 They are not displayed as canonical modes.
 
+Mode availability depends on the active context capabilities.
+
 ---
 
-## 15. Quick mode
+## 17. Quick mode
 
 Purpose:
 
@@ -552,9 +825,10 @@ Target file or module
 
 The selector:
 
-- lists active-project GF sources;
-- supports browsing;
-- converts valid selections to project-relative identity;
+- lists active-language GF sources through shared selection services;
+- preserves a focused file selected at startup;
+- supports browsing inside approved roots;
+- converts valid selections to stable source-relative identity;
 - rejects paths outside allowed roots.
 
 Typical options:
@@ -562,21 +836,23 @@ Typical options:
 ```text
 Run static scan
 Compile target
-Run configured smoke scenario
+Run configured smoke scenario, when available
 Compare with previous compatible run
 Keep OK details
 ```
 
-The plan shows target count, selected scenarios and whether PGF construction is excluded.
+When GF is unavailable, `Run static scan` may remain enabled while `Compile target` is disabled with an accessible reason.
+
+The plan shows target count, effective GF path, selected scenarios and whether PGF construction is excluded.
 
 ---
 
-## 16. Checkpoint mode
+## 18. Checkpoint mode
 
 Purpose:
 
 ```text
-validate a declared project subsystem
+validate a declared subsystem from an explicit validation profile
 ```
 
 Required control:
@@ -585,7 +861,13 @@ Required control:
 Checkpoint
 ```
 
-The checkpoint list comes from project configuration.
+The checkpoint list comes from the active validation profile.
+
+When no checkpoints are configured:
+
+- checkpoint mode is disabled;
+- the GUI explains that an explicit validation profile is required;
+- quick and diagnostic source operations remain available when their capabilities are ready.
 
 The GUI may show:
 
@@ -604,20 +886,24 @@ Checkpoint membership is not edited in the run screen.
 
 ---
 
-## 17. Release mode
+## 19. Release mode
 
 Purpose:
 
 ```text
-evaluate all declared release criteria
+evaluate all declared release criteria from an explicit validation profile
 ```
+
+Release mode is enabled only when `Release Ready` is satisfied.
 
 Confirmation shows:
 
 ```text
-Project
+Language identity
+Selected source context
+Validation profile
 GF version
-RGL root
+Effective GF path
 Entrypoints
 Required checkpoints
 Required scenarios
@@ -641,6 +927,7 @@ skip required scenarios
 skip required PGF construction
 automatic gold update
 ignore required artifact failure
+missing release profile
 ```
 
 The GUI displays release success only when:
@@ -653,12 +940,12 @@ and required artifact integrity checks pass.
 
 ---
 
-## 18. Diagnostic mode
+## 20. Diagnostic mode
 
 Purpose:
 
 ```text
-collect broad evidence for difficult failures
+collect broad evidence for difficult source, path, environment or validation failures
 ```
 
 Typical controls:
@@ -668,11 +955,12 @@ subject scope
 verbose GF output
 keep OK details
 dependency introspection
-selected scenarios
+selected scenarios, when configured
 extended timeout
 maximum files
 previous-run comparison
 scan only
+language-resolution evidence
 ```
 
 Diagnostic mode still enforces:
@@ -681,8 +969,10 @@ Diagnostic mode still enforces:
 - output containment;
 - no shell injection;
 - no automatic gold update;
-- one resolved GF executable;
-- bounded generation.
+- one resolved GF executable per GF-backed run;
+- one effective GF path;
+- bounded generation;
+- bounded missing-module assistance.
 
 When `Scan only` is selected, the GUI states:
 
@@ -693,26 +983,27 @@ This run cannot satisfy checkpoint or release criteria.
 
 ---
 
-## 19. Mode-dependent controls
+## 21. Mode-dependent controls
 
 | Control | Quick | Checkpoint | Release | Diagnostic |
 |---|:---:|:---:|:---:|:---:|
 | Target file | Required | Hidden | Hidden | Optional |
-| Checkpoint selector | Hidden | Required | Read-only all | Optional |
-| Scenario filter | Optional | Limited | Read-only required set | Optional |
+| Checkpoint selector | Hidden | Required from profile | Read-only all | Optional from profile |
+| Scenario filter | Optional when configured | Limited by profile | Read-only required set | Optional when configured |
 | Scan only | Optional | Disabled | Disabled | Optional |
 | Skip version probe | Warning | Restricted | Disabled | Optional |
 | Keep OK details | Optional | Optional | Policy-controlled | Optional |
 | CPU statistics | Optional | Optional | Optional | Optional |
 | Maximum files | Hidden | Hidden | Disabled | Optional |
-| PGF build | Hidden | Conditional | Project-required | Optional |
+| PGF build | Hidden | Conditional | Profile-required | Optional |
 | Previous comparison | Optional | Recommended | Policy-controlled | Optional |
+| Validation profile | Optional | Required | Required | Optional |
 
 Disabled controls explain their policy through accessible text or tooltips.
 
 ---
 
-## 20. Advanced options
+## 22. Advanced options
 
 Possible advanced controls:
 
@@ -727,17 +1018,28 @@ maximum files
 explicit GF path override
 verbose GF output
 strict mode
+missing-module assistance policy
 ```
 
-Project-owned facts remain read-only:
+Resolved-context facts remain read-only:
 
 ```text
-source directory
-source glob
-include and exclude rules
+language key
+selected language directory
+RGL source root
+selected source inventory
+module suffix
+resolution provenance
+```
+
+Profile-owned facts remain read-only in ordinary run controls:
+
+```text
+source filters
 entrypoints
 checkpoint membership
 required scenarios
+release gates
 ```
 
 An expert override:
@@ -745,21 +1047,24 @@ An expert override:
 - is clearly marked;
 - appears in the resolved plan;
 - is recorded in run evidence;
-- never rewrites project configuration;
+- never rewrites source or profile configuration;
 - cannot produce release success when it violates release policy.
 
 ---
 
-## 21. Resolved-plan panel
+## 23. Resolved-plan panel
 
 Before execution, show:
 
 ```text
 Mode
-Project ID
+Language key
+Selected source context
+Validation-profile identity, when present
 GF executable
 GF version or probe state
-RGL root
+RGL source root
+Effective GF path and provenance
 Output root
 Target or checkpoint
 Selected files
@@ -769,49 +1074,53 @@ Gold comparisons
 PGF targets
 Timeouts
 Previous-run comparison
+Capability prerequisites
 Strict constraints
 Overrides
 ```
 
 The plan comes from shared bootstrap and preview services.
 
-The GUI does not duplicate selection algorithms.
+The GUI does not duplicate selection or GF path algorithms.
 
-Any relevant widget change invalidates or rebuilds the preview.
+Any relevant widget, profile or environment change invalidates or rebuilds the preview.
 
 Estimates are labeled explicitly when exact selection requires a full operation.
 
 ---
 
-## 22. Input validation
+## 24. Input validation
 
 The GUI checks obvious local errors before confirmation:
 
 - required field empty;
 - file or directory missing;
+- selected startup file is not `.gf`;
 - invalid integer;
 - invalid regex;
-- target outside project;
+- target outside the resolved source context;
 - unknown checkpoint;
 - unwritable output;
-- contradictory options.
+- contradictory options;
+- requested mode unavailable for the current capability state.
 
 Rules shared with CLI use shared validators.
 
 Errors appear beside fields and in a concise summary, with focus moved to the first invalid field.
 
-Passing GUI validation means only that the request is ready for bootstrap and application validation.
+Passing GUI validation means only that the request is ready for application validation.
 
 ---
 
-## 23. Confirmation
+## 25. Confirmation
 
 Confirmation is required for:
 
 - checkpoint runs;
 - release runs;
 - broad diagnostic runs;
-- risky expert overrides.
+- risky expert overrides;
+- proposed GF path remediation when policy requires user approval.
 
 Release confirmation cannot be disabled.
 
@@ -829,9 +1138,9 @@ The Run action remains disabled while blocking errors exist.
 
 ---
 
-## 24. Execution
+## 26. Execution
 
-Validation runs outside the Qt GUI thread.
+Language probing, broad inventory work and validation runs execute outside the Qt GUI thread when they may block perceptibly.
 
 Supported mechanisms may include:
 
@@ -844,26 +1153,27 @@ background controller service
 Requirements:
 
 - the UI remains responsive;
-- the worker receives immutable resolved configuration;
+- workers receive immutable requests or resolved configuration;
 - progress crosses thread boundaries through structured events;
 - widgets update only on the GUI thread;
 - exceptions return as structured framework errors;
 - cleanup is deterministic.
 
-The worker calls one application use case.
+A validation worker calls one application use case.
 
 It does not call scanner, compiler, scenario runner or report writers directly.
 
-Ordinary project failure returns a structured `RunResult`, not an exception.
+Ordinary source or project failure returns a structured result, not an exception.
 
 ---
 
-## 25. Running state
+## 27. Running state
 
 While a run is active:
 
 - Run is disabled;
-- project switching is disabled;
+- language replacement is disabled;
+- validation-profile replacement is disabled;
 - environment editing is disabled;
 - mode and target editing are disabled;
 - advanced options are disabled;
@@ -882,7 +1192,7 @@ Starting a run does not erase the last completed run.
 
 ---
 
-## 26. Cancellation
+## 28. Cancellation
 
 A visible Cancel action is available during work.
 
@@ -906,11 +1216,11 @@ Completion wording:
 Run cancelled
 ```
 
-Cancellation is not displayed as success or ordinary project failure unless an additional framework error exists.
+Cancellation is not displayed as success or ordinary source failure unless an additional framework error exists.
 
 ---
 
-## 27. Progress
+## 29. Progress
 
 Show:
 
@@ -924,6 +1234,16 @@ warning count
 failure count
 ```
 
+Language-probe progress may show bounded stages such as:
+
+```text
+Validating selected path
+Resolving source root
+Selecting source files
+Classifying language modules
+Resolving capabilities
+```
+
 Use indeterminate progress when totals are unknown.
 
 Progress comes from structured application events.
@@ -932,15 +1252,17 @@ The GUI does not infer progress from activity-log line counts.
 
 ---
 
-## 28. Activity panel
+## 30. Activity panel
 
 The activity view is bounded presentation, not `raw/master.log`.
 
 It may show:
 
-- stage transitions;
+- language-resolution stages;
+- path or capability warnings;
+- validation-stage transitions;
 - current subject;
-- concise warnings;
+- concise diagnostics;
 - counts;
 - artifact paths.
 
@@ -954,14 +1276,16 @@ Secrets and full environment dumps are prohibited.
 
 ---
 
-## 29. Completion summary
+## 31. Completion summary
 
 Display:
 
 ```text
 Overall status
 Mode
-Project
+Language
+Resolved source context
+Validation profile, when present
 Run ID
 GF version
 Duration
@@ -990,11 +1314,12 @@ Status is also conveyed through text, icon or shape and accessible name.
 
 ---
 
-## 30. Diagnostic result view
+## 32. Diagnostic result view
 
 Separate:
 
 ```text
+Language-resolution errors
 Framework and environment errors
 Direct failures
 Required scenario failures
@@ -1020,6 +1345,7 @@ Open detail report
 Open source location
 Open scenario output
 Open gold diff
+Open path-resolution evidence
 ```
 
 Only existing owned paths are enabled.
@@ -1028,7 +1354,7 @@ The GUI consumes diagnostic classification from structured results.
 
 ---
 
-## 31. Artifact navigation
+## 33. Artifact navigation
 
 Required actions:
 
@@ -1050,6 +1376,7 @@ Open PGF Directory
 Open Scenario Output
 Open Gold Diff
 Open Detail Report
+Open Resolution Evidence
 ```
 
 Machine summary opens:
@@ -1073,14 +1400,16 @@ When an artifact is missing:
 
 ---
 
-## 32. Completed runs
+## 34. Completed runs
 
 A recent-runs view may show:
 
 ```text
 Run ID
 Date
-Project
+Language
+Source-context identity
+Validation profile
 Mode
 Overall status
 GF version
@@ -1108,7 +1437,7 @@ Historical status is not extracted from Markdown.
 
 ---
 
-## 33. Run comparison
+## 35. Run comparison
 
 Compatible runs may be compared using structured diff entries.
 
@@ -1122,13 +1451,21 @@ Removed
 Unchanged
 ```
 
-The GUI does not implement independent transition rules.
+Eligibility requires compatible:
 
-Cross-workspace portfolio comparison remains outside Wordbench.
+- language identity;
+- resolved source-context policy;
+- target or checkpoint identity;
+- relevant validation-profile identity and digest;
+- schema and normalization contracts.
+
+The GUI does not implement independent transition or compatibility rules.
+
+Cross-language portfolio comparison remains outside Wordbench.
 
 ---
 
-## 34. Application state
+## 36. Application state
 
 Canonical state file:
 
@@ -1139,27 +1476,29 @@ Canonical state file:
 Schema:
 
 ```text
-gf-wordbench.app-state/1.0
+gf-wordbench.app-state/1.1
 ```
 
 Application state stores disposable local preferences.
 
-Deleting it does not damage the project.
+Deleting it does not damage source, profiles or run artifacts.
 
-### Permitted environment fields
+### 36.1 Permitted environment fields
 
 ```text
-project_root
-rgl_root
+last_selected_language_path
+last_selected_validation_profile
+last_rgl_root
 gf_executable
 output_root
 ```
 
-### Permitted selection fields
+### 36.2 Permitted selection fields
 
 ```text
 mode
 target_file
+checkpoint_id
 timeout_sec
 max_files
 keep_ok_details
@@ -1169,20 +1508,24 @@ no_compile
 emit_cpu_stats
 ```
 
-### Permitted completed-run fields
+Only fields compatible with the newly resolved language context are restored.
+
+### 36.3 Permitted completed-run fields
 
 ```text
 run_dir
 summary_path
 status_message
+language_key
 ```
 
-### Runtime-only fields
+### 36.4 Runtime-only fields
 
 Never persist:
 
 ```text
 is_running = true
+resolved_language_context
 current_run_config
 current_run_result
 worker object
@@ -1192,42 +1535,47 @@ progress subscriptions
 cancellation token
 ```
 
-Startup always begins with no active run.
+Startup always begins with no active run and no trusted resolved language context.
 
 ---
 
-## 35. Project facts excluded from GUI state
+## 37. Resolved facts excluded from GUI state
 
-Do not store independent copies of:
+Do not store independent authoritative copies of:
 
 ```text
-source directory
-source glob
-include regex
-exclude regex
-GF project path parts
+portable language key
+language directory
+RGL source root
+selected source inventory
+module suffix
+resolved GF path
 entrypoints
 checkpoints
 required scenarios
 optional scenarios
-release artifact names
-language code
+release artifact policy
+capability statuses
+resolution diagnostics
 ```
 
-These facts belong to `project.toml` and project-owned documents.
+These facts come from fresh language resolution and an optional explicit validation profile.
 
-Expert overrides remain explicitly separate from project authority.
+Application state may remember paths and presentation choices only.
+
+Expert overrides remain explicitly separate from resolved authority.
 
 ---
 
-## 36. State persistence
+## 38. State persistence
 
 State is saved:
 
 - after meaningful preference changes, with debounce;
 - on normal close;
 - after a completed run;
-- after selecting a project or environment path.
+- after successful language resolution;
+- after selecting an environment or optional validation-profile path.
 
 Requirements:
 
@@ -1243,38 +1591,34 @@ Local state paths may be absolute.
 
 Canonical writers use `/`; readers accept native separators.
 
+A failed state write after successful language resolution does not invalidate the active context.
+
 ---
 
-## 37. Legacy state import
+## 39. Legacy state import
 
-The GUI may import the predecessor state file:
+The GUI may import predecessor state files and prior schema versions.
 
-```text
-.gf_audit_state.json
-```
-
-Supported mapping includes:
+Supported mode mapping includes:
 
 ```text
 all  → diagnostic
 file → quick
 ```
 
-Local paths move to environment state.
+Legacy `project_root` may be retained as a candidate validation-profile path only when it resolves explicitly and is compatible with a newly selected language context.
 
-Run preferences move to selection state.
+A legacy catalog language ID is not converted through an unbounded filesystem search.
 
-Completed-run references move to the completed-run section.
+When no reliable selected path is available, the user is asked to choose a language directory or `.gf` file.
 
-Project-owned fields are discarded once `project.toml` is authoritative.
-
-`is_running` is never imported.
+`is_running` and serialized runtime objects are never imported.
 
 Import is atomic: the predecessor file remains untouched until the canonical state is written and verified.
 
 ---
 
-## 38. Error presentation
+## 40. Error presentation
 
 Error dialogs separate:
 
@@ -1283,9 +1627,37 @@ summary
 recommended action
 technical details
 evidence path
+candidate choices, when applicable
 ```
 
-### Configuration error
+### 40.1 Language-resolution error
+
+Example:
+
+```text
+Language could not be resolved
+
+No eligible GF source files were found in:
+C:/work/gf-rgl/src/english
+
+Choose another language directory or GF file.
+```
+
+### 40.2 Ambiguous resolution
+
+Example:
+
+```text
+More than one language module group was detected.
+
+Choose the module group to use:
+- Eng
+- EngExt
+```
+
+The GUI does not preselect an arbitrary candidate.
+
+### 40.3 Configuration error
 
 Example:
 
@@ -1298,11 +1670,11 @@ C:/tools/gf/gf.exe
 Select another executable and try again.
 ```
 
-### Validation failure
+### 40.4 Validation failure
 
-Ordinary project `FAIL` appears in the result view rather than as an exception.
+Ordinary source or profile `FAIL` appears in the result view rather than as an exception.
 
-### Framework error
+### 40.5 Framework error
 
 Show:
 
@@ -1312,7 +1684,7 @@ Show:
 - expandable technical details;
 - Copy Details action.
 
-### Fatal GUI error
+### 40.6 Fatal GUI error
 
 The top-level handler:
 
@@ -1323,10 +1695,11 @@ The top-level handler:
 
 ---
 
-## 39. Warnings
+## 41. Warnings
 
 Warnings are visible in:
 
+- language-probe results;
 - confirmation;
 - running activity;
 - completion results;
@@ -1334,44 +1707,72 @@ Warnings are visible in:
 
 Examples:
 
+- module suffix could not be established;
+- no standard entrypoint candidate found;
 - GF version outside the tested range;
+- missing optional shared path;
 - low output disk space;
 - unavailable previous baseline;
+- no validation profile loaded;
 - optional scenario unavailable;
 - expert override active;
 - scan-only diagnostic request;
 - nonblocking static findings.
 
-Warnings block only when the governing policy makes them blocking.
+Warnings block only when the governing capability or validation policy makes them blocking.
 
 ---
 
-## 40. File and directory dialogs
+## 42. File and directory dialogs
+
+### 42.1 Language selection dialogs
 
 Initial location precedence:
 
-1. current valid field path;
-2. active project root;
+1. current valid selected-language path;
+2. last successfully selected language path;
+3. last resolved RGL source root;
+4. user home.
+
+The language-directory dialog accepts directories.
+
+The GF-file dialog filters primarily for:
+
+```text
+*.gf
+```
+
+Cancelling preserves the introduction state and current value.
+
+### 42.2 Target dialogs
+
+Initial location precedence:
+
+1. current target;
+2. active language directory;
 3. last relevant directory;
 4. user home.
 
-Cancelling a dialog preserves the current value.
-
-Valid selected target paths are displayed project-relatively where practical.
+Valid selected target paths are displayed relative to the active source context where practical.
 
 Containment uses shared normalized path policy, not string-prefix comparison.
 
+### 42.3 Profile dialogs
+
+Validation-profile dialogs do not automatically search ancestors. The user selects the profile explicitly.
+
 ---
 
-## 41. Keyboard and accessibility
+## 43. Keyboard and accessibility
 
 Minimum shortcuts:
 
 ```text
 Ctrl+R        Run validation
 Esc           Close dialog or request cancellation where safe
-Ctrl+O        Open project
-Ctrl+Shift+O  Open last run directory
+Ctrl+O        Choose language directory
+Ctrl+Shift+O  Choose GF file
+Ctrl+Alt+O    Open last run directory
 Ctrl+L        Focus activity/results
 Ctrl+,        Open settings
 F1            Open help
@@ -1392,11 +1793,11 @@ Accessibility requirements:
 - sufficient contrast;
 - no information conveyed only by hover.
 
-Result tables provide headers, row labels, keyboard navigation and accessible status text.
+Result and candidate tables provide headers, row labels, keyboard navigation and accessible status text.
 
 ---
 
-## 42. Localization
+## 44. Localization
 
 User-facing strings remain separate from logic.
 
@@ -1407,6 +1808,11 @@ quick
 checkpoint
 release
 diagnostic
+source-ready
+scan-ready
+compile-ready
+scenario-ready
+release-ready
 OK
 FAIL
 ERROR
@@ -1419,7 +1825,7 @@ Qt translation facilities may localize presentation labels.
 
 ---
 
-## 43. Window and settings state
+## 45. Window and settings state
 
 Optional presentation state may include:
 
@@ -1429,6 +1835,7 @@ splitter positions
 selected results tab
 column widths
 theme preference
+introduction-window geometry
 ```
 
 Such fields require schema definition before persistence.
@@ -1448,60 +1855,72 @@ Appearance
 Advanced
 ```
 
-Project entrypoints, scenarios and language rules do not belong in general application settings.
+Resolved language identity, profile entrypoints, scenarios and release rules do not belong in general application settings.
 
 ---
 
-## 44. Project configuration workflow
+## 46. Validation-profile workflow
 
-Project editing is separate from ordinary run controls.
+Profile editing is separate from ordinary run controls.
 
-A project editor must:
+A profile editor must:
 
-- validate the canonical project schema;
+- validate the canonical profile schema;
+- validate compatibility with the active language context;
 - show an exact diff before saving;
 - write atomically;
 - avoid edits during active runs;
-- separate project facts from local environment values;
+- separate profile facts from local environment values;
 - preserve or explicitly manage TOML comments;
-- coordinate dependent project contracts.
+- coordinate dependent profile contracts.
 
-When no safe editor is provided, the GUI opens `project.toml` in the configured external editor.
+When no safe editor is provided, the GUI opens the selected profile in the configured external editor.
+
+The GUI does not create a profile merely to open a language.
 
 ---
 
-## 45. Gold update workflow
+## 47. Gold update workflow
 
 Gold updates are separate from normal validation.
 
 A dedicated workflow:
 
-1. selects one scenario;
-2. executes it;
-3. normalizes output;
-4. displays expected and actual diff;
-5. requires explicit approval;
-6. writes the gold file atomically;
-7. records the update.
+1. requires an explicit scenario-capable validation profile;
+2. selects one scenario;
+3. executes it;
+4. normalizes output;
+5. displays expected and actual diff;
+6. requires explicit approval;
+7. writes the gold file atomically;
+8. records the update.
 
 It is unavailable during normal active runs, never triggered automatically and prohibited during release validation.
 
 ---
 
-## 46. GUI and CLI equivalence
+## 48. GUI and CLI equivalence
 
 For equivalent explicit inputs:
 
 ```text
+GUI LanguageProbeRequest == CLI LanguageProbeRequest
+GUI ResolvedLanguageContext == CLI ResolvedLanguageContext
 GUI resolved RunConfig == CLI resolved RunConfig
 ```
 
-after canonical normalization.
+following canonical normalization and presentation-independent path representation.
 
 Equivalence includes:
 
+- selected language path;
+- selected path kind;
+- language identity;
+- resolved source root;
+- module candidate classification;
+- capability status;
+- optional validation-profile identity;
 - mode;
-- project identity;
 - environment;
 - target or checkpoint;
 - timeouts;
@@ -1522,7 +1941,7 @@ Allowed differences are presentation-only:
 
 ---
 
-## 47. Loading an existing run
+## 49. Loading an existing run
 
 Sequence:
 
@@ -1546,55 +1965,65 @@ A corrupt manifest produces an integrity warning without hiding the summary.
 
 Unverified artifact links are marked clearly.
 
+Loading a historical run does not change the active language context.
+
 ---
 
-## 48. Security
+## 50. Security
 
 The GUI:
 
 - passes structured values to application services;
 - does not construct host command strings;
-- safely renders diagnostics, source excerpts, scenario output, project names and paths;
+- does not perform unbounded filesystem discovery;
+- safely renders diagnostics, source excerpts, scenario output, labels and paths;
 - uses platform-safe local-file opening APIs;
 - confirms untrusted external URLs;
 - does not bypass scenario security policy;
 - does not persist or display tokens, passwords, private keys or full environment dumps;
-- validates path containment through shared policy.
+- validates path containment through shared policy;
+- records expert path overrides in evidence;
+- never writes inside source directories during language probing.
 
 ---
 
-## 49. Performance
+## 51. Performance
 
 Never perform on the GUI thread:
 
 - GF execution;
 - broad filesystem scanning;
+- bounded but potentially large RGL source indexing;
 - large hash computation;
 - large manifest verification;
 - historical-run indexing;
 - report generation.
 
+Simple selected-path checks may run synchronously only when their bounded latency is demonstrably negligible.
+
 Large logs are streamed, virtualized or bounded with a link to the complete file.
 
 Recent-run indexing occurs in the background.
 
-Derived caches are invalidated when summary or manifest fingerprints change.
+Derived caches are invalidated when source, summary or manifest fingerprints change.
 
 ---
 
-## 50. Active-run policy
+## 52. Active-run policy
 
 One GUI instance permits one active validation run.
 
 Starting a second run while one is active is prohibited.
 
-Independent instances must still respect run-directory collision protection and project-write safety.
+Language replacement, profile replacement and resolved-path mutation are prohibited while a run is active.
+
+Independent instances must still respect run-directory collision protection and source-write safety.
 
 A queued multi-run engine requires a separate architectural contract.
 
 ---
 
-## 51. Crash recovery
+## 53. Crash recovery
 
 On startup, incomplete run directories may be presented as:
 
@@ -1613,13 +2042,40 @@ Delete through cleanup workflow
 
 Incomplete runs are never marked successful.
 
-Application state never restores an active-running flag.
+Application state never restores an active-running flag or trusted resolved context.
+
+A remembered language path is revalidated independently of incomplete-run recovery.
 
 ---
 
-## 52. Controller flow
+## 54. Controller flows
 
-Conceptual controller flow:
+### 54.1 Introduction flow
+
+```python
+def on_language_path_selected(path: Path) -> None:
+    view.set_probing(True)
+    controller.start_language_probe(LanguageProbeRequest(selected_path=path))
+```
+
+```python
+def on_language_probe_finished(result: LanguageProbeResult) -> None:
+    view.set_probing(False)
+
+    if result.needs_user_input:
+        view.show_probe_choices(result)
+        return
+
+    if not result.is_resolved:
+        view.show_probe_error(result)
+        return
+
+    runtime = bootstrap.build_language_runtime(result.context)
+    state.record_last_selected_language_path(result.context.selected_path)
+    show_main_window(runtime)
+```
+
+### 54.2 Run-request flow
 
 ```python
 def on_run_requested() -> None:
@@ -1630,7 +2086,7 @@ def on_run_requested() -> None:
         view.show_validation_errors(validation)
         return
 
-    plan = bootstrap.preview_run(ui_request)
+    plan = bootstrap.preview_run(active_context, ui_request)
     view.show_plan(plan)
 
     if not view.confirm_run(plan):
@@ -1639,7 +2095,7 @@ def on_run_requested() -> None:
     controller.start_run(plan.run_config)
 ```
 
-Worker flow:
+### 54.3 Worker flow
 
 ```python
 def worker_run(run_config: RunConfig) -> None:
@@ -1654,7 +2110,7 @@ def worker_run(run_config: RunConfig) -> None:
         emit_failed(capture_framework_error(exc))
 ```
 
-Presentation flow:
+### 54.4 Presentation flow
 
 ```python
 def on_finished(result: RunResult) -> None:
@@ -1668,14 +2124,27 @@ Signatures are illustrative. Public contracts remain owned by the interfile lock
 
 ---
 
-## 53. GUI request model
+## 55. GUI request models
 
-The widget request may contain:
+### 55.1 Language probe request
+
+The introduction widgets produce conceptually:
 
 ```text
-project_root
+selected_path
+optional_validation_profile
+nonstandard_root_override
+probe_options
+```
+
+This request is not a `ResolvedLanguageContext`.
+
+### 55.2 Run request
+
+The main-window widgets may produce:
+
+```text
 gf_executable
-rgl_root
 output_root
 mode
 target_file
@@ -1691,17 +2160,24 @@ strict
 advanced_overrides
 ```
 
-This request is not a `RunConfig`.
+This request does not duplicate language context fields and is not a `RunConfig`.
 
-Bootstrap resolves and validates it.
+Bootstrap resolves and validates it against the active immutable context.
 
 ---
 
-## 54. Events
+## 56. Events
 
 Structured events may include:
 
 ```text
+language_probe_started
+language_probe_stage_started
+language_probe_warning
+language_probe_needs_input
+language_probe_finished
+language_runtime_created
+language_runtime_disposed
 run_started
 plan_resolved
 stage_started
@@ -1723,17 +2199,22 @@ Reports and automation do not depend on Qt.
 
 ---
 
-## 55. Testing
+## 57. Testing
 
-### Unit tests
+### 57.1 Unit tests
 
 Cover:
 
-- state-to-widget loading;
+- state-to-introduction loading;
+- file and directory path collection;
+- dialog cancellation;
+- probe-result presentation;
+- ambiguity-choice presentation;
+- capability-to-control mapping;
+- state-to-main-window loading;
 - widget-to-request collection;
 - mode-dependent controls;
-- dialog cancellation;
-- project-relative target conversion;
+- source-relative target conversion;
 - validation-message mapping;
 - result wording;
 - artifact-action enabling;
@@ -1741,29 +2222,37 @@ Cover:
 - legacy state import;
 - close-during-run logic.
 
-### Controller tests
+### 57.2 Controller tests
 
-Use fake bootstrap and application services.
+Use fake probe, bootstrap and application services.
 
 Cover:
 
-- invalid request does not start work;
-- rejected confirmation does not start work;
+- introduction always appears before main runtime;
+- invalid path does not construct main runtime;
+- source-ready context can construct main runtime without GF;
+- ambiguity does not auto-select a candidate;
+- successful resolution persists only the selected path;
+- state-save failure produces a warning;
+- rejected run confirmation does not start work;
 - one worker per run;
 - progress routing;
 - cancellation routing;
 - structured `FAIL` is not an exception;
 - infrastructure exception maps to `ERROR`;
 - completed result updates state;
-- state-save failure produces a warning;
-- worker cleanup.
+- worker cleanup;
+- language replacement disposes the old runtime.
 
-### Qt tests
+### 57.3 Qt tests
 
 Cover:
 
+- introduction actions;
+- language file and directory dialogs;
 - signals;
 - button states;
+- capability indicators;
 - focus order;
 - shortcuts;
 - modal dialogs;
@@ -1771,28 +2260,39 @@ Cover:
 - close behavior;
 - accessibility labels where testable.
 
-### Integration tests
+### 57.4 Integration tests
 
-With a small fixture project:
+With small fixture source trees:
 
-- launch GUI;
-- load project;
-- run successful quick validation;
-- render failure correctly;
+- launch GUI to introduction;
+- open a standard language directory;
+- open one `.gf` file;
+- browse and scan without GF;
+- run successful quick compilation with real GF;
+- display a missing-GF capability state;
+- resolve a language requiring one shared path;
+- present an ambiguous candidate without guessing;
+- load a compatible optional validation profile;
+- reject an incompatible profile;
+- run a checkpoint profile;
 - open run artifacts;
 - cancel a bounded long operation;
-- restart and restore safe state.
+- replace one language with another without contamination;
+- restart and revalidate the remembered path;
+- handle a stale remembered path safely.
 
-### CLI equivalence tests
+### 57.5 CLI equivalence tests
 
-Equivalent GUI and CLI input must resolve to equal canonical run configuration.
+Equivalent GUI and CLI path inputs must resolve to equal canonical probe results, contexts and run configuration.
 
-### Boundary tests
+### 57.6 Boundary tests
 
 Verify GUI modules do not import or directly call:
 
 ```text
-scanner
+filesystem scanner
+selection implementation
+GF path implementation
 compiler
 scenario runner
 gold comparator
@@ -1803,15 +2303,21 @@ Verify artifact paths come from structured results rather than hard-coded recons
 
 ---
 
-## 56. Drift indicators
+## 58. Drift indicators
 
 GUI drift exists when:
 
-- GUI and CLI resolve different run configuration;
+- the main runtime is constructed before language resolution;
+- GUI and CLI resolve different language contexts or run configuration;
+- GUI widgets enumerate GF source trees;
+- GUI widgets infer module suffixes or entrypoints;
+- GUI code constructs an independent GF path;
 - GUI imports validation-stage implementations;
+- normal startup requires a catalog or language bundle;
+- normal startup requires scenarios or golds;
 - visible modes use legacy identifiers;
 - language-specific paths appear in framework GUI defaults;
-- project facts are duplicated in local state;
+- resolved facts are duplicated as application-state authority;
 - `FAIL` is displayed as success;
 - completed-run pointers are cleared at run start;
 - Markdown is parsed for status;
@@ -1822,31 +2328,38 @@ GUI drift exists when:
 - cancellation is represented as `OK`;
 - workers update widgets outside the GUI thread;
 - large logs are rendered without bounds;
-- state persists an active-running flag;
+- state persists an active-running flag or resolved runtime context;
 - malformed state crashes startup;
 - hidden values override confirmed visible values;
-- project switching occurs during a run;
+- language or profile switching occurs during a run;
+- a stale remembered path selects an unrelated directory;
+- ambiguity is resolved by first match;
 - GUI behavior depends on `gf-portfolio`.
 
 Any drift indicator requires coordinated contract and test correction.
 
 ---
 
-## 57. Change checklist
+## 59. Change checklist
 
 ```text
 [ ] User goal identified
+[ ] Introduction-flow impact reviewed
+[ ] LanguageProbeRequest impact reviewed
+[ ] ResolvedLanguageContext impact reviewed
+[ ] Capability-state impact reviewed
 [ ] Widget and application owner identified
 [ ] Bootstrap impact reviewed
 [ ] RunConfig impact reviewed
 [ ] CLI equivalence reviewed
 [ ] Application-state schema reviewed
+[ ] Validation-profile impact reviewed
 [ ] Mode matrix reviewed
 [ ] Accessibility reviewed
 [ ] Threading and cancellation reviewed
-[ ] Error presentation reviewed
+[ ] Error and ambiguity presentation reviewed
 [ ] Artifact ownership reviewed
-[ ] Security reviewed
+[ ] Security and path containment reviewed
 [ ] Unit and Qt tests updated
 [ ] Contract and integration tests updated
 [ ] Owner documentation and locks updated
@@ -1858,60 +2371,81 @@ A public GUI contract change is not implemented only in a widget file.
 
 ---
 
-## 58. User workflows
+## 60. User workflows
 
-### First launch
+### 60.1 First launch
 
 1. Start GF Wordbench.
-2. Select or confirm the active project.
-3. select the GF executable.
-4. select the RGL root.
-5. select the output root.
-6. test the environment.
+2. Choose a language directory or `.gf` file.
+3. Review the resolved language and capability status.
+4. Configure the GF executable when compilation is needed.
+5. Select or confirm the output root.
+6. optionally load a validation profile.
 7. choose a validation mode.
 8. review the resolved plan.
 9. run validation.
 10. open the generated reports.
 
-### Quick validation
+### 60.2 Reopen last language
+
+1. Start GF Wordbench.
+2. Select `Open Last Language`.
+3. Wordbench revalidates the remembered path.
+4. Resolve any path or environment issue.
+5. Continue in the main window.
+
+### 60.3 Quick source validation
 
 1. Choose `Quick`.
-2. Select a project source target.
-3. Confirm relevant options.
-4. Run validation.
-5. Review direct failures first.
-6. Open evidence as needed.
+2. Select a GF source target or keep the focused startup file.
+3. Select scan and compilation options according to available capabilities.
+4. Review the effective GF path and target.
+5. Run validation.
+6. Review direct failures first.
+7. Open evidence as needed.
 
-### Checkpoint validation
+### 60.4 Checkpoint validation
 
-1. Choose `Checkpoint`.
-2. Select a declared checkpoint.
-3. Review modules and scenarios.
-4. Run validation.
-5. Inspect gates and regressions.
+1. Load a validation profile that declares checkpoints.
+2. Choose `Checkpoint`.
+3. Select a declared checkpoint.
+4. Review modules and scenarios.
+5. Run validation.
+6. Inspect gates and regressions.
 
-### Release validation
+### 60.5 Release validation
 
-1. Choose `Release`.
-2. Resolve blocking environment issues.
-3. Review the release plan.
-4. Confirm the run.
-5. Observe required stages.
-6. verify outcome and manifest.
-7. open release artifacts.
+1. Load a complete release validation profile.
+2. Resolve blocking environment and profile issues.
+3. Choose `Release`.
+4. Review the release plan.
+5. Confirm the run.
+6. Observe required stages.
+7. Verify outcome and manifest.
+8. Open release artifacts.
 
-### Diagnostic validation
+### 60.6 Diagnostic validation
 
 1. Choose `Diagnostic`.
 2. Select scope.
 3. Enable only necessary advanced options.
 4. Run validation.
-5. Inspect framework errors, then direct failures.
-6. Use `AI_READY.md` and raw logs for deeper analysis.
+5. Inspect language-resolution and framework errors first.
+6. Inspect direct failures before downstream failures.
+7. Use `AI_READY.md` and raw logs for deeper analysis.
+
+### 60.7 Change language
+
+1. Ensure no run is active.
+2. Select `Change Language`.
+3. Confirm runtime replacement when asked.
+4. Choose another language directory or `.gf` file.
+5. Review the new resolved context.
+6. Continue with a newly composed runtime.
 
 ---
 
-## 59. Troubleshooting
+## 61. Troubleshooting
 
 ### GUI does not start
 
@@ -1926,16 +2460,51 @@ launcher working directory
 
 Run the Python module entrypoint from a terminal to expose startup errors.
 
+### Language cannot be opened
+
+Possible causes:
+
+- path does not exist;
+- path is unreadable;
+- selected file is not `.gf`;
+- selected directory contains no eligible GF sources;
+- RGL source root is ambiguous or unsupported;
+- resolved path escapes the approved root;
+- module grouping is ambiguous.
+
+The introduction window displays the blocking reason and remediation.
+
+### Main window opens but Compile is unavailable
+
+Possible causes:
+
+- GF executable not configured;
+- GF version probe failed;
+- required GF path unresolved;
+- no compile target selected.
+
+Source browsing and static scan may remain available.
+
+### Checkpoint or Release mode is disabled
+
+Possible causes:
+
+- no validation profile loaded;
+- profile declares no checkpoints;
+- profile is incompatible with the active language;
+- scenarios, golds or release targets are incomplete;
+- required capability preflight failed.
+
 ### Run button disabled
 
 Possible causes:
 
-- invalid project;
-- missing GF executable;
-- missing RGL;
-- required target or checkpoint not selected;
+- required target not selected;
+- requested mode capability unavailable;
+- missing GF executable for a compile-backed request;
 - active run already in progress;
-- unresolved release constraints.
+- unresolved release constraints;
+- invalid output root.
 
 The GUI displays the blocking reason.
 
@@ -1951,6 +2520,14 @@ Inspect:
 
 The GUI thread remains responsive.
 
+### Last language cannot open
+
+The remembered path may no longer exist or may no longer satisfy the supported layout.
+
+Choose another language directory or `.gf` file.
+
+The GUI does not search the filesystem for a replacement automatically.
+
 ### Last run cannot open
 
 The stored path may no longer exist.
@@ -1963,25 +2540,38 @@ The GUI does not claim deletion without cleanup evidence.
 
 Malformed state is ignored or quarantined.
 
-The GUI starts with safe defaults.
+The GUI starts at the introduction window with safe defaults.
 
-Project files remain unaffected.
+Source and profile files remain unaffected.
 
 ---
 
-## 60. Canonical labels
+## 62. Canonical labels
 
-Section labels:
+Introduction labels:
 
 ```text
-Project
+Open Last Language
+Choose Language Directory
+Choose GF File
+Settings
+Quit
+```
+
+Main section labels:
+
+```text
+Language
+Capabilities
 Environment
+Validation Profile
 Validation
 Resolved Plan
 Results
 Activity
 Run Validation
 Cancel
+Change Language
 Open Run Directory
 Open Machine Summary
 Open Human Summary
@@ -1991,6 +2581,16 @@ Open Manifest
 Test Environment
 Settings
 Advanced Options
+```
+
+Capability labels:
+
+```text
+Source Ready
+Scan Ready
+Compile Ready
+Scenario Ready
+Release Ready
 ```
 
 Mode labels:
@@ -2005,6 +2605,9 @@ Diagnostic
 Status labels:
 
 ```text
+Language ready
+Language needs attention
+Language could not be resolved
 Validation passed
 Validation completed with failures
 Validation error
@@ -2012,6 +2615,8 @@ Run cancelled
 Ready
 Running
 Cancelling
+Checking
+Unavailable
 ```
 
 Labels may be localized.
@@ -2020,36 +2625,47 @@ Internal identifiers remain stable tokens.
 
 ---
 
-## 61. Invariants
+## 63. Invariants
 
-1. One active project exists per GUI session.
-2. Project facts come from `project.toml`.
-3. Environment preferences remain local.
-4. Four canonical validation modes are exposed.
-5. GUI and CLI share bootstrap and application services.
-6. The GUI never bypasses shared validation orchestration.
-7. Validation runs outside the GUI thread.
-8. Cancellation preserves evidence.
-9. `FAIL` is never displayed as success.
-10. `summary.json` is the machine source for completed runs.
-11. Artifact paths come from structured results.
-12. Application state is versioned and atomic.
-13. Runtime worker objects are never persisted.
-14. Normal validation never updates gold.
-15. Release mode enforces required stages.
-16. Raw diagnostics remain accessible.
-17. Color is not the only status signal.
-18. Large logs are rendered with bounds.
-19. Closing during a run requires explicit cancellation.
-20. Generic GUI code contains no active-language identifiers.
-21. The GUI remains independent from `gf-portfolio`.
+1. Every interactive launch shows the introduction window before the main runtime.
+2. The user supplies one language directory or one `.gf` file.
+3. The GUI delegates path resolution and source selection to shared services.
+4. One immutable resolved language context exists per active GUI runtime.
+5. One language identity exists per ordinary run.
+6. The GUI may open in source-ready mode without GF or a validation profile.
+7. A catalog, language bundle, scenario registry and gold set are not basic startup prerequisites.
+8. Validation profiles are explicit and optional except for profile-dependent modes.
+9. Environment preferences remain local.
+10. Four canonical validation modes are exposed.
+11. Capability status controls mode availability.
+12. GUI and CLI share probe, bootstrap and application services.
+13. The GUI never bypasses shared validation orchestration.
+14. Validation and potentially expensive probing run outside the GUI thread.
+15. Cancellation preserves evidence.
+16. `FAIL` is never displayed as success.
+17. `summary.json` is the machine source for completed runs.
+18. Artifact paths come from structured results.
+19. Application state is versioned and atomic.
+20. Runtime contexts and worker objects are never persisted.
+21. Remembered paths are revalidated on every load.
+22. Normal validation never updates gold.
+23. Release mode enforces required profile stages.
+24. Raw diagnostics remain accessible.
+25. Color is not the only status signal.
+26. Large logs are rendered with bounds.
+27. Closing during a run requires explicit cancellation.
+28. Language replacement is prohibited during an active run.
+29. Replacing a language recreates the runtime.
+30. Generic GUI code contains no active-language identifiers or hard-coded RGL language paths.
+31. Ambiguity is never resolved by implicit first match.
+32. The GUI remains independent from `gf-portfolio`.
 
 ---
 
-## 62. Enforcement
+## 64. Enforcement
 
-> GF Wordbench's GUI makes the resolved validation plan visible, executes it only through shared application services, preserves responsiveness and evidence, displays structured outcomes accurately, and keeps project facts separate from local interface state.
+> GF Wordbench's GUI begins from one explicit language source path, makes the resolved language and validation plan visible, executes only through shared application services, preserves responsiveness and evidence, displays structured outcomes accurately, and keeps machine-local intent separate from resolved runtime authority.
 
 The GUI may simplify interaction.
 
-It must not simplify away required evidence, required stages, diagnostic uncertainty, security constraints or release policy.
+It must not simplify away explicit language intent, path containment, ambiguity, capability limits, required evidence, required stages, diagnostic uncertainty, security constraints or release policy.

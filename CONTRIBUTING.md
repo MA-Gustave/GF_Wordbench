@@ -2,13 +2,13 @@
 
 Thank you for contributing to GF Wordbench.
 
-GF Wordbench is a validation and development workbench for one active Grammatical Framework language project at a time. Contributions must preserve three properties:
+GF Wordbench is a validation and development workbench for one explicitly selected Grammatical Framework language path at a time. An optional validation profile may add policy, scenarios, golds, targets, and release gates, but it is not required for normal startup. Contributions must preserve three properties:
 
 1. **Correctness** — code, contracts, behavior, and evidence agree.
 2. **Traceability** — every important result can be traced to source, command, output, artifact, or decision.
-3. **Contract integrity** — files, tools, persisted formats, and language-project components do not drift apart.
+3. **Contract integrity** — files, tools, persisted formats, and language and validation-profile components do not drift apart.
 
-This document defines the contribution workflow for framework code, documentation, tests, external-tool integration, persisted schemas, project templates, and the active language project.
+This document defines the contribution workflow for framework code, documentation, tests, external-tool integration, persisted schemas, validation-profile templates, selected language sources, and optional external validation profiles.
 
 ---
 
@@ -23,8 +23,7 @@ docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Their responsibilities are distinct:
@@ -35,8 +34,7 @@ Their responsibilities are distinct:
 | `docs/INTERFILE_CONTRACT_LOCK.md` | Contracts between framework files and components |
 | `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md` | Contracts between GF Wordbench and external executables, runtimes, filesystems, and operating-system behavior |
 | `docs/PERSISTED_SCHEMA_LOCK.md` | Versioned formats, persistent paths, manifests, state, summaries, normalized outputs, and gold files |
-| `project/docs/INTERFILE_CONTRACT_LOCK.md` | Contracts inside the active language project |
-| `templates/project/docs/INTERFILE_CONTRACT_LOCK.md` | Generic project-contract template used when initializing another language |
+| `templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md` | Language-neutral profile-contract template used when initializing an optional external validation profile |
 
 When documents disagree, follow the precedence defined by `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`. Do not choose one silently. Identify the conflict, apply the authoritative rule, update every affected owner document, and add validation that prevents recurrence.
 
@@ -59,9 +57,9 @@ Contributions may affect one or more of these areas:
 - diagnostics and classification;
 - reports and manifests;
 - persisted schemas and migrations;
-- project initialization and reset;
-- active-language GF source;
-- project documentation;
+- validation-profile initialization, reset, and migration;
+- selected-language GF source;
+- language and validation-profile documentation;
 - framework documentation;
 - tests, fixtures, and CI;
 - Windows launchers and automation.
@@ -72,28 +70,31 @@ Every change must declare its affected area or areas.
 
 ## 3. Repository boundaries
 
-GF Wordbench separates reusable framework assets from the active language project.
+GF Wordbench separates reusable framework assets from selected language sources and optional validation-profile assets.
+
+Normal startup begins from one explicit selected language path. A repository-local `project/` directory is not language authority and must not be recreated as a startup prerequisite.
 
 ### 3.1 Framework-owned content
 
 Framework-owned content includes:
 
 ```text
-app/
+src/
+scripts/
+tools/
 tests/
 docs/
 templates/
 README.md
-CHANGELOG.md
 CONTRIBUTING.md
 SECURITY.md
 LICENSE.md
 pyproject.toml
 ```
 
-Framework code must not contain active-language identifiers, paths, suffixes, module names, or linguistic assumptions except in clearly named migration fixtures or compatibility tests.
+Framework code must not contain selected-language identifiers, machine-local paths, suffixes, module names, or linguistic assumptions except in clearly named migration fixtures or compatibility tests.
 
-Examples of project-specific content that must not appear in generic framework behavior:
+Examples of language-specific content that must not appear in generic framework behavior:
 
 ```text
 albanian
@@ -103,40 +104,38 @@ NounSqi
 lib/src/albanian
 ```
 
-### 3.2 Active-project content
+### 3.2 Selected-language and validation-profile content
 
-The active language project lives under:
+The selected language is an explicit machine-local directory or `.gf` file. Its source tree normally lives outside the GF Wordbench repository and remains owned by its language maintainers.
+
+An optional validation profile may live at an explicit external location such as:
 
 ```text
-project/
+<validation-profile-root>/
 ```
 
-It may contain language-specific:
+It may contain policy or language-specific:
 
-- paths;
-- module names;
-- suffixes;
-- morphology;
-- syntax;
-- lincat contracts;
-- scenarios;
-- inputs;
+- filters and targets;
+- module names and checkpoints;
+- scenarios and inputs;
 - gold files;
-- decisions;
-- known issues;
+- decisions and known issues;
 - release criteria.
 
-### 3.3 Project template
+A validation profile augments a resolved language context. It does not select the language, override the resolved source root, or become a normal-startup prerequisite.
 
-The reusable empty project template lives under:
+### 3.3 Validation-profile template
+
+The reusable language-neutral validation-profile template lives under:
 
 ```text
-templates/project/
+templates/validation-profile/
 ```
 
-It must remain language-neutral.
+Initialization reads this template and writes to an explicit external destination. It must not recreate a repository-local `project/` directory.
 
-A contribution that changes the structure or required documentation of `project/` must normally update `templates/project/` in the same change.
+A contribution that changes the structure or required documentation of an optional validation profile must normally update `templates/validation-profile/` in the same coordinated change.
 
 ### 3.4 Independent Portfolio boundary
 
@@ -178,7 +177,7 @@ Before editing:
 5. classify the change;
 6. identify required tests;
 7. identify persisted-data or migration impact;
-8. identify active-project and template impact;
+8. identify selected-language, validation-profile, and template impact;
 9. identify authoritative documentation affected by a contract, command, schema, workflow, or user-visible behavior change;
 10. determine whether an ADR or decision-log entry is required.
 
@@ -241,7 +240,7 @@ Examples:
 - an optional model field with a defined default;
 - an optional report section;
 - an optional scenario;
-- an optional project configuration field;
+- an optional validation-profile configuration field;
 - additional non-breaking diagnostic metadata;
 - a new manifest role;
 - a new optional GF helper.
@@ -254,7 +253,7 @@ Requirements:
 - add tests;
 - update relevant lock files;
 - increment a schema minor version when persisted data changes;
-- update templates when project structure changes;
+- update templates when validation-profile structure changes;
 - add changelog notes when user-visible.
 
 ### 5.4 Breaking contract change
@@ -275,7 +274,7 @@ Examples:
 - changing status meaning;
 - renaming a persisted field;
 - changing expected PGF names;
-- changing required project configuration.
+- changing required validation-profile configuration.
 
 Requirements:
 
@@ -373,7 +372,7 @@ Tests that execute real GF require:
 - a supported `gf` or `gf.exe`;
 - a valid GF/RGL path;
 - a writable output directory;
-- a small fixture grammar or active project suitable for integration testing.
+- a small fixture grammar or explicitly selected language suitable for integration testing.
 
 Unit tests must not require a globally installed GF executable unless marked as integration tests.
 
@@ -404,7 +403,7 @@ feature/scenario-runner
 fix/summary-schema-migration
 docs/contributing
 refactor/process-runner
-project/update-morphology-contract
+language/update-morphology-contract
 ```
 
 Commits should be reviewable and describe intent.
@@ -417,10 +416,10 @@ fix: preserve raw stderr after timeout
 docs: define persisted schema migration workflow
 test: cover Windows paths with spaces
 refactor: centralize artifact path ownership
-project: update morphology provider contracts
+language: update morphology provider contracts
 ```
 
-Avoid commits that mix unrelated framework, project, formatting, and generated-output changes.
+Avoid commits that mix unrelated framework, language/profile, formatting, and generated-output changes.
 
 Do not rewrite gold files, schemas, and code in a large unexplained commit. Separate preparation, behavior, and expected-output changes when practical.
 
@@ -503,7 +502,7 @@ Fallback behavior must be explicit, testable, and documented.
 Do not silently:
 
 - use another executable;
-- use another project root;
+- use another selected language path or validation-profile root;
 - change the GF path;
 - skip a required scenario;
 - create a missing gold file;
@@ -513,9 +512,9 @@ Do not silently:
 
 ---
 
-## 10. GF source and project standards
+## 10. GF language and validation-profile standards
 
-Changes under `project/` must follow the active project contract lock.
+Changes to selected language sources must follow the owning language repository's contracts. Changes to optional validation-profile assets must follow the profile's documented contracts. Framework behavior must not assume a repository-local `project/` directory.
 
 ### 10.1 Module ownership
 
@@ -551,9 +550,9 @@ Any intentional representation change requires:
 
 ### 10.4 Known issues and release blockers
 
-Record an unresolved project issue only when it materially affects a language contract, validation result, release criterion, migration, or maintainer handoff. Use the project-owned issue or decision document appropriate to the subject.
+Record an unresolved language or validation-profile issue only when it materially affects a language contract, validation result, release criterion, migration, or maintainer handoff. Use the owning language or profile issue or decision document appropriate to the subject.
 
-Do not use project documentation to track routine development progress, transient implementation states, or short-lived work sequencing.
+Do not use language or validation-profile documentation to track routine development progress, transient implementation states, or short-lived work sequencing.
 
 ---
 
@@ -614,7 +613,7 @@ Required review:
 
 ### 11.1 Security
 
-Project scenarios must not contain shell escapes or arbitrary external-command execution unless the feature is explicitly authorized, documented, and tested.
+Language or validation-profile scenarios must not contain shell escapes or arbitrary external-command execution unless the feature is explicitly authorized, documented, and tested.
 
 GF Wordbench must not pass untrusted text through a shell command string when an argument-array API is available.
 
@@ -624,7 +623,7 @@ GF Wordbench must not pass untrusted text through a shell command string when an
 
 Persisted assets include:
 
-- `project/project.toml`;
+- an explicit optional `<validation-profile-root>/project.toml`;
 - application state;
 - `summary.json`;
 - `manifest.json`;
@@ -710,10 +709,10 @@ Migrations must:
 
 ## 13. Scenario contributions
 
-Scenario files belong under:
+Scenario files supplied by an optional validation profile belong under:
 
 ```text
-project/validation/scenarios/
+<validation-profile-root>/validation/scenarios/
 ```
 
 A scenario contribution must define:
@@ -748,21 +747,21 @@ Random generation must not be used as an exact deterministic gold unless a stabl
 
 A new required scenario must update:
 
-- `project.toml`;
-- project validation documentation;
+- `<validation-profile-root>/project.toml`;
+- validation-profile documentation;
 - scenario registry;
 - expected gold or explicit assertion strategy;
 - release criteria when release-blocking;
-- project interfile contract lock when it adds a new boundary.
+- the owning language or validation-profile contract document when it adds a new boundary.
 
 ---
 
 ## 14. Gold-file contributions
 
-Gold files live under:
+Gold files supplied by an optional validation profile live under:
 
 ```text
-project/validation/gold/
+<validation-profile-root>/validation/gold/
 ```
 
 They are reviewed source artifacts, not disposable generated output.
@@ -776,7 +775,7 @@ Gold changes require:
 3. review of linguistic and technical meaning;
 4. matching scenario ID and normalization version;
 5. explicit update operation;
-6. project documentation review;
+6. language or validation-profile documentation review;
 7. changelog or decision-log update when behavior changes.
 
 Do not approve a gold update solely because it makes a failing test pass.
@@ -887,7 +886,8 @@ Examples:
 - schema details belong in `PERSISTED_SCHEMA_LOCK.md`;
 - external invocation details belong in `EXTERNAL_TOOL_CONTRACT_LOCK.md`;
 - framework file boundaries belong in `INTERFILE_CONTRACT_LOCK.md`;
-- active-language boundaries belong in `project/docs/INTERFILE_CONTRACT_LOCK.md`.
+- selected-language boundaries belong in the owning language repository's documentation;
+- validation-profile boundaries belong in the profile's own contract documentation, based on `templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md`.
 
 ### 17.2 Normative language
 
@@ -899,7 +899,7 @@ Avoid contradictory requirements disguised as examples.
 
 Examples must be labeled when they are not canonical.
 
-Do not use active-language names in generic templates unless clearly marked as illustrative examples.
+Do not use language-specific names in generic templates unless clearly marked as illustrative examples.
 
 ### 17.4 Cross-references
 
@@ -1044,13 +1044,18 @@ At minimum, test:
 
 Use the commands defined by the repository configuration.
 
-The baseline Python validation is expected to include:
+The snapshot 18 integration baseline is expected to include:
 
 ```powershell
-python -m pytest
-python -m compileall -q app tests
-python -m ruff check app tests
-python -m mypy app
+python -m compileall -q src tools scripts
+python -m gf_wordbench --help
+python -m pytest --collect-only -q
+python -m pytest tests/contracts -q
+python -m pytest tests/components -q
+python -m pytest tests/unit -q
+python tools/diagnostics/run_safe_suite.py
+git diff --check
+git status --short
 ```
 
 When a tool is unavailable, do not claim that its validation passed.
@@ -1066,7 +1071,7 @@ gf-wordbench schemas check --strict
 gf-wordbench project contracts check
 ```
 
-Project-facing changes should run the relevant GF Wordbench modes:
+Language- or validation-profile-facing changes should run the relevant GF Wordbench modes:
 
 ```text
 quick
@@ -1105,7 +1110,7 @@ Compatibility:
 Migration:
 External-tool impact:
 Persisted-schema impact:
-Project/template impact:
+Language/profile/template impact:
 Scenario/gold impact:
 Security impact:
 Tests:
@@ -1120,7 +1125,7 @@ Documentation:
 [ ] Change classification is stated
 [ ] Contract IDs are identified
 [ ] Providers and consumers are identified
-[ ] Framework/project boundary is preserved
+[ ] Framework/language/profile boundary is preserved
 [ ] Shared models and schemas are updated
 [ ] Artifact ownership is preserved
 [ ] Error behavior is reviewed
@@ -1164,7 +1169,7 @@ Documentation:
 [ ] Manifest impact reviewed
 ```
 
-### 20.4 Active-project checklist
+### 20.4 Language and validation-profile checklist
 
 ```text
 [ ] Provider module validated
@@ -1197,8 +1202,8 @@ A reviewer should confirm:
 - raw evidence is preserved;
 - gold changes are intentional;
 - migrations are safe and tested;
-- active-language content did not leak into the framework;
-- template and active-project structure remain aligned;
+- language-specific content did not leak into the framework;
+- the validation-profile template and explicit profile structure remain aligned;
 - documentation describes accepted behavior and public contracts directly, without progress labels;
 - validation evidence supports the conclusion.
 
@@ -1233,9 +1238,9 @@ Add or update an ADR when a change alters:
 - scenario strategy;
 - result model separation;
 - major reporting policy;
-- project lifecycle.
+- validation-profile lifecycle.
 
-Use the active project decision log for language-specific architectural or linguistic decisions.
+Use the owning language repository or validation-profile decision log for language-specific architectural or linguistic decisions.
 
 ---
 
@@ -1252,7 +1257,7 @@ Security-sensitive areas include:
 - path traversal;
 - symlink handling;
 - unsafe archive extraction;
-- untrusted project configuration;
+- untrusted validation-profile configuration;
 - arbitrary file overwrite;
 - gold update commands;
 - secrets in logs;
@@ -1273,7 +1278,7 @@ AI-generated changes must be reviewed for:
 - nonexistent GF commands;
 - fabricated schema fields;
 - duplicated normative rules;
-- active-language leakage;
+- language-specific leakage;
 - path assumptions;
 - hidden behavior changes;
 - untested gold rewrites;
@@ -1312,7 +1317,7 @@ A contribution is complete when:
 13. the changelog or decision record is updated when required;
 14. review can trace every important claim to evidence.
 
-Passing local unit tests alone is not sufficient for a contribution that changes a cross-file, external-tool, persisted-schema, or active-language contract.
+Passing local unit tests alone is not sufficient for a contribution that changes a cross-file, external-tool, persisted-schema, selected-language, or validation-profile contract.
 
 ---
 
@@ -1325,7 +1330,7 @@ Every accepted contribution must leave GF Wordbench in a state where:
 - framework files agree with one another;
 - external requests agree with external-response interpretation;
 - writers agree with readers;
-- active-project modules agree with consumers;
+- selected-language and validation-profile contracts agree with consumers;
 - scenarios agree with entrypoints;
 - outputs agree with gold expectations;
 - documentation agrees with accepted contracts and observable behavior;

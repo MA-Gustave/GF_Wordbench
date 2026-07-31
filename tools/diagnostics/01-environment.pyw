@@ -15,6 +15,7 @@ from diag_core import (
     DiagConfig,
     DiagReport,
     executable_available,
+    console_python,
     execute_step,
     module_available,
     run_level_app,
@@ -84,7 +85,7 @@ def run_checks(config: DiagConfig, report: DiagReport, log) -> None:
         step_id="environment.wordbench.import",
         title="Import gf_wordbench",
         command=[
-            sys.executable,
+            console_python(),
             "-c",
             "import gf_wordbench; print(getattr(gf_wordbench, '__version__', 'imported'))",
         ],
@@ -96,7 +97,7 @@ def run_checks(config: DiagConfig, report: DiagReport, log) -> None:
         log,
         step_id="environment.wordbench.cli-version",
         title="Wordbench CLI version",
-        command=[sys.executable, "-m", "gf_wordbench", "--version"],
+        command=[console_python(), "-m", "gf_wordbench", "--version"],
         timeout=config.timeout("short", 30),
     )
 

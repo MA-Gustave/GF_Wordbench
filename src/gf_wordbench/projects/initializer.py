@@ -1,9 +1,12 @@
-"""Initialize the single active project from the canonical project template."""
+"""Initialize an explicit external validation profile from the canonical template."""
 
 from __future__ import annotations
 
 import os
 import re
+from contextlib import nullcontext
+from datetime import UTC, datetime
+from uuid import uuid4
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
@@ -21,13 +24,15 @@ from .models import (
     ProjectValidationResult,
 )
 from .ports import (
+    LifecycleLockRequest,
     ProjectConfigWriter,
     ProjectFilesystem,
+    ProjectLifecycleLock,
     ProjectTemplateSource,
     TreeEntry,
     TreeEntryKind,
 )
-from .validator import check_project
+from .validator import ProjectValidator, check_project
 
 __all__ = (
     "ProjectInitializationRequest",
@@ -36,10 +41,13 @@ __all__ = (
     "initialize_project",
 )
 
-_ACTIVE_PROJECT_DIRECTORY: Final[str] = "project"
 _PROJECT_FILENAME: Final[str] = "project.toml"
-_STAGING_DIRECTORY: Final[str] = ".gf-wordbench-project-init-stage"
-_ROLLBACK_DIRECTORY: Final[str] = ".gf-wordbench-project-init-rollback"
+_TEMPLATE_DIRECTORY: Final[PurePosixPath] = PurePosixPath(
+    "templates/validation-profile"
+)
+_STAGE_SUFFIX: Final[str] = ".gf-wordbench-profile-init-stage"
+_ROLLBACK_SUFFIX: Final[str] = ".gf-wordbench-profile-init-rollback"
+_OPERATION_TYPE: Final[str] = "initialize-validation-profile"
 
 _PLACEHOLDER_TOKEN: Final[re.Pattern[str]] = re.compile(
     r"^<[A-Z][A-Z0-9_-]*>$"
@@ -65,18 +73,23 @@ _MAX_VALIDATION_ERRORS: Final[int] = 8
 
 @dataclass(frozen=True, slots=True)
 class ProjectInitializationRequest:
-    """Explicit inputs for one template-to-project initialization."""
+    """Explicit inputs for one external validation-profile initialization."""
 
     workspace_root: Path
+    project_root: Path
     config: ProjectConfig
     template_values: Mapping[str, str] = field(default_factory=dict)
-    require_resolved_placeholders: bool = False
+    require_resolved_placeholders: bool = True
     allow_existing_empty_project: bool = True
 
     def __post_init__(self) -> None:
         workspace_root = _validated_absolute_path(
             self.workspace_root,
             field_name="workspace_root",
+        )
+        project_root = _validated_absolute_path(
+            self.project_root,
+            field_name="project_root",
         )
         if not isinstance(self.config, ProjectConfig):
             raise TypeError("config must be a ProjectConfig")
@@ -91,6 +104,7 @@ class ProjectInitializationRequest:
         )
 
         object.__setattr__(self, "workspace_root", workspace_root)
+        object.__setattr__(self, "project_root", project_root)
         object.__setattr__(
             self,
             "template_values",
@@ -99,10 +113,16 @@ class ProjectInitializationRequest:
             ),
         )
 
+    @property
+    def destination_root(self) -> Path:
+        """Return the explicit external validation-profile destination."""
+
+        return self.project_root
+
 
 @dataclass(frozen=True, slots=True)
 class ProjectInitializationResult:
-    """Published project paths and validation evidence."""
+    """Published external validation-profile paths and validation evidence."""
 
     workspace_root: Path
     template_root: Path
@@ -113,8 +133,20 @@ class ProjectInitializationResult:
     validation: ProjectValidationResult
 
     @property
+    def destination_root(self) -> Path:
+        """Return the published external validation-profile root."""
+
+        return self.project_root
+
+    @property
+    def validation_profile_path(self) -> Path:
+        """Return the canonical profile document path."""
+
+        return self.project_file
+
+    @property
     def is_active(self) -> bool:
-        """Whether the published project is valid and fully resolved."""
+        """Whether the published profile is valid and fully resolved."""
 
         return self.validation.ok and not self.unresolved_placeholders
 
@@ -129,7 +161,7 @@ class _ProjectTemplateStage:
 
 
 class ProjectInitializer:
-    """Coordinate staged, validated, atomic project initialization."""
+    """Coordinate staged, validated, atomic profile initialization."""
 
     def __init__(
         self,
@@ -137,16 +169,24 @@ class ProjectInitializer:
         template_source: ProjectTemplateSource,
         filesystem: ProjectFilesystem,
         config_writer: ProjectConfigWriter,
+        lifecycle_lock: ProjectLifecycleLock | None = None,
+        validator: ProjectValidator | None = None,
     ) -> None:
         self._template_source = template_source
         self._filesystem = filesystem
         self._config_writer = config_writer
+        self._lifecycle_lock = lifecycle_lock
+        self._validator = (
+            validator
+            if validator is not None
+            else ProjectValidator(filesystem)
+        )
 
     def initialize(
         self,
         request: ProjectInitializationRequest,
     ) -> ProjectInitializationResult:
-        """Materialize, validate, and atomically publish the active project."""
+        """Materialize and atomically publish one external validation profile."""
 
         if not isinstance(request, ProjectInitializationRequest):
             raise TypeError(
@@ -154,18 +194,11 @@ class ProjectInitializer:
             )
 
         workspace_root = self._filesystem.resolve(request.workspace_root)
-        self._require_workspace(workspace_root)
+        project_root = self._filesystem.resolve(request.project_root)
 
-        project_root = self._contained(
-            workspace_root / _ACTIVE_PROJECT_DIRECTORY,
-            workspace_root=workspace_root,
-        )
-        stage_root = self._contained(
-            workspace_root / _STAGING_DIRECTORY,
-            workspace_root=workspace_root,
-        )
-        rollback_root = self._contained(
-            workspace_root / _ROLLBACK_DIRECTORY,
+        self._require_workspace(workspace_root)
+        self._require_external_destination(
+            project_root,
             workspace_root=workspace_root,
         )
 
@@ -176,10 +209,52 @@ class ProjectInitializer:
             template_root,
             workspace_root=workspace_root,
         )
-        self._require_matching_configuration(
+        _require_matching_configuration(
             request.config,
             project_root=project_root,
         )
+
+        stage_root = _lifecycle_sibling(
+            project_root,
+            suffix=_STAGE_SUFFIX,
+        )
+        rollback_root = _lifecycle_sibling(
+            project_root,
+            suffix=_ROLLBACK_SUFFIX,
+        )
+
+        lock_context = nullcontext()
+        if self._lifecycle_lock is not None:
+            lock_context = self._lifecycle_lock.acquire(
+                LifecycleLockRequest(
+                    operation_id=uuid4().hex,
+                    operation_type=_OPERATION_TYPE,
+                    process_id=os.getpid(),
+                    started_at=datetime.now(UTC),
+                    workspace_root=project_root.parent,
+                )
+            )
+
+        with lock_context:
+            return self._initialize_locked(
+                request,
+                workspace_root=workspace_root,
+                project_root=project_root,
+                template_root=template_root,
+                stage_root=stage_root,
+                rollback_root=rollback_root,
+            )
+
+    def _initialize_locked(
+        self,
+        request: ProjectInitializationRequest,
+        *,
+        workspace_root: Path,
+        project_root: Path,
+        template_root: Path,
+        stage_root: Path,
+        rollback_root: Path,
+    ) -> ProjectInitializationResult:
         self._require_available_lifecycle_paths(
             project_root=project_root,
             stage_root=stage_root,
@@ -189,7 +264,7 @@ class ProjectInitializer:
 
         expected_layout = _inventory_layout(
             self._template_source.inventory(),
-            owner="project template",
+            owner="validation-profile template",
         )
         _require_canonical_template(expected_layout)
 
@@ -215,7 +290,7 @@ class ProjectInitializer:
 
             observed_layout = _inventory_layout(
                 self._filesystem.inspect_tree(stage_root),
-                owner="materialized project stage",
+                owner="materialized validation-profile stage",
             )
             _require_matching_layout(
                 expected=expected_layout,
@@ -236,10 +311,8 @@ class ProjectInitializer:
                 filesystem=self._filesystem,
             )
 
-            staged_validation = check_project(
+            staged_validation = self._validate(
                 staged_config,
-                self._filesystem,
-                scope=ProjectCheckScope.NORMAL,
                 strict=request.require_resolved_placeholders,
             )
             _raise_for_validation(
@@ -259,10 +332,8 @@ class ProjectInitializer:
             )
             published = True
 
-            active_validation = check_project(
+            active_validation = self._validate(
                 request.config,
-                self._filesystem,
-                scope=ProjectCheckScope.NORMAL,
                 strict=request.require_resolved_placeholders,
             )
             _raise_for_validation(
@@ -299,17 +370,64 @@ class ProjectInitializer:
                 )
             raise
 
+    def _validate(
+        self,
+        config: ProjectConfig,
+        *,
+        strict: bool,
+    ) -> ProjectValidationResult:
+        if strict:
+            return self._validator.validate_for_load(config)
+        return check_project(
+            config,
+            self._filesystem,
+            scope=ProjectCheckScope.NORMAL,
+            strict=False,
+        )
+
     def _require_workspace(self, workspace_root: Path) -> None:
         if (
             not self._filesystem.exists(workspace_root)
             or not self._filesystem.is_directory(workspace_root)
         ):
             raise ProjectConfigurationError(
-                "Project initialization requires an existing workspace directory",
+                "Profile initialization requires an existing Wordbench workspace",
                 code="GF-WB-PROJECT-INIT-001",
                 stage="projects",
-                operation="initialize-project",
+                operation=_OPERATION_TYPE,
                 subject=str(workspace_root),
+            )
+
+    def _require_external_destination(
+        self,
+        project_root: Path,
+        *,
+        workspace_root: Path,
+    ) -> None:
+        if _same_or_within(project_root, workspace_root):
+            raise ProjectConfigurationError(
+                "Validation-profile destination must be external to the Wordbench repository",
+                code="GF-WB-PROJECT-INIT-002",
+                detail=(
+                    f"Repository: {workspace_root!s}; "
+                    f"destination: {project_root!s}."
+                ),
+                stage="projects",
+                operation=_OPERATION_TYPE,
+                subject=str(project_root),
+            )
+
+        parent = project_root.parent
+        if (
+            not self._filesystem.exists(parent)
+            or not self._filesystem.is_directory(parent)
+        ):
+            raise ProjectConfigurationError(
+                "Validation-profile destination parent is unavailable",
+                code="GF-WB-PROJECT-INIT-003",
+                stage="projects",
+                operation=_OPERATION_TYPE,
+                subject=str(parent),
             )
 
     def _require_template_root(
@@ -319,15 +437,15 @@ class ProjectInitializer:
         workspace_root: Path,
     ) -> None:
         expected = self._filesystem.resolve(
-            workspace_root / "templates" / "project"
+            workspace_root.joinpath(*_TEMPLATE_DIRECTORY.parts)
         )
         if template_root != expected:
             raise ContractViolationError(
-                "The project template source does not identify the canonical template",
-                code="GF-WB-PROJECT-INIT-002",
+                "The template source is not templates/validation-profile",
+                code="GF-WB-PROJECT-INIT-004",
                 detail=f"Expected {expected!s}, received {template_root!s}.",
                 stage="projects",
-                operation="initialize-project",
+                operation=_OPERATION_TYPE,
                 subject=str(template_root),
             )
 
@@ -336,24 +454,12 @@ class ProjectInitializer:
             or not self._filesystem.is_directory(template_root)
         ):
             raise ProjectConfigurationError(
-                "The canonical project template directory is unavailable",
-                code="GF-WB-PROJECT-INIT-003",
+                "The canonical validation-profile template is unavailable",
+                code="GF-WB-PROJECT-INIT-005",
                 stage="projects",
-                operation="initialize-project",
+                operation=_OPERATION_TYPE,
                 subject=str(template_root),
             )
-
-    def _contained(
-        self,
-        path: Path,
-        *,
-        workspace_root: Path,
-    ) -> Path:
-        return self._filesystem.require_contained(
-            path,
-            root=workspace_root,
-            allow_root=False,
-        )
 
     def _require_available_lifecycle_paths(
         self,
@@ -369,14 +475,14 @@ class ProjectInitializer:
         ):
             if self._filesystem.exists(path):
                 raise ProjectConfigurationError(
-                    f"A stale project-initialization {role} path already exists",
-                    code="GF-WB-PROJECT-INIT-004",
+                    f"A stale profile-initialization {role} path already exists",
+                    code="GF-WB-PROJECT-INIT-006",
                     detail=(
                         "Inspect and remove the stale lifecycle-owned path "
                         "before retrying initialization."
                     ),
                     stage="projects",
-                    operation="initialize-project",
+                    operation=_OPERATION_TYPE,
                     subject=str(path),
                 )
 
@@ -385,29 +491,29 @@ class ProjectInitializer:
 
         if not allow_existing_empty:
             raise ProjectConfigurationError(
-                "An active project path already exists",
-                code="GF-WB-PROJECT-INIT-005",
+                "The validation-profile destination already exists",
+                code="GF-WB-PROJECT-INIT-007",
                 stage="projects",
-                operation="initialize-project",
+                operation=_OPERATION_TYPE,
                 subject=str(project_root),
             )
 
         if not self._filesystem.is_directory(project_root):
             raise ProjectConfigurationError(
-                "The active project path is not a regular directory",
-                code="GF-WB-PROJECT-INIT-006",
+                "The validation-profile destination is not a directory",
+                code="GF-WB-PROJECT-INIT-008",
                 stage="projects",
-                operation="initialize-project",
+                operation=_OPERATION_TYPE,
                 subject=str(project_root),
             )
 
         if self._filesystem.inspect_tree(project_root):
             raise ProjectConfigurationError(
-                "The active project directory is not empty",
-                code="GF-WB-PROJECT-INIT-007",
-                detail="Initialization never overwrites existing project work.",
+                "The validation-profile destination is not empty",
+                code="GF-WB-PROJECT-INIT-009",
+                detail="Initialization never overwrites existing profile work.",
                 stage="projects",
-                operation="initialize-project",
+                operation=_OPERATION_TYPE,
                 subject=str(project_root),
             )
 
@@ -428,14 +534,14 @@ class ProjectInitializer:
                 self._filesystem.remove_tree(project_root)
         except Exception as rollback_error:
             raise ContractViolationError(
-                "Project initialization failed and automatic rollback also failed",
-                code="GF-WB-PROJECT-INIT-008",
+                "Profile initialization failed and automatic rollback also failed",
+                code="GF-WB-PROJECT-INIT-010",
                 detail=(
                     f"Original failure: {type(original_error).__name__}: "
                     f"{original_error}"
                 ),
                 stage="projects",
-                operation="initialize-project",
+                operation=_OPERATION_TYPE,
                 subject=str(project_root),
                 evidence_paths=(str(rollback_root),),
             ) from rollback_error
@@ -447,15 +553,18 @@ def initialize_project(
     template_source: ProjectTemplateSource,
     filesystem: ProjectFilesystem,
     config_writer: ProjectConfigWriter,
+    lifecycle_lock: ProjectLifecycleLock | None = None,
+    validator: ProjectValidator | None = None,
 ) -> ProjectInitializationResult:
-    """Initialize the canonical active project through explicit ports."""
+    """Initialize one explicit external validation profile through ports."""
 
     return ProjectInitializer(
         template_source=template_source,
         filesystem=filesystem,
         config_writer=config_writer,
+        lifecycle_lock=lifecycle_lock,
+        validator=validator,
     ).initialize(request)
-
 
 def _staged_configuration(
     config: ProjectConfig,
@@ -494,13 +603,36 @@ def _require_matching_configuration(
 
     if mismatches:
         raise ProjectConfigurationError(
-            "The supplied project configuration belongs to another project root",
+            "The supplied profile configuration belongs to another destination root",
             code="GF-WB-PROJECT-INIT-009",
             detail="; ".join(mismatches),
             stage="projects",
             operation="initialize-project",
             subject=str(expected_project_file),
         )
+
+
+
+def _lifecycle_sibling(
+    project_root: Path,
+    *,
+    suffix: str,
+) -> Path:
+    if not isinstance(project_root, Path):
+        raise TypeError("project_root must be a pathlib.Path")
+    if not isinstance(suffix, str) or not suffix:
+        raise ValueError("suffix must be a non-empty string")
+    return project_root.with_name(f".{project_root.name}{suffix}")
+
+
+def _same_or_within(path: Path, root: Path) -> bool:
+    path_key = os.path.normcase(os.path.normpath(os.fspath(path)))
+    root_key = os.path.normcase(os.path.normpath(os.fspath(root)))
+    try:
+        return os.path.commonpath((path_key, root_key)) == root_key
+    except ValueError:
+        # Different Windows drives are necessarily external to each other.
+        return False
 
 
 def _inventory_layout(
@@ -550,7 +682,7 @@ def _require_canonical_template(
 ) -> None:
     if not layout:
         raise ProjectConfigurationError(
-            "The canonical project template is empty",
+            "The canonical validation-profile template is empty",
             code="GF-WB-PROJECT-INIT-010",
             stage="projects",
             operation="initialize-project",
@@ -559,7 +691,7 @@ def _require_canonical_template(
     project_file = PurePosixPath(_PROJECT_FILENAME)
     if layout.get(project_file) is not TreeEntryKind.FILE:
         raise ProjectConfigurationError(
-            "The canonical project template does not contain project.toml",
+            "The canonical validation-profile template does not contain project.toml",
             code="GF-WB-PROJECT-INIT-011",
             stage="projects",
             operation="initialize-project",
@@ -600,7 +732,7 @@ def _require_matching_layout(
         details.append("kind-changed=" + ", ".join(changed))
 
     raise ContractViolationError(
-        "The materialized project does not match the canonical template layout",
+        "The materialized profile does not match the canonical template layout",
         code="GF-WB-PROJECT-INIT-012",
         detail="; ".join(details),
         stage="projects",
@@ -622,13 +754,13 @@ def _created_files(
 def _assert_stage(stage: _ProjectTemplateStage) -> None:
     if stage.project_file != stage.root / _PROJECT_FILENAME:
         raise ContractViolationError(
-            "The project stage has a noncanonical project.toml path",
+            "The profile stage has a noncanonical project.toml path",
             subject=str(stage.project_file),
         )
 
     if PurePosixPath(_PROJECT_FILENAME) not in stage.created_files:
         raise ContractViolationError(
-            "The project stage does not contain project.toml",
+            "The profile stage does not contain project.toml",
             subject=str(stage.root),
         )
 
@@ -649,7 +781,7 @@ def _find_unresolved_placeholders(
             content = filesystem.read_text(path, encoding="utf-8")
         except UnicodeError as error:
             raise ProjectConfigurationError(
-                "A textual project-template asset is not valid UTF-8",
+                "A textual validation-profile template asset is not valid UTF-8",
                 code="GF-WB-PROJECT-INIT-013",
                 detail=f"{type(error).__name__}: {error}",
                 stage="projects",
@@ -683,7 +815,7 @@ def _raise_for_validation(
         )
 
     raise ProjectConfigurationError(
-        "Project initialization validation failed",
+        "Validation-profile initialization validation failed",
         code="GF-WB-PROJECT-INIT-014",
         detail=detail,
         stage="projects",
@@ -702,7 +834,7 @@ def _raise_for_placeholders(
         return
 
     raise ContractViolationError(
-        "Project initialization left unresolved placeholders",
+        "Validation-profile initialization left unresolved placeholders",
         code="GF-WB-PROJECT-INIT-015",
         detail=", ".join(unresolved),
         stage="projects",
@@ -781,7 +913,7 @@ def _normalized_template_values(
 def _validated_relative_path(value: Path) -> PurePosixPath:
     if not isinstance(value, Path):
         raise TypeError(
-            "project inventory paths must be pathlib.Path values"
+            "profile inventory paths must be pathlib.Path values"
         )
 
     rendered = value.as_posix()
@@ -797,7 +929,7 @@ def _validated_relative_path(value: Path) -> PurePosixPath:
         or any(part in {"", ".", ".."} for part in relative_path.parts)
     ):
         raise ContractViolationError(
-            "Project inventory contains an unsafe relative path",
+            "Profile inventory contains an unsafe relative path",
             subject=rendered,
         )
 

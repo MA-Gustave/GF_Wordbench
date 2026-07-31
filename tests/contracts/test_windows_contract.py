@@ -178,8 +178,21 @@ def _invokes_documented_entrypoint(contract: LauncherContract, text: str) -> boo
 
 
 def _assert_no_hidden_policy(text: str, launcher_name: str) -> None:
+    """Reject application policy embedded in a Windows wrapper.
+
+    ADR-0015 makes language selection and path resolution application concerns.
+    The batch launchers may forward caller arguments, but they must not invent,
+    select, remember, validate, or rewrite language and run configuration.
+    """
+
     non_echo_text = _without_echo_commands(text)
     prohibited_fragments = {
+        "--language-path": "selected-language-path policy",
+        "--language-dir": "language-directory policy",
+        "--language-file": "focused-language-file policy",
+        "--validation-profile": "validation-profile policy",
+        "--project": "legacy project-startup policy",
+        "--catalog": "legacy catalog-startup policy",
         "--mode": "validation mode",
         "--gf-exe": "GF executable override",
         "--rgl-root": "RGL override",
@@ -188,6 +201,8 @@ def _assert_no_hidden_policy(text: str, launcher_name: str) -> None:
         "--no-compile": "compilation policy",
         "--scan-only": "scan policy",
         "project.toml": "project loading policy",
+        "language.toml": "mandatory language-bundle policy",
+        "rgl-language-catalog": "catalog-driven startup policy",
         ".gf_wordbench_state.json": "persistent state ownership",
     }
     lowered = non_echo_text.casefold()
@@ -216,6 +231,36 @@ def test_launcher_console_scripts_match_package_metadata() -> None:
     )
     assert project["gui-scripts"]["gf-wordbench-gui"] == (
         "gf_wordbench.entrypoints.gui.main:main"
+    )
+
+
+def test_gui_launcher_defers_language_selection_to_the_application() -> None:
+    """The Windows wrapper must not bypass the ADR-0015 startup surface."""
+
+    text = _read_launcher(_GUI_LAUNCHER)
+    non_echo_text = _without_echo_commands(text).casefold()
+
+    prohibited_language_literals = {
+        "src/english": "hard-coded English source directory",
+        r"src\english": "hard-coded English source directory",
+        "langeng.gf": "hard-coded English entrypoint",
+        "grammareng.gf": "hard-coded English entrypoint",
+        "alleng.gf": "hard-coded English entrypoint",
+    }
+    violations = [
+        description
+        for fragment, description in prohibited_language_literals.items()
+        if fragment in non_echo_text
+    ]
+
+    assert violations == [], (
+        "launch_gui.bat embeds a language-specific startup default: "
+        f"{', '.join(violations)}"
+    )
+    assert _has_argument_forwarding(text), (
+        "launch_gui.bat must forward explicit caller intent unchanged; the GUI "
+        "application remains responsible for presenting and resolving language "
+        "selection"
     )
 
 

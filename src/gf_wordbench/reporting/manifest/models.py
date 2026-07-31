@@ -50,6 +50,111 @@ class ManifestVerificationMode(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class ManifestVerificationPolicy:
+    """Immutable policy controlling artifact-manifest verification."""
+
+    mode: ManifestVerificationMode | str = ManifestVerificationMode.STANDARD
+    expected_run_id: RunId | str | None = None
+    verify_summary: bool = False
+    require_pgf: bool = False
+    detect_unlisted_files: bool = False
+    reject_unlisted_files: bool = False
+    allow_symlinks: bool | None = None
+    required_paths: tuple[str, ...] = ()
+    owned_directories: tuple[str, ...] = ()
+    allowed_roles: tuple[str, ...] = ()
+    allowed_creators: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        mode = _coerce_manifest_verification_mode(self.mode)
+
+        expected_run_id = self.expected_run_id
+        if expected_run_id is not None:
+            expected_run_id = _require_text(
+                expected_run_id,
+                field="expected_run_id",
+            )
+
+        verify_summary = _validate_bool(
+            self.verify_summary,
+            field="verify_summary",
+        )
+        require_pgf = _validate_bool(
+            self.require_pgf,
+            field="require_pgf",
+        )
+        detect_unlisted_files = _validate_bool(
+            self.detect_unlisted_files,
+            field="detect_unlisted_files",
+        )
+        reject_unlisted_files = _validate_bool(
+            self.reject_unlisted_files,
+            field="reject_unlisted_files",
+        )
+
+        allow_symlinks = self.allow_symlinks
+        if allow_symlinks is None:
+            allow_symlinks = mode is ManifestVerificationMode.STANDARD
+        else:
+            allow_symlinks = _validate_bool(
+                allow_symlinks,
+                field="allow_symlinks",
+            )
+
+        required_paths = _validate_policy_values(
+            self.required_paths,
+            field="required_paths",
+            validator=validate_manifest_artifact_path,
+        )
+        owned_directories = _validate_policy_values(
+            self.owned_directories,
+            field="owned_directories",
+            validator=_validate_owned_directory,
+        )
+        allowed_roles = _validate_policy_values(
+            self.allowed_roles,
+            field="allowed_roles",
+            validator=_validate_role,
+        )
+        allowed_creators = _validate_policy_values(
+            self.allowed_creators,
+            field="allowed_creators",
+            validator=_validate_creator,
+        )
+
+        object.__setattr__(self, "mode", mode)
+        object.__setattr__(self, "expected_run_id", expected_run_id)
+        object.__setattr__(self, "verify_summary", verify_summary)
+        object.__setattr__(self, "require_pgf", require_pgf)
+        object.__setattr__(
+            self,
+            "detect_unlisted_files",
+            detect_unlisted_files or reject_unlisted_files,
+        )
+        object.__setattr__(
+            self,
+            "reject_unlisted_files",
+            reject_unlisted_files,
+        )
+        object.__setattr__(self, "allow_symlinks", allow_symlinks)
+        object.__setattr__(self, "required_paths", required_paths)
+        object.__setattr__(self, "owned_directories", owned_directories)
+        object.__setattr__(self, "allowed_roles", allowed_roles)
+        object.__setattr__(self, "allowed_creators", allowed_creators)
+
+    @property
+    def strict(self) -> bool:
+        return self.mode in {
+            ManifestVerificationMode.STRICT,
+            ManifestVerificationMode.RELEASE,
+        }
+
+    @property
+    def release(self) -> bool:
+        return self.mode is ManifestVerificationMode.RELEASE
+
+
+@dataclass(frozen=True, slots=True)
 class ArtifactManifestEntry:
     path: str
     role: str
@@ -396,6 +501,70 @@ def _validate_schema_version(value: object) -> str:
     return version
 
 
+def _coerce_manifest_verification_mode(
+    value: object,
+) -> ManifestVerificationMode:
+    if isinstance(value, ManifestVerificationMode):
+        return value
+    if not isinstance(value, str):
+        raise TypeError(
+            "mode must be ManifestVerificationMode or string"
+        )
+    try:
+        return ManifestVerificationMode(value.strip().lower())
+    except ValueError as exc:
+        raise ValueError(
+            f"unsupported manifest verification mode: {value!r}"
+        ) from exc
+
+
+def _validate_bool(value: object, *, field: str) -> bool:
+    if type(value) is not bool:
+        raise TypeError(f"{field} must be a boolean")
+    return value
+
+
+def _validate_policy_values(
+    values: tuple[str, ...],
+    *,
+    field: str,
+    validator: object,
+) -> tuple[str, ...]:
+    if isinstance(values, (str, bytes)):
+        raise TypeError(f"{field} must be an iterable of strings")
+    if not callable(validator):
+        raise TypeError("validator must be callable")
+
+    prepared = tuple(
+        validator(value)  # type: ignore[operator]
+        for value in values
+    )
+    if len(prepared) != len(set(prepared)):
+        raise ValueError(f"{field} must not contain duplicates")
+    return prepared
+
+
+def _validate_owned_directory(value: object) -> str:
+    path = _require_text(value, field="owned directory")
+    if "\\" in path:
+        raise ValueError("owned directory must use forward slashes")
+    if path.startswith("/") or _DRIVE_PREFIX_RE.match(path):
+        raise ValueError("owned directory must be run-relative")
+    if path.endswith("/"):
+        raise ValueError("owned directory must not end with a slash")
+
+    parts = path.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        raise ValueError(
+            "owned directory must be normalized and contain no traversal"
+        )
+
+    normalized = PurePosixPath(*parts).as_posix()
+    if normalized != path:
+        raise ValueError("owned directory is not in canonical form")
+    return normalized
+
+
 def _validate_non_negative_int(value: object, *, field: str) -> int:
     if type(value) is not int:
         raise TypeError(f"{field} must be an integer")
@@ -486,6 +655,7 @@ __all__ = (
     "ArtifactManifest",
     "ArtifactManifestEntry",
     "ManifestVerificationMode",
+    "ManifestVerificationPolicy",
     "ManifestVerificationResult",
     "ManifestWriteResult",
     "validate_generated_at",

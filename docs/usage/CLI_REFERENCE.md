@@ -7,8 +7,8 @@
 **Canonical executable:** `gf-wordbench`  
 **Owner:** GF Wordbench maintainers  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
-**CLI contract version:** `1.1`  
-**Last structural review:** 2026-07-24  
+**CLI contract version:** `1.2`  
+**Last structural review:** 2026-07-29  
 
 ---
 
@@ -631,13 +631,15 @@ gf-wordbench validate `
 
 ## 15.2 Requirements
 
-`--target` is required unless the active project defines one unambiguous default quick target.
+`--target` is always required in quick mode.
 
 Canonical policy:
 
 ```text
 explicit --target required
 ```
+
+The CLI must reject `--mode quick` before execution when no target is supplied.
 
 ## 15.3 Target identity
 
@@ -1775,10 +1777,11 @@ Canonical process exit codes:
 
 | Code | Name | Meaning |
 |---:|---|---|
-| `0` | `EXIT_OK` | Command completed successfully and required validation passed |
-| `1` | `EXIT_VALIDATION_FAILED` | Command executed reliably, but required validation failed |
-| `2` | `EXIT_USAGE_OR_CONFIG` | Invalid arguments, project configuration, schema, or requested contract |
-| `3` | `EXIT_RUNTIME_ERROR` | Framework, external-tool launch, timeout, I/O, cancellation, or integrity error |
+| `0` | `EXIT_OK` | Command completed successfully and all required criteria passed |
+| `1` | `EXIT_VALIDATION_FAILED` | Command completed reliably, but at least one required validation criterion failed |
+| `2` | `EXIT_USAGE_ERROR` | Invalid invocation, configuration, path, schema, or requested contract prevented a valid command result |
+| `3` | `EXIT_RUNTIME_ERROR` | Framework, external-tool launch, timeout, I/O, integrity, persistence, or cancellation-handling failure |
+| `4` | `EXIT_CANCELLED` | Controlled cancellation completed with process containment and best-effort evidence preservation |
 
 ## 36.1 Exit `0`
 
@@ -1810,12 +1813,13 @@ Examples:
 - unknown option;
 - missing required target;
 - incompatible mode/option combination;
-- invalid project configuration;
+- invalid project configuration detected before execution;
 - unregistered scenario ID;
-- unsafe path;
-- missing required gold before normal validation;
-- unsupported persisted schema;
+- unsafe path rejected before execution;
+- unsupported persisted schema supplied as an input;
 - prohibited scenario command detected before execution.
+
+Exit `2` means that no valid command result was constructed.
 
 ## 36.4 Exit `3`
 
@@ -1823,36 +1827,44 @@ Examples:
 
 - GF executable cannot launch;
 - required process times out;
-- process cancellation;
 - output root cannot be written;
 - report writer required by mode fails;
 - manifest integrity cannot be established;
+- controlled cancellation cannot safely contain child processes or preserve evidence;
 - unexpected framework exception.
 
-## 36.5 Help and version
+## 36.5 Exit `4`
+
+Examples:
+
+- the user requests cancellation;
+- application shutdown requests cancellation;
+- a controller policy requests cancellation;
+- `Ctrl+C` is converted to controlled cancellation.
+
+Exit `4` applies only when cancellation is the command-level outcome and containment plus best-effort evidence preservation complete successfully.
+
+A timeout is not cancellation and returns `3`.
+
+## 36.6 Help and version
 
 ```text
 --help    -> 0
 --version -> 0
 ```
 
-## 36.6 Keyboard interruption
+## 36.7 Keyboard interruption
 
-`Ctrl+C` should use controlled cancellation where possible.
+`Ctrl+C` should request controlled cancellation where possible.
 
-Canonical exit:
-
-```text
-3
-```
-
-The CLI may additionally follow platform convention `130` only if the exit-code reference explicitly standardizes it.
-
-To keep the first stable contract small, canonical GF Wordbench code is:
+Canonical result:
 
 ```text
-3
+controlled cancellation completed safely -> 4
+cancellation handling failed critically   -> 3
 ```
+
+The public GF Wordbench CLI does not use platform signal code `130` as its canonical application result.
 
 ---
 
@@ -1869,19 +1881,30 @@ RunResult.overall_status = FAIL
 
 RunResult.overall_status = ERROR
     -> exit 3
+
+controlled cancellation
+    -> exit 4
 ```
 
-Argument/configuration errors detected before execution:
+Argument or configuration errors detected before a valid command result exists:
 
 ```text
 exit 2
 ```
 
-The predecessor CLI mapped only `fail_count > 0`.
+Canonical precedence after execution begins:
+
+```text
+runtime error
+    > controlled cancellation
+    > validation failure
+    > success
+```
 
 Canonical overall status drives the exit code so that:
 
 - runtime errors do not return success;
+- controlled cancellation remains distinct from runtime failure;
 - scenario failures affect the exit code;
 - release-gate failures affect the exit code;
 - skipped compilation is not mistaken for success;
@@ -2187,7 +2210,7 @@ It returns:
 3 = runtime exception
 ```
 
-The canonical CLI retains the four-code shape while mapping success to the complete `RunResult`.
+The canonical CLI preserves predecessor meanings for codes `0` through `3` and adds code `4` for controlled cancellation.
 
 ---
 
@@ -2271,13 +2294,13 @@ def main(argv=None) -> int:
         return determine_exit_code(result)
     except CliConfigurationError as exc:
         print_error(exc)
-        return EXIT_USAGE_OR_CONFIG
+        return EXIT_USAGE_ERROR
     except ControlledValidationFailure as exc:
         print_failure(exc)
         return EXIT_VALIDATION_FAILED
     except CancellationRequested as exc:
         print_error(exc)
-        return EXIT_RUNTIME_ERROR
+        return EXIT_CANCELLED
     except Exception as exc:
         print_error(exc)
         return EXIT_RUNTIME_ERROR
@@ -2343,18 +2366,26 @@ It may print artifact paths from `RunPaths`.
 Canonical mapping:
 
 ```python
-def determine_exit_code(run_result: RunResult) -> int:
-    if run_result.overall_status == "OK":
-        return EXIT_OK
+def determine_exit_code(
+    run_result: RunResult,
+    *,
+    cancelled: bool = False,
+    runtime_error: bool = False,
+    cancellation_error: bool = False,
+) -> int:
+    if runtime_error or cancellation_error or run_result.overall_status == "ERROR":
+        return EXIT_RUNTIME_ERROR
+    if cancelled:
+        return EXIT_CANCELLED
     if run_result.overall_status == "FAIL":
         return EXIT_VALIDATION_FAILED
-    return EXIT_RUNTIME_ERROR
+    return EXIT_OK
 ```
 
-Before-run configuration exceptions map to:
+Before-run invocation and configuration exceptions map to:
 
 ```text
-EXIT_USAGE_OR_CONFIG
+EXIT_USAGE_ERROR
 ```
 
 The function must not depend only on:
@@ -2404,19 +2435,31 @@ On `Ctrl+C`:
 3. terminate owned child processes;
 4. preserve partial evidence;
 5. write best-effort reports;
-6. return exit `3`.
+6. return exit `4` when containment and evidence preservation complete safely;
+7. return exit `3` when cancellation handling itself fails critically.
 
 ## 52.2 Repeated interrupt
 
 A second interrupt may force immediate termination.
 
-The CLI warns that the run may remain unfinalized.
+The CLI warns that the run may remain unfinalized. An externally forced termination may prevent the application from returning a canonical code.
 
 ## 52.3 Partial run
 
 A cancelled partial run must not be represented as finalized.
 
 Automatic baseline discovery skips it unless the baseline policy explicitly supports partial runs.
+
+## 52.4 Timeout distinction
+
+A process timeout is a runtime error:
+
+```text
+timeout              -> 3
+controlled cancellation -> 4
+```
+
+The CLI must not relabel a timeout as cancellation.
 
 ---
 
@@ -2593,6 +2636,8 @@ OK -> 0
 FAIL -> 1
 invalid args/config -> 2
 ERROR -> 3
+controlled cancellation -> 4
+cancellation-handling failure -> 3
 help -> 0
 version -> 0
 ```
@@ -2837,8 +2882,8 @@ Breaking changes require a major CLI contract version.
 [ ] concise console output follows the summary contract
 [ ] quiet and verbose behavior is enforced
 [ ] overall status drives exit code
-[ ] four exit codes are stable
-[ ] controlled cancellation returns runtime error code
+[ ] five exit codes are stable
+[ ] controlled cancellation returns `EXIT_CANCELLED` and cancellation-handling failure returns `EXIT_RUNTIME_ERROR`
 [ ] project check is read-only and complete
 [ ] scenarios check is read-only and complete
 [ ] gold update is explicit and atomic

@@ -181,6 +181,25 @@ def test_project_identity_accepts_unicode_display_name_and_portable_root() -> No
     )
 
 
+def test_path_models_accept_native_nested_relative_paths() -> None:
+    """Runtime Path values use the host separator after schema validation."""
+
+    root = Path("nested") / "project"
+    source_directory = Path("source") / "gf"
+    checkpoint = Path("Syntax") / "Main.gf"
+
+    identity = _identity(root=root)
+    sources = _sources(directory=source_directory)
+    modules = _modules(checkpoints=(checkpoint,))
+
+    assert identity.root == root
+    assert sources.directory == source_directory
+    assert modules.checkpoints == (checkpoint,)
+    assert identity.root.as_posix() == "nested/project"
+    assert sources.directory.as_posix() == "source/gf"
+    assert modules.checkpoints[0].as_posix() == "Syntax/Main.gf"
+
+
 @pytest.mark.parametrize(
     ("overrides", "exception", "message"),
     [
@@ -196,7 +215,6 @@ def test_project_identity_accepts_unicode_display_name_and_portable_root() -> No
         ({"language_code": r"fr\CA"}, ValueError, "path separator"),
         ({"root": Path("..")}, ValueError, "parent traversal"),
         ({"root": Path("C:/project")}, ValueError, "project-relative"),
-        ({"root": Path(r"nested\project")}, ValueError, "canonical '/'"),
         ({"root": "project"}, TypeError, "pathlib.Path"),
     ],
 )
@@ -225,7 +243,6 @@ def test_source_config_preserves_valid_selection_policy() -> None:
         ({"directory": Path("../src")}, ValueError, "parent traversal"),
         ({"directory": Path("/src")}, ValueError, "project-relative"),
         ({"directory": Path("C:/src")}, ValueError, "project-relative"),
-        ({"directory": Path(r"source\gf")}, ValueError, "canonical '/'"),
         ({"directory": "src"}, TypeError, "pathlib.Path"),
         ({"glob": ""}, ValueError, "sources.glob"),
         ({"glob": "/absolute/*.gf"}, ValueError, "absolute path pattern"),
@@ -326,7 +343,6 @@ def test_module_targets_allow_empty_collections_at_model_boundary() -> None:
         ("entrypoints", (Path("../Main.gf"),), ValueError, "parent traversal"),
         ("entrypoints", (Path("/Main.gf"),), ValueError, "project-relative"),
         ("entrypoints", (Path("Main.gf"), Path("Main.gf")), ValueError, "duplicate"),
-        ("checkpoints", (Path(r"Syntax\Main.gf"),), ValueError, "canonical '/'"),
         ("checkpoints", (Path("C:/Main.gf"),), ValueError, "project-relative"),
     ],
 )

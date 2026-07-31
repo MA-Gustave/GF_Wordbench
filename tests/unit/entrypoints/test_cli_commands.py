@@ -20,7 +20,13 @@ from gf_wordbench.entrypoints.cli.audit_commands import (
 )
 from gf_wordbench.entrypoints.cli.exit_codes import (
     EXIT_OK,
-    EXIT_USAGE_OR_CONFIG,
+    EXIT_USAGE_ERROR,
+)
+from gf_wordbench.entrypoints.cli.language_commands import (
+    LanguageCommandServices,
+    LanguageProbeCommandRequest,
+    execute_language_probe_command,
+    language_probe_request_from_namespace,
 )
 from gf_wordbench.entrypoints.cli.maintenance_commands import (
     ApplyProjectResetCommand,
@@ -41,6 +47,7 @@ from gf_wordbench.entrypoints.cli.project_commands import (
     project_check_request_from_namespace,
 )
 from gf_wordbench.kernel.statuses import ValidationMode
+from gf_wordbench.projects.languages.models import LanguageProbeResult
 from gf_wordbench.projects.models import (
     ProjectDiagnostic,
     ProjectDiagnosticSeverity,
@@ -62,6 +69,22 @@ class _AuditApplication:
         event_sink: object | None = None,
     ) -> RunResult:
         self.calls.append((request, event_sink))
+        return self.result
+
+
+class _LanguageApplication:
+    def __init__(self, result: LanguageProbeResult) -> None:
+        self.result = result
+        self.calls: list[LanguageProbeCommandRequest] = []
+
+    def probe_language(
+        self,
+        request: LanguageProbeCommandRequest,
+        *args: object,
+        **kwargs: object,
+    ) -> LanguageProbeResult:
+        del args, kwargs
+        self.calls.append(request)
         return self.result
 
 
@@ -95,6 +118,10 @@ def _field_defaults(model: type[Any], values: dict[str, Any]) -> dict[str, Any]:
 
 def _validate_request(**overrides: Any) -> ValidateCommandRequest:
     values: dict[str, Any] = {
+        "language_path": Path("language"),
+        "selected_language_path": Path("language"),
+        "validation_profile": None,
+        "profile_path": None,
         "mode": ValidationMode.DIAGNOSTIC,
         "target": None,
         "target_path": None,
@@ -139,8 +166,31 @@ def _validate_request(**overrides: Any) -> ValidateCommandRequest:
     return ValidateCommandRequest(**_field_defaults(ValidateCommandRequest, values))
 
 
+def _language_probe_request(**overrides: Any) -> LanguageProbeCommandRequest:
+    values: dict[str, Any] = {
+        "language_path": Path("language"),
+        "selected_path": Path("language"),
+        "rgl_root": None,
+        "validation_profile": None,
+        "profile_path": None,
+        "gf_executable": None,
+        "gf_exe": None,
+        "verify_with_gf": False,
+        "quiet": False,
+        "verbose": False,
+    }
+    values.update(overrides)
+    return LanguageProbeCommandRequest(
+        **_field_defaults(LanguageProbeCommandRequest, values)
+    )
+
+
 def _project_request(**overrides: Any) -> ProjectCheckRequest:
     values: dict[str, Any] = {
+        "language_path": Path("language"),
+        "selected_language_path": Path("language"),
+        "validation_profile": Path("project/project.toml"),
+        "profile_path": Path("project/project.toml"),
         "project_root": None,
         "strict": False,
         "probe_gf": False,
@@ -158,14 +208,18 @@ def _run_result_stub() -> RunResult:
     return object.__new__(RunResult)
 
 
-def _project_diagnostic(tmp_path: Path) -> ProjectDiagnostic:
+def _language_probe_result_stub() -> LanguageProbeResult:
+    return object.__new__(LanguageProbeResult)
+
+
+def _profile_diagnostic(tmp_path: Path) -> ProjectDiagnostic:
     return ProjectDiagnostic(
         code="GF-WB-TEST-001",
         severity=ProjectDiagnosticSeverity.ERROR,
-        field="project.id",
-        message="Project identity is invalid.",
-        source_file=(tmp_path / "project.toml").resolve(),
-        suggestion="Use a canonical project identifier.",
+        field="profile.id",
+        message="Validation profile identity is invalid.",
+        source_file=(tmp_path / "project" / "project.toml").resolve(),
+        suggestion="Use a profile compatible with the resolved language context.",
     )
 
 
@@ -193,12 +247,21 @@ def test_normalize_validation_mode_rejects_unknown_value() -> None:
         normalize_validation_mode("unsupported")
 
 
-def test_validate_request_from_namespace_preserves_canonical_options(
+def test_validate_request_from_namespace_preserves_path_resolved_options(
     tmp_path: Path,
 ) -> None:
+    language_path = (tmp_path / "gf-rgl" / "src" / "english").resolve()
+    profile_path = (tmp_path / "profile" / "project.toml").resolve()
+    gf_executable = (tmp_path / "gf.exe").resolve()
+    rgl_root = (tmp_path / "gf-rgl").resolve()
+
     namespace = parse_cli_namespace(
         [
             "validate",
+            "--language-path",
+            str(language_path),
+            "--validation-profile",
+            str(profile_path),
             "--mode",
             "diagnostic",
             "--scenario",
@@ -217,45 +280,91 @@ def test_validate_request_from_namespace_preserves_canonical_options(
             "--cpu-stats",
             "--keep-ok-details",
             "--no-compare-previous",
-            "--project-root",
-            str(tmp_path),
+            "--gf-exe",
+            str(gf_executable),
+            "--rgl-root",
+            str(rgl_root),
         ]
     )
 
     request = ValidateCommandRequest.from_namespace(namespace)
 
+    assert request.language_path == language_path
+    assert request.validation_profile == profile_path
     assert request.mode is ValidationMode.DIAGNOSTIC
     assert request.strict is True
     assert request.no_compile is True
     assert request.max_files == 9
     assert request.keep_ok_details is True
     assert request.diff_previous is False
-    assert request.project_root == tmp_path.resolve()
+    assert request.gf_executable == gf_executable
+    assert request.rgl_root == rgl_root
     assert tuple(str(item) for item in request.scenario_ids) == ("parse-basic",)
+
+
+def test_validate_request_rejects_missing_language_path() -> None:
+    with pytest.raises(CliAuditCommandError):
+        request = _validate_request(
+            language_path=None,
+            selected_language_path=None,
+        )
+        validate_command_request(request)
 
 
 def test_validate_request_rejects_release_compile_bypass() -> None:
     with pytest.raises(CliAuditCommandError):
         request = _validate_request(
             mode=ValidationMode.RELEASE,
+            validation_profile=Path("project/project.toml"),
             no_compile=True,
         )
         validate_command_request(request)
 
 
-def test_validate_request_rejects_quick_without_target() -> None:
+def test_validate_request_rejects_release_without_validation_profile() -> None:
     with pytest.raises(CliAuditCommandError):
-        request = _validate_request(mode=ValidationMode.QUICK)
+        request = _validate_request(
+            mode=ValidationMode.RELEASE,
+            validation_profile=None,
+            profile_path=None,
+        )
         validate_command_request(request)
 
 
-def test_validate_request_rejects_checkpoint_without_selection() -> None:
+def test_validate_request_rejects_quick_directory_without_target() -> None:
     with pytest.raises(CliAuditCommandError):
-        request = _validate_request(mode=ValidationMode.CHECKPOINT)
+        request = _validate_request(
+            language_path=Path("english"),
+            mode=ValidationMode.QUICK,
+            target=None,
+            target_path=None,
+        )
         validate_command_request(request)
 
 
-def test_execute_validate_command_delegates_once() -> None:
+def test_validate_request_accepts_quick_selected_gf_file_as_focused_target() -> None:
+    request = _validate_request(
+        language_path=Path("english/LangEng.gf"),
+        selected_language_path=Path("english/LangEng.gf"),
+        mode=ValidationMode.QUICK,
+        target=None,
+        target_path=None,
+    )
+
+    validate_command_request(request)
+
+
+def test_validate_request_rejects_checkpoint_without_profile_selection() -> None:
+    with pytest.raises(CliAuditCommandError):
+        request = _validate_request(
+            mode=ValidationMode.CHECKPOINT,
+            validation_profile=None,
+            checkpoint=None,
+        )
+        validate_command_request(request)
+
+
+def test_execute_validate_command_delegates_once(tmp_path: Path) -> None:
     result = _run_result_stub()
     application = _AuditApplication(result)
     events: list[object] = []
@@ -263,8 +372,15 @@ def test_execute_validate_command_delegates_once() -> None:
         application=application,
         event_sink=events.append,
     )
+    language_path = (tmp_path / "gf-rgl" / "src" / "english").resolve()
     namespace = parse_cli_namespace(
-        ["validate", "--mode", "diagnostic"]
+        [
+            "validate",
+            "--language-path",
+            str(language_path),
+            "--mode",
+            "diagnostic",
+        ]
     )
 
     returned = execute_validate_command(namespace, services=services)
@@ -272,6 +388,7 @@ def test_execute_validate_command_delegates_once() -> None:
     assert returned is result
     assert len(application.calls) == 1
     request, event_sink = application.calls[0]
+    assert request.language_path == language_path
     assert request.mode is ValidationMode.DIAGNOSTIC
     assert callable(event_sink)
 
@@ -287,18 +404,80 @@ def test_audit_services_reject_invalid_dependencies() -> None:
         )
 
 
-def test_project_check_namespace_builds_typed_request(tmp_path: Path) -> None:
-    project_root = tmp_path.resolve()
+def test_language_probe_namespace_builds_typed_request(tmp_path: Path) -> None:
+    language_path = (
+        tmp_path / "gf-rgl" / "src" / "english" / "LangEng.gf"
+    ).resolve()
+    rgl_root = (tmp_path / "gf-rgl").resolve()
     gf_executable = (tmp_path / "gf.exe").resolve()
-    rgl_root = (tmp_path / "rgl").resolve()
+
+    namespace = parse_cli_namespace(
+        [
+            "language",
+            "probe",
+            str(language_path),
+            "--rgl-root",
+            str(rgl_root),
+            "--gf-exe",
+            str(gf_executable),
+            "--verify-with-gf",
+            "--verbose",
+        ]
+    )
+
+    request = language_probe_request_from_namespace(namespace)
+
+    assert request.language_path == language_path
+    assert request.rgl_root == rgl_root
+    assert request.gf_executable == gf_executable
+    assert request.verify_with_gf is True
+    assert request.verbose is True
+    assert request.quiet is False
+
+
+def test_language_probe_request_rejects_conflicting_verbosity() -> None:
+    with pytest.raises(ValueError):
+        _language_probe_request(quiet=True, verbose=True)
+
+
+def test_execute_language_probe_delegates_once(tmp_path: Path) -> None:
+    result = _language_probe_result_stub()
+    application = _LanguageApplication(result)
+    services = LanguageCommandServices(application=application)
+    language_path = (tmp_path / "gf-rgl" / "src" / "english").resolve()
+    namespace = parse_cli_namespace(
+        ["language", "probe", str(language_path)]
+    )
+
+    returned = execute_language_probe_command(namespace, services=services)
+
+    assert returned is result
+    assert len(application.calls) == 1
+    assert application.calls[0].language_path == language_path
+
+
+def test_language_services_reject_invalid_dependencies() -> None:
+    with pytest.raises(TypeError):
+        LanguageCommandServices(application=object())
+
+
+def test_project_check_namespace_builds_explicit_profile_request(
+    tmp_path: Path,
+) -> None:
+    language_path = (tmp_path / "gf-rgl" / "src" / "english").resolve()
+    validation_profile = (tmp_path / "profile" / "project.toml").resolve()
+    gf_executable = (tmp_path / "gf.exe").resolve()
+    rgl_root = (tmp_path / "gf-rgl").resolve()
     namespace = parse_cli_namespace(
         [
             "project",
             "check",
+            "--language-path",
+            str(language_path),
+            "--validation-profile",
+            str(validation_profile),
             "--strict",
             "--probe-gf",
-            "--project-root",
-            str(project_root),
             "--gf-exe",
             str(gf_executable),
             "--rgl-root",
@@ -309,7 +488,8 @@ def test_project_check_namespace_builds_typed_request(tmp_path: Path) -> None:
 
     request = project_check_request_from_namespace(namespace)
 
-    assert request.project_root == project_root
+    assert request.language_path == language_path
+    assert request.validation_profile == validation_profile
     assert request.gf_executable == gf_executable
     assert request.rgl_root == rgl_root
     assert request.strict is True
@@ -341,9 +521,11 @@ def test_execute_project_check_returns_success_exit_code() -> None:
     assert stderr.getvalue() == ""
 
 
-def test_execute_project_check_reports_contract_failure(tmp_path: Path) -> None:
+def test_execute_project_check_reports_profile_contract_failure(
+    tmp_path: Path,
+) -> None:
     request = _project_request()
-    result = ProjectValidationResult((_project_diagnostic(tmp_path),))
+    result = ProjectValidationResult((_profile_diagnostic(tmp_path),))
     application = _ProjectApplication(result)
     stdout = StringIO()
     stderr = StringIO()
@@ -355,10 +537,10 @@ def test_execute_project_check_reports_contract_failure(tmp_path: Path) -> None:
         stderr=stderr,
     )
 
-    assert code == EXIT_USAGE_OR_CONFIG
+    assert code == EXIT_USAGE_ERROR
     assert application.calls == [request]
     assert "GF-WB-TEST-001" in stderr.getvalue()
-    assert "Project identity is invalid." in stderr.getvalue()
+    assert "Validation profile identity is invalid." in stderr.getvalue()
 
 
 def test_reset_plan_and_apply_commands_have_distinct_safety_classification() -> None:
@@ -387,8 +569,16 @@ def test_maintenance_classification_rejects_unknown_command() -> None:
 @pytest.mark.parametrize(
     "argv",
     [
-        ["validate", "--mode", "diagnostic"],
-        ["project", "check"],
+        ["language", "probe", "src/english"],
+        ["validate", "--language-path", "src/english", "--mode", "diagnostic"],
+        [
+            "project",
+            "check",
+            "--language-path",
+            "src/english",
+            "--validation-profile",
+            "project/project.toml",
+        ],
         ["scenarios", "check"],
         ["gold", "update", "parse-basic", "--yes"],
         ["schemas", "check", "summary.json"],
@@ -404,10 +594,10 @@ def test_main_resolves_handler_for_every_public_command(
     assert callable(handler)
 
 
-def test_dispatch_cli_request_uses_resolved_handler(
+def test_dispatch_cli_request_uses_resolved_language_handler(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    request = parse_cli_request(["project", "check"])
+    request = parse_cli_request(["language", "probe", "src/english"])
     calls: list[object] = []
     sentinel = object()
 
@@ -423,6 +613,9 @@ def test_dispatch_cli_request_uses_resolved_handler(
 
 def test_parser_rejects_command_contract_violations() -> None:
     invalid_argv = [
+        ["language", "probe"],
+        ["validate", "--mode", "diagnostic"],
+        ["project", "check", "--language-path", "src/english"],
         ["gold", "update"],
         ["gold", "update", "parse-basic", "--all"],
         ["schemas", "check"],

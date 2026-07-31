@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
@@ -99,6 +99,30 @@ def test_resolve_project_relative_path_joins_portable_segments(
     )
 
 
+def test_resolve_project_relative_path_accepts_native_path_object(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    declaration = Path("validation") / "scenarios" / "load.gfs"
+
+    assert resolve_project_relative_path(project_root, declaration) == (
+        project_root / "validation" / "scenarios" / "load.gfs"
+    )
+
+
+def test_resolve_project_relative_path_accepts_windows_runtime_path(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    declaration = PureWindowsPath(
+        r"validation\scenarios\generation-smoke.gfs"
+    )
+
+    assert resolve_project_relative_path(project_root, declaration) == (
+        project_root / "validation" / "scenarios" / "generation-smoke.gfs"
+    )
+
+
 def test_resolve_project_relative_path_preserves_unicode_and_case(
     tmp_path: Path,
 ) -> None:
@@ -147,14 +171,14 @@ def test_resolve_project_relative_path_rejects_escape_attempts(
 @pytest.mark.parametrize(
     "value",
     [
-        r"source\\Main.gf",
+        r"source\Main.gf",
         "source//Main.gf",
         "source/${MODULE}.gf",
         "source/%MODULE%.gf",
         "source/NUL.gf",
     ],
 )
-def test_resolve_project_relative_path_rejects_noncanonical_paths(
+def test_resolve_project_relative_path_rejects_noncanonical_raw_text(
     tmp_path: Path,
     value: str,
 ) -> None:
@@ -217,9 +241,21 @@ def test_normalize_project_root_declaration_supports_reviewed_alternate_layout()
     ) == PurePosixPath("nested/project")
 
 
-def test_normalize_project_root_declaration_rejects_backslashes() -> None:
+def test_normalize_project_root_declaration_accepts_windows_runtime_path() -> None:
+    declaration = PureWindowsPath(r"nested\project")
+
+    assert normalize_project_root_declaration(
+        declaration,
+        allow_noncanonical=True,
+    ) == PurePosixPath("nested/project")
+
+
+def test_normalize_project_root_declaration_rejects_raw_backslashes() -> None:
     with pytest.raises(ContractViolationError, match="must use '/' separators"):
-        normalize_project_root_declaration(r"nested\\project", allow_noncanonical=True)
+        normalize_project_root_declaration(
+            r"nested\project",
+            allow_noncanonical=True,
+        )
 
 
 def test_resolve_source_root_uses_project_root_as_its_only_base(
@@ -230,6 +266,17 @@ def test_resolve_source_root_uses_project_root_as_its_only_base(
     assert resolve_source_root(project_root, "lib/src/french") == (
         project_root / "lib" / "src" / "french"
     )
+
+
+def test_resolve_source_root_accepts_windows_runtime_path(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+
+    assert resolve_source_root(
+        project_root,
+        PureWindowsPath(r"lib\src\french"),
+    ) == project_root / "lib" / "src" / "french"
 
 
 def test_resolve_source_root_rejects_project_root_as_source_directory(
@@ -250,6 +297,17 @@ def test_resolve_source_relative_path_uses_source_root_as_base(
     ) == source_root / "concrete" / "French.gf"
 
 
+def test_resolve_source_relative_path_accepts_windows_runtime_path(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "project" / "src"
+
+    assert resolve_source_relative_path(
+        source_root,
+        PureWindowsPath(r"concrete\French.gf"),
+    ) == source_root / "concrete" / "French.gf"
+
+
 def test_resolve_module_path_accepts_case_insensitive_gf_suffix(
     tmp_path: Path,
 ) -> None:
@@ -259,6 +317,24 @@ def test_resolve_module_path_accepts_case_insensitive_gf_suffix(
     assert resolve_module_path(source_root, "Legacy.GF") == (
         source_root / "Legacy.GF"
     )
+
+
+def test_resolve_module_path_accepts_windows_runtime_path(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "src"
+
+    assert resolve_module_path(
+        source_root,
+        PureWindowsPath(r"concrete\Main.gf"),
+    ) == source_root / "concrete" / "Main.gf"
+
+
+def test_resolve_module_path_rejects_raw_backslashes(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ContractViolationError, match="must use '/' separators"):
+        resolve_module_path(tmp_path, r"concrete\Main.gf")
 
 
 @pytest.mark.parametrize(
@@ -314,7 +390,7 @@ def test_resolve_scenario_path_preserves_valid_unicode_identifier(
         ".",
         "..",
         "nested/scenario",
-        r"nested\\scenario",
+        r"nested\scenario",
         "scenario.gfs",
         "SCENARIO.GFS",
         "NUL",

@@ -34,6 +34,7 @@ ArgumentValue: TypeAlias = object
 
 @unique
 class CliCommand(StrEnum):
+    LANGUAGE_PROBE = "language.probe"
     VALIDATE = "validate"
     PROJECT_CHECK = "project.check"
     SCENARIOS_CHECK = "scenarios.check"
@@ -98,6 +99,20 @@ class CliRequest:
     def as_dict(self) -> dict[str, ArgumentValue]:
         return dict(self.arguments)
 
+    @property
+    def project_overrides(self) -> Mapping[str, ArgumentValue]:
+        """Return migration-only legacy project overrides.
+
+        The canonical path-resolved startup model does not use these values as
+        language authority. The property remains available while legacy CLI
+        inputs are migrated by the application layer.
+        """
+
+        value = self.arguments.get("legacy_overrides", MappingProxyType({}))
+        if not isinstance(value, Mapping):
+            raise TypeError("legacy_overrides must be a mapping")
+        return cast(Mapping[str, ArgumentValue], value)
+
 
 def build_parser(*, prog: str = _PROG) -> CliArgumentParser:
     """Build the canonical parser without reading configuration or the filesystem."""
@@ -105,8 +120,8 @@ def build_parser(*, prog: str = _PROG) -> CliArgumentParser:
     parser = CliArgumentParser(
         prog=prog,
         description=(
-            "Validate, diagnose, compare, and assess release readiness for one "
-            "active Grammatical Framework language project."
+            "Open one Grammatical Framework language path, then validate, "
+            "diagnose, compare, or assess its configured release policy."
         ),
         allow_abbrev=False,
     )
@@ -122,6 +137,7 @@ def build_parser(*, prog: str = _PROG) -> CliArgumentParser:
         required=True,
     )
 
+    _add_language_parser(commands)
     _add_validate_parser(commands)
     _add_project_parser(commands)
     _add_scenarios_parser(commands)
@@ -178,6 +194,53 @@ def parse_args(
     return parse_cli_request(argv, prog=prog)
 
 
+def _add_language_parser(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    language = commands.add_parser(
+        "language",
+        help="path-resolved language startup operations",
+        allow_abbrev=False,
+    )
+    actions = language.add_subparsers(
+        dest="_language_action",
+        metavar="ACTION",
+        required=True,
+    )
+    probe = actions.add_parser(
+        "probe",
+        help="resolve one GF language directory or .gf file",
+        description=(
+            "Resolve one explicit GF language path through the shared "
+            "path-resolved startup service without starting a validation run."
+        ),
+        allow_abbrev=False,
+    )
+    probe.set_defaults(_command=CliCommand.LANGUAGE_PROBE)
+    probe.add_argument(
+        "language_path",
+        type=_path_value,
+        metavar="LANGUAGE-PATH",
+        help="GF language directory or .gf file",
+    )
+    probe.add_argument(
+        "--profile",
+        dest="validation_profile",
+        type=_path_value,
+        default=None,
+        metavar="PATH",
+        help="optional explicit validation profile",
+    )
+    probe.add_argument(
+        "--verify-gf",
+        action="store_true",
+        help="request capability verification through the normal GF boundary",
+    )
+    probe.add_argument("--strict", action="store_true")
+    _add_verbosity_options(probe)
+    _add_environment_paths(probe, include_output=False)
+
+
 def _add_validate_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = commands.add_parser(
         "validate",
@@ -186,6 +249,16 @@ def _add_validate_parser(commands: argparse._SubParsersAction[argparse.ArgumentP
         allow_abbrev=False,
     )
     parser.set_defaults(_command=CliCommand.VALIDATE)
+    _add_language_selection_options(parser, allow_last_language=True)
+    parser.add_argument(
+        "--profile",
+        "--validation-profile",
+        dest="validation_profile",
+        type=_path_value,
+        default=None,
+        metavar="PATH",
+        help="optional explicit validation profile",
+    )
     parser.add_argument(
         "--mode",
         choices=(*_CANONICAL_MODES, *_LEGACY_MODE_ALIASES),
@@ -245,27 +318,38 @@ def _add_validate_parser(commands: argparse._SubParsersAction[argparse.ArgumentP
     parser.add_argument("--baseline", type=_path_value, default=None, metavar="PATH")
 
     _add_verbosity_options(parser)
-    _add_common_paths(parser, include_output=True)
+    _add_environment_paths(parser, include_output=True)
+    _add_legacy_project_root_option(parser)
     _add_validate_legacy_options(parser)
 
 
 def _add_project_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     project = commands.add_parser(
         "project",
-        help="active-project contract operations",
+        help="explicit validation-profile contract operations",
         allow_abbrev=False,
     )
     actions = project.add_subparsers(dest="_project_action", metavar="ACTION", required=True)
     check = actions.add_parser(
         "check",
-        help="validate the active project contract without running validation",
+        help="validate one explicit validation profile without running validation",
         allow_abbrev=False,
     )
     check.set_defaults(_command=CliCommand.PROJECT_CHECK)
     check.add_argument("--strict", action="store_true")
     check.add_argument("--probe-gf", action="store_true")
+    _add_language_selection_options(check, allow_last_language=False)
+    check.add_argument(
+        "--profile",
+        dest="validation_profile",
+        type=_path_value,
+        default=None,
+        metavar="PATH",
+        help="explicit validation profile to check",
+    )
     _add_verbosity_options(check)
-    _add_common_paths(check, include_output=False)
+    _add_environment_paths(check, include_output=False)
+    _add_legacy_project_root_option(check)
 
 
 def _add_scenarios_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -294,8 +378,17 @@ def _add_scenarios_parser(commands: argparse._SubParsersAction[argparse.Argument
         default=None,
         metavar="ID",
     )
+    _add_language_selection_options(check, allow_last_language=True)
+    check.add_argument(
+        "--profile",
+        dest="validation_profile",
+        type=_path_value,
+        default=None,
+        metavar="PATH",
+        help="explicit profile owning the scenario registry",
+    )
     _add_verbosity_options(check)
-    check.add_argument("--project-root", type=_path_value, default=None, metavar="PATH")
+    _add_legacy_project_root_option(check)
 
 
 def _add_gold_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -327,8 +420,18 @@ def _add_gold_parser(commands: argparse._SubParsersAction[argparse.ArgumentParse
         default=None,
         metavar="SECONDS",
     )
+    _add_language_selection_options(update, allow_last_language=True)
+    update.add_argument(
+        "--profile",
+        dest="validation_profile",
+        type=_path_value,
+        default=None,
+        metavar="PATH",
+        help="explicit profile owning the selected gold contracts",
+    )
     _add_verbosity_options(update)
-    _add_common_paths(update, include_output=True)
+    _add_environment_paths(update, include_output=True)
+    _add_legacy_project_root_option(update)
 
 
 def _add_schemas_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -378,12 +481,63 @@ def _add_reports_parser(commands: argparse._SubParsersAction[argparse.ArgumentPa
     _add_verbosity_options(check)
 
 
-def _add_common_paths(parser: argparse.ArgumentParser, *, include_output: bool) -> None:
-    parser.add_argument("--project-root", type=_path_value, default=None, metavar="PATH")
-    parser.add_argument("--gf-exe", type=_path_value, default=None, metavar="PATH")
+def _add_language_selection_options(
+    parser: argparse.ArgumentParser,
+    *,
+    allow_last_language: bool,
+) -> None:
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument(
+        "--language-path",
+        type=_path_value,
+        default=None,
+        metavar="PATH",
+        help="GF language directory or .gf file",
+    )
+    if allow_last_language:
+        selection.add_argument(
+            "--last-language",
+            dest="use_last_language",
+            action="store_true",
+            default=False,
+            help="revalidate and use the last selected language path",
+        )
+    else:
+        parser.set_defaults(use_last_language=False)
+
+
+def _add_environment_paths(
+    parser: argparse.ArgumentParser,
+    *,
+    include_output: bool,
+) -> None:
+    parser.add_argument(
+        "--gf-exe",
+        dest="gf_executable",
+        type=_path_value,
+        default=None,
+        metavar="PATH",
+    )
     parser.add_argument("--rgl-root", type=_path_value, default=None, metavar="PATH")
     if include_output:
-        parser.add_argument("--out-root", type=_path_value, default=None, metavar="PATH")
+        parser.add_argument(
+            "--out-root",
+            dest="output_root",
+            type=_path_value,
+            default=None,
+            metavar="PATH",
+        )
+
+
+def _add_legacy_project_root_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--project-root",
+        dest="_legacy_project_root",
+        type=_path_value,
+        default=None,
+        metavar="PATH",
+        help=argparse.SUPPRESS,
+    )
 
 
 def _add_verbosity_options(parser: argparse.ArgumentParser) -> None:
@@ -448,12 +602,24 @@ def _normalize_namespace(
 
     aliases: list[str] = []
     _normalize_repeatable_values(namespace)
+    _normalize_language_inputs(namespace, aliases, parser)
 
-    if namespace._command is CliCommand.VALIDATE:
+    if namespace._command is CliCommand.LANGUAGE_PROBE:
+        _normalize_language_probe(namespace, parser)
+    elif namespace._command is CliCommand.VALIDATE:
         _normalize_validate(namespace, aliases, parser)
+    elif namespace._command is CliCommand.PROJECT_CHECK:
+        if getattr(namespace, "validation_profile", None) is None:
+            _usage_error(parser, "project check requires --profile")
     elif namespace._command is CliCommand.SCENARIOS_CHECK:
+        _require_language_startup_input(namespace, parser)
+        if getattr(namespace, "validation_profile", None) is None:
+            _usage_error(parser, "scenarios check requires --profile")
         _validate_unique_ids(namespace.scenario_ids, option="--scenario")
     elif namespace._command is CliCommand.GOLD_UPDATE:
+        _require_language_startup_input(namespace, parser)
+        if getattr(namespace, "validation_profile", None) is None:
+            _usage_error(parser, "gold update requires --profile")
         _normalize_gold_update(namespace, parser)
     elif namespace._command is CliCommand.REPORTS_CHECK and namespace.strict:
         namespace.verify_hashes = True
@@ -462,11 +628,62 @@ def _normalize_namespace(
     return namespace
 
 
+def _normalize_language_inputs(
+    namespace: argparse.Namespace,
+    aliases: list[str],
+    parser: argparse.ArgumentParser,
+) -> None:
+    legacy_root = getattr(namespace, "_legacy_project_root", None)
+    if legacy_root is None:
+        return
+
+    profile = legacy_root / "project" / "project.toml"
+    existing = getattr(namespace, "validation_profile", None)
+    if existing is not None and existing != profile:
+        _usage_error(
+            parser,
+            "--project-root conflicts with --profile",
+        )
+    namespace.validation_profile = profile
+    namespace.legacy_project_root = legacy_root
+    aliases.append(
+        "--project-root -> --profile <root>/project/project.toml "
+        "(migration compatibility)"
+    )
+    delattr(namespace, "_legacy_project_root")
+
+
+def _normalize_language_probe(
+    namespace: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> None:
+    language_path = getattr(namespace, "language_path", None)
+    if language_path is None:
+        _usage_error(parser, "language probe requires LANGUAGE-PATH")
+
+
+def _require_language_startup_input(
+    namespace: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> None:
+    if getattr(namespace, "language_path", None) is not None:
+        return
+    if bool(getattr(namespace, "use_last_language", False)):
+        return
+    if getattr(namespace, "legacy_project_root", None) is not None:
+        return
+    _usage_error(
+        parser,
+        "an explicit --language-path or --last-language selection is required",
+    )
+
+
 def _normalize_validate(
     namespace: argparse.Namespace,
     aliases: list[str],
     parser: argparse.ArgumentParser,
 ) -> None:
+    _require_language_startup_input(namespace, parser)
     raw_mode = namespace.mode
     if raw_mode in _LEGACY_MODE_ALIASES:
         canonical_mode = _LEGACY_MODE_ALIASES[raw_mode]
@@ -511,9 +728,17 @@ def _normalize_validate(
     effective_mode = namespace.mode or DEFAULT_VALIDATION_MODE
     if not isinstance(effective_mode, ValidationMode):
         effective_mode = ValidationMode(effective_mode)
+    namespace.mode = effective_mode
 
     if effective_mode is ValidationMode.QUICK and namespace.target is None:
-        _usage_error(parser, "--target is required when --mode quick")
+        language_path = getattr(namespace, "language_path", None)
+        if isinstance(language_path, Path) and language_path.suffix.casefold() == ".gf":
+            namespace.target = language_path
+        else:
+            _usage_error(
+                parser,
+                "--target is required in quick mode unless --language-path is a .gf file",
+            )
     if namespace.target is not None and effective_mode is not ValidationMode.QUICK:
         _usage_error(parser, "--target is valid only when --mode quick")
     if namespace.checkpoint is not None and effective_mode is not ValidationMode.CHECKPOINT:

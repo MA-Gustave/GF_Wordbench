@@ -24,7 +24,7 @@ def main() -> int:
         script = suite_root / filename
         print(f"\n=== {filename} ===", flush=True)
         completed = subprocess.run(
-            [sys.executable, str(script), "--headless"],
+            [console_python(), str(script), "--headless"],
             cwd=str(repo_root),
         )
         worst = max(worst, int(completed.returncode))

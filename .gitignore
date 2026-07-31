@@ -28,20 +28,13 @@ coverage.xml
 htmlcov/
 junit.xml
 
-# Python packaging and build output
-build/
-dist/
-.eggs/
-*.egg-info/
-pip-wheel-metadata/
-
 # GF Wordbench local state and generated run evidence
 .gf_wordbench_state.json
 .gf_wordbench_state.json.*
-runs/
-run_*/
-_gf_wordbench/
-_gf_wordbench_backups/
+/runs/
+/run_*/
+/_gf_wordbench/
+/_gf_wordbench_backups/
 
 # Generated GF compiler artifacts
 *.gfo

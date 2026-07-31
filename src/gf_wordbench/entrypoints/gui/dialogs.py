@@ -40,6 +40,7 @@ __all__ = (
     "resolve_initial_location",
     "select_existing_directory",
     "select_existing_file",
+    "select_language_path",
     "select_output_directory",
     "show_error",
     "show_fatal_error",
@@ -53,7 +54,10 @@ PathValidator: TypeAlias = Callable[[Path], bool]
 _MAX_DIALOG_TEXT: Final[int] = 200_000
 _MAX_SUMMARY_TEXT: Final[int] = 8_000
 _MAX_PLAN_ITEMS: Final[int] = 1_000
-_DEFAULT_PROJECT_FILTER: Final[str] = "GF Wordbench project (project.toml);;All files (*)"
+_GF_SOURCE_FILTER: Final[str] = "Grammatical Framework source (*.gf);;All files (*)"
+_VALIDATION_PROFILE_FILTER: Final[str] = (
+    "GF Wordbench validation profile (project.toml);;TOML files (*.toml);;All files (*)"
+)
 
 
 @unique
@@ -260,6 +264,7 @@ class DialogService:
         title: str,
         purpose: str,
         current: PathLike | None = None,
+        base_root: PathLike | None = None,
         project_root: PathLike | None = None,
         validator: PathValidator | None = None,
         rejection_message: str = "The selected directory is not permitted.",
@@ -268,6 +273,7 @@ class DialogService:
             self._parent,
             title=title,
             current=current,
+            base_root=base_root,
             project_root=project_root,
             last_directory=self.last_directory(purpose),
             validator=validator,
@@ -283,6 +289,7 @@ class DialogService:
         title: str,
         purpose: str,
         current: PathLike | None = None,
+        base_root: PathLike | None = None,
         project_root: PathLike | None = None,
         file_filter: str = "All files (*)",
         validator: PathValidator | None = None,
@@ -292,6 +299,7 @@ class DialogService:
             self._parent,
             title=title,
             current=current,
+            base_root=base_root,
             project_root=project_root,
             last_directory=self.last_directory(purpose),
             file_filter=file_filter,
@@ -302,27 +310,54 @@ class DialogService:
             self.remember_directory(purpose, result.value.parent)
         return result
 
+    def select_language_path(
+        self,
+        *,
+        current: PathLike | None = None,
+        rgl_root: PathLike | None = None,
+    ) -> PathSelection:
+        result = select_language_path(
+            self._parent,
+            current=current,
+            base_root=rgl_root,
+            last_directory=self.last_directory("language"),
+        )
+        if result.cancelled or result.value is None:
+            return result
+        remembered = result.value if result.value.is_dir() else result.value.parent
+        self.remember_directory("language", remembered)
+        return result
+
+    def select_validation_profile(
+        self,
+        *,
+        current: PathLike | None = None,
+        base_root: PathLike | None = None,
+    ) -> PathSelection:
+        return self.select_file(
+            title="Open GF Wordbench validation profile",
+            purpose="validation_profile",
+            current=current,
+            base_root=base_root,
+            file_filter=_VALIDATION_PROFILE_FILTER,
+            validator=lambda path: path.name == "project.toml",
+            rejection_message="Select a GF Wordbench project.toml validation profile.",
+        )
+
     def select_project_root(
         self,
         *,
         current: PathLike | None = None,
     ) -> PathSelection:
-        result = self.select_file(
-            title="Open GF Wordbench project",
-            purpose="project",
-            current=current,
-            project_root=current,
-            file_filter=_DEFAULT_PROJECT_FILTER,
-            validator=lambda path: path.name == "project.toml",
-            rejection_message="Select the active project's project.toml file.",
-        )
+        """Compatibility adapter for the superseded mandatory-project startup flow."""
+        result = self.select_validation_profile(current=current, base_root=current)
         if result.cancelled or result.value is None:
             return result
-        project_file = result.value
+        profile_file = result.value
         root = (
-            project_file.parent.parent
-            if project_file.parent.name == "project"
-            else project_file.parent
+            profile_file.parent.parent
+            if profile_file.parent.name == "project"
+            else profile_file.parent
         )
         self.remember_directory("project", root)
         return PathSelection(value=root, cancelled=False)
@@ -486,6 +521,7 @@ def select_existing_directory(
     *,
     title: str,
     current: PathLike | None = None,
+    base_root: PathLike | None = None,
     project_root: PathLike | None = None,
     last_directory: PathLike | None = None,
     validator: PathValidator | None = None,
@@ -494,6 +530,7 @@ def select_existing_directory(
     _require_text(title, field="title", allow_empty=False)
     initial = resolve_initial_location(
         current=current,
+        base_root=base_root,
         project_root=project_root,
         last_directory=last_directory,
     )
@@ -520,6 +557,7 @@ def select_output_directory(
     *,
     title: str,
     current: PathLike | None = None,
+    base_root: PathLike | None = None,
     project_root: PathLike | None = None,
     last_directory: PathLike | None = None,
     validator: PathValidator | None = None,
@@ -528,6 +566,7 @@ def select_output_directory(
     _require_text(title, field="title", allow_empty=False)
     initial = resolve_initial_location(
         current=current,
+        base_root=base_root,
         project_root=project_root,
         last_directory=last_directory,
     )
@@ -551,6 +590,7 @@ def select_existing_file(
     *,
     title: str,
     current: PathLike | None = None,
+    base_root: PathLike | None = None,
     project_root: PathLike | None = None,
     last_directory: PathLike | None = None,
     file_filter: str = "All files (*)",
@@ -561,6 +601,7 @@ def select_existing_file(
     _require_text(file_filter, field="file_filter", allow_empty=False)
     initial = resolve_initial_location(
         current=current,
+        base_root=base_root,
         project_root=project_root,
         last_directory=last_directory,
     )
@@ -577,14 +618,87 @@ def select_existing_file(
     return PathSelection(value=candidate, cancelled=False)
 
 
+
+def select_language_path(
+    parent: QWidget | None,
+    *,
+    title: str = "Open GF language",
+    current: PathLike | None = None,
+    base_root: PathLike | None = None,
+    last_directory: PathLike | None = None,
+) -> PathSelection:
+    """Collect one explicit language directory or GF source-file path.
+
+    This adapter validates only the selected path kind. Language identity,
+    source inventory, RGL-root discovery, module-role classification and GF-path
+    resolution belong to the shared LanguageProbeService.
+    """
+    _require_text(title, field="title", allow_empty=False)
+
+    prompt = QMessageBox(parent)
+    prompt.setWindowTitle(title)
+    prompt.setIcon(QMessageBox.Icon.Question)
+    prompt.setText("Choose a GF language directory or a .gf source file.")
+    prompt.setInformativeText(
+        "Wordbench will validate the selected path and resolve the language context "
+        "before opening the main window."
+    )
+    prompt.setTextFormat(Qt.TextFormat.PlainText)
+
+    directory_button = prompt.addButton(
+        "Choose Language Directory",
+        QMessageBox.ButtonRole.ActionRole,
+    )
+    file_button = prompt.addButton(
+        "Choose GF File",
+        QMessageBox.ButtonRole.ActionRole,
+    )
+    cancel_button = prompt.addButton(QMessageBox.StandardButton.Cancel)
+
+    directory_button.setAccessibleName("Choose language directory")
+    file_button.setAccessibleName("Choose GF file")
+    cancel_button.setAccessibleName("Cancel language selection")
+
+    prompt.exec()
+    clicked = prompt.clickedButton()
+
+    if clicked is directory_button:
+        result = select_existing_directory(
+            parent,
+            title="Choose GF language directory",
+            current=current,
+            base_root=base_root,
+            last_directory=last_directory,
+        )
+    elif clicked is file_button:
+        result = select_existing_file(
+            parent,
+            title="Choose GF source file",
+            current=current,
+            base_root=base_root,
+            last_directory=last_directory,
+            file_filter=_GF_SOURCE_FILTER,
+            validator=_is_gf_source_file,
+            rejection_message="Select a readable Grammatical Framework source file ending in .gf.",
+        )
+    else:
+        return PathSelection(value=None, cancelled=True)
+
+    if result.cancelled:
+        return PathSelection(value=None, cancelled=True)
+    return result
+
+
 def resolve_initial_location(
     *,
     current: PathLike | None = None,
+    base_root: PathLike | None = None,
     project_root: PathLike | None = None,
     last_directory: PathLike | None = None,
     home: PathLike | None = None,
 ) -> Path:
-    candidates = (current, project_root, last_directory, home or Path.home())
+    root = _coalesce_base_root(base_root=base_root, project_root=project_root)
+    candidates = (current, root, last_directory, home or Path.home())
     for raw in candidates:
         if raw is None:
             continue
@@ -660,6 +774,26 @@ def _copy_to_clipboard(text: str) -> None:
     if application is None:
         return
     QApplication.clipboard().setText(text)
+
+
+
+def _is_gf_source_file(path: Path) -> bool:
+    return path.is_file() and path.suffix.casefold() == ".gf"
+
+
+def _coalesce_base_root(
+    *,
+    base_root: PathLike | None,
+    project_root: PathLike | None,
+) -> Path | None:
+    if base_root is None:
+        return _optional_path(project_root)
+    checked = _coerce_path(base_root, field="base_root")
+    if project_root is not None:
+        compatibility_root = _coerce_path(project_root, field="project_root")
+        if checked != compatibility_root:
+            raise ValueError("base_root and project_root must identify the same path")
+    return checked
 
 
 def _optional_path(value: PathLike | None) -> Path | None:

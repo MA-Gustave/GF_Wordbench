@@ -18,7 +18,8 @@ from gf_wordbench.kernel.paths import (
     relative_portable_path,
 )
 from gf_wordbench.kernel.statuses import OverallStatus, ValidationStatus
-from gf_wordbench.runs.models.results import FileResult, RunResult, ScenarioResult
+from gf_wordbench.runs.models.results import FileResult, RunResult
+from gf_wordbench.validation.scenarios.models import ScenarioResult
 
 SubjectKind: TypeAlias = Literal["run", "file", "scenario"]
 SubjectKey: TypeAlias = tuple[SubjectKind, str]
@@ -120,14 +121,17 @@ class SubjectMatch:
 def canonical_file_subject_id(
     file_path: Path,
     *,
-    project_root: Path,
+    source_root: Path,
 ) -> str:
-    """Return a canonical project-relative file subject ID."""
+    """Return a canonical language-source-relative file subject ID."""
 
     if not isinstance(file_path, Path):
         raise TypeError("file_path must be a Path")
 
-    root = normalize_environment_path(project_root, role="project root")
+    root = normalize_environment_path(
+        source_root,
+        role="language source root",
+    )
     if file_path.is_absolute():
         portable = relative_portable_path(
             root,
@@ -148,7 +152,7 @@ def canonical_file_subject_id(
 def file_subject_identity(
     result: FileResult,
     *,
-    project_root: Path,
+    source_root: Path,
 ) -> SubjectIdentity:
     """Build the canonical identity of one file result."""
 
@@ -160,7 +164,7 @@ def file_subject_identity(
         subject_kind="file",
         subject_id=canonical_file_subject_id(
             result.file_path,
-            project_root=project_root,
+            source_root=source_root,
         ),
     )
 
@@ -201,7 +205,7 @@ def index_comparable_subjects(
         raise TypeError("include_overall_status must be a boolean")
 
     case_sensitive = _resolve_case_policy(case_sensitive_paths)
-    project_root = _project_root(run_result)
+    source_root = _source_root(run_result)
     index: dict[SubjectKey, IndexedSubject[ComparableSubject]] = {}
 
     if include_overall_status:
@@ -234,7 +238,7 @@ def index_comparable_subjects(
         _insert_subject(
             index,
             result,
-            file_subject_identity(result, project_root=project_root),
+            file_subject_identity(result, source_root=source_root),
             case_sensitive_paths=case_sensitive,
         )
 
@@ -377,16 +381,27 @@ def _comparison_key(
     return identity.subject_kind, normalized
 
 
-def _project_root(run_result: RunResult) -> Path:
+def _source_root(run_result: RunResult) -> Path:
+    """Return the public language source root recorded by the run config.
+
+    ``RunConfig.source_root`` resolves to the active
+    ``ResolvedLanguageContext.language_directory`` and retains the documented
+    legacy-profile fallback during migration. Regression matching therefore
+    does not depend on ``project.project_root`` or rediscover source ownership.
+    """
+
     try:
-        project_root = run_result.run_config.project.project_root
+        source_root = run_result.run_config.source_root
     except AttributeError as exc:
         raise SubjectMatchingError(
-            "run_result.run_config.project.project_root is required"
+            "run_result.run_config.source_root is required"
         ) from exc
-    if not isinstance(project_root, Path):
-        raise TypeError("project_root must be a Path")
-    return normalize_environment_path(project_root, role="project root")
+    if not isinstance(source_root, Path):
+        raise TypeError("source_root must be a Path")
+    return normalize_environment_path(
+        source_root,
+        role="language source root",
+    )
 
 
 def _resolve_case_policy(value: bool | None) -> bool:

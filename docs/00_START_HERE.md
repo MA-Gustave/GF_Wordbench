@@ -5,7 +5,8 @@
 **Applies to:** GF Wordbench framework, active language project, validation assets, generated runs, and project templates  
 **Owner:** GF Wordbench maintainers  
 **Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\00_START_HERE.md`  
-**Documentation version:** `1.0.0`
+**Documentation version:** `1.1.1`
+**Last reviewed:** `2026-07-30`
 
 ---
 
@@ -159,13 +160,16 @@ GF Wordbench separates permanent framework content from replaceable project cont
 
 ```text
 GF_Wordbench/
-├── app/                    framework implementation
+├── src/gf_wordbench/       framework implementation
 ├── tests/                  framework and contract tests
 ├── docs/                   permanent framework documentation
 ├── project/                one active language project
 ├── templates/project/      clean reusable project template
 ├── scripts/                maintenance and project lifecycle tools
-├── run_<id>/               generated validation evidence
+├── tools/diagnostics/      thin diagnostic launchers and reports
+├── _gf_wordbench/          default generated run root
+├── launch_cli.bat          canonical Windows CLI launcher
+├── launch_gui.bat          canonical Windows GUI launcher
 ├── README.md               repository entry point
 └── pyproject.toml          Python package and tool configuration
 ```
@@ -175,11 +179,14 @@ GF_Wordbench/
 Normally preserved when changing language:
 
 ```text
-app/
+src/
 tests/
 docs/
 templates/
 scripts/
+tools/diagnostics/
+launch_cli.bat
+launch_gui.bat
 README.md
 pyproject.toml
 ```
@@ -197,9 +204,26 @@ project/
 Disposable and reproducible:
 
 ```text
-run_<id>/
+_gf_wordbench/
+runs/
+run_*/
+.wordbench-diagnostics/
 .gf_wordbench_state.json
 ```
+
+The canonical default run root is:
+
+```text
+<project-root>/_gf_wordbench
+```
+
+Each completed run is stored below the resolved output root as:
+
+```text
+<out-root>/run_<run-id>/
+```
+
+The `.wordbench-diagnostics/` directory contains diagnostic-suite reports and command logs. It is generated evidence, not framework source or project configuration.
 
 Generated evidence may be archived, but it is not source configuration.
 
@@ -389,7 +413,21 @@ docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/architecture/PROCESS_EXECUTION_MODEL.md
 ```
 
-### 8.4 Language-project developer
+### 8.4 CLI, automation, or diagnostics developer
+
+Read:
+
+```text
+docs/usage/CLI_REFERENCE.md
+docs/reference/EXIT_CODES.md
+docs/architecture/ERROR_HANDLING_MODEL.md
+docs/INTERFILE_CONTRACT_LOCK.md
+tools/diagnostics/README.md
+```
+
+The CLI reference owns command and option names. The exit-code reference owns numeric values, constant names, cancellation semantics, and command-level result mapping.
+
+### 8.5 Language-project developer
 
 Read:
 
@@ -405,7 +443,7 @@ project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
-### 8.5 Scenario author
+### 8.6 Scenario author
 
 Read:
 
@@ -418,7 +456,7 @@ docs/scenarios/GOLDEN_TESTS.md
 project/validation/README.md
 ```
 
-### 8.6 Report or schema developer
+### 8.7 Report or schema developer
 
 Read:
 
@@ -431,7 +469,7 @@ docs/reports/SUMMARY_JSON_REFERENCE.md
 docs/reports/ARTIFACT_MANIFEST.md
 ```
 
-### 8.7 Release maintainer
+### 8.8 Release maintainer
 
 Read:
 
@@ -461,11 +499,17 @@ Purpose:
 Expected work:
 
 - validate configuration;
-- select the target;
+- require and resolve one explicit target;
 - perform static scan;
 - compile the target;
 - optionally run a short smoke scenario;
 - write a compact run summary.
+
+A `quick` run requires an explicit target. The canonical CLI form is:
+
+```text
+gf-wordbench validate --mode quick --target PATH
+```
 
 A `quick` run is not release evidence.
 
@@ -531,6 +575,106 @@ all  → diagnostic
 ```
 
 Canonical writers and documentation must use the canonical names.
+
+### 9.5 Canonical CLI path options
+
+For commands that load the workspace or execute GF, canonical option names are:
+
+```text
+--project-root PATH
+--gf-exe PATH
+--rgl-root PATH
+--out-root PATH
+```
+
+`--project-root` identifies the GF Wordbench repository root containing `project/project.toml`. It does not identify the `project/` directory itself.
+
+Canonical environment variables are:
+
+```text
+GF_WORDBENCH_GF_EXE
+GF_WORDBENCH_RGL_ROOT
+GF_WORDBENCH_OUT_ROOT
+```
+
+Adapters, launchers, diagnostics, tests, examples, and documentation must not invent alternate public names for these options or variables.
+
+### 9.6 Command-specific required arguments
+
+The following forms require their positional or mode-specific argument:
+
+```text
+gf-wordbench validate --mode quick --target PATH
+gf-wordbench schemas check PATH [PATH ...]
+gf-wordbench reports check RUN-DIR
+```
+
+A parser or diagnostic probe must use a syntactically valid command. A probe that intentionally tests only parsing may use an existing harmless path or a clearly isolated fixture path, but it must still satisfy the public CLI grammar.
+
+### 9.7 Canonical process exit codes
+
+The canonical exit-code registry is owned by:
+
+```text
+docs/reference/EXIT_CODES.md
+src/gf_wordbench/entrypoints/cli/exit_codes.py
+```
+
+Allocated values are:
+
+| Code | Constant | Meaning |
+|---:|---|---|
+| `0` | `EXIT_OK` | Command completed and required criteria passed |
+| `1` | `EXIT_VALIDATION_FAILED` | Evaluation completed and required criteria failed |
+| `2` | `EXIT_USAGE_ERROR` | Invocation, arguments, or pre-execution configuration were invalid |
+| `3` | `EXIT_RUNTIME_ERROR` | The operation could not be completed, interpreted, or persisted safely |
+| `4` | `EXIT_CANCELLED` | The command was deliberately cancelled before normal completion |
+
+CLI adapters, automation adapters, launchers, and diagnostics must import or preserve this registry. They must not create a second exit-code vocabulary or duplicate the status-to-exit mapping.
+
+A controlled `CancellationRequested` outcome maps to `EXIT_CANCELLED`, not `EXIT_RUNTIME_ERROR`, provided cancellation cleanup and evidence preservation complete safely.
+
+### 9.8 Integrated mini diagnostics
+
+The optional mini diagnostic suite lives under:
+
+```text
+tools/diagnostics/
+```
+
+It is a thin external observer over the public CLI, pytest suites, and repository validation scripts. It must not reimplement Wordbench validation semantics or establish a competing release policy.
+
+The diagnostic control panel is launched on Windows with:
+
+```text
+tools\diagnostics\launch_diagnostics.bat
+```
+
+Safe diagnostic execution covers N01 through N04:
+
+```text
+tools\diagnostics\run_safe_diagnostics.bat
+python tools/diagnostics/run_safe_suite.py
+```
+
+Diagnostic launchers live exclusively under `tools/diagnostics/`. Root-level diagnostic launcher duplicates are obsolete and must not be restored.
+
+N05 starts an explicit release validation and is never part of the safe suite.
+
+Diagnostic reports and command logs are written below:
+
+```text
+.wordbench-diagnostics/
+```
+
+The diagnostics suite must:
+
+- invoke child console commands with `python.exe`, not `pythonw.exe`;
+- use canonical CLI option and environment-variable names;
+- pass every command-required argument;
+- retain complete command output in artifacts;
+- distinguish a diagnostic-tool failure from a Wordbench validation failure;
+- treat Wordbench CLI and structured run evidence as authoritative.
 
 ---
 
@@ -774,7 +918,7 @@ Reports must not flatten these distinctions into one undifferentiated failure li
 Canonical run structure:
 
 ```text
-run_<run-id>/
+<out-root>/run_<run-id>/
 ├── summary.json
 ├── summary.md
 ├── AI_READY.md
@@ -902,6 +1046,8 @@ docs/usage/INSTALLATION.md
 docs/usage/QUICK_START.md
 docs/usage/CLI_REFERENCE.md
 docs/usage/GUI_REFERENCE.md
+docs/reference/EXIT_CODES.md
+tools/diagnostics/README.md
 ```
 
 ### Project lifecycle
@@ -939,7 +1085,9 @@ Before changing a file, answer:
 7. Does it alter release criteria?
 8. Which lock owns the change?
 9. Which tests prove compatibility?
-10. Is a migration required?
+10. Does the change alter CLI options, environment variables, or exit-code mapping?
+11. Does a diagnostic probe or launcher consume the changed boundary?
+12. Is a migration required?
 
 A change that crosses a boundary must be coordinated.
 
@@ -958,8 +1106,11 @@ An isolated edit is not complete when another file depends on the changed promis
 [ ] Update persisted fixtures when needed
 [ ] Update migration logic when needed
 [ ] Update documentation owner
+[ ] Verify canonical CLI names and exit-code imports
 [ ] Run the complete framework test suite
 [ ] Run schema and contract checks
+[ ] Run CLI/GUI parity tests
+[ ] Run safe diagnostics N01–N04
 [ ] Record architectural decisions when applicable
 ```
 
@@ -977,7 +1128,7 @@ An isolated edit is not complete when another file depends on the changed promis
 [ ] Update input fixtures
 [ ] Update gold only through explicit review
 [ ] Update project contract lock
-[ ] Run quick validation
+[ ] Run quick validation with an explicit target
 [ ] Run checkpoint validation
 [ ] Run release validation when closing a subsystem
 ```
@@ -996,6 +1147,9 @@ GF Wordbench framework release requires:
 - no language-specific path remains in framework defaults;
 - templates contain no active-language data;
 - migration behavior is documented;
+- CLI and automation use the canonical exit-code registry;
+- diagnostic probes use valid canonical command forms;
+- safe diagnostics N01–N04 complete without diagnostic-tool errors;
 - release notes are complete.
 
 Active language release requires:
@@ -1028,6 +1182,18 @@ Either:
 
 The persisted schema lock governs canonical persisted structure.
 
+### CLI syntax versus examples or diagnostics
+
+`docs/usage/CLI_REFERENCE.md` governs public commands, option names, required arguments, and path semantics.
+
+Examples, tests, launchers, and diagnostic probes must be corrected when they diverge from that reference.
+
+### Exit-code behavior versus local adapters
+
+`docs/reference/EXIT_CODES.md` and the shared exit-code module govern numeric values and mapping semantics.
+
+Local adapters must consume that contract rather than redefining it.
+
 ### Human report versus raw evidence
 
 Raw evidence and structured results govern.
@@ -1057,7 +1223,9 @@ When GF Wordbench cannot safely infer intent:
 - do not migrate in place without a backup;
 - do not treat missing evidence as success;
 - do not treat a zero external exit code as sufficient proof when expected markers or artifacts are missing;
-- return a structured `ERROR` or configuration failure.
+- preserve partial evidence during controlled cancellation;
+- map controlled cancellation to exit code `4`;
+- return a structured `ERROR` or configuration failure when the operation cannot be completed safely.
 
 ---
 
@@ -1095,9 +1263,26 @@ What proves this language is complete?
 
 ```text
 What happened in this run?
-→ run_<id>/summary.json
-→ run_<id>/manifest.json
+→ <out-root>/run_<id>/summary.json
+→ <out-root>/run_<id>/manifest.json
 → raw evidence
+```
+
+```text
+What is the exact CLI spelling or required argument?
+→ docs/usage/CLI_REFERENCE.md
+```
+
+```text
+Which process exit code applies?
+→ docs/reference/EXIT_CODES.md
+```
+
+```text
+Why did an integrated diagnostic level fail?
+→ .wordbench-diagnostics/
+→ tools/diagnostics/README.md
+→ the retained per-command log
 ```
 
 ---
@@ -1110,4 +1295,4 @@ A file may be internally correct and still break the system when it changes what
 
 Therefore:
 
-> Every public promise, persisted format, external command, project dependency, scenario expectation, and release criterion must have one documented owner and one coordinated change path.
+> Every public promise, persisted format, external command, exit-code mapping, diagnostic probe, project dependency, scenario expectation, and release criterion must have one documented owner and one coordinated change path.

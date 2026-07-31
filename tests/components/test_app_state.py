@@ -53,21 +53,34 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def _future_major_version() -> str:
+    major_text, _minor_text = APP_STATE_SCHEMA_VERSION.split(".", maxsplit=1)
+    return f"{int(major_text) + 1}.0"
+
+
+def _future_minor_version() -> str:
+    major_text, minor_text = APP_STATE_SCHEMA_VERSION.split(".", maxsplit=1)
+    return f"{major_text}.{int(minor_text) + 1}"
+
+
 def _custom_state() -> AppState:
     state = default_app_state()
     return replace(
         state,
         environment=replace(
             state.environment,
-            project_root="C:/work/project",
-            rgl_root="C:/gf-rgl",
+            last_selected_language_path="C:/gf-rgl/src/english",
+            last_selected_validation_profile=(
+                "C:/work/project/project/project.toml"
+            ),
+            last_rgl_root="C:/gf-rgl",
             gf_executable="C:/gf/bin/gf.exe",
             output_root="C:/work/output",
         ),
         selection=replace(
             state.selection,
             mode=ValidationMode.CHECKPOINT,
-            target_file="src/Main.gf",
+            target_file="LangEng.gf",
             timeout_sec=91,
             max_files=17,
             keep_ok_details=True,
@@ -91,8 +104,9 @@ def test_default_state_matches_locked_canonical_defaults() -> None:
     assert state.schema_id == APP_STATE_SCHEMA_ID
     assert state.schema_version == APP_STATE_SCHEMA_VERSION
     assert state.producer is None
-    assert state.environment.project_root is None
-    assert state.environment.rgl_root is None
+    assert state.environment.last_selected_language_path is None
+    assert state.environment.last_selected_validation_profile is None
+    assert state.environment.last_rgl_root is None
     assert state.environment.gf_executable is None
     assert state.environment.output_root is None
     assert state.selection.mode is DEFAULT_MODE
@@ -121,8 +135,9 @@ def test_default_document_contains_only_persisted_state_groups() -> None:
     )
     assert "producer" not in document
     assert set(document["environment"]) == {
-        "project_root",
-        "rgl_root",
+        "last_selected_language_path",
+        "last_selected_validation_profile",
+        "last_rgl_root",
         "gf_executable",
         "output_root",
     }
@@ -142,6 +157,30 @@ def test_default_document_contains_only_persisted_state_groups() -> None:
         "summary_path",
         "status_message",
     }
+
+
+def test_state_schema_contains_only_language_startup_convenience() -> None:
+    document = default_app_state_document()
+    environment = document["environment"]
+
+    assert "last_selected_language_path" in environment
+    assert "last_selected_validation_profile" in environment
+    assert "last_rgl_root" in environment
+
+    prohibited_authority_fields = {
+        "language_key",
+        "language_directory",
+        "resolved_rgl_source_root",
+        "module_suffix",
+        "source_inventory",
+        "available_entrypoints",
+        "capability_statuses",
+        "resolved_language_context",
+        "project_root",
+        "catalog_path",
+        "last_language_id",
+    }
+    assert prohibited_authority_fields.isdisjoint(environment)
 
 
 def test_tolerant_parser_recovers_invalid_convenience_values() -> None:
@@ -223,7 +262,17 @@ def test_save_and_load_round_trip_canonical_typed_state(tmp_path: Path) -> None:
         "name": "gf-wordbench",
         "version": __version__,
     }
+    assert document["environment"] == {
+        "last_selected_language_path": "C:/gf-rgl/src/english",
+        "last_selected_validation_profile": (
+            "C:/work/project/project/project.toml"
+        ),
+        "last_rgl_root": "C:/gf-rgl",
+        "gf_executable": "C:/gf/bin/gf.exe",
+        "output_root": "C:/work/output",
+    }
     assert document["selection"]["mode"] == "checkpoint"
+    assert document["selection"]["target_file"] == "LangEng.gf"
     assert document["selection"]["timeout_sec"] == 91
     assert loaded == replace(
         state,
@@ -265,7 +314,7 @@ def test_future_major_fails_closed_without_rewriting_source(
     document: dict[str, Any] = json.loads(
         json.dumps(default_app_state_document())
     )
-    document["schema_version"] = "2.0"
+    document["schema_version"] = _future_major_version()
     original = json.dumps(document, separators=(",", ":"))
     state_path.write_text(original, encoding="utf-8")
 
@@ -287,7 +336,7 @@ def test_future_minor_recovers_known_fields_without_rewriting_source(
     document: dict[str, Any] = json.loads(
         json.dumps(default_app_state_document())
     )
-    document["schema_version"] = "1.1"
+    document["schema_version"] = _future_minor_version()
     selection = document["selection"]
     assert isinstance(selection, dict)
     selection["timeout_sec"] = 77
@@ -311,8 +360,16 @@ def test_legacy_state_migrates_once_and_preserves_legacy_source(
     legacy_path = tmp_path / LEGACY_STATE_FILENAME
     legacy_document = {
         "selected_mode": "file",
-        "selected_target_file": "src/Main.gf",
+        "selected_target_file": "LangEng.gf",
+        "selected_language_path": "C:/gf-rgl/src/english",
+        "selected_validation_profile": (
+            "C:/work/project/project/project.toml"
+        ),
+        "selected_rgl_root": "C:/gf-rgl",
+        # Catalog/project-era fields are deliberately non-authoritative.
         "selected_project_root": "C:/work/project",
+        "last_language_id": "Eng",
+        "catalog_path": "C:/work/rgl-language-catalog.json",
         "selected_timeout_sec": "90",
         "selected_max_files": 12,
         "selected_keep_ok_details": "true",
@@ -336,7 +393,14 @@ def test_legacy_state_migrates_once_and_preserves_legacy_source(
     assert first.migrated is True
     assert first.diagnostics[0].code is StateDiagnosticCode.MIGRATED
     assert first.state.selection.mode is ValidationMode.QUICK
-    assert first.state.selection.target_file == "src/Main.gf"
+    assert first.state.environment.last_selected_language_path == (
+        "C:/gf-rgl/src/english"
+    )
+    assert first.state.environment.last_selected_validation_profile == (
+        "C:/work/project/project/project.toml"
+    )
+    assert first.state.environment.last_rgl_root == "C:/gf-rgl"
+    assert first.state.selection.target_file == "LangEng.gf"
     assert first.state.selection.timeout_sec == 90
     assert first.state.selection.max_files == 12
     assert first.state.selection.keep_ok_details is True
@@ -368,11 +432,11 @@ def test_existing_canonical_state_takes_precedence_over_legacy(
 def test_reset_is_idempotent_and_does_not_touch_owned_data(
     tmp_path: Path,
 ) -> None:
-    project_file = tmp_path / "project" / "project.toml"
+    profile_file = tmp_path / "project" / "project.toml"
     run_file = tmp_path / "runs" / "run_1" / "summary.json"
-    project_file.parent.mkdir()
+    profile_file.parent.mkdir()
     run_file.parent.mkdir(parents=True)
-    project_file.write_text("schema_version = '1.0'\n", encoding="utf-8")
+    profile_file.write_text("schema_version = '1.0'\n", encoding="utf-8")
     run_file.write_text("{}\n", encoding="utf-8")
     repository = StateRepository(tmp_path)
     saved = repository.save(default_app_state())
@@ -383,7 +447,7 @@ def test_reset_is_idempotent_and_does_not_touch_owned_data(
     assert first == saved
     assert second is None
     assert not saved.exists()
-    assert project_file.is_file()
+    assert profile_file.is_file()
     assert run_file.is_file()
 
 

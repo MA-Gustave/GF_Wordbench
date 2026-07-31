@@ -1,8 +1,9 @@
 {
-  "schema": "wordbench.minidiag.config.v1",
+  "schema": "wordbench.minidiag.config.v2",
   "app_name": "GF Wordbench Mini Diagnostics",
   "artifact_dir": ".wordbench-diagnostics",
-  "project_root": "project",
+  "language_path": "",
+  "validation_profile": "",
   "output_root": "",
   "gf_executable": "gf",
   "rgl_root": "",
@@ -15,14 +16,11 @@
     "pyproject.toml",
     "src/gf_wordbench",
     "tests",
-    "scripts",
-    "project"
+    "scripts"
   ],
   "summary_globs": [
     "runs/run_*/summary.json",
-    "run_*/summary.json",
-    "project/runs/run_*/summary.json",
-    "project/run_*/summary.json"
+    "run_*/summary.json"
   ],
   "timeouts": {
     "short": 30,
@@ -47,3 +45,4 @@
     ]
   }
 }
+

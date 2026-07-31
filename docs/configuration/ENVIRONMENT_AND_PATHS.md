@@ -2,31 +2,34 @@
 
 **Document ID:** `GF-WB-CONFIG-ENVIRONMENT-PATHS`  
 **Status:** Normative configuration and path-resolution specification  
-**Applies to:** one GF Wordbench workspace, its one active project, CLI, GUI, automation, GF invocation, run creation, reporting, migration and tests  
+**Applies to:** path-resolved language startup, one resolved language context per session, CLI, GUI, automation, GF invocation, optional validation profiles, run creation, reporting, migration and tests  
 **Owner:** GF Wordbench maintainers  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
-**Configuration authority:** `docs/configuration/PROJECT_TOML_REFERENCE.md`, `docs/configuration/APPLICATION_STATE_REFERENCE.md`  
+**Architectural authority:** `docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`  
+**Configuration authorities:** `docs/configuration/APPLICATION_STATE_REFERENCE.md`, `docs/configuration/PROJECT_TOML_REFERENCE.md` for optional validation profiles  
 **Boundary authorities:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`  
-**Specification version:** `1.0`  
-**Last reviewed:** `2026-07-24`
+**Specification version:** `2.0`  
+**Last reviewed:** `2026-07-30`
 
 ---
 
 ## 1. Purpose
 
-This document defines how GF Wordbench represents, discovers, resolves, validates, persists, and reports environment-dependent values and filesystem paths.
+This document defines how GF Wordbench represents, discovers, resolves,
+validates, persists and reports environment-dependent values and filesystem
+paths under the path-resolved startup model established by ADR-0015.
 
 It establishes one shared model for:
 
 - the GF Wordbench framework root;
-- the active project root;
-- the active project configuration;
-- the project source root;
+- the explicit language path selected by the user;
+- the resolved language directory;
+- the RGL source root and checkout root;
+- an optional validation-profile root and configuration file;
 - the GF executable;
-- the Resource Grammar Library root;
-- the ordered GF search path;
+- the ordered effective GF search path;
 - the output root;
-- run directories;
+- language-scoped run directories;
 - raw and generated artifact paths;
 - application-state location;
 - temporary paths;
@@ -37,37 +40,72 @@ It establishes one shared model for:
 - path-related errors;
 - path-related tests.
 
-The objective is portability without ambiguity.
+The objective is portability without requiring a global language catalog or a
+mandatory project bundle.
 
-A project must remain clonable, while every execution must record the exact local paths that were actually used.
+A user supplies one language directory or `.gf` file. Wordbench derives only
+bounded candidate facts from that explicit path and validates them through its
+existing selection, path, preflight, GF and diagnostic boundaries.
 
 ---
 
 ## 2. Core rule
 
-> Portable project facts use project-relative paths; generated run facts use run-relative paths; machine-local tools and roots use resolved environment paths.
+> The user selects one source location; Wordbench resolves one contained,
+> immutable language context; every executable operation consumes that same
+> context and the same effective GF path.
+
+Path representation follows these rules:
+
+```text
+portable language identity
+    → relative to the resolved RGL source root
+
+optional validation-profile assets
+    → relative to validation_profile_root
+
+run artifacts
+    → relative to run_dir
+
+machine-local tools and roots
+    → resolved absolute environment paths
+```
 
 No path may be interpreted without a documented base.
 
 No consumer may reconstruct an owned path through duplicated filename constants.
 
-No local environment path may become a language-project fact.
+No machine-local absolute path may become the portable identity of a language.
+
+Discovery may propose a candidate path. It does not create executable authority
+until `ResolvedLanguageContext` is published successfully.
 
 ---
 
 ## Workspace and product boundary
 
-One GF Wordbench workspace resolves exactly one active GF language project. One run uses exactly one `project_root` and one normative language target.
+One running GF Wordbench session has zero or one resolved language context. One
+ordinary run records exactly one portable language identity and one resolved
+source context.
 
-Environment and path configuration may select the workspace or its active project for the current invocation. It must not create:
+The same installed Wordbench application may open several languages
+sequentially. Switching language destroys the current runtime and resolves a new
+context. It does not merge languages in one run or maintain several active
+language contexts simultaneously.
 
-- a registry of several Wordbench projects;
-- a runtime language-profile list;
-- cross-workspace path discovery;
-- portfolio-wide output roots or aggregation state;
+Environment and path configuration must not create:
+
+- a simultaneously active multi-language registry;
+- cross-language result aggregation inside one ordinary run;
+- a filesystem-wide RGL search;
+- a hidden language selection based on branch name, output directory or prior
+  run filenames;
 - a dependency on `gf-portfolio` configuration, schemas, storage or runtime.
 
-The independent `gf-portfolio` product may read finalized, public, versioned run artifacts. It does not participate in Wordbench project discovery, path precedence, GF search-path construction, run-directory creation or application-state resolution.
+The independent `gf-portfolio` product may read finalized, public, versioned run
+artifacts. It does not participate in language probing, path precedence, GF
+search-path construction, run-directory creation or application-state
+resolution.
 
 ---
 
@@ -76,6 +114,7 @@ The independent `gf-portfolio` product may read finalized, public, versioned run
 The following documents remain authoritative for their domains:
 
 ```text
+docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md
 docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/architecture/PRODUCT_BOUNDARIES.md
 docs/architecture/ARCHITECTURE_OVERVIEW.md
@@ -87,8 +126,8 @@ docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/configuration/CONFIGURATION_OVERVIEW.md
-docs/configuration/PROJECT_TOML_REFERENCE.md
 docs/configuration/APPLICATION_STATE_REFERENCE.md
+docs/configuration/PROJECT_TOML_REFERENCE.md
 docs/gf/GF_PATH_RESOLUTION.md
 docs/operations/RUN_DIRECTORY_LIFECYCLE.md
 ```
@@ -96,12 +135,17 @@ docs/operations/RUN_DIRECTORY_LIFECYCLE.md
 Priority when rules overlap:
 
 1. accepted ADRs govern architectural decisions;
-2. `DOCUMENTATION_ALIGNMENT_LOCK.md` governs cross-document interpretation and the Wordbench/Portfolio boundary;
+2. `DOCUMENTATION_ALIGNMENT_LOCK.md` governs cross-document interpretation and
+   the Wordbench/Portfolio boundary;
 3. `PERSISTED_SCHEMA_LOCK.md` governs canonical persisted path representation;
-4. `EXTERNAL_TOOL_CONTRACT_LOCK.md` governs executable, working-directory and GF command boundaries;
+4. `EXTERNAL_TOOL_CONTRACT_LOCK.md` governs executable, working-directory and GF
+   command boundaries;
 5. `INTERFILE_CONTRACT_LOCK.md` governs ownership and dependency direction;
 6. this document governs environment and path resolution;
 7. report and operation-specific references govern presentation details.
+
+`PROJECT_TOML_REFERENCE.md` governs only an explicitly loaded validation profile.
+It is not the normal language-startup authority.
 
 ---
 
@@ -109,25 +153,26 @@ Priority when rules overlap:
 
 This specification governs:
 
-- configuration precedence;
+- selected-language-path precedence;
+- optional validation-profile precedence;
 - environment-variable names;
 - path input parsing;
 - path expansion policy;
 - relative-path bases;
 - path normalization;
-- path existence checks;
-- path type checks;
+- path existence and type checks;
 - path containment;
 - symlink and junction handling;
 - executable discovery;
-- RGL root resolution;
+- bounded RGL root resolution;
+- language-directory resolution;
 - GF search-path construction;
 - output-root selection;
-- run-directory construction;
+- language-scoped run-directory construction;
 - temporary files;
 - persisted path representation;
 - legacy path migration;
-- Windows drive, UNC, separator, and case behavior;
+- Windows drive, UNC, separator and case behavior;
 - POSIX behavior;
 - environment inheritance;
 - path evidence;
@@ -140,20 +185,24 @@ This specification governs:
 
 This specification does not define:
 
-- GF module resolution semantics;
-- GF compiler option compatibility;
-- the internal structure of the RGL;
-- project linguistic architecture;
+- GF module-resolution semantics;
+- GF compiler-option compatibility;
+- a full parser for GF source syntax;
+- a global manifest of RGL languages;
+- language-specific linguistic architecture;
 - report prose;
 - scenario command syntax;
-- operating-system access-control policy;
+- operating-system access-control administration;
 - network filesystem administration;
 - package installation;
 - remote execution;
 - container orchestration;
 - cloud storage;
-- arbitrary environment-variable expansion in project files;
+- arbitrary environment-variable expansion in source or profile files;
 - Portfolio workspace discovery or aggregation.
+
+GF remains authoritative for parsing, type checking, compilation and module
+resolution.
 
 ---
 
@@ -163,57 +212,102 @@ Environment and path values are divided by owner.
 
 ### 6.1 Projects module
 
-The `projects` module owns:
+The `projects` module owns the path-resolved language application use case.
 
-- locating the active project boundary;
-- loading `project/project.toml`;
-- validating project identity;
-- resolving project-relative source, entrypoint, checkpoint, scenario, input and gold paths;
-- producing the resolved project-path model.
+It owns:
 
-It does not resolve machine-local GF or output locations from project metadata.
+- accepting one explicit selected language path from an entrypoint;
+- coordinating `LanguageProbeService`;
+- deriving the candidate language directory;
+- locating a bounded RGL source-root ancestor;
+- coordinating source enumeration through the existing selection service;
+- classifying standard module-role candidates;
+- loading an optional explicit validation profile;
+- validating profile compatibility with the selected source context;
+- producing one immutable `ResolvedLanguageContext`.
 
-### 6.2 Active project
+It does not:
 
-The active project owns portable declarations in:
+- implement a second recursive file selector;
+- implement a second GF path resolver;
+- launch GF directly;
+- parse GF diagnostics independently;
+- own run directories or report paths;
+- discover arbitrary projects across the filesystem.
+
+### 6.2 Resolved language context
+
+The resolved language context owns runtime source identity and boundaries.
+
+Required path facts include:
 
 ```text
-project/project.toml
+selected_language_path
+selected_path_kind
+language_directory
+rgl_source_root
+rgl_root, when resolved
+selected_file, when applicable
+portable_language_key
+candidate or selected entrypoints
+effective GF path requirements and provenance
 ```
 
+These facts are immutable after runtime composition.
+
+A change to the selected language path, source root, GF path requirements or
+validation profile requires a new resolution and a new runtime.
+
+### 6.3 Optional validation profile
+
+An explicitly loaded validation profile may own portable declarations such as:
+
+```text
+source include and exclude rules
+required entrypoints
+required checkpoints
+scenario registrations
+input paths
+gold paths
+release targets
+release gates
+project-specific documentation references
+```
+
+The canonical compatibility filename may remain:
+
+```text
+project.toml
+```
+
+Profile-owned paths are relative to `validation_profile_root`. The profile is not
+required for browsing, static scanning or targeted compilation of a standard RGL
+language directory.
+
+### 6.4 Application configuration and state adapter
+
+Machine-local values are supplied through explicit invocation values, documented
+environment variables or disposable application state.
+
 Examples:
 
-- source directory;
-- source glob;
-- GF path parts owned by the project;
-- entrypoint paths;
-- checkpoint paths;
-- scenario paths;
-- input paths;
-- gold paths.
-
-Project-owned paths are project-relative, portable and source-controlled.
-
-### 6.3 Application configuration and state adapter
-
-Machine-local values are supplied through explicit invocation values, documented environment variables or disposable application state.
-
-Examples:
-
-- active project root for the current workspace;
+- last successfully selected language path;
+- last explicitly selected validation profile;
 - GF executable;
-- RGL root;
+- optional RGL root override for a nonstandard layout;
 - output root;
 - optional state-file override.
 
-These values may be absolute. They remain non-authoritative for language identity and project policy.
+These values may be absolute. They remain non-authoritative until revalidated.
 
-### 6.4 Runs module
+### 6.5 Runs module
 
-The `runs` module owns the run identity, run directory and immutable run-path allocation.
+The `runs` module owns run identity, the run directory and immutable run-path
+allocation.
 
 Examples:
 
+- language scope directory;
 - run directory;
 - raw evidence directories;
 - temporary directory;
@@ -222,9 +316,10 @@ Examples:
 
 Run-owned paths are derived once per run.
 
-### 6.5 Reporting module
+### 6.6 Reporting module
 
-The `reporting` module owns canonical report and manifest paths supplied through the run-path model.
+The `reporting` module owns canonical report and manifest paths supplied through
+the run-path model.
 
 Examples:
 
@@ -235,11 +330,15 @@ Examples:
 - detail reports;
 - `manifest.json`.
 
-Consumers receive owned paths from the run context and never reconstruct them through duplicated filename constants.
+Consumers receive owned paths from the run context and never reconstruct them
+through duplicated filename constants.
 
-### 6.6 Adapters
+### 6.7 Adapters
 
-Filesystem, process, state and platform adapters implement path operations through application ports. Domain and application rules do not depend on GUI widgets, CLI parser objects, operating-system process APIs or private `gf-portfolio` state.
+Filesystem, process, state and platform adapters implement path operations
+through application ports. Domain and application rules do not depend on GUI
+widgets, CLI parser objects, operating-system process APIs or private
+`gf-portfolio` state.
 
 ---
 
@@ -249,7 +348,8 @@ Every path field belongs to exactly one path class.
 
 ```text
 framework path
-project-owned path
+language-source path
+validation-profile-owned path
 run-owned path
 environment path
 temporary path
@@ -262,7 +362,8 @@ A field must not silently change class.
 
 ## 8. Framework paths
 
-Framework paths point inside the installed or checked-out GF Wordbench framework.
+Framework paths point inside the installed or checked-out GF Wordbench
+framework.
 
 Examples:
 
@@ -275,24 +376,55 @@ templates/project/
 
 Framework paths are resolved against `framework_root`.
 
-They must not be stored as language-project paths.
+They must not be stored as language-source paths.
 
-The active project may reference framework templates only during explicit initialization or reset operations.
-
-Normal project validation must not depend on mutable files under `templates/project/`.
+Optional project templates may be used only during explicit initialization or
+profile-authoring operations. Normal path-resolved startup does not depend on
+them.
 
 ---
 
-## 9. Project-owned paths
+## 9. Language-source paths
 
-Project-owned paths identify source-controlled assets belonging to the active language project.
+Language-source paths identify files in the selected GF language source tree.
+
+Examples:
+
+```text
+english
+english/LangEng.gf
+english/AdjectiveEng.gf
+```
+
+Portable representation is relative to `rgl_source_root`, with `/` separators.
+
+Canonical rules:
+
+- no drive letter;
+- no UNC prefix;
+- no unresolved `..`;
+- no user-home alias;
+- no inline environment variable;
+- no backslash in canonical persisted output;
+- preserve Unicode and case;
+- containment beneath the resolved `rgl_source_root`;
+- one run records one language directory.
+
+When a selected source does not belong to a standard RGL checkout, an explicit
+profile may define another approved source base. That base is recorded with
+provenance and does not become a global RGL root.
+
+---
+
+## 10. Validation-profile-owned paths
+
+Profile-owned paths identify portable, source-controlled validation policy and
+assets.
 
 Examples:
 
 ```text
 project.toml
-lib/src/language
-lib/src/language/GrammarX.gf
 validation/scenarios/parse.gfs
 validation/inputs/parse.txt
 validation/gold/parse.gold
@@ -301,19 +433,21 @@ docs/VALIDATION_SPEC.md
 
 Canonical persistence rules:
 
-- relative to `project_root`;
+- relative to `validation_profile_root`;
 - `/` separators;
 - no drive letter;
 - no UNC prefix;
 - no `..` after normalization;
 - no user-home alias;
 - no inline environment variable;
-- no backslash in canonical output;
 - empty path only when the field explicitly permits it.
+
+A profile path must not silently redirect the selected language to another
+source tree.
 
 ---
 
-## 10. Run-owned paths
+## 11. Run-owned paths
 
 Run-owned paths identify artifacts inside one run directory.
 
@@ -321,9 +455,9 @@ Examples:
 
 ```text
 summary.json
-raw/compile/GrammarX.stdout.txt
+raw/compile/LangEng.stdout.txt
 raw/scenarios/parse.out
-artifacts/pgf/Grammar.pgf
+artifacts/pgf/Lang.pgf
 ```
 
 Canonical persistence rules:
@@ -338,7 +472,7 @@ Canonical persistence rules:
 
 ---
 
-## 11. Environment paths
+## 12. Environment paths
 
 Environment paths identify machine-local locations.
 
@@ -346,8 +480,9 @@ Examples:
 
 ```text
 C:/tools/gf/gf.exe
+C:/work/gf-rgl
 C:/work/gf-rgl/src
-C:/work/GF_Wordbench/project
+C:/work/gf-rgl/src/english
 C:/work/gf-wordbench-runs
 ```
 
@@ -356,15 +491,16 @@ Environment paths may be absolute.
 Rules:
 
 - resolve before execution;
-- record the actual resolved value;
+- record the actual resolved value when it materially affects evidence;
 - use `/` separators in canonical persisted text where practical;
 - accept native separators as user input;
-- do not copy environment paths into `project.toml`;
-- do not infer project semantics from their directory names.
+- do not copy them into portable profile fields;
+- do not infer semantic language identity only from their absolute text;
+- revalidate remembered state values on every load.
 
 ---
 
-## 12. Temporary paths
+## 13. Temporary and external evidence paths
 
 Temporary paths exist only during one operation or run.
 
@@ -380,33 +516,26 @@ scenario-input.tmp
 Temporary paths:
 
 - are not canonical final artifacts;
-- are excluded from the manifest unless a failure-retention policy explicitly catalogs them;
-- must remain inside an owned temporary root;
-- must not be placed in the active source directory;
-- must be cleaned on successful finalization;
+- are excluded from the manifest unless a failure-retention policy catalogs
+  them explicitly;
+- remain inside an owned temporary root;
+- are never placed in the selected language source directory;
+- are cleaned on successful finalization;
 - may remain after abnormal termination only with an explicit recovery marker.
 
----
-
-## 13. External evidence paths
-
-External evidence paths point outside the project and run roots but are recorded for traceability.
+External evidence paths point outside owned source, profile and run roots but are
+recorded for traceability.
 
 Examples:
 
 ```text
 resolved GF executable
-resolved RGL root
-external previous-run summary selected explicitly
+explicit external validation profile
+explicit previous-run summary
 ```
 
-These paths:
-
-- may be absolute;
-- must be read-only unless an operation explicitly owns them;
-- must not be treated as portable project paths;
-- may be redacted in exported reports;
-- must not be followed blindly from untrusted diagnostic text.
+They are read-only unless an operation explicitly owns them, may be redacted in
+portable exports and must never be followed blindly from diagnostic text.
 
 ---
 
@@ -416,17 +545,23 @@ The resolved path model includes:
 
 ```text
 framework_root
-project_root
-project_config_path
-source_root
-gf_executable
+selected_language_path
+language_directory
+rgl_source_root
 rgl_root
+selected_file
+validation_profile_root
+validation_profile_path
+gf_executable
 gf_search_paths
 output_root
+language_output_root
 run_dir
 state_path
 temporary_root
 ```
+
+Optional values are `null` when not applicable.
 
 Each value has one owner and one documented derivation.
 
@@ -434,100 +569,167 @@ Each value has one owner and one documented derivation.
 
 ## 15. `framework_root`
 
-`framework_root` is the root of the current GF Wordbench installation or checkout.
+`framework_root` is the root of the current GF Wordbench installation or
+checkout.
 
-Expected contents include:
+Expected contents may include:
 
 ```text
 application package/
 docs/
-project/
+tests/
 templates/
 ```
 
 Resolution order:
 
-1. installed package/resource metadata where applicable;
-2. repository root derived from the launcher or package location;
+1. installed package or resource metadata where applicable;
+2. repository root derived from launcher or package location;
 3. explicit developer-test fixture.
 
-`framework_root` must not be derived from the process current working directory alone.
-
-Normal users do not need an environment variable for `framework_root`.
-
-A developer-only override requires an explicit test or development contract.
+`framework_root` must not be derived from the process current working directory
+alone.
 
 ---
 
-## 16. `project_root`
+## 16. `selected_language_path`
 
-`project_root` is the root of the workspace's one active project.
+`selected_language_path` is the exact file or directory asserted by the current
+caller.
 
-It contains:
-
-```text
-project.toml
-```
-
-Canonical workspace location:
+Accepted forms:
 
 ```text
-<framework_root>/project
+<rgl-root>/src/<language-directory>
+<rgl-root>/src/<language-directory>/<module>.gf
 ```
 
-An explicit invocation may select another valid active-project root for that invocation. This selects one workspace boundary; it does not create a multi-project registry or permit one run to combine projects.
+Examples:
 
-One GF Wordbench run uses exactly one immutable `project_root`.
+```text
+C:/work/gf-rgl/src/english
+C:/work/gf-rgl/src/english/LangEng.gf
+C:/work/gf-rgl/src/english/AdjectiveEng.gf
+```
+
+Rules:
+
+- explicit invalid input fails closed;
+- a file selection must identify a readable regular `.gf` file;
+- a directory selection must identify a readable directory;
+- the exact selected file remains the focused target when applicable;
+- state may remember the path but does not make it authoritative;
+- no fallback to another language occurs when validation fails.
 
 ---
 
-## 17. `project_config_path`
+## 17. `language_directory`
 
-Canonical path:
+Derivation:
 
 ```text
-<project_root>/project.toml
+selected directory → selected directory
+selected .gf file  → selected file parent
 ```
 
-The project configuration path is not independently guessed after the project root is resolved.
+The directory is then validated and enumerated through the existing source
+selection service.
 
-A custom project configuration filename is not supported in schema version `1.0`.
+Rules:
 
-This keeps project discovery deterministic.
+- contains at least one eligible `.gf` source for `source-ready` status;
+- must remain within the approved source root after root resolution;
+- is read-only during normal startup and validation;
+- is not replaced silently by a detected sibling directory;
+- is immutable for the lifetime of the resolved context.
 
 ---
 
-## 18. `source_root`
+## 18. `rgl_source_root`
 
-`source_root` is derived from:
+`rgl_source_root` is the nearest validated ancestor representing the RGL source
+root.
+
+Standard form:
 
 ```text
-project_root
-+
-[sources].directory
+<rgl-root>/src
 ```
 
 Example:
 
 ```text
-project_root = C:/work/GF_Wordbench/project
-sources.directory = lib/src/french
-source_root = C:/work/GF_Wordbench/project/lib/src/french
+C:/work/gf-rgl/src
+```
+
+Resolution is bounded to ancestors of the selected path. Wordbench does not
+search unrelated drives, user profiles or arbitrary directory trees.
+
+Acceptance requires:
+
+- the selected language directory is contained beneath the candidate root;
+- the candidate satisfies the supported standard RGL source-layout contract;
+- no nearer ancestor satisfies that contract more precisely;
+- symlink or junction resolution preserves approved containment.
+
+A nonstandard source tree requires an explicit override or validation profile.
+
+---
+
+## 19. `rgl_root`
+
+`rgl_root` is the checkout root that contains `rgl_source_root`.
+
+Standard derivation:
+
+```text
+rgl_root = rgl_source_root.parent
+```
+
+Example:
+
+```text
+C:/work/gf-rgl
 ```
 
 Rules:
 
-- source directory is project-relative;
-- source root must remain inside project root;
-- source root must exist for normal validation;
-- source root must be a directory;
-- source root is read-only except for explicit migration or project-editing operations.
+- machine-local;
+- normally derived from the selected language path;
+- may be asserted explicitly for a nonstandard layout;
+- an explicit root must contain the selected source context;
+- recorded when it affects execution or evidence;
+- never discovered through an unbounded filesystem search.
 
 ---
 
-## 19. `gf_executable`
+## 20. `validation_profile_root` and `validation_profile_path`
 
-`gf_executable` is the exact native executable used for the run.
+These values are optional.
+
+Canonical explicit profile example:
+
+```text
+validation_profile_root = C:/work/my-english-validation
+validation_profile_path = C:/work/my-english-validation/project.toml
+```
+
+Rules:
+
+- loaded only when explicitly selected, supplied or accepted through documented
+  compatibility behavior;
+- no arbitrary ancestor search for `project.toml`;
+- profile-owned paths resolve relative to `validation_profile_root`;
+- profile source declarations must agree with the selected language context;
+- conflicts are configuration errors;
+- absence of a profile does not block source browsing, static scan or targeted
+  compilation.
+
+---
+
+## 21. `gf_executable`
+
+`gf_executable` is the exact native executable used for GF-backed operations.
 
 Examples:
 
@@ -538,59 +740,41 @@ C:/Program Files/GF/bin/gf.exe
 
 Rules:
 
-- it must be resolved to an explicit path before required validation;
-- it must identify a regular file where the platform exposes that distinction;
-- it must be passed separately from arguments;
-- it must not be silently substituted after configuration finalization;
-- the actual path must be recorded in run metadata;
-- version probing uses this exact path.
+- resolve to an explicit path before a GF-backed operation;
+- regular-file and launch validation are platform-aware;
+- pass executable separately from arguments;
+- do not silently substitute after configuration finalization;
+- record the actual path in run metadata;
+- version probing uses this exact path;
+- absence does not block `source-ready` or `scan-ready` capability.
 
 ---
 
-## 20. `rgl_root`
+## 22. `gf_search_paths`
 
-`rgl_root` identifies the configured Resource Grammar Library source root.
-
-Example:
-
-```text
-C:/work/gf-rgl/src
-```
-
-Rules:
-
-- it is machine-local;
-- it must not be stored in `project.toml`;
-- it may be absent only when the active operation does not require an external RGL root and the GF command contract supports that state;
-- if required, it must exist and be a directory;
-- RGL-relative GF path aliases resolve under this root;
-- the resolved root must be recorded when it affects execution.
-
-GF Wordbench must not search the entire filesystem for an RGL installation.
-
----
-
-## 21. `gf_search_paths`
-
-`gf_search_paths` is the ordered resolved list passed to GF or used to build the GF path option.
+`gf_search_paths` is the ordered structured list passed to GF or used to build
+the GF path option.
 
 It is derived from:
 
 ```text
-project [gf].path_parts
-project_root
-rgl_root
+language_directory
+standard shared RGL requirements supported by the existing resolver
+explicit source directives exposed through approved contracts
+optional validation-profile path requirements
+bounded exact missing-module remediation accepted by policy
 ```
 
-The list is structured internally.
+The list is structured internally. The joined command-line representation is
+derived only at the GF command boundary.
 
-The joined command-line representation is derived only at the GF command boundary.
+Wordbench must not add every directory beneath `rgl_source_root`.
 
 ---
 
-## 22. `output_root`
+## 23. `output_root` and `language_output_root`
 
-`output_root` contains run directories.
+`output_root` contains language-scoped run directories.
 
 Canonical default:
 
@@ -600,30 +784,37 @@ Canonical default:
 
 A user may select another local directory.
 
+`language_output_root` is derived from a safe, deterministic representation of
+the portable language key.
+
+Example:
+
+```text
+<output_root>/rgl_english
+```
+
 Rules:
 
-- output root may be outside the project;
 - output root must be writable before a run starts;
-- output root must not equal a source directory;
-- output root must not be inside `templates/project`;
-- output root should not be inside the RGL;
-- run directories are created below it;
+- output root must not equal or be inside selected source directories;
+- output root should not be inside the RGL checkout;
+- one language scope never reuses another language's run directory;
 - existing runs are not overwritten.
 
 ---
 
-## 23. `run_dir`
+## 24. `run_dir`
 
 Canonical form:
 
 ```text
-<output_root>/run_<run-id>
+<language_output_root>/run_<run-id>
 ```
 
 Example:
 
 ```text
-C:/work/gf-wordbench-runs/run_20260722_184500
+C:/work/gf-wordbench-runs/rgl_english/run_20260730_204500
 ```
 
 Rules:
@@ -632,34 +823,27 @@ Rules:
 - collision produces a deterministic numeric suffix;
 - never reuse a non-empty prior run directory;
 - contains only run-owned artifacts and temporary files;
-- path is fixed for the lifetime of the run;
+- fixed for the lifetime of the run;
 - all `RunPaths` values derive from it.
 
 ---
 
-## 24. `state_path`
+## 25. `state_path` and `temporary_root`
 
-Canonical default:
+Canonical state default:
 
 ```text
 <framework_root>/.gf_wordbench_state.json
 ```
-
-An explicit state-path override may place it elsewhere.
 
 Rules:
 
 - machine-local;
 - disposable;
 - written atomically;
-- must not be inside `project/validation/gold`;
-- must not be treated as project configuration;
-- deleting it must not damage the project;
+- never treated as language or profile authority;
+- deleting it must not damage source, profiles or runs;
 - canonical writer uses only the current state schema.
-
----
-
-## 25. `temporary_root`
 
 Canonical run-local temporary root:
 
@@ -667,27 +851,19 @@ Canonical run-local temporary root:
 <run_dir>/.tmp
 ```
 
-Use a run-local temporary root when:
-
-- temporary output will later move into the run;
-- atomic replacement requires the same filesystem;
-- operation evidence needs deterministic containment.
-
-The operating-system temporary directory may be used only for data that:
-
-- does not need same-filesystem atomic replacement;
-- contains no persistent project secret;
-- is cleaned deterministically;
-- is not mistaken for final evidence.
+The operating-system temporary directory may be used only when same-filesystem
+atomicity, owned containment and persistent evidence are not required.
 
 ---
 
 # 26. Canonical environment variables
 
-GF Wordbench version `1.0` recognizes the following path-related variables:
+GF Wordbench recognizes the following path-related variables under this
+specification:
 
 ```text
-GF_WORDBENCH_PROJECT_ROOT
+GF_WORDBENCH_LANGUAGE_PATH
+GF_WORDBENCH_VALIDATION_PROFILE
 GF_WORDBENCH_GF_EXE
 GF_WORDBENCH_RGL_ROOT
 GF_WORDBENCH_OUTPUT_ROOT
@@ -696,7 +872,8 @@ GF_WORDBENCH_STATE_PATH
 
 These names are framework configuration contracts.
 
-Adding, renaming, or removing one requires documentation and compatibility review.
+Adding, renaming or removing one requires documentation and compatibility
+review.
 
 ---
 
@@ -704,21 +881,24 @@ Adding, renaming, or removing one requires documentation and compatibility revie
 
 | Variable | Meaning | Required | Canonical target |
 |---|---|---:|---|
-| `GF_WORDBENCH_PROJECT_ROOT` | Active project root | No | Directory containing `project.toml` |
+| `GF_WORDBENCH_LANGUAGE_PATH` | Selected language directory or `.gf` file | No | Existing readable path |
+| `GF_WORDBENCH_VALIDATION_PROFILE` | Optional profile file or root | No | Explicit profile path |
 | `GF_WORDBENCH_GF_EXE` | GF executable | No | `gf.exe` or `gf` file |
-| `GF_WORDBENCH_RGL_ROOT` | RGL source root | No | RGL `src` directory |
-| `GF_WORDBENCH_OUTPUT_ROOT` | Parent of run directories | No | Writable directory |
+| `GF_WORDBENCH_RGL_ROOT` | Explicit RGL checkout or source-root override | No | Root containing selected language context |
+| `GF_WORDBENCH_OUTPUT_ROOT` | Parent of language-scoped run directories | No | Writable directory |
 | `GF_WORDBENCH_STATE_PATH` | Application state file | No | JSON file path |
 
 An unset variable contributes no value.
 
-An empty variable is treated as unset. A different empty-value meaning requires an explicit configuration-contract revision.
+An empty variable is treated as unset. A different empty-value meaning requires
+an explicit configuration-contract revision.
 
 ---
 
 ## 28. No inline interpolation
 
-Canonical configuration does not expand inline path expressions such as:
+Canonical source and profile configuration does not expand inline path
+expressions such as:
 
 ```text
 %USERPROFILE%\gf
@@ -729,54 +909,49 @@ $GF_ROOT/src
 
 Rules:
 
-- `project.toml` must contain literal project-relative paths;
-- application state should contain resolved absolute paths;
+- portable profile files contain literal relative paths;
+- application state contains resolved absolute machine paths;
 - environment variables override complete configuration values;
-- CLI input may be expanded at the user-input boundary only when documented;
-- the resolved path, not the original expression, enters the resolved run request.
-
-This prevents hidden machine-specific behavior inside portable files.
+- CLI input may be expanded only at the documented user-input boundary;
+- the resolved path, not the original expression, enters the resolved context.
 
 ---
 
 ## 29. Unknown environment variables
 
-Variables beginning with:
+Variables beginning with `GF_WORDBENCH_` but not documented here must not
+silently alter behavior.
 
-```text
-GF_WORDBENCH_
-```
-
-but not documented here must not silently alter behavior.
-
-The bootstrap may:
-
-- ignore them;
-- warn in strict configuration mode;
-- reject them when an explicit environment-validation command is used.
-
-It must not guess their meaning.
+Bootstrap may ignore them, warn in strict configuration mode or reject them in
+an explicit environment-validation command. It must not guess their meaning.
 
 ---
 
 ## 30. Deprecated environment variables
 
-Legacy or temporary variable names may be read only through a documented compatibility adapter.
+The catalog-era or project-root variable:
 
-Canonical writers and examples must use current names.
+```text
+GF_WORDBENCH_PROJECT_ROOT
+```
 
-A deprecated variable must define:
+is deprecated as a startup selector.
+
+A compatibility adapter may interpret it only as an explicit validation-profile
+root during a documented migration period.
+
+Deprecated variables must define:
 
 ```text
 old name
-new name
+new behavior or replacement
 precedence
 warning policy
 removal target
 tests
 ```
 
-Legacy GF Audit environment-variable aliases are accepted only through an explicit compatibility contract.
+Canonical writers and examples use current names.
 
 ---
 
@@ -791,39 +966,59 @@ explicit invocation value
         ↓
 GF Wordbench environment variable
         ↓
-valid application-state value
+valid application-state convenience value
         ↓
-canonical default or documented discovery
+bounded derivation from the explicit selected path
+        ↓
+canonical default when documented
         ↓
 configuration error when required
 ```
 
-Project-owned fields are resolved separately from `project.toml`.
+A higher-precedence invalid explicit value produces an error. It does not
+silently fall through.
 
-Explicit invocation values include current CLI arguments or current GUI form values.
+Optional validation-profile fields are resolved separately from base language
+startup.
 
 ---
 
-## 32. Project-root precedence
+## 32. Selected-language-path precedence
 
 ```text
-1. explicit CLI --project-root
-2. explicit current GUI project-root field
-3. GF_WORDBENCH_PROJECT_ROOT
-4. application-state environment.project_root
-5. <framework_root>/project
-6. failure
+1. explicit CLI language path
+2. explicit current GUI language path
+3. GF_WORDBENCH_LANGUAGE_PATH
+4. application-state last_selected_language_path after user chooses “Open last language”
+5. failure or interactive selection
 ```
 
-The first candidate that validates as a project root wins.
+There is no implicit framework-local active language default.
 
-A higher-precedence invalid explicit value must produce an error.
-
-It must not silently fall through to a lower value.
+The normal GUI always presents the introduction surface before composing the
+main runtime.
 
 ---
 
-## 33. GF-executable precedence
+## 33. Validation-profile precedence
+
+```text
+1. explicit CLI profile path
+2. explicit current GUI profile path
+3. GF_WORDBENCH_VALIDATION_PROFILE
+4. application-state last_selected_validation_profile when explicitly reused
+5. no profile
+```
+
+An invalid explicit profile is an error. Its failure does not silently select a
+different profile.
+
+No profile is a valid state for source browsing, static scan and targeted
+compilation.
+
+---
+
+## 34. GF-executable precedence
 
 ```text
 1. explicit CLI GF executable
@@ -831,44 +1026,37 @@ It must not silently fall through to a lower value.
 3. GF_WORDBENCH_GF_EXE
 4. application-state environment.gf_executable
 5. optional PATH discovery
-6. failure
+6. unavailable capability
 ```
 
-Canonical project schema version `1.0` does not store a machine-local GF executable.
+If `PATH` discovery succeeds, the discovered token is resolved to an explicit
+path and recorded.
 
-If `PATH` discovery succeeds:
-
-- the discovered token is resolved to an explicit path;
-- the explicit path is used for execution;
-- the explicit path is recorded.
+A missing executable marks GF-backed capabilities unavailable; it does not make
+the selected source context invalid.
 
 ---
 
-## 34. RGL-root precedence
+## 35. RGL-root precedence
 
 ```text
-1. explicit CLI RGL root
-2. explicit current GUI RGL root
-3. GF_WORDBENCH_RGL_ROOT
-4. application-state environment.rgl_root
-5. documented installation-specific discovery
-6. null when operation permits it
-7. failure when required
+1. explicit CLI or GUI RGL root assertion
+2. GF_WORDBENCH_RGL_ROOT
+3. bounded derivation from selected_language_path ancestors
+4. application-state last_rgl_root as a validated hint
+5. explicit nonstandard-layout remediation
+6. failure when a standard RGL root is required
 ```
+
+Every candidate must contain the selected language context.
 
 Broad recursive filesystem search is prohibited.
 
-Installation-specific discovery must be:
-
-- deterministic;
-- bounded;
-- platform-documented;
-- testable;
-- visible in resolved configuration.
-
 ---
 
-## 35. Output-root precedence
+## 36. Output-root and state-path precedence
+
+Output root:
 
 ```text
 1. explicit CLI output root
@@ -879,11 +1067,7 @@ Installation-specific discovery must be:
 6. failure
 ```
 
-The winning path must pass write and safety validation before run creation.
-
----
-
-## 36. State-path precedence
+State path:
 
 ```text
 1. explicit application startup option
@@ -895,29 +1079,28 @@ The state file does not select itself through values stored inside itself.
 
 ---
 
-## 37. Project-field precedence
+## 37. Profile-field precedence
 
-Project-owned fields use:
+Profile-owned fields use:
 
 ```text
-project.toml value
+explicit validation-profile value
         ↓
-documented schema default
+documented profile-schema default
         ↓
-configuration error when required
+configuration error when required by the requested capability
 ```
 
-Environment variables must not override:
+Environment variables must not override portable profile facts such as:
 
-- project ID;
-- language code;
-- source directory;
-- entrypoints;
-- checkpoints;
+- required entrypoints;
+- required checkpoints;
 - required scenarios;
+- gold references;
 - release requirements.
 
-An explicit command may select a subset for a non-release run, but it does not rewrite project policy.
+A command may select a subset for a non-release run without rewriting profile
+policy.
 
 ---
 
@@ -925,177 +1108,157 @@ An explicit command may select a subset for a non-release run, but it does not r
 
 An explicitly supplied path is an assertion by the caller.
 
-If it is invalid:
+If invalid:
 
 - report the invalid value;
 - report its source;
 - stop resolution for that field;
-- do not silently use state, environment, or discovery.
-
-This rule prevents typographical errors from selecting an unintended installation.
+- do not silently use state, environment, catalog data or another sibling path.
 
 ---
 
 ## 39. Resolved-value provenance
 
-Every significant resolved path should retain provenance:
+Every significant resolved path retains provenance.
+
+Canonical values include:
 
 ```text
 explicit_cli
 explicit_gui
 environment
 state
+derived_from_selected_path
+validation_profile
 default
-discovery
-project_config
-derived
+bounded_remediation
 ```
-
-Provenance may be represented internally in a resolved-configuration record.
 
 Reports may show provenance in diagnostic or strict modes.
 
-The full provenance model does not need to be persisted in every summary field unless the schema requires it.
-
 ---
 
-# 40. Project configuration path rules
+# 40. Optional validation-profile path rules
 
-Canonical `project.toml` path fields include:
+A validation profile adds policy to an already selected source context.
+
+It must not become a second hidden language selector.
+
+Canonical path fields may include:
 
 ```text
-[project].root
-[sources].directory
+[profile].root
+[sources].directory or source identity assertion
+[sources].glob
 [gf].path_parts
 [modules].entrypoints
 [modules].checkpoints
-scenario and validation asset paths
+scenario, input and gold asset paths
 ```
 
-All project-owned path fields resolve against `project_root` unless a field explicitly declares another base.
+Every profile path has an explicit base.
 
 ---
 
-## 41. `[project].root`
+## 41. `[profile].root`
 
-Canonical value:
+Canonical value for a profile stored at its root:
 
 ```toml
-[project]
+[profile]
 root = "."
 ```
 
-Version `1.0` expects `.` for the normal layout.
+A different value requires documented containment and no ambiguous double-root
+interpretation.
 
-A different value requires:
-
-- a documented layout;
-- containment within the selected project root;
-- explicit test coverage;
-- no ambiguous double-root interpretation.
-
-The selected `project_root` remains the directory containing `project.toml`.
+The selected `validation_profile_root` remains the directory that owns the
+profile contract.
 
 ---
 
-## 42. `[sources].directory`
+## 42. Source assertion
 
-Example:
+A profile may assert a language source path or portable language key.
 
-```toml
-[sources]
-directory = "lib/src/french"
-```
+The assertion must agree with the path-resolved context.
 
-Resolution:
+Allowed behavior:
 
 ```text
-source_root = project_root / sources.directory
+profile source matches selected language
+→ profile may load
+
+profile source differs from selected language
+→ configuration error
 ```
 
-Validation:
-
-- relative;
-- normalized;
-- contained;
-- existing directory;
-- not empty;
-- no wildcard;
-- no environment interpolation.
+The profile cannot redirect startup to a different language silently.
 
 ---
 
 ## 43. Source globs
 
-`[sources].glob` is a filename-matching expression, not a path root.
-
-Example:
-
-```toml
-glob = "*.gf"
-```
+A source glob is a filename-matching expression, not a path root.
 
 Rules:
 
-- evaluated below `source_root`;
-- must not escape source root;
-- recursive behavior must be explicit;
-- path separators in glob syntax follow the file-selector contract;
-- glob result ordering is normalized before use.
+- evaluated below the resolved `language_directory` or an explicitly approved
+  profile source base;
+- must not escape its base;
+- recursive behavior is explicit;
+- path separators follow the file-selector contract;
+- result ordering is normalized by the existing selection service.
 
 ---
 
 ## 44. Entrypoint paths
 
-Entrypoints may be represented as module filenames or documented project-relative source paths.
+Without a validation profile, standard module filenames may be presented as
+candidate roles. They are not mandatory policy.
 
-Resolution must be unambiguous.
+With a profile, entrypoints are explicit portable paths or filenames.
 
-Recommended rule:
+Resolution rules:
 
-- bare filename resolves under `source_root`;
-- path containing `/` resolves against `project_root`;
-- absolute entrypoint is rejected;
-- missing entrypoint is a configuration or release error.
-
-Examples:
-
-```text
-GrammarFre.gf
-lib/src/french/GrammarFre.gf
-```
-
-`PROJECT_TOML_REFERENCE.md` defines the canonical entrypoint representation.
+- bare filename resolves under `language_directory`;
+- a profile-relative path resolves against `validation_profile_root` only when
+  the schema explicitly defines that base;
+- absolute entrypoint is rejected in portable profile configuration;
+- missing required profile entrypoint is a capability or release error;
+- a user-selected `.gf` file remains the focused target even when another
+  entrypoint candidate exists.
 
 ---
 
 ## 45. Checkpoint paths
 
-Checkpoint paths follow the same resolution rules as entrypoints.
+Checkpoints are optional unless an explicit validation profile requires them.
 
 Declared order is semantically significant for reporting and validation order.
+The resolver must not sort explicitly ordered checkpoints.
 
-The resolver must not sort checkpoints if the project configuration deliberately orders them.
+Without a profile, Wordbench may browse and scan all selected sources without
+inventing a mandatory checkpoint list.
 
 ---
 
 ## 46. Scenario paths
 
-Default scenario path:
+Default profile-owned scenario form:
 
 ```text
 validation/scenarios/<scenario-id>.gfs
 ```
 
-Scenario registry configuration may declare a different project-relative path.
-
 Rules:
 
 - `.gfs` extension;
-- project-contained;
+- profile-contained;
 - read-only during normal validation;
 - no inline environment expansion;
-- stable scenario identity independent of absolute path.
+- stable scenario identity independent of absolute path;
+- scenario absence does not block source-ready or compile-ready capability.
 
 ---
 
@@ -1107,19 +1270,17 @@ Validation inputs normally resolve under:
 validation/inputs/
 ```
 
-A declared project-relative path outside that directory may be accepted only when:
+A declared path outside that directory may be accepted only when still contained
+inside `validation_profile_root`, documented by the profile and read-only during
+normal validation.
 
-- still inside `project_root`;
-- documented by the project validation specification;
-- read-only during normal validation.
-
-Absolute input paths are prohibited in portable project configuration.
+Absolute input paths are prohibited in portable profile configuration.
 
 ---
 
 ## 48. Gold paths
 
-Default gold path:
+Default profile-owned gold form:
 
 ```text
 validation/gold/<scenario-id>.gold
@@ -1127,114 +1288,105 @@ validation/gold/<scenario-id>.gold
 
 Rules:
 
-- project-contained;
+- profile-contained;
 - read-only during normal validation;
 - no environment interpolation;
-- no output-root reference;
-- no run-relative reference;
-- update only through the explicit gold-update operation.
+- no output-root or run-relative reference;
+- updated only through the explicit gold-update operation;
+- absence blocks only a capability or release gate that requires that gold.
 
 ---
 
 # 49. GF search-path model
 
-GF search paths are ordered because path order can affect module resolution.
+GF search paths are ordered because order can affect module resolution.
 
-Canonical project field:
+The effective list is built once and reused by compilation, scenarios and PGF
+construction within one run.
 
-```toml
-[gf]
-path_parts = [
-  "lib/src",
-  "lib/src/french",
-  "abstract",
-  "common",
-  "prelude",
-]
+Potential inputs are:
+
+```text
+language_directory
+standard shared RGL aliases supported by the existing resolver
+approved source-local directives
+optional profile path_parts
+accepted bounded missing-module remediation
 ```
 
-The resolver must preserve declared order.
+No catalog is consulted during normal resolution.
 
 ---
 
-## 50. Project-relative GF path parts
+## 50. Language and shared path parts
 
-A non-reserved path part resolves against `project_root`.
+The language directory is the first source-local candidate unless an approved GF
+contract requires another ordering.
 
-Examples:
-
-```text
-lib/src
-lib/src/french
-shared
-```
-
-Resolved examples:
+Standard shared aliases may include resolver-owned names such as:
 
 ```text
-C:/work/GF_Wordbench/project/lib/src
-C:/work/GF_Wordbench/project/lib/src/french
-C:/work/GF_Wordbench/project/shared
+abstract
+api
+common
+prelude
 ```
 
-These paths must remain inside `project_root`.
+Family directories such as `romance`, `scandinavian`, `bantu` or `hindustani`
+are not appended globally. They enter the path only through explicit profile
+requirements, approved source directives or bounded exact missing-module
+remediation.
 
 ---
 
 ## 51. RGL aliases
 
-Canonical version `1.0` reserves these unqualified aliases:
+Reserved RGL aliases resolve beneath `rgl_source_root`.
+
+Examples:
 
 ```text
-abstract
-common
-prelude
-```
-
-They resolve as:
-
-```text
-<rgl_root>/abstract
-<rgl_root>/common
-<rgl_root>/prelude
+abstract → <rgl_source_root>/abstract
+api      → <rgl_source_root>/api
+common   → <rgl_source_root>/common
+prelude  → <rgl_source_root>/prelude
 ```
 
 Rules:
 
 - exact alias matching;
-- no nested suffix under an alias in version `1.0`;
-- aliases require `rgl_root`;
-- unknown bare names are treated as project-relative paths;
-- adding another reserved alias is a configuration-contract change.
-
-Any alias syntax extension requires a schema-compatible documented contract change.
+- aliases require a resolved RGL source root;
+- adding or changing a reserved alias is a contract change;
+- unknown bare profile values are not guessed as aliases;
+- every resolved alias retains provenance.
 
 ---
 
 ## 52. GF path resolution algorithm
 
-For each declared `path_part` in order:
+For every candidate requirement in order:
 
-1. validate non-empty string;
-2. reject absolute syntax;
-3. normalize separators;
-4. reject parent escape;
-5. if exact reserved RGL alias:
-   - require `rgl_root`;
-   - resolve below `rgl_root`;
-6. otherwise:
-   - resolve below `project_root`;
-7. validate directory according to mode;
-8. deduplicate by platform-aware normalized identity;
-9. preserve first occurrence;
-10. append to the structured resolved list.
+1. validate a non-empty structured requirement;
+2. identify its declared base and provenance;
+3. reject prohibited absolute portable syntax;
+4. normalize separators;
+5. reject parent escape;
+6. resolve standard aliases beneath `rgl_source_root`;
+7. resolve language-local requirements beneath `language_directory`;
+8. resolve profile-owned requirements according to the profile schema;
+9. validate directory existence according to required or optional policy;
+10. deduplicate by platform-aware normalized identity;
+11. preserve the first accepted occurrence;
+12. return one immutable structured resolution.
 
 The resolver returns:
 
 ```text
 ordered absolute Path values
 provenance per path
-warnings
+required or optional classification
+warnings and errors
+native command representation metadata
 ```
 
 ---
@@ -1243,28 +1395,42 @@ warnings
 
 Duplicate resolved paths are removed while preserving the first occurrence.
 
-Duplicate comparison:
+Comparison is:
 
 - case-insensitive on Windows;
 - case-sensitive on normal POSIX filesystems;
 - separator-normalized;
 - based on normalized absolute identity;
-- no lowercasing of the display path.
-
-A duplicate warning may be emitted in strict mode.
+- display-case preserving.
 
 ---
 
-## 54. Missing GF path part
+## 54. Missing GF path or module
 
-Default behavior:
+Required path part missing:
 
-- required path part missing → configuration error;
-- optional compatibility path missing → explicit warning only when the project schema marks it optional;
-- release mode → no silent missing required path;
-- diagnostic mode → may continue only when the affected operation can still execute meaningfully.
+```text
+configuration or capability error
+```
 
-Version `1.0` treats configured `path_parts` as required. Optional path parts require a configuration-schema revision.
+Optional path part missing:
+
+```text
+explicit warning and omission when policy permits
+```
+
+When canonical GF diagnostics identify one missing module, Wordbench may perform
+a bounded exact-name search beneath `rgl_source_root` through approved selection
+services.
+
+```text
+zero exact matches     → module absent
+one exact match        → remediation candidate
+multiple exact matches → ambiguity requiring user choice
+```
+
+No directory is added twice. Resolution stops on ambiguity, no progress or the
+configured maximum number of additions.
 
 ---
 
@@ -1276,44 +1442,32 @@ Internally:
 tuple[Path, ...]
 ```
 
-At the GF command boundary, the command builder creates the version-supported path option.
+At the GF command boundary, the command builder creates the supported path
+option.
 
-Possible supported forms include:
-
-```text
---path=<joined-path>
---gf-lib-path=<rgl-root>
-```
-
-The join separator uses the platform or GF contract:
+The join separator follows the platform and GF contract:
 
 ```text
 Windows: ;
 POSIX:   :
 ```
 
-The structured path list remains authoritative.
-
-A persisted summary should prefer the structured list rather than only the joined string.
+The structured ordered path list remains authoritative and is preferred in
+persisted evidence.
 
 ---
 
 ## 56. No ambient GF path
 
-GF Wordbench must not depend silently on a developer’s global:
-
-```text
-GF_LIB_PATH
-```
+GF Wordbench must not depend silently on a developer's global `GF_LIB_PATH`.
 
 Policy:
 
-- detect the variable when it could affect GF;
+- detect it when it could affect GF;
 - override or neutralize it according to the resolved command contract;
 - record the applied policy;
-- never let tests pass only because a developer has it configured.
-
-Other GF-version-specific path variables require an explicit compatibility rule before use.
+- never let tests pass only because a developer has configured it;
+- never use it to select a language implicitly.
 
 ---
 
@@ -1340,70 +1494,53 @@ controlled-inherit-v1
 The policy:
 
 1. copies the current parent environment;
-2. applies documented removal or neutralization of ambient variables that would alter GF path behavior invisibly;
-3. applies explicit safe overrides;
+2. removes or neutralizes ambient values that would alter GF path behavior
+   invisibly;
+3. applies documented safe overrides;
 4. passes the resulting mapping only to the child;
 5. records the policy identifier;
 6. records explicit non-secret overrides;
 7. does not persist the full environment.
 
-This policy balances platform compatibility with reproducibility.
-
 ---
 
 ## 59. Required inherited operating-system context
 
-GF Wordbench should not maintain a brittle universal allowlist for all child-process environment values.
-
-The controlled-inherit policy retains ordinary operating-system context needed by executables, such as:
+GF Wordbench retains ordinary operating-system context required by executables,
+such as:
 
 ```text
 PATH
 system runtime variables
 temporary-directory variables
 locale variables
-user-profile variables needed by the platform
+user-profile variables required by the platform
 ```
 
-However:
-
-- retained values are not automatically recorded;
-- path-affecting GF variables are handled explicitly;
-- secrets are not copied into reports;
-- operation-specific overrides remain visible.
+Retained values are not automatically recorded. Path-affecting GF variables are
+handled explicitly and secrets are not copied into reports.
 
 ---
 
 ## 60. `PATH`
 
-`PATH` may be used for the initial optional discovery of `gf`.
+`PATH` may be used for initial optional discovery of `gf`.
 
 After discovery:
 
 - resolve the executable to an explicit path;
-- use that path for the run;
+- use that path for the operation;
 - record that path;
-- do not rerun discovery for each operation.
-
-Changing `PATH` after request resolution must not change the selected executable.
+- do not rerun discovery after context finalization.
 
 ---
 
 ## 61. Temporary-directory variables
 
-Operating-system variables such as:
+Operating-system variables such as `TEMP`, `TMP` and `TMPDIR` may be inherited.
 
-```text
-TEMP
-TMP
-TMPDIR
-```
-
-may be inherited.
-
-GF Wordbench-owned temporary files should still prefer `temporary_root` when same-filesystem containment or atomic replacement matters.
-
-A child tool’s private temporary behavior is external-tool behavior and should be captured only when it affects the contract.
+Wordbench-owned temporary files still prefer `temporary_root` when
+same-filesystem containment or atomic replacement matters.
 
 ---
 
@@ -1411,15 +1548,13 @@ A child tool’s private temporary behavior is external-tool behavior and should
 
 Locale variables may affect tool wording or encoding.
 
-The policy:
+Policy:
 
 - use explicit UTF-8 file and stream handling;
 - record relevant explicit locale overrides;
-- avoid relying on locale-specific diagnostic text when stable structured evidence exists;
-- keep diagnostic fixtures tagged with platform and locale;
+- avoid relying on locale-specific diagnostic text when stable evidence exists;
+- keep fixtures tagged with platform and locale;
 - avoid changing locale silently between CLI and GUI.
-
-A forced locale is permitted only when supported by the selected GF and documented.
 
 ---
 
@@ -1432,14 +1567,14 @@ Explicit process environment overrides must:
 - be scoped to one child process;
 - avoid secrets where possible;
 - mark secret keys for redaction when unavoidable;
-- not overwrite project configuration;
+- not overwrite portable profile configuration;
 - not be persisted as a complete environment dump.
 
 ---
 
 ## 64. Environment evidence
 
-A process-backed result should preserve:
+A process-backed result preserves:
 
 ```text
 environment policy identifier
@@ -1448,39 +1583,38 @@ non-sensitive override values
 redaction markers
 ```
 
-It should not preserve:
-
-```text
-complete inherited environment
-unrelated user variables
-secrets
-```
-
-Environment provenance must be sufficient to explain material behavior without leaking private data.
+It does not preserve the complete inherited environment, unrelated user
+variables or secrets.
 
 ---
 
 # 65. Relative input paths
 
-Relative user input is resolved at one explicit boundary.
+Relative user input is resolved at one explicit entrypoint boundary.
 
-### `--project-root`
+### `--language-path`
 
-Relative to the invocation current working directory.
+Relative to the invocation current working directory, then converted to an
+absolute resolved value.
+
+### `--validation-profile`
+
+Relative to the invocation current working directory, then converted to an
+absolute resolved value.
 
 ### Other machine-local CLI paths
 
-Relative to the invocation current working directory, then converted to absolute resolved values.
+The same rule applies to GF executable, RGL-root override, output root and state
+path.
 
 Examples:
 
 ```text
+--language-path ../gf-rgl/src/english
 --gf-exe tools/gf/gf.exe
---rgl-root ../gf-rgl/src
+--rgl-root ../gf-rgl
 --output-root runs
 ```
-
-The invocation current working directory must be recorded or available during configuration diagnosis.
 
 After bootstrap, no machine-local path remains relative.
 
@@ -1488,52 +1622,52 @@ After bootstrap, no machine-local path remains relative.
 
 ## 66. GUI path inputs
 
-GUI path pickers should produce absolute paths.
+GUI path pickers produce absolute paths.
 
-Typed relative GUI input must either:
+Typed relative GUI input must either be rejected clearly or resolve against a
+clearly displayed base before submission. It must not resolve against an
+invisible GUI process directory.
 
-- be rejected with a clear message; or
-- resolve against a clearly displayed base before submission.
-
-It must not resolve against an invisible GUI process directory.
+The GUI exposes both directory and `.gf` file selection.
 
 ---
 
 ## 67. Application-state paths
 
-Application state stores machine-local paths as resolved absolute strings or `null`.
+Application state stores machine-local paths as resolved absolute strings or
+`null`.
 
-It must not store:
+It may store:
 
-- unresolved relative machine paths;
-- `%VAR%` expressions;
-- `$VAR` expressions;
-- `~`;
-- project-owned source paths as environment configuration.
+```text
+last_selected_language_path
+last_selected_validation_profile
+last_rgl_root
+environment.gf_executable
+environment.output_root
+```
 
-Legacy relative values may be migrated only with an explicit known base.
+It must not store unresolved relative paths, interpolation expressions, inferred
+entrypoints, required checkpoints, scenario policy or a serialized executable
+resolved context.
 
 ---
 
-## 68. Project-relative persistence
+## 68. Portable source and profile persistence
 
-Canonical project paths are serialized with:
+Language-source paths are serialized relative to `rgl_source_root`.
 
-```python
-relative_path.as_posix()
-```
-
-or equivalent semantics.
+Profile-owned paths are serialized relative to `validation_profile_root`.
 
 Before serialization:
 
 - verify containment;
 - reject unresolved parent escape;
-- preserve Unicode;
-- preserve case;
+- preserve Unicode and case;
+- use `/` separators;
 - avoid drive-relative forms.
 
-A failure to relativize a supposed project path is a contract error.
+Failure to relativize a supposedly portable path is a contract error.
 
 ---
 
@@ -1546,52 +1680,46 @@ Examples:
 ```text
 summary.md
 raw/master.log
-artifacts/pgf/Grammar.pgf
+artifacts/pgf/Lang.pgf
 ```
 
 A report must not store a different base for the same artifact field.
-
-Legacy absolute run paths may be converted during migration when containment is provable.
 
 ---
 
 ## 70. Environment-path persistence
 
-Environment paths may be persisted as absolute strings for traceability.
+Environment paths may be persisted as absolute strings for local traceability.
 
-Canonical separator:
-
-```text
-/
-```
+Canonical separator is `/` where practical.
 
 Examples:
 
 ```text
 C:/Program Files/GF/bin/gf.exe
-C:/work/gf-rgl/src
+C:/work/gf-rgl/src/english
 ```
 
-Readers accept native `\` for legacy Windows files.
-
-A portable export may redact environment path prefixes but must mark the redaction.
+Portable exports may redact environment path prefixes but must mark the
+redaction.
 
 ---
 
 # 71. Path normalization
 
-Normalization converts path syntax into a consistent internal identity without changing the target intentionally.
+Normalization converts path syntax into a consistent internal identity without
+changing the target intentionally.
 
 Steps:
 
 1. validate input type;
-2. trim only unintended surrounding whitespace from user fields;
+2. trim unintended surrounding whitespace from user fields;
 3. reject NUL;
 4. expand an explicitly allowed user-input form;
 5. apply the documented base;
 6. normalize `.` components;
 7. reject prohibited `..` escape;
-8. convert to an absolute internal `Path` for environment/runtime paths;
+8. convert environment and runtime paths to absolute internal `Path` values;
 9. preserve original case for display;
 10. perform platform-aware identity comparison;
 11. validate containment and type.
@@ -1604,55 +1732,28 @@ Normalization is not existence validation.
 
 User-entered machine-local path fields may trim surrounding whitespace.
 
-Project-owned paths must preserve meaningful internal spaces.
+Portable relative paths preserve meaningful internal spaces.
 
-Examples:
-
-```text
-C:/Program Files/GF/bin/gf.exe
-validation/inputs/example sentences.txt
-```
-
-Generated filenames should avoid trailing spaces and platform-invalid endings.
-
-Quoted text entered through a GUI field is not automatically shell quoting and should not be retained as literal quote characters unless the quotes are part of the filename.
+Generated filenames avoid trailing spaces and platform-invalid endings.
 
 ---
 
 ## 73. Dot components
 
-Allowed:
+Redundant `.` components are removed from canonical persisted paths.
 
-```text
-.
-```
-
-during resolution.
-
-Canonical persisted project and run paths should not contain redundant `.` segments.
-
-Parent components:
-
-```text
-..
-```
-
-may appear in initial machine-local CLI input only before resolution.
-
-They are prohibited in canonical project and run-relative persistence.
+Parent components may appear in initial machine-local CLI input only before
+resolution. They are prohibited in canonical source, profile and run-relative
+persistence.
 
 ---
 
 ## 74. User-home expansion
 
-Project files do not use `~`.
+Portable files do not use `~`.
 
-CLI machine-local input may support `~` expansion when:
-
-- the expansion is explicit and documented;
-- expansion occurs before the run request is resolved;
-- the resolved absolute path is recorded;
-- Windows behavior is tested.
+CLI machine-local input may support `~` expansion when documented, performed
+before context resolution and tested on supported platforms.
 
 Application state stores the resolved path, not `~`.
 
@@ -1662,23 +1763,14 @@ Application state stores the resolved path, not `~`.
 
 Inline environment-variable expansion is disabled by default.
 
-The recognized `GF_WORDBENCH_*` variables provide complete values instead.
-
-This avoids:
-
-- platform-specific `%NAME%` versus `$NAME`;
-- accidental secret interpolation;
-- clone-dependent project files;
-- unresolved placeholders;
-- double expansion.
-
-Inline interpolation can be introduced only by a new configuration contract.
+Recognized `GF_WORDBENCH_*` variables provide complete values instead.
 
 ---
 
 ## 76. Filesystem resolution
 
-Do not call unrestricted `resolve()` blindly on untrusted paths when it may require inaccessible or non-existent targets.
+Do not call unrestricted `resolve()` blindly on untrusted paths when it may
+require inaccessible or nonexistent targets.
 
 Use an operation-appropriate strategy:
 
@@ -1691,16 +1783,18 @@ Use an operation-appropriate strategy:
 
 # 77. Path containment
 
-Containment protects project and run boundaries.
+Containment protects language-source, validation-profile, run, RGL, framework
+and temporary boundaries.
 
-Required roots:
+Required roots include:
 
 ```text
-project_root
+rgl_source_root
+language_directory
+validation_profile_root, when present
 run_dir
-rgl_root for RGL aliases
-framework_root for framework assets
-temporary_root for temporary files
+framework_root
+temporary_root
 ```
 
 A path owned by one root must not escape into another root accidentally.
@@ -1711,14 +1805,15 @@ A path owned by one root must not escape into another root accidentally.
 
 Lexical validation rejects:
 
-- absolute project-owned paths;
-- `..` escape;
+- absolute portable profile paths;
+- unresolved `..` escape;
 - drive changes;
 - UNC changes;
 - malformed separators;
 - empty required components.
 
-Lexical containment is necessary but not sufficient when symlinks or junctions exist.
+Lexical containment is necessary but not sufficient when symlinks or junctions
+exist.
 
 ---
 
@@ -1743,76 +1838,74 @@ For a new output path:
 
 ## 80. Symlinks and junctions
 
-A symlink or Windows junction can cross lexical boundaries.
-
 Default policy:
 
-- read-only project assets may traverse contained links only when resolved target remains inside an allowed root;
-- generated run outputs must not follow a link outside `run_dir`;
+- read-only source and profile assets may traverse links only when the resolved
+  target remains inside an approved root;
+- generated outputs must not follow a link outside `run_dir`;
 - release and gold-update operations use strict resolved containment;
 - ambiguous or inaccessible links produce an error;
-- the manifest records the final artifact path, not an unverified external target.
+- the manifest records the final artifact path, not an unverified external
+  target.
 
-A project intentionally using external linked sources requires an explicit project and security policy.
-
-It is not the default portable model.
+An intentionally external linked source requires explicit profile and security
+policy.
 
 ---
 
 ## 81. Root equality
 
-Some paths may equal their root:
+Some paths may equal their root, such as an RGL root itself or a report directly
+under `run_dir`.
 
-- project configuration at project root;
-- run report at run root;
-- RGL root itself.
-
-Containment checks must distinguish:
+Containment checks distinguish:
 
 ```text
 inside-or-equal
 strictly-inside
 ```
 
-Generated child artifacts normally require strictly-inside, except canonical files directly under `run_dir`.
+Generated child artifacts normally require strictly-inside except canonical
+files directly under `run_dir`.
 
 ---
 
 ## 82. Cross-root prohibition
 
-The following are prohibited by default:
+Prohibited by default:
 
-- source directory inside output root;
-- output root inside source directory;
-- state file inside gold directory;
-- run directory inside RGL;
-- temporary root inside project source;
-- project initialization writing into active run artifacts;
-- report detail copier reading arbitrary external diagnostic-mentioned files.
+- output root inside selected language source;
+- selected language source inside output root;
+- state file inside a gold directory;
+- run directory inside the RGL checkout;
+- temporary root inside source;
+- validation profile writing into source during normal validation;
+- report detail copier reading arbitrary diagnostic-mentioned files;
+- one resolved language context using another language's output scope.
 
-Bootstrap should detect dangerous overlap.
+Bootstrap detects dangerous overlap.
 
 ---
 
 # 83. Path type validation
 
-Paths are validated by expected type.
-
 | Field | Expected type |
 |---|---|
 | `framework_root` | directory |
-| `project_root` | directory |
-| `project_config_path` | regular file |
-| `source_root` | directory |
-| `gf_executable` | regular executable file |
-| `rgl_root` | directory when required |
+| `selected_language_path` | readable directory or regular `.gf` file |
+| `language_directory` | directory |
+| `rgl_source_root` | directory for a standard RGL context |
+| `rgl_root` | directory when resolved |
+| `validation_profile_root` | directory when present |
+| `validation_profile_path` | regular profile file when present |
+| `gf_executable` | regular executable file when GF capability is requested |
 | `output_root` | directory or creatable directory |
+| `language_output_root` | directory or creatable directory |
 | `run_dir` | new directory |
 | `state_path` | file path with creatable parent |
 | scenario path | regular `.gfs` file |
 | gold path | regular `.gold` file when required |
-| entrypoint | regular `.gf` file |
-| checkpoint | regular `.gf` file |
+| entrypoint or checkpoint | regular `.gf` file |
 
 A directory must not be accepted where a file is required.
 
@@ -1820,46 +1913,28 @@ A directory must not be accepted where a file is required.
 
 ## 84. Readability and writability
 
-Required checks should be operation-specific.
+Inputs are checked for existence, expected type, practical readability and
+containment.
 
-### Inputs
+Outputs are checked for parent existence or creatability, practical writability,
+collision policy, containment and no source overwrite.
 
-Check:
-
-- existence;
-- expected type;
-- readability where practical;
-- containment.
-
-### Outputs
-
-Check:
-
-- parent existence or creatability;
-- parent writability where practical;
-- collision policy;
-- containment;
-- no source overwrite.
-
-A preflight writability check cannot guarantee a later write.
-
-Write failures remain explicit runtime errors.
+A preflight writability check cannot guarantee a later write. Runtime write
+failures remain explicit.
 
 ---
 
 ## 85. Executability
 
-On POSIX, executable permission should be checked where meaningful.
+On POSIX, executable permission is checked where meaningful.
 
-On Windows:
-
-- regular-file status;
-- supported executable form;
-- launch result.
+On Windows, validate regular-file status, supported executable form and launch
+result.
 
 A file that exists but cannot launch produces a launch failure.
 
-A `.bat` or `.cmd` file is not treated as a native executable by the generic GF execution path.
+A `.bat` or `.cmd` file is not treated as the native GF executable by the generic
+GF execution path.
 
 ---
 
@@ -1867,14 +1942,14 @@ A `.bat` or `.cmd` file is not treated as a native executable by the generic GF 
 
 Windows is a first-class supported environment.
 
-GF Wordbench must support:
+GF Wordbench supports:
 
 - drive-letter absolute paths;
 - spaces;
 - Unicode;
 - mixed user-input separators;
-- case-insensitive identity;
-- executable paths outside the project;
+- case-insensitive filesystem identity;
+- executable paths outside source;
 - long paths where Python and the operating system support them.
 
 ---
@@ -1884,84 +1959,46 @@ GF Wordbench must support:
 Accepted input:
 
 ```text
-C:\work\project
-C:/work/project
+C:\work\gf-rgl\src\english
+C:/work/gf-rgl/src/english
 ```
 
 Internal representation uses `Path`.
 
-Canonical persistence uses:
-
-```text
-C:/work/project
-```
-
-Project and run-relative canonical persistence always uses `/`.
+Canonical persistence uses `/` separators.
 
 ---
 
 ## 88. Windows drive letters
 
-Absolute environment path:
+Drive-relative paths such as `C:work/english` are prohibited because their base
+depends on hidden per-drive process state.
 
-```text
-C:/work/project
-```
-
-Drive-relative path:
-
-```text
-C:work/project
-```
-
-is prohibited because its base depends on hidden per-drive process state.
-
-Drive-letter comparison is case-insensitive.
-
-Canonical display may preserve the resolved drive casing returned by the platform.
+Drive-letter comparison is case-insensitive. Display preserves resolved casing.
 
 ---
 
 ## 89. UNC paths
 
-UNC environment paths may be accepted:
+UNC environment paths may be accepted when reachable and when the operation
+supports network-filesystem semantics.
 
-```text
-//server/share/project
-```
+Portable source, profile and run-relative fields never contain UNC paths.
 
-when:
-
-- the path is reachable;
-- the operation supports network filesystem semantics;
-- required atomic-write behavior is available or safely degraded;
-- timeout and disconnection behavior are tested.
-
-Canonical project-relative fields never contain UNC paths.
-
-Release workflows should warn when filesystem semantics cannot guarantee required atomicity.
+Release workflows warn when required atomicity cannot be guaranteed.
 
 ---
 
 ## 90. Extended-length Windows paths
 
-Internal Windows paths may use extended-length syntax where required by the runtime:
+Internal paths may use extended-length syntax when required by the runtime.
+Canonical persisted paths avoid exposing that prefix unless necessary.
 
-```text
-\\?\C:\...
-```
-
-Canonical persisted paths should not expose this prefix unless necessary to identify an otherwise unrepresentable environment path.
-
-Path utility functions own any prefix conversion.
-
-Callers must not add the prefix independently.
+Shared path utilities own prefix conversion.
 
 ---
 
 ## 91. Windows case behavior
-
-Path identity is case-insensitive for ordinary Windows filesystems.
 
 Rules:
 
@@ -1971,41 +2008,25 @@ Rules:
 - treat case-only duplicates as duplicates;
 - do not assume a case-only rename is portable.
 
-Project module-name semantics remain GF semantics and are not redefined by filesystem comparison.
+GF module-name semantics remain GF semantics.
 
 ---
 
 ## 92. Windows reserved names
 
-Generated path components must avoid reserved device names such as:
-
-```text
-CON
-PRN
-AUX
-NUL
-COM1
-LPT1
-```
+Generated components avoid reserved device names such as `CON`, `PRN`, `AUX`,
+`NUL`, `COM1` and `LPT1`.
 
 The shared safe-name utility owns generated-name sanitization.
-
-Source project files with unsupported names must produce a clear configuration error.
 
 ---
 
 ## 93. Windows trailing dots and spaces
 
-Generated names must not end with:
+Generated names do not end with a dot or space.
 
-```text
-.
-space
-```
-
-because Windows may normalize them unexpectedly.
-
-Canonical project paths should reject ambiguous trailing-dot or trailing-space components in strict mode.
+Portable relative paths reject ambiguous trailing-dot or trailing-space
+components in strict mode.
 
 ---
 
@@ -2013,9 +2034,8 @@ Canonical project paths should reject ambiguous trailing-dot or trailing-space c
 
 Junctions are treated like symlinks for containment.
 
-A lexical path below `run_dir` whose junction target escapes the run is unsafe for generated output.
-
-Strict release and gold-update operations must verify resolved containment.
+A lexical path below `run_dir` whose junction target escapes the run is unsafe
+for generated output.
 
 ---
 
@@ -2023,21 +2043,11 @@ Strict release and gold-update operations must verify resolved containment.
 
 Paths containing spaces are passed as separate process arguments.
 
-GF Wordbench must not manually quote the executable into one command string.
-
 Correct:
 
 ```python
 [gf_executable, "--version"]
 ```
-
-Incorrect:
-
-```text
-"C:\Program Files\GF\gf.exe" --version
-```
-
-as one opaque execution string.
 
 Human display rendering is separate from execution.
 
@@ -2054,9 +2064,7 @@ POSIX support uses:
 - `:` for joined search paths;
 - UTF-8 policy independent of locale defaults.
 
-A project that differs only by path case may not be portable to Windows.
-
-Portability checks should detect case-colliding project assets.
+A source tree that differs only by path case may not be portable to Windows.
 
 ---
 
@@ -2064,15 +2072,16 @@ Portability checks should detect case-colliding project assets.
 
 Recommended strict checks:
 
-- no case-colliding project-relative paths;
-- no Windows reserved generated names;
-- no backslash-only project semantics;
+- no case-colliding source or profile paths;
+- no Windows-reserved generated names;
+- no backslash-only portable semantics;
 - no drive-relative path;
 - no path depending on shell expansion;
-- no source path escaping project root;
-- no absolute project-owned path;
-- no project file requiring a machine-specific RGL root;
-- no duplicate GF paths after platform normalization.
+- no source or profile path escaping its root;
+- no absolute portable profile path;
+- no profile requiring a machine-specific RGL root;
+- no duplicate GF paths after platform normalization;
+- no portable language identity derived from an absolute path.
 
 ---
 
@@ -2086,21 +2095,19 @@ YYYYMMDD_HHMMSS
 
 The timestamp represents UTC.
 
-Directory name:
+Directory form:
 
 ```text
-run_<run-id>
+<language_output_root>/run_<run-id>
 ```
 
 Collision suffix:
 
 ```text
-run_20260722_184500_02
+run_20260730_204500_02
 ```
 
-Creation must be exclusive.
-
-Run-directory creation must be exclusive and handle race conditions.
+Creation is exclusive and race-safe.
 
 ---
 
@@ -2135,38 +2142,19 @@ Exact public field names are locked by the data-model and interfile contracts.
 
 ## 100. No duplicated artifact filenames
 
-The following filenames must have one owner:
-
-```text
-summary.json
-summary.md
-AI_READY.md
-top_errors.txt
-manifest.json
-master.log
-ALL_SCAN_LOGS.TXT
-ALL_LOGS.TXT
-```
-
-Consumers receive paths through `RunPaths`.
-
-They must not define local constants with the same ownership role.
+Canonical report and log filenames have one owner. Consumers receive them
+through `RunPaths` and do not define local constants with the same ownership
+role.
 
 ---
 
 ## 101. Artifact subject keys
 
-Per-subject artifact filenames must use a shared safe key.
+Per-subject artifact filenames use a shared deterministic, path-safe,
+collision-resistant key independent of absolute source location.
 
-The key must be:
-
-- deterministic;
-- path-safe;
-- collision-resistant;
-- stable within one schema/contract version;
-- independent of absolute project location.
-
-When two source paths share a filename, the key must incorporate project-relative path identity or a stable suffix.
+When two source paths share a filename, the key incorporates portable relative
+path identity or a stable suffix.
 
 ---
 
@@ -2178,61 +2166,30 @@ Before writing an owned artifact:
 - ensure no other active owner has reserved the path;
 - apply the artifact collision policy;
 - never overwrite a prior run;
-- never overwrite project source or gold.
+- never overwrite source, profile or gold assets.
 
-Collision is a contract or artifact error.
-
-It is not silently resolved by dropping evidence.
+Collision is an artifact or contract error.
 
 ---
 
 ## 103. Atomic report paths
 
-Stable reports use sibling temporary files where supported.
+Stable reports use sibling temporary files where supported and atomically replace
+the final target after validation.
 
-Example:
-
-```text
-summary.json.tmp
-        → validate
-        → atomic replace summary.json
-```
-
-The temporary path must:
-
-- remain beside the destination;
-- use a collision-safe suffix;
-- not appear as a final manifest artifact;
-- be cleaned after success.
+Temporary report paths do not appear as final manifest artifacts and are cleaned
+after success.
 
 ---
 
 ## 104. Tool-generated artifact paths
 
-GF may generate:
+GF-generated `.gfo` and `.pgf` artifacts use owned destinations below the run
+artifacts tree.
 
-```text
-.gfo
-.pgf
-```
-
-The command owner declares expected destinations.
-
-Preferred destinations are below:
-
-```text
-artifacts/gfo/
-artifacts/pgf/
-```
-
-If a GF version cannot write directly to the final owned directory:
-
-1. use an owned temporary or build directory;
-2. preserve tool output;
-3. copy or move through a documented stage;
-4. verify size and identity;
-5. catalog the final artifact;
-6. do not alter the artifact content.
+When GF cannot write directly to the final directory, use an owned temporary
+build directory, preserve output, move or copy through a documented stage,
+verify identity and catalog the final artifact without modifying its content.
 
 ---
 
@@ -2242,17 +2199,19 @@ Previous-run comparison may use:
 
 - the last compatible run recorded in state;
 - a run selected explicitly;
-- deterministic discovery below the output root.
+- deterministic discovery below the current language scope.
 
-The selected summary must:
+The selected summary must exist, validate under a supported schema, remain
+read-only and record provenance.
 
-- exist;
-- validate under a supported schema or migrator;
-- not equal the current run summary;
-- remain read-only;
-- have its path provenance recorded.
+Compatibility requires at least:
 
-Discovery must not parse Markdown to identify a run.
+```text
+portable language key
+relevant source-context identity
+validation-profile identity when policy requires it
+schema compatibility
+```
 
 ---
 
@@ -2260,39 +2219,36 @@ Discovery must not parse Markdown to identify a run.
 
 When automatic previous-run discovery is enabled:
 
-1. enumerate direct candidate run directories below `output_root`;
+1. enumerate candidate run directories below `language_output_root`;
 2. validate canonical or supported legacy naming;
 3. locate `summary.json`;
-4. ignore current run;
+4. ignore the current run;
 5. load metadata;
-6. filter for compatible project identity;
-7. select by finished timestamp, not directory text alone;
+6. filter for compatible language and profile identity;
+7. select by finished timestamp;
 8. preserve deterministic tie-breaking.
 
-A malformed candidate must not crash all discovery.
+A malformed candidate does not crash all discovery.
 
 ---
 
 # 107. Application state and paths
 
-Canonical state environment fields:
+Canonical state path fields may include:
 
 ```text
-project_root
-rgl_root
-gf_executable
-output_root
+last_selected_language_path
+last_selected_validation_profile
+last_rgl_root
+environment.gf_executable
+environment.output_root
+last_compatible_run_by_language
 ```
 
-Each field is:
+Each field is a string, mapping or `null` according to the state schema.
 
-```text
-string or null
-```
-
-State is convenience data for one invocation environment. It is not a project registry, language selector or source of project identity.
-
-Project-owned source configuration must not migrate into state after `project.toml` is authoritative.
+State is convenience data. It is not a language registry, a source of profile
+policy or a serialized runtime authority.
 
 ---
 
@@ -2300,13 +2256,14 @@ Project-owned source configuration must not migrate into state after `project.to
 
 State loading must:
 
-- tolerate missing file;
+- tolerate a missing file;
 - reject or safely default invalid fields;
 - validate schema version;
 - preserve the source during migration;
-- not make the framework unusable because state is corrupt;
+- not make CLI or GUI unusable because state is corrupt;
 - not launch tools;
-- not silently treat project settings as local environment values.
+- revalidate remembered paths before use;
+- not infer a path from an obsolete catalog ID.
 
 ---
 
@@ -2315,82 +2272,90 @@ State loading must:
 State saving must:
 
 - write atomically;
-- create the parent directory safely;
-- store resolved paths;
-- omit secrets;
-- omit transient process handles;
-- omit active run results;
-- omit project entrypoints and scenario policy;
-- use canonical separators.
-
-The GUI may save user-confirmed machine-local fields after validation. It must not persist a list of selectable language projects.
+- create the parent safely;
+- store resolved machine-local paths;
+- omit secrets and process handles;
+- omit active run result objects;
+- omit inferred entrypoints and scenario policy;
+- use canonical separators;
+- update the last selected path only after successful context resolution.
 
 ---
 
 # 110. CLI and GUI equivalence
 
-Equivalent resolved values from CLI and GUI produce equivalent resolved run requests.
+Equivalent CLI and GUI inputs produce equivalent `LanguageProbeRequest`,
+`ResolvedLanguageContext` and run requests.
 
 Both interfaces use:
 
 ```text
-same project loader
+same language probe service
+same source selection service
 same environment reader
 same path resolver
-same validation rules
-same precedence semantics
+same preflight rules
+same GF adapter
 same RunPaths builder
 ```
 
-Interface-specific path normalization is prohibited after bootstrap.
+Interface-specific path inference after bootstrap is prohibited.
 
 ---
 
 ## 111. CLI display
 
-The CLI configuration-inspection surface displays, for each significant path:
+The CLI configuration-inspection or probe surface displays:
 
 ```text
-resolved value
-source or provenance
-validation result
+selected path
+resolved language directory
+portable language key
+resolved RGL roots
+validation profile when present
+effective GF path and provenance
+capability statuses
+validation result and remediation
 ```
 
-Exact command spelling and options are owned by `docs/usage/CLI_REFERENCE.md`.
-
-The CLI inspection surface does not replace internal validation and does not expose secrets or a complete inherited environment.
+Exact command spelling is owned by `CLI_REFERENCE.md` and the command registry.
 
 ---
 
 ## 112. GUI display
 
-The GUI displays resolved:
+The GUI introduction and configuration surfaces display:
 
-- project root;
-- project configuration;
-- source root;
-- GF executable;
-- GF version after probe;
-- RGL root;
-- output root;
-- next run location;
-- configuration warnings;
-- provenance when an environment value overrides stored convenience state.
+- selected language path;
+- resolved language directory;
+- portable language key;
+- module suffix when unambiguous;
+- detected candidate entrypoints;
+- optional validation profile;
+- GF executable and version after probe;
+- resolved RGL root;
+- effective GF path diagnostics;
+- output root and next run scope;
+- capability statuses;
+- provenance when an explicit value overrides stored convenience state.
 
-The GUI uses the same projects and configuration application boundaries as the CLI. It does not maintain a separate project registry or path-resolution policy.
+The GUI does not maintain a separate discovery or path policy.
 
 ---
 
 # 113. Error model
 
-Path and environment failures normally produce:
+Path and environment failures normally produce structured errors such as:
 
 ```text
 validation_status = ERROR
-error_kind = CONFIG, IO, TOOL, CONTRACT, or ARTIFACT
+error_kind = CONFIG, IO, TOOL, CONTRACT or ARTIFACT
 ```
 
-They do not become GF language failures.
+They do not become GF linguistic failures.
+
+A missing optional capability may instead produce a structured unavailable or
+skipped status.
 
 ---
 
@@ -2398,17 +2363,19 @@ They do not become GF language failures.
 
 Examples:
 
-- project root missing;
-- `project.toml` absent;
-- absolute project-owned path;
-- invalid path part;
-- missing required RGL root;
-- duplicate scenario path;
-- output root overlaps source root;
-- unresolved environment variable expression;
+- selected language path missing;
+- selected file is not `.gf`;
+- selected directory contains no eligible source;
+- RGL source root cannot be resolved;
+- explicit RGL root does not contain selected language;
+- module suffix or missing-module remediation is ambiguous;
+- validation profile conflicts with selected source context;
+- absolute profile-owned path;
+- invalid GF path requirement;
+- output root overlaps source or RGL;
 - unsupported state schema.
 
-These should be detected before GF execution.
+These are detected before affected GF execution.
 
 ---
 
@@ -2423,13 +2390,8 @@ Examples:
 - source cannot be read;
 - network path disappears.
 
-The error should preserve:
-
-- operation;
-- normalized path;
-- path role;
-- operating-system detail;
-- safe remediation context.
+Errors preserve operation, normalized path, path role, operating-system detail
+and safe remediation context.
 
 ---
 
@@ -2438,33 +2400,22 @@ The error should preserve:
 Examples:
 
 - GF executable missing;
-- path points to directory;
+- path points to a directory;
 - unsupported launcher type;
 - executable disappears after resolution;
 - executable cannot launch.
 
-A preflight invalid path is configuration error.
-
-A race or launch denial after preflight is launch failure.
+Missing GF may leave source and scan capabilities available.
 
 ---
 
 ## 117. Containment errors
 
-Normalized message should identify:
+Normalized messages identify candidate path, expected root, path role and
+containment stage.
 
-```text
-candidate path
-expected root
-path role
-containment stage
-```
-
-Sensitive prefixes may be redacted in portable export.
-
-Containment errors are contract or security errors.
-
-They must not be auto-corrected by moving the target silently.
+Containment errors are contract or security errors and are not auto-corrected by
+moving the target silently.
 
 ---
 
@@ -2476,27 +2427,23 @@ Examples:
 - run artifact escapes run root;
 - required output absent;
 - output collides with prior artifact;
-- unsafe subject-derived filename.
-
-These are artifact or contract errors.
+- unsafe subject-derived filename;
+- run written under the wrong language scope.
 
 ---
 
 # 119. Persistence rules
 
-Persisted project and run paths must follow the schema lock.
-
-Summary:
-
 | Path category | Persistence form |
 |---|---|
-| Project asset | Project-relative `/` |
-| Source result | Project-relative `/` |
-| Run artifact | Run-relative `/` |
+| Portable language identity | Relative to `rgl_source_root`, `/` |
+| Source result | Relative to `rgl_source_root`, `/` |
+| Validation-profile asset | Relative to `validation_profile_root`, `/` |
+| Run artifact | Relative to `run_dir`, `/` |
 | GF executable | Absolute environment path |
-| RGL root | Absolute environment path |
-| Project root | Absolute environment path where run metadata requires it |
-| Output root | Absolute environment path where run metadata requires it |
+| RGL root and source root | Absolute local evidence when required |
+| Selected language path | Absolute local state/evidence, redacted when exported |
+| Output root | Absolute local evidence when required |
 | State-local path | Absolute |
 | Temporary path | Normally not persisted |
 
@@ -2504,20 +2451,12 @@ Summary:
 
 ## 120. Legacy Windows paths
 
-Legacy readers accept:
+Legacy readers accept backslash Windows paths.
 
-```text
-C:\work\project\file.gf
-```
-
-Migration should:
-
-1. parse Windows syntax even on a non-Windows host when possible;
-2. determine whether the path belongs to known project or run roots;
-3. convert to project-relative or run-relative form;
-4. preserve as environment path if that is its actual role;
-5. report ambiguity or loss;
-6. leave the source untouched.
+Migration determines whether the path belongs to a known RGL source root,
+validation profile, run root or environment role, converts it to the correct
+portable representation when provable, preserves it as an environment path when
+appropriate and reports ambiguity without guessing.
 
 ---
 
@@ -2525,48 +2464,41 @@ Migration should:
 
 A legacy relative path is migratable only when its historical base is known.
 
-Possible bases:
+Possible bases include:
 
 ```text
 legacy project root
+legacy RGL source root
 legacy run directory
 legacy process working directory
 legacy application directory
 ```
 
-If the base is ambiguous:
-
-- preserve the original text in migration evidence;
-- mark a loss or warning;
-- do not guess silently.
+Ambiguity is preserved as migration evidence and never resolved silently.
 
 ---
 
 ## 122. Legacy GF path strings
 
-A legacy joined GF path string may be split only using its known source platform separator.
-
-Migration must know or infer safely:
-
-```text
-Windows ;
-POSIX :
-```
+A joined legacy GF path may be split only using its known source-platform
+separator.
 
 Windows drive colons make naive colon splitting unsafe.
 
-Canonical migration output should store the structured ordered path list when the target schema supports it.
+Canonical migration output stores the structured ordered path list when the
+target schema supports it.
 
 ---
 
 # 123. Security rules
 
-Paths are untrusted input until validated.
+Paths are untrusted until validated.
 
 Required protections:
 
 - no shell interpolation;
 - no NUL;
+- bounded discovery;
 - containment;
 - generated-name sanitization;
 - no source overwrite;
@@ -2576,41 +2508,40 @@ Required protections:
 - no secret interpolation;
 - explicit executable path;
 - output collision control;
+- no implicit catalog or sibling-language selection;
 - no `gf-portfolio` path or state dependency.
 
 ---
 
 ## 124. Diagnostic-mentioned paths
 
-GF output may mention paths.
+GF output may mention paths. A diagnostic parser may extract them as text.
 
-A diagnostic parser may extract them as text.
-
-Before opening such a path:
+Before opening one:
 
 1. identify expected path class;
-2. map against known project, RGL, or run inventories;
+2. map it against known language, RGL, profile or run inventories;
 3. validate containment;
 4. reject arbitrary external paths;
-5. preserve the original diagnostic regardless.
+5. preserve the original diagnostic.
 
-A report detail writer must not copy a file merely because GF output named it.
+A report writer does not copy a file merely because GF named it.
 
 ---
 
-## 125. Project import safety
+## 125. Profile import safety
 
-Initializing or replacing `project/` must:
+Initializing or importing an optional validation profile must:
 
-- target the explicit project root;
-- avoid following unsafe links;
-- not overwrite framework files;
+- target an explicit profile root;
+- avoid unsafe links;
+- not overwrite framework or language source files;
 - not copy application state;
 - not copy generated run artifacts;
-- validate the resulting project configuration;
-- preserve a backup under the explicit reset/migration policy.
+- validate compatibility with the selected language context;
+- preserve backups under explicit reset or migration policy.
 
-This document does not define the full project lifecycle.
+Normal language startup never creates or rewrites a profile.
 
 ---
 
@@ -2622,7 +2553,8 @@ Required coverage is organized around:
 tests/paths/
 ├── test_path_classes.py
 ├── test_path_precedence.py
-├── test_project_paths.py
+├── test_language_probe_paths.py
+├── test_validation_profile_paths.py
 ├── test_run_paths.py
 ├── test_gf_path_resolution.py
 ├── test_environment_variables.py
@@ -2634,63 +2566,39 @@ tests/paths/
 └── test_path_security.py
 ```
 
-Contract tests:
+Contract tests verify the language probe uses public selection, path, preflight
+and GF contracts without duplicating them.
 
-```text
-tests/contracts/test_environment_contract.py
-tests/contracts/test_filesystem_contract.py
-tests/contracts/test_windows_contract.py
-tests/contracts/test_path_ownership_contract.py
-```
-
-Schema tests:
-
-```text
-tests/schemas/test_project_paths.py
-tests/schemas/test_state_paths.py
-tests/schemas/test_summary_paths.py
-tests/schemas/test_manifest_paths.py
-```
+Schema tests cover state, summary, manifest and optional profile paths.
 
 ---
 
 ## 127. Precedence tests
 
-Test each path field with:
-
-- explicit value only;
-- environment only;
-- state only;
-- default only;
-- every source set;
-- invalid higher-precedence explicit value;
-- empty environment value;
-- corrupt state value;
-- discovery success;
-- discovery failure;
-- provenance reporting.
+Test each field with explicit value, environment only, state only, default or
+derivation only, all sources present, invalid higher-precedence value, empty
+environment value, corrupt state, bounded discovery success and failure, and
+provenance reporting.
 
 ---
 
-## 128. Project-path tests
+## 128. Language and profile path tests
 
 Required cases:
 
-- simple relative path;
-- nested relative path;
-- `.` normalization;
+- directory selection;
+- focused `.gf` file selection;
+- non-`.gf` file rejection;
+- nearest RGL source-root derivation;
+- nonstandard explicit root;
 - parent escape;
-- absolute Windows path;
-- absolute POSIX path;
-- backslash canonicalization;
-- Unicode;
-- spaces;
-- missing source directory;
-- entrypoint missing;
-- scenario outside root;
-- gold outside root;
-- symlink escape;
-- junction escape.
+- absolute Windows and POSIX paths;
+- Unicode and spaces;
+- source directory with no eligible GF files;
+- ambiguous suffix candidates;
+- explicit profile agreement and conflict;
+- scenario or gold outside profile root;
+- symlink and junction escape.
 
 ---
 
@@ -2698,56 +2606,37 @@ Required cases:
 
 Required cases:
 
-- project-relative part;
-- `abstract` alias;
-- `common` alias;
-- `prelude` alias;
-- missing RGL root;
-- missing path directory;
+- language directory first;
+- `abstract`, `api`, `common` and `prelude` aliases;
+- missing RGL source root;
+- missing required path directory;
 - duplicate paths;
-- duplicate case variation on Windows;
+- case-variant duplicate on Windows;
 - stable declared order;
 - Windows `;` rendering;
 - POSIX `:` rendering;
-- ambient `GF_LIB_PATH`;
-- no global-environment dependency.
+- ambient `GF_LIB_PATH` neutralization;
+- zero, one and multiple exact missing-module matches;
+- bounded remediation termination;
+- no all-language path construction.
 
 ---
 
 ## 130. Executable tests
 
-Required cases:
-
-- explicit existing GF executable;
-- path containing spaces;
-- Unicode path;
-- missing file;
-- directory passed as executable;
-- non-executable POSIX file;
-- `.bat` or `.cmd` rejection for native GF path;
-- `PATH` discovery;
-- discovery result recorded;
-- explicit invalid path does not fall through;
-- executable disappears before launch.
+Required cases include explicit executable, path with spaces, Unicode, missing
+file, directory passed as executable, non-executable POSIX file, unsupported
+launcher, `PATH` discovery, recorded result, invalid explicit path with no
+fallback and executable disappearance before launch.
 
 ---
 
 ## 131. Output-root tests
 
-Required cases:
-
-- default root;
-- explicit root;
-- environment root;
-- state root;
-- creatable missing directory;
-- permission denied;
-- overlaps source root;
-- equals RGL root;
-- run collision;
-- concurrent run creation;
-- UNC path where supported;
-- atomic report write behavior.
+Required cases include default, explicit, environment and state roots;
+creatable directory; permission denial; overlap with selected source or RGL;
+language-scope isolation; run collision; concurrent creation; supported UNC
+behavior and atomic report writing.
 
 ---
 
@@ -2755,16 +2644,16 @@ Required cases:
 
 Required cases:
 
-- project path uses `/`;
-- run path uses `/`;
-- source result is project-relative;
+- language-source path uses `/` relative to RGL source root;
+- profile path uses `/` relative to profile root;
+- run path uses `/` relative to run directory;
 - environment path remains absolute;
-- no `..`;
-- no environment interpolation;
+- no unresolved `..` or interpolation;
 - legacy backslash accepted;
-- legacy absolute source converted;
+- legacy absolute source converted when containment is provable;
 - ambiguous legacy path warns;
-- stable round trip.
+- stable round trip;
+- redaction preserves path role.
 
 ---
 
@@ -2773,36 +2662,27 @@ Required cases:
 Required cases:
 
 - path traversal;
-- symlink escape;
-- junction escape;
+- unbounded discovery prohibition;
+- symlink and junction escape;
 - NUL;
-- Windows reserved generated name;
+- Windows-reserved generated name;
 - shell metacharacters remain literal path text;
 - diagnostic path cannot trigger arbitrary copy;
 - source cannot become report destination;
-- gold cannot become raw log destination;
+- gold cannot become raw-log destination;
 - secret environment value is not reported;
-- output root cannot overwrite project template.
+- output root cannot overwrite source or templates;
+- obsolete catalog ID cannot trigger filesystem search.
 
 ---
 
 ## 134. Cross-platform fixture policy
 
-Tests use temporary roots and avoid a developer’s real environment.
+Tests use temporary roots and avoid a developer's real environment.
 
-Real-GF integration tests may read explicit test-only environment values.
-
-They must not pass only because:
-
-```text
-GF_LIB_PATH
-PATH
-current working directory
-user profile
-IDE settings
-```
-
-happen to contain usable local values.
+Real-GF integration tests may read explicit test-only values but must not pass
+only because ambient `GF_LIB_PATH`, `PATH`, current working directory, user
+profile or IDE settings happen to contain usable values.
 
 ---
 
@@ -2811,18 +2691,19 @@ happen to contain usable local values.
 The application exposes cohesive operations equivalent to:
 
 ```python
+probe_language_path(...)
 resolve_environment(...)
-resolve_active_project(...)
-resolve_project_paths(...)
+resolve_gf_path(...)
+resolve_validation_profile(...)
 allocate_run_paths(...)
 ```
-
-The exact model and operation names are governed by `docs/architecture/DATA_MODEL.md` and `docs/architecture/COMPONENT_MAP.md`.
 
 Required boundaries:
 
 - entrypoints provide explicit values;
-- the projects module resolves active-project paths;
+- the projects module coordinates language resolution;
+- the validation selection service enumerates sources;
+- the GF adapter resolves and serializes effective GF paths;
 - the runs module allocates run-owned paths;
 - adapters perform filesystem and platform operations through ports;
 - reporting receives canonical artifact paths from the run context;
@@ -2836,18 +2717,21 @@ Cohesive path operations cover:
 
 ```text
 normalize user-supplied environment path
-resolve environment path
-resolve project-relative path
+resolve selected language path
+resolve bounded RGL ancestors
+resolve source-relative path
+resolve profile-relative path
 resolve run-relative path
-serialize project path
+serialize portable source path
+serialize profile path
 serialize run path
 serialize environment path
 verify containment
-build a safe artifact key
+build a safe language and artifact key
 create an exclusive run directory
 ```
 
-A shared operation does not hide ownership or business policy. It receives explicit values, roots and path classes.
+Shared operations receive explicit roots, classes and provenance.
 
 ---
 
@@ -2857,13 +2741,14 @@ Shared path operations must not:
 
 - read GUI widgets;
 - read CLI parser objects;
-- load project configuration independently of the projects module;
+- load profiles independently of the projects module;
 - launch GF;
 - decide release policy;
 - own report prose;
-- invent active-language paths;
+- invent a language path;
 - silently expand arbitrary environment expressions;
-- read or write `gf-portfolio` configuration.
+- read or write `gf-portfolio` configuration;
+- read a runtime language catalog.
 
 ---
 
@@ -2871,29 +2756,26 @@ Shared path operations must not:
 
 Environment or path drift exists when:
 
-- CLI and GUI resolve different paths from equivalent inputs;
+- CLI and GUI resolve different contexts from equivalent inputs;
 - a framework module hardcodes an active-language path;
-- `project.toml` contains absolute GF, RGL, or output paths;
-- application state contains entrypoints or required scenarios;
+- a runtime catalog is required for normal startup;
+- a profile contains absolute GF, RGL or output paths;
+- application state contains inferred entrypoints or required scenarios;
 - a report reconstructs an artifact filename;
-- GF path order changes;
+- GF path order changes between consumers;
 - compilation and scenarios construct different GF paths;
 - tests rely on ambient `GF_LIB_PATH`;
-- a relative machine path survives into the resolved run request;
-- project paths persist with drive letters;
-- run artifact paths persist as absolute without reason;
-- an inline `%VAR%`, `$VAR`, or `~` is silently expanded in project config;
-- output root overlaps source root;
+- a relative machine path survives into the resolved context;
+- portable source or profile paths persist with drive letters;
+- output root overlaps source or RGL;
 - a symlink escapes an owned root;
-- one path is normalized differently by writer and reader;
-- Windows path comparison lowercases displayed paths;
-- `PATH` discovery is repeated after configuration resolution;
-- environment values change behavior without provenance;
+- path normalization differs by writer and reader;
+- `PATH` discovery repeats after resolution;
 - a run directory is reused;
-- a generated filename differs between components;
-- state corruption prevents command-line use;
-- a migration guesses an ambiguous path base;
-- Wordbench reads a Portfolio registry to resolve its active project.
+- state corruption prevents CLI use;
+- migration guesses an ambiguous base;
+- Wordbench reads a Portfolio registry;
+- one language runtime retains paths from another.
 
 Any drift indicator requires coordinated review.
 
@@ -2903,35 +2785,20 @@ Any drift indicator requires coordinated review.
 
 ## 139.1 Internal compatible change
 
-Examples:
+Examples include faster containment with unchanged semantics, private helper
+refactoring, clearer error text with the same semantic fields and platform
+optimization with identical results.
 
-- faster containment algorithm with unchanged semantics;
-- private helper refactor;
-- clearer error text with same semantic fields;
-- platform-specific internal optimization with unchanged semantics.
-
-Requirements:
-
-- same resolved values;
-- same precedence;
-- same persistence;
-- tests pass.
+Requirements: same resolved values, precedence and persistence, with tests
+passing.
 
 ## 139.2 Compatible extension
 
-Examples:
+Examples include an optional provenance field, optional resolver alias, optional
+profile field or additional strict-mode warning.
 
-- optional new environment variable;
-- optional provenance field;
-- optional new project-relative path field;
-- additional strict-mode warning.
-
-Requires:
-
-- safe default;
-- documentation;
-- tests;
-- schema minor version when persisted.
+Requires safe default, documentation, tests and schema minor version when
+persisted.
 
 ## 139.3 Breaking change
 
@@ -2941,24 +2808,16 @@ Examples:
 - environment-variable rename;
 - path base change;
 - new implicit expansion;
-- canonical separator change;
+- portable language-key change;
 - artifact filename change;
 - ownership transfer;
 - RGL alias semantic change;
-- output-root default change after users depend on it;
-- project path becoming absolute;
-- state path relocation without migration.
+- output-root or language-scope layout change;
+- state path relocation without migration;
+- reintroducing a mandatory catalog or bundle.
 
-Requires:
-
-1. impact analysis;
-2. schema review;
-3. compatibility adapter;
-4. migration;
-5. tests;
-6. documentation update;
-7. contract-lock update;
-8. changelog entry.
+Requires impact analysis, schema review, compatibility adapter, migration, tests,
+documentation, contract-lock update and changelog entry.
 
 ---
 
@@ -2966,66 +2825,76 @@ Requires:
 
 ```text
 [ ] framework_root is deterministic
-[ ] project_root contains project.toml
-[ ] project-root provenance is known
-[ ] source_root is project-contained
-[ ] GF executable is explicit
-[ ] GF executable is recorded
-[ ] RGL root is explicit when required
-[ ] GF path parts preserve declared order
-[ ] RGL aliases resolve under RGL root
+[ ] selected_language_path is explicit and valid
+[ ] language_directory is derived once
+[ ] rgl_source_root discovery is bounded
+[ ] rgl_root contains the selected language context
+[ ] portable language key is path-independent
+[ ] optional validation profile agrees with the selected language
+[ ] GF executable is explicit when GF capability is requested
+[ ] effective GF path preserves order and provenance
 [ ] ambient GF path variables are controlled
-[ ] output root is writable
-[ ] output root does not overlap source
+[ ] output root does not overlap source or RGL
+[ ] language output scope is deterministic
 [ ] run directory is new and exclusive
-[ ] state path is machine-local
-[ ] project paths contain no interpolation
-[ ] project paths serialize with /
+[ ] state is machine-local convenience only
+[ ] source and profile paths contain no interpolation
+[ ] portable paths serialize with /
 [ ] run paths serialize relative to run_dir
 [ ] environment paths are absolute after bootstrap
-[ ] CLI and GUI use the same resolver
-[ ] path containment is checked
-[ ] symlink/junction behavior is safe
-[ ] secrets and full environment are not reported
+[ ] CLI and GUI use the same language probe and resolver
+[ ] symlink and junction containment is safe
+[ ] secrets and full environments are not reported
+[ ] no runtime language catalog is required
 ```
 
 ---
 
 # 141. Governing invariants
 
-1. Every path has a declared class and base.
-2. Portable project paths are project-relative.
-3. Run artifact paths are run-relative.
-4. Machine-local paths are resolved before execution.
-5. `project.toml` contains no absolute GF, RGL, or output path.
-6. Application state contains no language-project architecture.
-7. Environment variables override complete local values, not path fragments.
-8. Inline environment interpolation is disabled.
-9. Explicit invalid input does not silently fall through.
-10. Path provenance remains inspectable.
-11. The GF executable is explicit and stable for the run.
-12. `PATH` discovery is optional and occurs only before resolution finalizes.
-13. The RGL is not found through unbounded filesystem search.
-14. GF path order is preserved.
-15. Compilation and scenarios use the same GF path resolver.
-16. Ambient `GF_LIB_PATH` cannot silently determine test or run behavior.
-17. Working directories are explicit.
-18. Output root does not overlap project source or RGL.
-19. Every run directory is new and exclusive.
-20. `RunPaths` owns generated artifact locations.
-21. Consumers do not reconstruct owned paths.
-22. Containment accounts for symlinks and Windows junctions.
-23. Canonical persisted separators use `/`.
-24. Windows paths with spaces and Unicode are supported.
-25. Drive-relative Windows paths are prohibited.
-26. Source, scenario, input, and gold assets remain read-only during normal validation.
-27. Temporary files remain inside owned locations.
-28. Full inherited environments and secrets are not persisted.
-29. Migration never guesses an ambiguous path base silently.
-30. Path-contract changes are coordinated across configuration, execution, persistence, tests, and documentation.
-31. One run resolves exactly one active project root and one normative language target.
-32. Wordbench path resolution does not read a Portfolio registry or depend on `gf-portfolio`.
-33. Portfolio consumption, when used, begins only at finalized public Wordbench artifacts.
+1. Every path has a declared class, base and owner.
+2. The user supplies exactly one primary language path for startup.
+3. A running session has zero or one immutable resolved language context.
+4. A selected `.gf` file remains the focused target unless the user changes it.
+5. The language directory is derived once from the selected path.
+6. RGL root discovery is bounded to explicit input and its approved ancestors.
+7. Wordbench never searches the entire filesystem for an RGL installation.
+8. Portable language identity is relative to an approved source root, not an
+   absolute path.
+9. Optional profile paths are relative to their profile root.
+10. Run artifact paths are relative to `run_dir`.
+11. Machine-local paths are resolved before execution.
+12. Application state is convenience only and is revalidated.
+13. An explicit invalid input never silently falls through.
+14. Path provenance remains inspectable.
+15. The GF executable is explicit and stable for each GF-backed operation.
+16. Missing GF does not invalidate source-ready or scan-ready context.
+17. GF path order is preserved.
+18. Compilation, scenarios and PGF construction use one GF path resolution.
+19. Ambient `GF_LIB_PATH` cannot determine behavior silently.
+20. GF remains authoritative for module semantics.
+21. Missing-module assistance is exact, bounded and ambiguity-safe.
+22. No all-language GF path is constructed.
+23. Output root does not overlap selected source or RGL.
+24. Every run directory is new, exclusive and language-scoped.
+25. `RunPaths` owns generated artifact locations.
+26. Consumers do not reconstruct owned paths.
+27. Containment accounts for symlinks and Windows junctions.
+28. Canonical persisted separators use `/`.
+29. Windows paths with spaces and Unicode are supported.
+30. Drive-relative Windows paths are prohibited.
+31. Source, scenario, input and gold assets remain read-only during normal
+    validation.
+32. Full inherited environments and secrets are not persisted.
+33. Migration never guesses an ambiguous path base.
+34. A validation profile may add policy but cannot redirect language identity.
+35. `project.toml` is optional for normal language startup.
+36. A runtime catalog or mandatory language bundle is not required.
+37. Language switching recreates the runtime and is prohibited during an active
+    run.
+38. Previous-run comparison requires compatible language context.
+39. One ordinary run never mixes unrelated languages.
+40. Wordbench path resolution does not depend on `gf-portfolio`.
 
 ---
 
@@ -3034,21 +2903,22 @@ Requires:
 GF Wordbench path resolution follows one explicit chain:
 
 ```text
-portable project declarations
-        +
-machine-local environment selection
-        +
-documented precedence
+one user-selected language directory or .gf file
         ↓
-validated absolute runtime roots
+bounded candidate resolution
         ↓
-contained project and run paths
+existing source selection and path services
         ↓
-structured GF search path
+one immutable ResolvedLanguageContext
         ↓
-recorded execution evidence
+one ordered effective GF path
         ↓
-portable persisted references
+capability-specific preflight and execution
+        ↓
+language-scoped run evidence
+        ↓
+portable relative references plus controlled local-path evidence
 ```
 
-A path is valid only when its owner, base, provenance, containment, runtime target, and persistence form all agree.
+A path is valid only when its owner, base, provenance, containment, runtime
+target and persistence form all agree.

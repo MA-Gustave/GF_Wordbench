@@ -1,19 +1,135 @@
-# ADR-0001 — One Active Language Project per GF Wordbench Workspace
+# ADR-0001 — Single Active Language Context
 
 **ADR ID:** `ADR-0001`  
 **Title:** Single Active Language  
-**Status:** Accepted  
+**Status:** Accepted — superseded in part by `ADR-0015`  
 **Decision date:** 2026-07-22  
-**Last reviewed:** 2026-07-24  
+**Last reviewed:** 2026-07-30  
 **Decision owners:** GF Wordbench maintainers  
-**Applies to:** workspace structure, project configuration, CLI, GUI, validation, automation, templates, application state, reports and release artifacts  
+**Applies to:** language identity, resolved runtime context, CLI, GUI, validation, automation, application state, reports, artifacts and portfolio boundaries  
 **Alignment authority:** `../DOCUMENTATION_ALIGNMENT_LOCK.md`  
-**Related decisions:** `ADR-0002-GF-AS-EXECUTION-ENGINE.md`, `ADR-0003-SEPARATE-SCAN-AND-COMPILE.md`, `ADR-0004-NATIVE-GFS-SCENARIOS.md`, `ADR-0011-SEPARATE-PORTFOLIO.md`, `ADR-0012-INDEPENDENT-PRODUCTS.md`  
-**Related contracts:** `../INTERFILE_CONTRACT_LOCK.md`, `../PERSISTED_SCHEMA_LOCK.md`, `../../project/docs/INTERFILE_CONTRACT_LOCK.md`, `../../templates/project/docs/INTERFILE_CONTRACT_LOCK.md`
+**Related decisions:** `ADR-0002-GF-AS-EXECUTION-ENGINE.md`, `ADR-0003-SEPARATE-SCAN-AND-COMPILE.md`, `ADR-0004-NATIVE-GFS-SCENARIOS.md`, `ADR-0011-SEPARATE-PORTFOLIO.md`, `ADR-0012-INDEPENDENT-PRODUCTS.md`, `ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md`, `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`  
+**Related contracts:** `../INTERFILE_CONTRACT_LOCK.md`, `../PERSISTED_SCHEMA_LOCK.md`, `../../project/docs/INTERFILE_CONTRACT_LOCK.md`, `../../templates/project/docs/INTERFILE_CONTRACT_LOCK.md`  
+**Superseded by:** `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md` for workspace-coupled startup, mandatory `project/project.toml`, catalog-driven selection, mandatory language bundles and the prohibition on remembering a last selected language path  
+**Preserved authority:** exactly one resolved language context per running session, exactly one language identity per ordinary run, no cross-language evidence mixing and no GF Wordbench dependency on `gf-portfolio`
+
+---
+
+## 0. Current authority after ADR-0015
+
+This ADR is retained because its core safety decision remains valid:
+
+> GF Wordbench has at most one completely resolved language context in a
+> running session, and every ordinary run belongs to exactly one language.
+
+`ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md` supersedes the parts of this
+decision that coupled language identity to one physical Wordbench workspace,
+`project/project.toml`, a static language catalog or a mandatory language
+bundle.
+
+The current product is:
+
+```text
+multi-language capable
+single-active-language per session
+single-language per ordinary run
+path-resolved at startup
+```
+
+The following rules in ADR-0001 remain normative:
+
+- one ordinary run resolves one language identity before validation begins;
+- language identity cannot change while a run is active;
+- sources, scenarios, inputs, golds, prior-run baselines and release evidence
+  from different languages cannot be merged into one ordinary run;
+- run artifacts and reports remain attributable to one resolved language
+  context;
+- changing language disposes the current runtime before another is composed;
+- `gf-portfolio` remains separate and optional;
+- Wordbench performs no multilingual aggregation or portfolio comparison.
+
+The following earlier rules are superseded by ADR-0015:
+
+- one independently maintained language requires a separate Wordbench clone,
+  worktree or workspace;
+- the normal GUI cannot offer a language selector;
+- `project/project.toml` is the mandatory startup authority;
+- a static language catalog is the mandatory startup authority;
+- a language bundle is required before source browsing or compilation;
+- application state cannot remember the last successfully selected language
+  path;
+- changing language must replace or reset the physical workspace project.
+
+The authoritative replacement contracts are:
+
+```text
+selected language path
+    one explicit language directory or GF source file chosen by the user
+
+LanguageProbeService
+    bounded coordinator that reuses existing selection, path, preflight,
+    compilation and diagnostic contracts
+
+ResolvedLanguageContext
+    complete immutable runtime configuration for one loaded language
+
+optional validation profile
+    explicit advanced policy for scenarios, golds, checkpoints and release
+
+.gf_wordbench_state.json
+    disposable machine-local state that may remember the last selected path
+```
+
+No reader may combine the old workspace-coupled clauses below with the current
+path-resolved startup model. Where this ADR and ADR-0015 conflict, ADR-0015 is
+authoritative. The historical clauses remain in this file to preserve reasoning
+and change history; they are not alternate supported behavior.
+
+### 0.1 Historical sections superseded in whole or in part
+
+The following sections are historical wherever they require workspace-coupled
+identity, mandatory project configuration, catalog-driven selection or prohibit
+bounded path resolution after an explicit user selection:
+
+```text
+1 Decision summary
+2 Context, final workspace-authority conclusion
+3.1 Workspace
+3.2 Active project
+3.3 Project identity
+3.5 Multi-project workspace
+4.1 One canonical active-project boundary
+4.3 One authoritative project identity
+4.4 No project-profile registry
+4.5 No hidden runtime switch
+4.6 Application state is not project authority
+4.7 Multiple languages use isolated workspaces
+4.8 Project replacement is explicit
+5.2 Active-project-owned zone
+6 Configuration and path consequences
+7 CLI and GUI consequences
+9 Templates and project lifecycle
+10 Automation and CI, where workspace identity is assumed
+11 Security consequences, where all selectors are treated as hidden authority
+12.2 Accepted costs
+13.1, 13.2, 13.4 and 13.6
+16 Traceability, where project/project.toml or a catalog is startup authority
+17 Reconsideration
+18 Decision statement
+```
+
+Section 4.2, the validation and evidence-isolation rules in section 8, the
+Portfolio boundary in section 4.9 and all equivalent single-language-per-run
+requirements remain authoritative, interpreted using the immutable resolved
+language context defined by ADR-0015.
 
 ---
 
 ## 1. Decision summary
+
+> **Historical scope note:** this section records the original accepted model.
+> Its workspace-coupled clauses are superseded by ADR-0015. The preserved rule
+> is one resolved language context per session and one language per ordinary run.
 
 GF Wordbench uses the following project model:
 
@@ -131,6 +247,11 @@ A **multi-project workspace** is a design in which one workspace stores several 
 
 ### 4.1 One canonical active-project boundary
 
+> **Historical rule — superseded by ADR-0015.** Normal startup now begins from
+> one explicit language directory or `.gf` file and publishes an immutable
+> resolved language context rather than requiring `project/` to be the startup
+> boundary.
+
 A GF Wordbench workspace MUST contain exactly one canonical active-project boundary:
 
 ```text
@@ -147,6 +268,10 @@ Inactive or archived projects MAY exist outside active discovery, but they MUST 
 
 ### 4.2 One project per run
 
+> **Still authoritative.** Under ADR-0015, “project identity” in this section is
+> satisfied by the portable language key and immutable resolved language context
+> published before the run.
+
 Every ordinary run MUST resolve exactly one project identity before project-owned paths or validation assets are used.
 
 A run MUST NOT:
@@ -160,6 +285,10 @@ A run MUST NOT:
 - produce one ordinary summary that represents unrelated projects.
 
 ### 4.3 One authoritative project identity
+
+> **Historical rule — superseded for normal startup by ADR-0015.** The explicit
+> selected path is resolved into a portable language identity and immutable
+> context before runtime composition.
 
 `project/project.toml` owns the active project identity.
 
@@ -198,6 +327,10 @@ without an ADR that supersedes this decision and updates every affected schema a
 
 ### 4.5 No hidden runtime switch
 
+> **Historical prohibition — replaced by ADR-0015.** An explicit introduction
+> selector, bounded path probe and controlled language switch are allowed;
+> hidden selection and in-place mutation of an active runtime remain prohibited.
+
 The normal CLI and GUI MUST NOT select among several project profiles within one workspace through controls or options such as:
 
 ```text
@@ -210,6 +343,10 @@ The normal CLI and GUI MUST NOT select among several project profiles within one
 A GUI MAY open another workspace as an explicit operation. Opening another workspace creates a separate run context; it is not a profile switch inside the current workspace.
 
 ### 4.6 Application state is not project authority
+
+> **Preserved with one ADR-0015 extension.** Application state may remember the
+> exact last selected language path, but that path must be fully revalidated and
+> never supplies an executable resolved context by itself.
 
 Application state MAY retain machine-local convenience values such as:
 
@@ -241,6 +378,10 @@ expected PGF identity
 Deleting disposable application state MUST NOT change the active project or its validation contract.
 
 ### 4.7 Multiple languages use isolated workspaces
+
+> **Historical rule — superseded by ADR-0015.** Separate workspaces remain
+> permitted, but they are no longer required merely to open several language
+> directories with one Wordbench installation.
 
 A user MAY maintain several languages through separate clones, worktrees, copied workspaces or initialized workspace directories.
 
@@ -278,6 +419,9 @@ Changing the active project requires an explicit lifecycle operation such as:
 Project replacement MUST NOT occur as a side effect of selecting a GUI item, changing application state, changing an environment variable or following an unrecorded symlink.
 
 ### 4.9 Portfolio capabilities belong to `gf-portfolio`
+
+> **Still authoritative.** Catalog-driven language selection inside Wordbench
+> does not transfer aggregation, comparison or portfolio storage into Wordbench.
 
 The following capabilities are outside GF Wordbench:
 
@@ -587,6 +731,9 @@ Rejected because arbitrary project-supplied Python weakens security, reproducibi
 
 ### 13.6 Selected design
 
+> **Historical design — superseded by ADR-0015 for workspace and startup
+> selection.** The single-language-per-run part remains authoritative.
+
 ```text
 one isolated workspace
 one `project/`
@@ -601,23 +748,34 @@ This is the accepted design.
 
 ## 14. Mandatory invariants
 
+The current invariant set is interpreted jointly with ADR-0015:
+
 ```text
-INV-001 One workspace contains one canonical active project.
-INV-002 One ordinary run resolves one project ID.
-INV-003 `project/project.toml` owns project identity.
-INV-004 Application state does not select the active project.
-INV-005 Framework defaults contain no active-language values.
-INV-006 Project scenarios, inputs and gold files belong to the active project.
-INV-007 Previous-run comparison requires compatible project identity.
-INV-008 Release status applies to one project.
-INV-009 Required artifacts belong to the active project and run.
-INV-010 Project documentation describes one active project.
-INV-011 Project replacement is explicit.
-INV-012 Multiple languages use isolated workspaces.
-INV-013 A shared executable may serve several workspaces in separate runs.
-INV-014 No ordinary run merges results from unrelated projects.
-INV-015 Portfolio aggregation belongs outside GF Wordbench.
-INV-016 GF Wordbench has no runtime dependency on `gf-portfolio`.
+INV-001 A running session has zero or one resolved language context.
+INV-002 One ordinary run resolves exactly one portable language identity.
+INV-003 Normal startup begins from one explicit user-selected language directory or `.gf` file.
+INV-004 Discovery is bounded to the selected path, its ancestors and approved source roots.
+INV-005 Candidate discovery is not executable authority.
+INV-006 One immutable ResolvedLanguageContext gates main-runtime and run creation.
+INV-007 Source enumeration reuses the canonical file-selection service.
+INV-008 Effective GF paths are produced only by the centralized GF path resolver.
+INV-009 GF remains authoritative for module semantics and dependency resolution.
+INV-010 Application state may remember a selected path but owns no executable language context.
+INV-011 Loading the last language fully revalidates the remembered path.
+INV-012 Language identity cannot change while a run is active.
+INV-013 Language switching disposes the current runtime before another is composed.
+INV-014 Source, scenario, input and gold paths resolve only from the current context and optional explicit profile.
+INV-015 Previous-run comparison requires compatible language identity and source context.
+INV-016 Required artifacts belong to the current language and current run.
+INV-017 An ordinary run never merges results from unrelated languages.
+INV-018 Run summaries and manifests record one language identity and resolved path context.
+INV-019 Framework defaults contain no active-language values.
+INV-020 Portfolio aggregation remains outside GF Wordbench.
+INV-021 GF Wordbench has no runtime dependency on `gf-portfolio`.
+INV-022 A failed language load leaves Wordbench at the introduction surface with no main runtime.
+INV-023 Normal startup does not require a static language catalog or mandatory language bundle.
+INV-024 Optional validation profiles may add policy but cannot contradict the resolved language context.
+INV-025 No ambiguity may be resolved by an implicit first match or fuzzy fallback.
 ```
 
 ---
@@ -627,78 +785,107 @@ INV-016 GF Wordbench has no runtime dependency on `gf-portfolio`.
 The framework contracts and tests MUST cover at least:
 
 ```text
-one valid canonical project loads
-missing or ambiguous project configuration is rejected
-multi-profile project configuration is rejected
-project identity remains stable during a run
-application state cannot override project identity
-project-owned path traversal is rejected
-scenarios, inputs and gold files outside the project are rejected
-previous runs from another project are rejected
-summary and manifest project identities agree
-ordinary combined multi-project runs are rejected
-template initialization creates one project
-reset removes stale project identity and incompatible baselines
+explicit directory selection
+explicit `.gf` file selection
+focused target preservation for a selected non-entrypoint file
+missing, unreadable and unsupported selected paths
+bounded RGL source-root resolution
+portable language-key construction
+unique and ambiguous module-suffix classification
+canonical source enumeration through SelectionService
+one centralized GFPathResolution reused by all GF consumers
+source-ready and scan-ready operation without GF installed
+compile-ready gating through GF-specific preflight
+optional validation-profile loading
+validation-profile conflict rejection
+last selected path as convenience state only
+stale remembered path returns to explicit selection
+resolved language context is complete and immutable
+main runtime is not created after partial resolution failure
+language switch is rejected during an active run
+language switch destroys the old runtime before composing the new one
+project evidence from another language is rejected
+summary and manifest language identities agree
+ordinary combined multilingual runs are rejected
 framework defaults remain language-neutral
-GF Wordbench operates without `gf-portfolio`
+normal startup works without a runtime language catalog
+normal startup works without a mandatory language bundle
+GF Wordbench operates without gf-portfolio
 ```
 
-These checks are maintained with the owning loaders, schemas, reports, lifecycle operations and integration tests.
+The detailed provider, consumer, state, path, GUI and migration contracts are
+owned by ADR-0015 and the lock files it names.
 
 ---
 
 ## 16. Traceability
 
-This decision is reflected in:
+This decision is now interpreted through:
 
 ```text
+docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md
 docs/DOCUMENTATION_ALIGNMENT_LOCK.md
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
+docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
+docs/configuration/APPLICATION_STATE_REFERENCE.md
+docs/configuration/ENVIRONMENT_AND_PATHS.md
+docs/configuration/PROJECT_TOML_REFERENCE.md
+docs/gf/GF_PATH_RESOLUTION.md
+docs/validation/FILE_SELECTION.md
+docs/usage/GUI_REFERENCE.md
 docs/architecture/PRODUCT_BOUNDARIES.md
 docs/architecture/EXTENSION_BOUNDARIES.md
-docs/configuration/PROJECT_TOML_REFERENCE.md
-docs/projects/PROJECT_MODEL.md
-docs/projects/CREATING_A_PROJECT.md
-docs/projects/CLONING_AND_RESETTING.md
-docs/projects/MIGRATING_AN_EXISTING_LANGUAGE.md
-docs/operations/AUTOMATION_AND_CI.md
-project/project.toml
-project/docs/INTERFILE_CONTRACT_LOCK.md
-templates/project/project.toml
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
-Specialized owner documents define the detailed schemas, paths, lifecycle operations and validation behavior. This ADR owns the architectural choice that project identity is singular per workspace and per ordinary run.
+Specialized owner documents define schemas, paths, lifecycle operations and
+validation behavior. ADR-0001 owns the preserved safety rule of one resolved
+language per session and per ordinary run. ADR-0015 owns explicit path
+selection, bounded probing, resolved-context publication, last-path convenience,
+optional validation profiles and controlled language switching.
+
+`ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md` remains historical and is
+superseded by ADR-0015. A static RGL catalog or language bundle may exist as
+non-authoritative maintenance data or an optional validation profile, but neither
+participates as mandatory startup authority.
 
 ---
 
 ## 17. Reconsideration
 
-This ADR may be superseded only by a decision that defines, as one coordinated contract change:
+ADR-0015 is the accepted reconsideration of the workspace-coupled and
+catalog-coupled portions of this decision. A future change that permits more
+than one simultaneously active language or more than one language identity in
+an ordinary run MUST supersede both ADR-0001 and ADR-0015.
+
+Such a decision must define, as one coordinated contract change:
 
 ```text
-project registry schema
-project-selection authority
-CLI and GUI selection semantics
-application-state semantics
-path containment
-scenario, input and gold ownership
+multi-language runtime identity
+selection and concurrency semantics
+source, scenario, input and gold ownership
 run-result and artifact nesting
 regression-baseline rules
 release and partial-failure semantics
-cache isolation
+cache and output isolation
+application-state semantics
 security model
-migration from single-project workspaces
+migrations
 compatibility and contract tests
 ```
 
-The replacement decision must explain why isolated workspaces and external portfolio orchestration no longer satisfy the product requirements.
+A new selector, path-discovery optimization, optional manifest or profile format
+is not sufficient to weaken the single-active-language invariant.
 
 ---
 
 ## 18. Decision statement
 
-GF Wordbench is a single-language-project workbench, not a multi-project portfolio manager.
+GF Wordbench is multi-language capable, but it is not a simultaneous
+multilingual runtime or a portfolio manager.
 
-> One GF Wordbench workspace resolves exactly one active language project from `project/project.toml`; several languages use isolated workspaces, while `gf-portfolio` may consume their public artifacts without becoming a GF Wordbench runtime dependency.
+> A user may open any supported language directory or GF source file through the
+> path-resolved startup governed by
+> `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`. A Wordbench session has zero or
+> one immutable resolved language context, and every ordinary run belongs to
+> exactly that one language. Portfolio aggregation remains outside Wordbench.

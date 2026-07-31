@@ -8,16 +8,22 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Final, Protocol, runtime_checkable
+from typing import Final, Protocol, cast, runtime_checkable
 
+from gf_wordbench.infrastructure.json_io import JsonObject, read_json, write_json
 from gf_wordbench.kernel.errors import ArtifactError
 from gf_wordbench.kernel.serialization import format_rfc3339_utc
+from gf_wordbench.kernel.statuses import ValidationStatus
 from gf_wordbench.version import __version__
 
 from .declarations import ArtifactDeclaration
 from .hashing import FileHash, hash_file
 from .media_types import validate_role_media_type
-from .models import ArtifactManifest, ArtifactManifestEntry
+from .models import (
+    ArtifactManifest,
+    ArtifactManifestEntry,
+    ManifestWriteResult,
+)
 
 MANIFEST_SCHEMA_ID: Final[str] = "gf-wordbench.artifact-manifest"
 MANIFEST_SCHEMA_VERSION: Final[str] = "1.0"
@@ -160,7 +166,6 @@ class _PreparedDeclaration:
     declaration: ArtifactDeclaration
     absolute_path: Path
     manifest_path: str
-    comparison_key: str
 
 
 def build_manifest(
@@ -201,24 +206,7 @@ def build_manifest_result(
 
     authoritative_paths = _require_run_paths(run_paths)
     _validate_run_result_paths(run_result, authoritative_paths)
-
-    run_root = _resolved_directory(
-        authoritative_paths.run_dir,
-        field_name="run_paths.run_dir",
-    )
-    manifest_target = _resolved_candidate(
-        authoritative_paths.manifest_json,
-        run_root=run_root,
-        field_name="run_paths.manifest_json",
-    )
-    if manifest_target.name != MANIFEST_FILENAME:
-        raise UnsafeManifestPathError(
-            f"manifest target must be named {MANIFEST_FILENAME!r}"
-        )
-    if manifest_target.parent != run_root:
-        raise UnsafeManifestPathError(
-            "manifest target must be a direct child of the run directory"
-        )
+    run_root, manifest_target = _manifest_location(authoritative_paths)
 
     run_id = _canonical_run_id(authoritative_paths.run_id)
     producer_version = _non_empty_text(
@@ -299,15 +287,12 @@ def build_manifest_result(
         artifacts=tuple(entries),
     )
 
-    required_count = sum(1 for entry in entries if entry.required)
-    total_size = sum(entry.size_bytes for entry in entries)
-
     return ManifestBuildResult(
         manifest=manifest,
         warnings=tuple(warnings),
-        entry_count=len(entries),
-        required_entry_count=required_count,
-        total_size_bytes=total_size,
+        entry_count=manifest.entry_count,
+        required_entry_count=manifest.required_entry_count,
+        total_size_bytes=manifest.total_size_bytes,
     )
 
 
@@ -333,6 +318,85 @@ def build_manifest_from_result(
     )
 
 
+def write_manifest(
+    manifest: ArtifactManifest,
+    run_paths: RunPathsLike,
+) -> ManifestWriteResult:
+    """Atomically persist and re-validate one canonical artifact manifest.
+
+    The function never claims success until the final ``manifest.json`` has
+    been re-read, schema-validated, and confirmed equal to the supplied model.
+    Runtime or persistence failures are contained in ``ManifestWriteResult``;
+    invalid manifest argument types still fail fast with ``TypeError``.
+    """
+
+    if not isinstance(manifest, ArtifactManifest):
+        raise TypeError("manifest must be ArtifactManifest")
+
+    try:
+        authoritative_paths = _require_run_paths(run_paths)
+        _, manifest_target = _manifest_location(authoritative_paths)
+        _validate_manifest_run_id(manifest, authoritative_paths)
+
+        document = _serialize_manifest_document(manifest)
+        written_path = write_json(manifest_target, document)
+        persisted_document = read_json(written_path)
+        persisted_manifest = _parse_manifest_document(persisted_document)
+
+        if persisted_document != document:
+            raise ManifestBuildError(
+                "persisted manifest document differs from canonical serialization"
+            )
+        if persisted_manifest != manifest:
+            raise ManifestBuildError(
+                "persisted manifest model differs from the supplied manifest"
+            )
+
+        return ManifestWriteResult(
+            status=ValidationStatus.OK,
+            manifest_path=written_path.resolve(strict=True),
+            entry_count=manifest.entry_count,
+            required_entry_count=manifest.required_entry_count,
+            total_size_bytes=manifest.total_size_bytes,
+            warnings=(),
+            message="Canonical artifact manifest written and validated.",
+        )
+    except Exception as exc:  # reporting boundary: return structured failure
+        return ManifestWriteResult(
+            status=ValidationStatus.ERROR,
+            manifest_path=None,
+            entry_count=manifest.entry_count,
+            required_entry_count=manifest.required_entry_count,
+            total_size_bytes=manifest.total_size_bytes,
+            warnings=(),
+            message=_manifest_write_error_message(exc),
+        )
+
+
+def _serialize_manifest_document(manifest: ArtifactManifest) -> JsonObject:
+    # Lazy import avoids coupling package initialization to schema loading.
+    from gf_wordbench.reporting.schemas.manifest_v1 import (
+        serialize_artifact_manifest,
+    )
+
+    return cast(JsonObject, serialize_artifact_manifest(manifest))
+
+
+def _parse_manifest_document(document: JsonObject) -> ArtifactManifest:
+    from gf_wordbench.reporting.schemas.manifest_v1 import parse_artifact_manifest
+
+    return parse_artifact_manifest(document, strict=True)
+
+
+def _manifest_write_error_message(exc: Exception) -> str:
+    detail = " ".join(str(exc).replace("\x00", "").split())
+    if not detail:
+        detail = type(exc).__name__
+    elif not detail.startswith(type(exc).__name__):
+        detail = f"{type(exc).__name__}: {detail}"
+    return f"Canonical artifact manifest write failed: {detail[:1000]}"
+
+
 def canonical_manifest_path(
     artifact_path: Path,
     *,
@@ -343,6 +407,9 @@ def canonical_manifest_path(
 
     if not isinstance(artifact_path, Path):
         raise TypeError("artifact_path must be pathlib.Path")
+    if case_sensitive is not None and type(case_sensitive) is not bool:
+        raise TypeError("case_sensitive must be a bool or None")
+
     root = _resolved_directory(run_root, field_name="run_root")
     candidate = _resolved_candidate(
         artifact_path,
@@ -350,9 +417,16 @@ def canonical_manifest_path(
         field_name="artifact_path",
         require_exists=False,
     )
+    return _canonical_manifest_path_from_resolved(candidate, run_root=root)
 
+
+def _canonical_manifest_path_from_resolved(
+    artifact_path: Path,
+    *,
+    run_root: Path,
+) -> str:
     try:
-        relative = candidate.relative_to(root)
+        relative = artifact_path.relative_to(run_root)
     except ValueError as exc:
         raise UnsafeManifestPathError(
             f"artifact path escapes run root: {artifact_path}"
@@ -360,13 +434,8 @@ def canonical_manifest_path(
 
     normalized = relative.as_posix()
     _validate_manifest_relative_path(normalized)
-
     if normalized == MANIFEST_FILENAME:
-        raise UnsafeManifestPathError(
-            "manifest.json must not include itself"
-        )
-
-    del case_sensitive
+        raise UnsafeManifestPathError("manifest.json must not include itself")
     return normalized
 
 
@@ -440,10 +509,9 @@ def _prepare_declaration_sequence(
                 "manifest.json must not include itself"
             )
 
-        manifest_path = canonical_manifest_path(
+        manifest_path = _canonical_manifest_path_from_resolved(
             absolute,
             run_root=run_root,
-            case_sensitive=sensitive,
         )
         key = manifest_path_comparison_key(
             manifest_path,
@@ -463,7 +531,6 @@ def _prepare_declaration_sequence(
                 declaration=declaration,
                 absolute_path=absolute,
                 manifest_path=manifest_path,
-                comparison_key=key,
             )
         )
 
@@ -568,6 +635,38 @@ def _validate_entry_uniqueness(
                 f"duplicate manifest entries: {previous!r}, {entry.path!r}"
             )
         seen[key] = entry.path
+
+
+def _manifest_location(run_paths: RunPathsLike) -> tuple[Path, Path]:
+    run_root = _resolved_directory(
+        run_paths.run_dir,
+        field_name="run_paths.run_dir",
+    )
+    manifest_target = _resolved_candidate(
+        run_paths.manifest_json,
+        run_root=run_root,
+        field_name="run_paths.manifest_json",
+    )
+    if manifest_target.name != MANIFEST_FILENAME:
+        raise UnsafeManifestPathError(
+            f"manifest target must be named {MANIFEST_FILENAME!r}"
+        )
+    if manifest_target.parent != run_root:
+        raise UnsafeManifestPathError(
+            "manifest target must be a direct child of the run directory"
+        )
+    return run_root, manifest_target
+
+
+def _validate_manifest_run_id(
+    manifest: ArtifactManifest,
+    run_paths: RunPathsLike,
+) -> None:
+    expected = _canonical_run_id(run_paths.run_id)
+    if manifest.run_id != expected:
+        raise ManifestBuildError(
+            "manifest and run_paths use different run identifiers"
+        )
 
 
 def _validate_run_result_paths(
@@ -731,4 +830,5 @@ __all__ = (
     "build_manifest_result",
     "canonical_manifest_path",
     "manifest_path_comparison_key",
+    "write_manifest",
 )

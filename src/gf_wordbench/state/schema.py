@@ -23,7 +23,8 @@ from gf_wordbench.kernel.statuses import ValidationMode
 from .models import AppState, EnvironmentState, LastRunState, SelectionState
 
 APP_STATE_SCHEMA_ID: Final = "gf-wordbench.app-state"
-APP_STATE_SCHEMA_VERSION: Final = "1.0"
+APP_STATE_SCHEMA_VERSION: Final = "2.0"
+LEGACY_APP_STATE_SCHEMA_VERSION: Final = "1.0"
 APP_STATE_FILENAME: Final = ".gf_wordbench_state.json"
 LEGACY_APP_STATE_FILENAME: Final = ".gf_audit_state.json"
 PRODUCER_NAME: Final = "gf-wordbench"
@@ -43,8 +44,10 @@ CANONICAL_MODES: Final = frozenset(mode.value for mode in ValidationMode)
 _SCHEMA_VERSION_PATTERN: Final = re.compile(
     r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
 )
-_CURRENT_SCHEMA_MAJOR: Final = 1
+_CURRENT_SCHEMA_MAJOR: Final = 2
 _CURRENT_SCHEMA_MINOR: Final = 0
+_LEGACY_SCHEMA_MAJOR: Final = 1
+_LEGACY_SCHEMA_MINOR: Final = 0
 _NUL: Final = "\x00"
 _MISSING: Final = object()
 
@@ -75,6 +78,15 @@ _REQUIRED_ROOT_FIELDS: Final = frozenset(
 )
 _PRODUCER_FIELDS: Final = frozenset({"name", "version"})
 _ENVIRONMENT_FIELDS: Final = frozenset(
+    {
+        "last_selected_language_path",
+        "last_selected_validation_profile",
+        "last_rgl_root",
+        "gf_executable",
+        "output_root",
+    }
+)
+_LEGACY_ENVIRONMENT_FIELDS: Final = frozenset(
     {
         "project_root",
         "rgl_root",
@@ -110,8 +122,9 @@ class ProducerDocument(TypedDict):
 
 
 class EnvironmentDocument(TypedDict):
-    project_root: str | None
-    rgl_root: str | None
+    last_selected_language_path: str | None
+    last_selected_validation_profile: str | None
+    last_rgl_root: str | None
     gf_executable: str | None
     output_root: str | None
 
@@ -171,8 +184,9 @@ def default_app_state() -> AppState:
         schema_version=APP_STATE_SCHEMA_VERSION,
         producer=None,
         environment=EnvironmentState(
-            project_root=None,
-            rgl_root=None,
+            last_selected_language_path=None,
+            last_selected_validation_profile=None,
+            last_rgl_root=None,
             gf_executable=None,
             output_root=None,
         ),
@@ -294,7 +308,13 @@ def recover_app_state_document(
     *,
     source: Path | None = None,
 ) -> StateSchemaResult:
-    """Recover supported canonical values from untrusted parsed JSON."""
+    """Recover canonical state from current or supported legacy documents.
+
+    Version ``1.0`` is migrated in memory to the path-resolved ``2.0`` model.
+    The former ``project_root`` value is deliberately discarded because it
+    cannot safely establish a selected language path or validation profile.
+    The former ``rgl_root`` value remains a non-authoritative remembered root.
+    """
 
     del source
 
@@ -334,7 +354,7 @@ def recover_app_state_document(
         return _failure(warnings, schema_version)
 
     major, minor = parsed
-    if major != _CURRENT_SCHEMA_MAJOR:
+    if major not in {_CURRENT_SCHEMA_MAJOR, _LEGACY_SCHEMA_MAJOR}:
         _warn(
             warnings,
             "unsupported_schema_major",
@@ -343,7 +363,13 @@ def recover_app_state_document(
         )
         return _failure(warnings, schema_version)
 
-    future_minor = minor > _CURRENT_SCHEMA_MINOR
+    legacy_document = major == _LEGACY_SCHEMA_MAJOR
+    supported_minor = (
+        _LEGACY_SCHEMA_MINOR
+        if legacy_document
+        else _CURRENT_SCHEMA_MINOR
+    )
+    future_minor = minor > supported_minor
     if future_minor:
         _warn(
             warnings,
@@ -352,13 +378,26 @@ def recover_app_state_document(
             "known fields were recovered; automatic rewrite is unsafe",
         )
 
+    if legacy_document:
+        _warn(
+            warnings,
+            "schema_migrated",
+            "$.schema_version",
+            f"state {schema_version} was migrated in memory to "
+            f"{APP_STATE_SCHEMA_VERSION}",
+        )
+
     state = default_app_state_document()
 
     producer = _recover_producer(root, warnings)
     if producer is not None:
         state["producer"] = producer
 
-    state["environment"] = _recover_environment(root, warnings)
+    state["environment"] = (
+        _recover_legacy_environment(root, warnings)
+        if legacy_document
+        else _recover_environment(root, warnings)
+    )
     state["selection"] = _recover_selection(root, warnings)
     state["last_run"] = _recover_last_run(root, warnings)
 
@@ -377,10 +416,35 @@ def canonicalize_app_state_document(
     source: Path | None = None,
     require_producer: bool = True,
 ) -> AppStateDocument:
-    """Validate and normalize a document before canonical persistence."""
+    """Validate and normalize one exact current-version document."""
 
     context = _StrictContext(source)
     root = _strict_mapping(document, "$", context)
+
+    schema_id = root.get("schema_id")
+    if schema_id != APP_STATE_SCHEMA_ID:
+        context.fail(
+            "$.schema_id",
+            f"must be {APP_STATE_SCHEMA_ID!r}",
+        )
+
+    schema_version = root.get("schema_version")
+    if schema_version != APP_STATE_SCHEMA_VERSION:
+        parsed = (
+            _parse_version(schema_version)
+            if isinstance(schema_version, str)
+            else None
+        )
+        if parsed is not None and parsed[0] != _CURRENT_SCHEMA_MAJOR:
+            context.unsupported(
+                "$.schema_version",
+                f"schema major {parsed[0]} is unsupported for strict "
+                "canonical output",
+            )
+        context.fail(
+            "$.schema_version",
+            f"must be {APP_STATE_SCHEMA_VERSION!r}",
+        )
 
     required_root = _REQUIRED_ROOT_FIELDS | (
         frozenset({"producer"})
@@ -422,30 +486,6 @@ def canonicalize_app_state_document(
             context,
         )
 
-    schema_id = root["schema_id"]
-    if schema_id != APP_STATE_SCHEMA_ID:
-        context.fail(
-            "$.schema_id",
-            f"must be {APP_STATE_SCHEMA_ID!r}",
-        )
-
-    schema_version = root["schema_version"]
-    if schema_version != APP_STATE_SCHEMA_VERSION:
-        parsed = (
-            _parse_version(schema_version)
-            if isinstance(schema_version, str)
-            else None
-        )
-        if parsed is not None and parsed[0] != _CURRENT_SCHEMA_MAJOR:
-            context.unsupported(
-                "$.schema_version",
-                f"schema major {parsed[0]} is unsupported",
-            )
-        context.fail(
-            "$.schema_version",
-            f"must be {APP_STATE_SCHEMA_VERSION!r}",
-        )
-
     result = recover_app_state_document(root, source=source)
     if not result.compatible:
         context.fail(
@@ -464,7 +504,6 @@ def canonicalize_app_state_document(
         )
 
     return result.document
-
 
 def producer_document(version: str) -> ProducerDocument:
     """Build producer metadata through the canonical owning model."""
@@ -494,11 +533,14 @@ def _state_to_document(
         schema_id=state.schema_id,
         schema_version=state.schema_version,
         environment=EnvironmentDocument(
-            project_root=_portable_optional_path(
-                state.environment.project_root
+            last_selected_language_path=_portable_optional_path(
+                state.environment.last_selected_language_path
             ),
-            rgl_root=_portable_optional_path(
-                state.environment.rgl_root
+            last_selected_validation_profile=_portable_optional_path(
+                state.environment.last_selected_validation_profile
+            ),
+            last_rgl_root=_portable_optional_path(
+                state.environment.last_rgl_root
             ),
             gf_executable=_portable_optional_path(
                 state.environment.gf_executable
@@ -562,8 +604,13 @@ def _document_to_state(
         schema_version=document["schema_version"],
         producer=producer,
         environment=EnvironmentState(
-            project_root=environment["project_root"],
-            rgl_root=environment["rgl_root"],
+            last_selected_language_path=environment[
+                "last_selected_language_path"
+            ],
+            last_selected_validation_profile=environment[
+                "last_selected_validation_profile"
+            ],
+            last_rgl_root=environment["last_rgl_root"],
             gf_executable=environment["gf_executable"],
             output_root=environment["output_root"],
         ),
@@ -649,13 +696,65 @@ def _recover_environment(
         warnings,
     )
     return EnvironmentDocument(
-        project_root=_optional_path(
+        last_selected_language_path=_optional_path(
             group,
-            "project_root",
+            "last_selected_language_path",
             "$.environment",
             warnings,
         ),
-        rgl_root=_optional_path(
+        last_selected_validation_profile=_optional_path(
+            group,
+            "last_selected_validation_profile",
+            "$.environment",
+            warnings,
+        ),
+        last_rgl_root=_optional_path(
+            group,
+            "last_rgl_root",
+            "$.environment",
+            warnings,
+        ),
+        gf_executable=_optional_path(
+            group,
+            "gf_executable",
+            "$.environment",
+            warnings,
+        ),
+        output_root=_optional_path(
+            group,
+            "output_root",
+            "$.environment",
+            warnings,
+        ),
+    )
+
+
+def _recover_legacy_environment(
+    root: Mapping[str, object],
+    warnings: list[StateSchemaWarning],
+) -> EnvironmentDocument:
+    """Migrate schema-1 environment values without inventing language facts."""
+
+    group = _group(
+        root,
+        "environment",
+        warnings,
+    )
+
+    project_root = group.get("project_root", _MISSING)
+    if project_root not in {_MISSING, None, ""}:
+        _warn(
+            warnings,
+            "discarded_project_root",
+            "$.environment.project_root",
+            "legacy project_root was discarded; select a language path "
+            "explicitly",
+        )
+
+    return EnvironmentDocument(
+        last_selected_language_path=None,
+        last_selected_validation_profile=None,
+        last_rgl_root=_optional_path(
             group,
             "rgl_root",
             "$.environment",
@@ -1245,6 +1344,7 @@ __all__ = (
     "CANONICAL_MODES",
     "EnvironmentDocument",
     "LEGACY_APP_STATE_FILENAME",
+    "LEGACY_APP_STATE_SCHEMA_VERSION",
     "LastRunDocument",
     "MAX_STATE_WARNINGS",
     "ProducerDocument",

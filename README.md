@@ -1,21 +1,29 @@
 # GF Wordbench
 
-**GF Wordbench** is a validation, diagnostics, regression-testing and release-readiness workbench for [Grammatical Framework](https://www.grammaticalframework.org/) language projects.
+**GF Wordbench** is a validation, diagnostics, regression-testing, and
+release-readiness workbench for
+[Grammatical Framework](https://www.grammaticalframework.org/) languages.
 
-It combines static source checks with native GF execution, structured diagnostics, scripted scenarios, reviewed golden outputs, previous-run comparison and reproducible audit artifacts.
+It combines static source checks with native GF execution, structured
+diagnostics, scripted scenarios, reviewed golden outputs, previous-run
+comparison, and reproducible audit artifacts.
 
 ```text
-GF sources
+explicit selected language path
+    → bounded language probe
+    → resolved language context
     → static scan
     → GF compilation
-    → native .gfs scenarios
+    → optional validation-profile scenarios and release policy
     → normalized evidence
-    → gold comparison
     → classification and regression analysis
-    → human, machine and AI-ready reports
+    → human, machine, and AI-ready reports
 ```
 
-GF Wordbench is designed for **one active GF language project per workspace**. Multi-workspace, multilingual portfolio aggregation belongs to the independent `gf-portfolio` product; GF Wordbench has no runtime dependency on it.
+A running session has zero or one resolved language context. An ordinary run
+resolves exactly one portable language identity and one immutable source
+context. Portfolio-scale aggregation belongs to the independent
+`gf-portfolio` product; GF Wordbench has no runtime dependency on it.
 
 ---
 
@@ -23,19 +31,23 @@ GF Wordbench is designed for **one active GF language project per workspace**. M
 
 - [Goals](#goals)
 - [Core principles](#core-principles)
+- [Language startup](#language-startup)
+- [Validation profiles](#validation-profiles)
 - [Validation modes](#validation-modes)
 - [Validation pipeline](#validation-pipeline)
 - [Quick start](#quick-start)
-- [Project model](#project-model)
 - [Run outputs](#run-outputs)
 - [Status and diagnostic semantics](#status-and-diagnostic-semantics)
 - [Architecture](#architecture)
 - [Anti-drift contracts](#anti-drift-contracts)
 - [Repository layout](#repository-layout)
 - [Documentation](#documentation)
+- [Native GF scenarios](#native-gf-scenarios)
+- [Output normalization](#output-normalization)
 - [Development](#development)
 - [Compatibility](#compatibility)
 - [Security](#security)
+- [Non-goals](#non-goals)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -43,17 +55,22 @@ GF Wordbench is designed for **one active GF language project per workspace**. M
 
 ## Goals
 
-GF Wordbench provides a single, reproducible workflow for answering the following questions:
+GF Wordbench provides a reproducible workflow for answering questions such as:
 
-- Do the selected GF source files satisfy the framework's static source rules?
-- Do individual modules compile with the intended GF executable and search path?
-- Do configured checkpoints and final entrypoints load successfully?
-- Does the final grammar expose missing functions?
-- Do parsing, linearization, morphology and bounded-generation scenarios behave as expected?
-- Did the current run improve, regress or remain unchanged relative to the previous run?
-- Which failures are direct, downstream, ambiguous or infrastructure-related?
+- Do selected GF sources satisfy the framework's static source rules?
+- Does a selected module compile with the intended GF executable and search
+  path?
+- Which language directory, source root, and portable language identity were
+  resolved from the selected path?
+- Do configured checkpoints and final entrypoints load successfully when an
+  explicit validation profile supplies that policy?
+- Do parsing, linearization, morphology, and bounded-generation scenarios
+  behave as expected?
+- Did the current run improve, regress, or remain unchanged relative to a
+  compatible previous run?
+- Which failures are direct, downstream, ambiguous, or infrastructure-related?
 - Which raw files prove every reported conclusion?
-- Is the active language project ready for a release-level PGF build?
+- Is the resolved language ready for a profile-defined release build?
 
 The workbench is intended for:
 
@@ -69,25 +86,61 @@ The workbench is intended for:
 
 ### GF remains authoritative
 
-GF Wordbench does not reimplement the GF parser, type checker, module resolver, runtime, generation engine or PGF format.
+GF Wordbench does not reimplement the GF parser, type checker, module resolver,
+runtime, generation engine, or PGF format.
 
-Static scanning can identify suspicious source patterns. Native GF execution remains authoritative for GF syntax, typing, loading, parsing, linearization, generation and artifact production.
+Static scanning can identify suspicious source patterns. Native GF execution
+remains authoritative for GF syntax, typing, loading, parsing, linearization,
+generation, and artifact production.
 
-### One active language project
+### Startup begins with an explicit language path
 
-Each repository copy contains one authoritative active project:
+Normal startup begins from one explicit selected language path. The selected
+value may identify a language directory or a `.gf` source file.
 
-```text
-project/project.toml
-```
+The language probe performs bounded inspection, coordinates the existing source
+selection, GF-path, structural-preflight, and diagnostic services, and publishes
+a `ResolvedLanguageContext` only after required structural validation.
 
-Language identity, source roots, module suffixes, entrypoints, checkpoints, scenarios and release targets come from that project configuration.
+Candidate discovery is provisional. A `LanguageCandidate` cannot authorize an
+ordinary run.
 
-GUI state, old run directories and framework defaults must not redefine the active language.
+### One resolved context per run
+
+A resolved language context is the sole runtime authority for:
+
+- the selected machine-local path;
+- the validated language directory;
+- the approved source root;
+- the portable language identity;
+- the effective GF path;
+- capability status;
+- bounded diagnostics and remediation choices.
+
+Application state, GUI widgets, old run directories, and framework defaults must
+not redefine those facts.
+
+### Validation policy is optional
+
+A validation profile is optional for:
+
+- browsing;
+- source selection;
+- static scanning;
+- targeted compilation.
+
+A profile is required only for policy it explicitly owns, such as configured
+checkpoints, scenarios, gold comparisons, release gates, and profile-specific
+artifacts.
+
+A validation profile augments the resolved language context. It must not replace
+the selected language, escape the approved source root, or redefine the
+effective language identity.
 
 ### Evidence before interpretation
 
-Every process-backed validation preserves raw evidence before diagnostics or normalization:
+Every process-backed validation preserves raw evidence before diagnostics or
+normalization:
 
 - executable and ordered arguments;
 - working directory;
@@ -95,7 +148,7 @@ Every process-backed validation preserves raw evidence before diagnostics or nor
 - start and finish times;
 - duration;
 - exit code;
-- timeout or launch state;
+- timeout, cancellation, or launch state;
 - stdout;
 - stderr;
 - produced artifacts.
@@ -104,19 +157,22 @@ A parser or report failure must not erase valid GF evidence.
 
 ### Structured results
 
-Files and scenarios produce structured results. Reports consume those results; they do not rerun GF or reconstruct missing evidence.
+Files and scenarios produce typed results. Reports consume finalized results;
+they do not rerun GF or reconstruct missing evidence.
 
-The primary persisted record is:
+The primary persisted run record is:
 
 ```text
 run_<run-id>/summary.json
 ```
 
-Human-readable reports are projections of the structured result, not independent sources of truth.
+Human-readable reports are projections of structured results, not independent
+sources of truth.
 
 ### Deterministic validation
 
-Given equivalent sources, configuration, GF version and scenario inputs, the workbench aims to produce deterministic:
+Given equivalent sources, configuration, GF version, and scenario inputs, the
+workbench aims to produce deterministic:
 
 - file selection;
 - execution order;
@@ -128,9 +184,101 @@ Given equivalent sources, configuration, GF version and scenario inputs, the wor
 
 ### Explicit compatibility
 
-Persisted formats have schema identities and versions. Breaking changes require a migration.
+Persisted formats have schema identities and versions. Breaking changes require
+an explicit migration or documented compatibility policy.
 
-Cross-file, external-tool, persisted-schema and project-language contracts are maintained explicitly.
+Cross-file, external-tool, persisted-schema, and language-profile contracts are
+maintained explicitly.
+
+---
+
+## Language startup
+
+The normal startup boundary is path-resolved rather than repository-project
+resolved.
+
+```text
+selected path
+    → language candidate
+    → structural and capability checks
+    → resolved language context
+    → runtime composition
+```
+
+The probe may:
+
+- interpret one explicit selected file or directory;
+- derive the candidate language directory;
+- inspect supported ancestors within documented bounds;
+- classify common GF module roles from filenames;
+- coordinate public source-selection and GF-path services;
+- offer bounded exact-name remediation for a typed missing-module diagnostic;
+- publish one resolved context after required checks pass.
+
+The probe must not:
+
+- recursively enumerate source files by itself;
+- parse full GF import semantics;
+- construct native GF commands;
+- call subprocess APIs directly;
+- write reports or state;
+- require a global language catalog;
+- require a validation profile for source-ready startup;
+- mutate language sources or profile files.
+
+Switching languages disposes the old runtime and constructs a new resolved
+context. Active-run language mutation is forbidden.
+
+---
+
+## Validation profiles
+
+A validation profile is an optional, explicit, external policy package. It is
+not the normal language-startup authority.
+
+The repository-owned reusable template lives at:
+
+```text
+templates/validation-profile/
+```
+
+Create or inspect a profile with:
+
+```text
+python scripts/init_project.py --help
+```
+
+Initialization reads the language-neutral template and writes to an explicit
+destination selected by the caller. It must not recreate a repository-owned
+active project directory.
+
+A profile may contain:
+
+```text
+<explicit-profile-destination>/
+├── project.toml
+├── docs/
+└── validation/
+    ├── scenarios/
+    ├── gold/
+    └── inputs/
+```
+
+Profile-owned paths are interpreted relative to the explicit profile root.
+Machine-local executable, RGL, output, and state paths remain environment or
+application concerns.
+
+Profiles may define:
+
+- project and profile identity;
+- source filters that remain inside the resolved language context;
+- checkpoints;
+- final entrypoints;
+- validation modes and targets;
+- required and optional scenarios;
+- normalization and gold policy;
+- release gates;
+- expected release artifacts.
 
 ---
 
@@ -140,12 +288,12 @@ GF Wordbench exposes four canonical modes.
 
 | Mode | Purpose | Typical scope |
 |---|---|---|
-| `quick` | Fast local feedback | Modified or selected file, static scan, compile and smoke validation |
-| `checkpoint` | Validate a coherent development layer | Configured checkpoint modules and required checkpoint scenarios |
-| `release` | Prove release readiness | Checkpoints, final entrypoints, required scenarios, PGF build and release gates |
-| `diagnostic` | Collect broad evidence | Exhaustive configured source, scenario and diagnostic coverage |
+| `quick` | Fast local feedback | One explicit file or module, static scan, targeted compilation |
+| `checkpoint` | Validate a coherent profile-defined layer | Configured checkpoint modules and required checkpoint scenarios |
+| `release` | Prove profile-defined release readiness | Checkpoints, final entrypoints, required scenarios, PGF build, and release gates |
+| `diagnostic` | Collect broad evidence | Expanded source, scenario, and diagnostic coverage within approved bounds |
 
-Legacy mode names may be accepted only during migration:
+Legacy mode names may be accepted only through explicit compatibility handling:
 
 ```text
 file → quick
@@ -154,36 +302,38 @@ all  → diagnostic
 
 ### Quick
 
-Use after a focused source edit.
+Quick mode is designed for focused source work. It may run without a validation
+profile when the selected target and resolved context provide sufficient
+information.
 
 Expected work includes:
 
-- resolve the requested target;
+- resolve the explicit target inside the language directory;
 - run static checks;
 - compile the target when enabled;
-- run configured smoke validation;
-- preserve evidence and emit a normal run report.
+- preserve evidence;
+- emit normal run results and reports.
 
-Quick mode is optimized for speed. It is not release evidence.
+Quick mode is not release evidence.
 
 ### Checkpoint
 
-Use after completing or repairing a subsystem such as morphology, categories, syntax, structural vocabulary or extensions.
+Checkpoint mode requires profile-owned checkpoint policy.
 
 Expected work includes:
 
-- validate configured checkpoint modules;
+- resolve configured checkpoint modules inside the resolved language context;
 - execute required checkpoint scenarios;
 - compare applicable gold files;
-- detect regressions relative to the previous compatible run.
+- detect regressions relative to a compatible previous run.
 
 ### Release
 
-Use before declaring the active project releasable.
+Release mode requires an explicit compatible validation profile.
 
 Expected work includes:
 
-- project and schema validation;
+- profile and schema validation;
 - checkpoint validation;
 - final grammar and API entrypoint validation;
 - required native GF scenarios;
@@ -199,18 +349,18 @@ Individual `.gfo` success does not prove release readiness.
 
 ### Diagnostic
 
-Use when the primary goal is evidence collection and fault isolation.
+Diagnostic mode is optimized for evidence collection and fault isolation.
 
-Diagnostic mode may include:
+It may include:
 
-- broad source enumeration;
-- all configured scans and compilations;
+- broader approved source enumeration;
+- configured scans and compilations;
 - optional scenarios;
 - introspection commands;
 - extended logs;
 - additional retained details.
 
-A diagnostic run may be slower and larger than normal development runs.
+A diagnostic run may be slower and larger than a normal development run.
 
 ---
 
@@ -219,27 +369,30 @@ A diagnostic run may be slower and larger than normal development runs.
 The orchestration layer owns execution order. Individual stages remain isolated.
 
 ```text
-1. Bootstrap
-2. Load and validate project configuration
-3. Resolve local environment and GF toolchain
-4. Create the owned run directory
-5. Select source files
-6. Capture source fingerprints
-7. Run static source scans
-8. Compile selected GF modules
-9. Classify direct and downstream file failures
-10. Execute configured native GF scenarios
-11. Normalize scenario output
-12. Compare reviewed gold files
-13. Build final PGF when required
-14. Compare with the previous compatible run
-15. Build structured file and scenario results
-16. Write reports and raw logs
-17. Generate and verify the artifact manifest
-18. Evaluate mode-specific success criteria
+1. Accept one explicit selected language path
+2. Probe and publish one resolved language context
+3. Load an optional explicit validation profile
+4. Resolve local environment and the GF toolchain
+5. Build one immutable run configuration
+6. Create the owned run directory
+7. Select source files through the canonical selection service
+8. Capture source fingerprints
+9. Run static source scans
+10. Compile selected GF modules
+11. Classify direct and downstream file failures
+12. Execute profile-defined native GF scenarios when applicable
+13. Normalize scenario output
+14. Compare reviewed gold files
+15. Build final PGF when required
+16. Compare with a compatible previous run
+17. Build structured file and scenario results
+18. Write reports and raw logs
+19. Generate and verify the artifact manifest
+20. Evaluate mode-specific success criteria
 ```
 
-A failure in one report writer must not invalidate raw evidence already captured by an earlier stage.
+A failure in one report writer must not invalidate raw evidence captured by an
+earlier stage.
 
 See:
 
@@ -258,9 +411,10 @@ Install:
 - a Python version supported by `pyproject.toml`;
 - a compatible GF executable (`gf` or `gf.exe`);
 - the required GF RGL source tree;
-- Git for normal development and reviewed gold changes.
+- Git for normal development and reviewed changes.
 
-GF Wordbench must record the exact executable and effective GF path used for each run.
+GF Wordbench records the exact executable and effective GF path used for each
+run.
 
 ### 2. Create a local environment
 
@@ -297,134 +451,57 @@ python -m pip install -e .
 gf --version
 ```
 
-On Windows, an explicit path to `gf.exe` may be configured instead of relying on `PATH`.
+On Windows, an explicit path to `gf.exe` may be configured instead of relying
+on `PATH`.
 
-### 4. Configure the active project
-
-Review:
-
-```text
-project/project.toml
-```
-
-At minimum, confirm:
-
-- project identity;
-- active language code and module suffix;
-- source directory and glob;
-- GF path components;
-- checkpoints;
-- final entrypoints;
-- required and optional scenarios;
-- expected release artifacts.
-
-Project-owned paths should be relative to the project root. Local executable, RGL and output paths belong to the local environment or application state.
-
-### 5. Inspect the command surface
+### 4. Inspect the command surfaces
 
 ```text
+python -m gf_wordbench --help
 gf-wordbench --help
-gf-wordbench audit --help
+gf-wordbench-gui
 ```
 
-Canonical audit pattern:
+Use the CLI help for the integrated command and option names of the checked-out
+revision.
+
+### 5. Select a language
+
+Start from an explicit language directory or `.gf` file. The CLI, GUI, or
+automation must pass that selection through the normal language probe before
+constructing an ordinary run.
+
+An environment-provided selected path is still untrusted input and must pass the
+same probe.
+
+### 6. Add a validation profile only when needed
+
+For checkpoint, scenario, gold, or release policy, create or select an explicit
+validation profile:
 
 ```text
-gf-wordbench audit --mode <quick|checkpoint|release|diagnostic>
+python scripts/init_project.py --help
 ```
 
-The CLI and GUI must build equivalent run configuration for equivalent inputs.
+The profile destination is external and explicit. Source-ready startup does not
+depend on it.
 
-See [`docs/usage/CLI_REFERENCE.md`](docs/usage/CLI_REFERENCE.md) for the complete command contract.
+### 7. Inspect generated evidence
 
-### 6. Run a quick audit
-
-```text
-gf-wordbench audit --mode quick
-```
-
-### 7. Inspect the generated run
-
-Open:
+A finalized run normally contains:
 
 ```text
 summary.md
 AI_READY.md
 summary.json
 manifest.json
+details/
 raw/
 artifacts/
 ```
 
-Do not diagnose from the summary alone when raw stdout, stderr or scenario transcripts are available.
-
----
-
-## Project model
-
-### Active project
-
-The active project lives under:
-
-```text
-project/
-├── README.md
-├── project.toml
-├── docs/
-└── validation/
-    ├── scenarios/
-    ├── gold/
-    └── inputs/
-```
-
-It contains language-specific information and may refer to the active language's GF source tree.
-
-### Project template
-
-A clean reusable template lives under:
-
-```text
-templates/project/
-```
-
-The template mirrors the project documentation and validation structure, but contains generic placeholders rather than active-language facts.
-
-### Separation rule
-
-Framework code must not contain active-language assumptions except in clearly identified examples, migration fixtures or legacy compatibility tests.
-
-```text
-framework
-    app/
-    tests/
-    docs/
-    templates/
-
-active language
-    project/project.toml
-    project/docs/
-    project/validation/
-    language GF sources
-```
-
-### Project initialization
-
-A new language project should be created from the template and then completed deliberately:
-
-1. assign the project identity;
-2. declare source roots and GF paths;
-3. register checkpoints and entrypoints;
-4. define required scenarios;
-5. create reviewed gold files;
-6. replace project-document placeholders;
-7. validate project contracts;
-8. establish release criteria.
-
-See:
-
-- [`docs/projects/PROJECT_MODEL.md`](docs/projects/PROJECT_MODEL.md)
-- [`docs/projects/CREATING_A_PROJECT.md`](docs/projects/CREATING_A_PROJECT.md)
-- [`docs/projects/MIGRATING_AN_EXISTING_LANGUAGE.md`](docs/projects/MIGRATING_AN_EXISTING_LANGUAGE.md)
+Do not diagnose from a summary alone when raw stdout, stderr, or scenario
+transcripts are available.
 
 ---
 
@@ -455,9 +532,7 @@ run_<run-id>/
 
 ### `summary.json`
 
-The canonical machine-readable run record.
-
-It contains versioned:
+The canonical machine-readable run record contains versioned:
 
 - metadata;
 - totals;
@@ -467,7 +542,8 @@ It contains versioned:
 - diff entries;
 - top errors.
 
-Automation, the GUI, comparison logic and migration tooling should consume this file rather than parse Markdown reports.
+Automation, GUI projections, comparison logic, and migration tooling should
+consume this file rather than parse Markdown reports.
 
 ### `summary.md`
 
@@ -482,9 +558,7 @@ A human-readable audit summary containing:
 
 ### `AI_READY.md`
 
-A bounded evidence packet designed for human or AI-assisted diagnosis.
-
-It must:
+A bounded evidence packet for human or AI-assisted diagnosis. It must:
 
 - derive conclusions from structured results;
 - distinguish direct and downstream failures;
@@ -495,9 +569,7 @@ It must:
 
 ### `manifest.json`
 
-The artifact inventory for the finalized run.
-
-It records, as applicable:
+The artifact inventory for a finalized run records, as applicable:
 
 - run-relative path;
 - role;
@@ -513,13 +585,14 @@ The manifest does not hash itself.
 
 Raw stdout and stderr are immutable after capture.
 
-Normalization, diagnostic parsing and reporting produce derived evidence without replacing the original process output.
+Normalization, diagnostic parsing, and reporting produce derived evidence
+without replacing original process output.
 
 ---
 
 ## Status and diagnostic semantics
 
-Process execution and validation interpretation are separate.
+Process execution and validation interpretation are separate dimensions.
 
 ### Validation status
 
@@ -532,14 +605,14 @@ SKIPPED
 
 | Status | Meaning |
 |---|---|
-| `OK` | The validation completed and met its criteria |
-| `FAIL` | The validation executed but did not meet its criteria |
-| `ERROR` | GF Wordbench could not correctly execute or interpret the validation |
-| `SKIPPED` | The validation was intentionally not executed |
+| `OK` | Validation completed and met its criteria |
+| `FAIL` | Validation executed but did not meet its criteria |
+| `ERROR` | GF Wordbench could not correctly execute or interpret validation |
+| `SKIPPED` | Validation was intentionally not executed |
 
 ### Execution state
 
-Process-level state records facts such as:
+Process-level facts include:
 
 ```text
 completed
@@ -564,15 +637,15 @@ skipped
 | Class | Meaning |
 |---|---|
 | `ok` | No relevant failure |
-| `direct` | Evidence indicates the selected file or scenario directly owns the failure |
-| `downstream` | The result is blocked by another known failure |
+| `direct` | Evidence indicates that this subject directly owns the failure |
+| `downstream` | The subject is blocked by another known failure |
 | `ambiguous` | Available evidence does not safely establish ownership |
-| `noise` | The result is excluded or non-actionable under the configured policy |
-| `skipped` | The validation did not run |
+| `noise` | The result is excluded or non-actionable under policy |
+| `skipped` | Validation did not run |
 
 ### Error kind
 
-The error kind describes the nature of the failure, separately from causal ownership.
+Error kind describes the nature of a failure separately from causal ownership.
 
 Canonical kinds include:
 
@@ -589,110 +662,103 @@ IO
 TOOL
 ```
 
-A non-zero process exit does not by itself determine whether a failure is direct or downstream.
+A non-zero process exit does not by itself determine whether a failure is direct
+or downstream.
 
 ---
 
 ## Architecture
 
-GF Wordbench uses explicit layers and ownership.
+GF Wordbench is one deployable hexagonal modular monolith.
 
 ```text
 CLI / GUI
-    → bootstrap and configuration
-    → audit orchestration
-        → file selection
-        → static scanner
-        → GF compiler
-        → scenario runner
-        → diagnostic parser
-        → classifier
-        → regression diff
-        → result construction
-    → report writers
-    → persisted artifacts
+    → public application and project use cases
+        → resolved-language probe
+        → configuration resolution
+        → run planning and orchestration
+            → source selection
+            → static scanning
+            → GF compilation
+            → scenario execution
+            → diagnostics and classification
+            → regression comparison
+            → result construction
+        → report writers
+        → persisted artifacts
 ```
-
-### Main framework responsibilities
-
-| Responsibility | Canonical owner |
-|---|---|
-| Application defaults | `app/config.py` |
-| Configuration construction | `app/bootstrap.py` |
-| Shared models | `app/models.py` |
-| File selection | `app/audit/file_selector.py` |
-| Static GF scanning | `app/audit/scanner.py` |
-| GF compilation | `app/audit/compiler.py` |
-| Native GF scenarios | `app/audit/scenario_runner.py` |
-| Diagnostic parsing | `app/audit/diagnostics.py` |
-| Failure classification | `app/audit/classifier.py` |
-| Fingerprints | `app/audit/fingerprint.py` |
-| Regression comparison | `app/audit/diff.py` |
-| Result construction | `app/audit/result_model.py` |
-| Audit orchestration | `app/audit/audit_core.py` |
-| JSON report | `app/reports/report_json.py` |
-| Markdown report | `app/reports/report_md.py` |
-| AI-ready report | `app/reports/report_ai_ready.py` |
-| Raw and aggregate logs | `app/reports/report_logs.py` |
-| Detail reports | `app/reports/report_details.py` |
-| Process execution | `app/utils/process_utils.py` |
-| Persistent UI state | `app/state.py` |
 
 ### Dependency direction
 
-Expected direction:
+Expected high-level direction:
 
 ```text
-CLI / GUI
-    → bootstrap
-    → audit core
-    → stages
-    → process and filesystem utilities
-    → typed models
-    → reports
+entrypoints → application/use cases → domain models + ports
+bootstrap   → use cases + ports + adapters
+adapters    → ports + infrastructure + external systems
+reporting   → finalized results + artifact readers
 ```
 
-Prohibited examples:
+Foundation packages remain below projects, state, entrypoints, and concrete
+composition.
+
+Prohibited examples include:
 
 ```text
-reports → compiler
-reports → scanner
-reports → scenario runner
-models → GUI
-compiler → reports
-scanner → compiler
-classifier → process execution
+reports → compiler execution
+reports → scanner execution
+domain models → concrete adapters
+kernel → projects or entrypoints
+language probe → GUI widgets
+language probe → subprocess
+runtime packages → gf-portfolio
 ```
 
-Reports consume completed results. They do not create new audit evidence.
+Reports consume completed results. They do not create new validation evidence.
 
-See [`docs/architecture/ARCHITECTURE_OVERVIEW.md`](docs/architecture/ARCHITECTURE_OVERVIEW.md).
+### Canonical implementation areas
+
+| Responsibility | Canonical area |
+|---|---|
+| Shared kernel contracts | `src/gf_wordbench/kernel/` |
+| Configuration | `src/gf_wordbench/config/` |
+| Infrastructure and process execution | `src/gf_wordbench/infrastructure/` |
+| Language probing and optional profiles | `src/gf_wordbench/projects/` |
+| Disposable application state | `src/gf_wordbench/state/` |
+| Run planning and result construction | `src/gf_wordbench/runs/` |
+| Validation stages | `src/gf_wordbench/validation/` |
+| Diagnostics and classification | `src/gf_wordbench/diagnostics/` |
+| Reporting and schemas | `src/gf_wordbench/reporting/` |
+| CLI and GUI | `src/gf_wordbench/entrypoints/` |
+| Runtime composition | `src/gf_wordbench/bootstrap.py` |
+
+See
+[`docs/architecture/ARCHITECTURE_OVERVIEW.md`](docs/architecture/ARCHITECTURE_OVERVIEW.md).
 
 ---
 
 ## Anti-drift contracts
 
-GF Wordbench maintains seven coordinated anti-drift documents.
+GF Wordbench maintains coordinated anti-drift authorities.
 
 | Path | Scope |
 |---|---|
-| [`docs/DOCUMENTATION_ALIGNMENT_LOCK.md`](docs/DOCUMENTATION_ALIGNMENT_LOCK.md) | Cross-document product identity, authority order and correction rules |
-| [`docs/DOCUMENTATION_CORRECTION_LEDGER.md`](docs/DOCUMENTATION_CORRECTION_LEDGER.md) | Coordination of documentation corrections across branches |
-| [`docs/INTERFILE_CONTRACT_LOCK.md`](docs/INTERFILE_CONTRACT_LOCK.md) | Python and framework file boundaries |
-| [`docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`](docs/EXTERNAL_TOOL_CONTRACT_LOCK.md) | GF, process, filesystem and platform boundaries |
+| [`docs/DOCUMENTATION_ALIGNMENT_LOCK.md`](docs/DOCUMENTATION_ALIGNMENT_LOCK.md) | Cross-document product identity, authority order, and correction rules |
+| [`docs/DOCUMENTATION_CORRECTION_LEDGER.md`](docs/DOCUMENTATION_CORRECTION_LEDGER.md) | Coordination of documentation corrections |
+| [`docs/INTERFILE_CONTRACT_LOCK.md`](docs/INTERFILE_CONTRACT_LOCK.md) | Python ownership, imports, re-exports, and provider-consumer boundaries |
+| [`docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`](docs/EXTERNAL_TOOL_CONTRACT_LOCK.md) | GF, process, filesystem, and platform boundaries |
 | [`docs/PERSISTED_SCHEMA_LOCK.md`](docs/PERSISTED_SCHEMA_LOCK.md) | Versioned persisted formats and migrations |
-| [`project/docs/INTERFILE_CONTRACT_LOCK.md`](project/docs/INTERFILE_CONTRACT_LOCK.md) | Active language GF modules, scenarios and artifacts |
-| [`templates/project/docs/INTERFILE_CONTRACT_LOCK.md`](templates/project/docs/INTERFILE_CONTRACT_LOCK.md) | Generic project-lock template |
+| [`templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md`](templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md) | Language-neutral validation-profile lock template |
 
 ### Contract-change rule
 
-A provider and every consumer form one coordinated change unit when their shared contract changes.
+A provider and every consumer form one coordinated change unit when their shared
+contract changes.
 
 A contract-changing edit must review, as applicable:
 
-- provider;
-- direct consumers;
-- downstream consumers;
+- the owner;
+- direct and downstream consumers;
 - typed models;
 - configuration;
 - process requests;
@@ -704,18 +770,12 @@ A contract-changing edit must review, as applicable:
 - documentation;
 - migration notes.
 
-### Suggested contract checks
+The command surface is defined by the integrated CLI implementation and its
+reference documentation. Verify the checked-out revision with:
 
 ```text
-gf-wordbench contracts check
-gf-wordbench contracts check --strict
-gf-wordbench contracts check-external
-gf-wordbench project contracts check
-gf-wordbench schemas check
-gf-wordbench schemas check --strict
+python -m gf_wordbench --help
 ```
-
-The command surface is defined by the CLI reference and must remain synchronized with the code.
 
 ---
 
@@ -724,41 +784,37 @@ The command surface is defined by the CLI reference and must remain synchronized
 ```text
 GF_Wordbench/
 ├── README.md
-├── CHANGELOG.md
 ├── CONTRIBUTING.md
 ├── SECURITY.md
 ├── LICENSE.md
+├── DOCUMENT_MANIFEST.json
 ├── pyproject.toml
-├── app/
-│   ├── audit/
-│   ├── gui/
-│   ├── reports/
-│   └── utils/
+├── src/
+│   └── gf_wordbench/
+│       ├── config/
+│       ├── diagnostics/
+│       ├── entrypoints/
+│       ├── infrastructure/
+│       ├── kernel/
+│       ├── projects/
+│       ├── reporting/
+│       ├── runs/
+│       ├── state/
+│       └── validation/
+├── scripts/
+├── tools/
+│   └── diagnostics/
 ├── tests/
 ├── docs/
-│   ├── architecture/
-│   ├── configuration/
-│   ├── decisions/
-│   ├── development/
-│   ├── diagnostics/
-│   ├── gf/
-│   ├── operations/
-│   ├── projects/
-│   ├── reference/
-│   ├── release/
-│   ├── reports/
-│   ├── scenarios/
-│   ├── usage/
-│   └── validation/
-├── project/
-│   ├── project.toml
-│   ├── docs/
-│   └── validation/
 └── templates/
-    └── project/
+    └── validation-profile/
 ```
 
-Generated runs should be written to an explicitly configured output root, not mixed into language source directories.
+Generated runs belong under an explicitly configured output root. They must not
+be mixed into language source directories.
+
+The repository does not require or recreate an authoritative active
+`project/` directory.
 
 ---
 
@@ -774,6 +830,7 @@ Start with:
 ### Architecture
 
 - [`docs/architecture/ARCHITECTURE_OVERVIEW.md`](docs/architecture/ARCHITECTURE_OVERVIEW.md)
+- [`docs/architecture/CANONICAL_FILE_ARCHITECTURE.md`](docs/architecture/CANONICAL_FILE_ARCHITECTURE.md)
 - [`docs/architecture/COMPONENT_MAP.md`](docs/architecture/COMPONENT_MAP.md)
 - [`docs/architecture/DATA_MODEL.md`](docs/architecture/DATA_MODEL.md)
 - [`docs/architecture/ARTIFACT_MODEL.md`](docs/architecture/ARTIFACT_MODEL.md)
@@ -815,7 +872,7 @@ Start with:
 
 ## Native GF scenarios
 
-Scenarios are `.gfs` files executed by GF Wordbench through the GF shell.
+Scenarios are `.gfs` files executed through the GF process boundary.
 
 They may validate:
 
@@ -828,27 +885,22 @@ They may validate:
 - bounded generation;
 - PGF-facing behavior.
 
-A scenario must have:
+A profile-defined scenario must have:
 
 - a unique configured identifier;
 - a declared required or optional status;
 - a known grammar entrypoint;
 - bounded behavior;
-- stable begin/end markers;
+- stable begin and end markers;
 - explicit success criteria;
 - preserved raw stdout and stderr;
 - a normalization version;
 - a reviewed gold file when comparison is required.
 
-Normal validation is read-only with respect to project `.gold` files.
+Normal validation is read-only with respect to `.gold` files.
 
-Gold updates require an explicit reviewed operation:
-
-```text
-gf-wordbench gold update <scenario-id>
-```
-
-A missing required gold file is a failure, not an automatic creation request.
+Gold updates require an explicit reviewed operation. A missing required gold file
+is a failure, not an automatic creation request.
 
 ---
 
@@ -867,7 +919,8 @@ It may normalize documented unstable elements such as:
 - platform path separators;
 - explicitly version-independent banners.
 
-It must not remove linguistically or diagnostically meaningful information, including:
+It must not remove linguistically or diagnostically meaningful information,
+including:
 
 - GF errors;
 - relevant source filenames;
@@ -882,36 +935,54 @@ It must not remove linguistically or diagnostically meaningful information, incl
 
 Raw output remains unchanged.
 
-Any normalization change that alters existing gold comparisons is a contract change and requires deliberate gold review.
+Any normalization change that alters existing gold comparisons is a contract
+change and requires deliberate gold review.
 
 ---
 
 ## Development
 
-Install development dependencies as defined by `pyproject.toml`, then run the repository's test suite.
-
-Typical checks:
+Install development dependencies:
 
 ```text
-python -m pytest
-python -m compileall app tests
-gf-wordbench contracts check --strict
-gf-wordbench schemas check --strict
+python -m pip install -e ".[dev]"
 ```
 
-Real-GF integration tests should be clearly separated from fast unit tests.
+Core checks:
+
+```text
+python -m compileall -q src tools scripts
+python -m gf_wordbench --help
+python -m pytest --collect-only -q
+python -m pytest tests/contracts -q
+python -m pytest tests/components -q
+python -m pytest tests/unit -q
+python tools/diagnostics/run_safe_suite.py
+```
+
+Repository checks:
+
+```text
+git diff --check
+git status --short
+```
+
+Real-GF integration tests should remain clearly separated from fast unit tests.
 
 Development changes should preserve:
 
-- CLI/GUI semantic equivalence;
+- CLI and GUI semantic equivalence;
 - typed component boundaries;
-- single artifact ownership;
+- single artifact and symbol ownership;
+- resolved-language authority;
+- optional-profile boundaries;
 - raw evidence;
 - deterministic serialization;
 - backward-compatible schema behavior;
-- project/framework separation.
+- source, profile, and framework separation.
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/development/CODING_STANDARDS.md`](docs/development/CODING_STANDARDS.md).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
+[`docs/development/CODING_STANDARDS.md`](docs/development/CODING_STANDARDS.md).
 
 ---
 
@@ -921,7 +992,7 @@ GF Wordbench maintains separate compatibility policies for:
 
 - Python package versions;
 - GF executable versions;
-- project schema versions;
+- validation-profile schema versions;
 - application state;
 - run summaries;
 - manifests;
@@ -929,7 +1000,8 @@ GF Wordbench maintains separate compatibility policies for:
 - gold files;
 - cross-file contracts.
 
-Legacy GF Audit data may be imported through documented migrations.
+Legacy data may be imported only through documented migrations or explicit
+compatibility aliases.
 
 Examples include:
 
@@ -941,7 +1013,8 @@ mode=all → mode=diagnostic
 ai_brief_path → artifacts.ai_ready
 ```
 
-Canonical writers emit only current GF Wordbench formats. Legacy aliases are read-only compatibility inputs.
+Canonical writers emit only current GF Wordbench formats. Legacy aliases are
+read-only compatibility inputs.
 
 See:
 
@@ -953,7 +1026,8 @@ See:
 
 ## Security
 
-GF project paths, scenario files and external-tool arguments cross trust boundaries.
+Selected language paths, profile paths, scenario files, and external-tool
+arguments cross trust boundaries.
 
 GF Wordbench must:
 
@@ -961,13 +1035,14 @@ GF Wordbench must:
 - pass executable arguments as an ordered list;
 - validate paths before use;
 - keep owned artifacts inside approved roots;
+- prevent profiles from escaping the resolved language context;
 - treat `.gfs` scenarios as executable input;
 - prohibit operating-system escape commands unless explicitly enabled;
 - avoid complete environment dumps;
-- avoid persisting passwords, tokens, private keys or credentials;
+- avoid persisting passwords, tokens, private keys, or credentials;
 - preserve enough evidence to audit external execution safely.
 
-Do not run untrusted project scenarios without reviewing them.
+Do not run untrusted profile scenarios without reviewing them.
 
 See [`SECURITY.md`](SECURITY.md).
 
@@ -978,31 +1053,37 @@ See [`SECURITY.md`](SECURITY.md).
 GF Wordbench is not intended to:
 
 - replace GF;
+- require a global runtime language catalog;
+- require a repository-owned language bundle for normal startup;
+- require a validation profile for source browsing or targeted compilation;
 - edit GF source automatically during normal validation;
 - update gold files implicitly;
-- support multiple active languages in one repository copy;
+- run multiple active language contexts in one ordinary session;
 - infer release readiness from one successful file;
 - hide raw tool output behind a diagnosis;
-- use GUI state as authoritative project configuration;
+- use GUI state as authoritative language configuration;
 - treat human-readable reports as stable machine schemas;
-- silently accommodate breaking persisted-format changes.
+- silently accommodate breaking persisted-format changes;
+- import or require `gf-portfolio` at runtime.
 
 ---
 
 ## Contributing
 
-Contributions should be small enough to review but complete across every affected contract.
+Contributions should be small enough to review but complete across every
+affected contract.
 
 Before submitting a change:
 
-1. identify affected providers and consumers;
-2. classify the change as internal, compatible or breaking;
-3. update tests and scenarios;
+1. identify affected owners, providers, and consumers;
+2. classify the change as internal, compatible, or breaking;
+3. update tests and scenarios when their contracts or assertions change;
 4. review gold impact;
 5. preserve or migrate persisted formats;
-6. update the relevant contract lock;
+6. update the relevant contract authority;
 7. update user and developer documentation;
-8. run the appropriate checkpoint or release validation.
+8. run the appropriate validation evidence;
+9. verify `git diff --check` and a clean intended worktree.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
@@ -1010,6 +1091,8 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
-GF Wordbench is distributed under the terms documented in [`LICENSE.md`](LICENSE.md).
+GF Wordbench is distributed under the terms documented in
+[`LICENSE.md`](LICENSE.md).
 
-Third-party components, including Grammatical Framework and language resources, retain their own licenses.
+Third-party components, including Grammatical Framework and language resources,
+retain their own licenses.

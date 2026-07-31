@@ -1,4 +1,10 @@
-"""Deterministic source-file selection service for GF Wordbench."""
+"""Deterministic GF source selection for runs and language probing.
+
+The run-oriented API remains backward compatible.  ``select_source_tree``
+exposes the same bounded enumeration, filtering, containment, deduplication and
+ordering behavior to path-resolved language startup without requiring a fake
+``RunConfig`` or duplicating selection logic in the language probe.
+"""
 
 from __future__ import annotations
 
@@ -18,12 +24,14 @@ from gf_wordbench.kernel.errors import (
 from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
 
 from .models import ExcludedFileEntry
+from .targets import extract_module_name as _extract_module_name
 
 __all__ = (
     "SelectionFilesystem",
     "SelectionService",
     "extract_module_name",
     "select_files",
+    "select_source_tree",
 )
 
 _MISSING_FILE: Final[str] = "missing_file"
@@ -188,6 +196,90 @@ class SelectionService:
             detail=f"mode={run_config.mode!r}",
             subject="mode",
             code="GF-WB-CONFIG-220",
+        )
+
+    def select_source_tree(
+        self,
+        source_root: Path,
+        *,
+        containment_root: Path | None = None,
+        glob_pattern: str = "*.gf",
+        include_regex: str = "",
+        exclude_regex: str = "",
+        max_files: int = 0,
+    ) -> tuple[list[Path], list[ExcludedFileEntry]]:
+        """Select a deterministic GF source inventory without a ``RunConfig``.
+
+        This operation is intended for path-resolved language probing and other
+        bounded source-tree inspections.  ``containment_root`` defaults to the
+        source root itself; callers may supply the validated RGL source root to
+        permit portable ordering while still restricting the scan to one
+        language directory.
+        """
+
+        if not isinstance(source_root, Path):
+            raise TypeError("source_root must be a pathlib.Path")
+        if containment_root is not None and not isinstance(
+            containment_root,
+            Path,
+        ):
+            raise TypeError("containment_root must be a pathlib.Path or None")
+        if type(max_files) is not int:
+            raise TypeError("max_files must be an integer")
+        if max_files < 0:
+            raise _configuration_error(
+                "max_files must not be negative.",
+                detail=f"max_files={max_files}",
+                subject="max_files",
+                code="GF-WB-CONFIG-243",
+            )
+
+        resolved_source_root = self._resolve_required_directory(
+            source_root,
+            subject="source_root",
+            missing_message="The selected source root does not exist.",
+        )
+        resolved_containment_root = self._resolve_required_directory(
+            containment_root or resolved_source_root,
+            subject="containment_root",
+            missing_message="The selection containment root does not exist.",
+        )
+
+        if not _contains(
+            resolved_containment_root,
+            resolved_source_root,
+            allow_equal=True,
+        ):
+            raise PathSecurityError(
+                "The selected source root escapes its containment root.",
+                code="GF-WB-PATH-223",
+                detail=(
+                    f"containment_root={resolved_containment_root!s}\n"
+                    f"source_root={resolved_source_root!s}"
+                ),
+                stage="selection",
+                operation="resolve_source_tree_roots",
+                subject=str(resolved_source_root),
+            )
+
+        roots = _SelectionRoots(
+            project_root=resolved_containment_root,
+            source_root=resolved_source_root,
+        )
+        filters = _compile_filter_values(
+            include_regex=include_regex,
+            exclude_regex=exclude_regex,
+            include_field="include_regex",
+            exclude_field="exclude_regex",
+        )
+        return self._select_discovered(
+            roots=roots,
+            filters=filters,
+            glob_pattern=_validate_glob(
+                glob_pattern,
+                field="glob_pattern",
+            ),
+            max_files=max_files,
         )
 
     def _resolve_roots(
@@ -396,9 +488,26 @@ class SelectionService:
                 code="GF-WB-CONFIG-230",
             )
 
-        glob_pattern = _validate_glob(
-            run_config.project.sources.glob
+        return self._select_discovered(
+            roots=roots,
+            filters=filters,
+            glob_pattern=_validate_glob(
+                run_config.project.sources.glob,
+                field="sources.glob",
+            ),
+            max_files=run_config.max_files,
         )
+
+    def _select_discovered(
+        self,
+        *,
+        roots: _SelectionRoots,
+        filters: _CompiledFilters,
+        glob_pattern: str,
+        max_files: int,
+    ) -> tuple[list[Path], list[ExcludedFileEntry]]:
+        """Enumerate and evaluate one bounded source tree deterministically."""
+
         raw_candidates = self._enumerate_candidates(
             roots.source_root,
             glob_pattern,
@@ -451,10 +560,9 @@ class SelectionService:
             )
         )
 
-        limit = run_config.max_files
-        if limit > 0 and len(accepted) > limit:
-            overflow = accepted[limit:]
-            accepted = accepted[:limit]
+        if max_files > 0 and len(accepted) > max_files:
+            overflow = accepted[max_files:]
+            accepted = accepted[:max_files]
             excluded.extend(
                 ExcludedFileEntry(
                     file_path=path,
@@ -944,38 +1052,78 @@ def select_files(
     *,
     filesystem: SelectionFilesystem | None = None,
 ) -> tuple[list[Path], list[ExcludedFileEntry]]:
+    """Select files for one fully resolved validation run."""
+
     service = SelectionService(
         filesystem=filesystem or _LOCAL_FILESYSTEM
     )
     return service.select(run_config)
 
 
+def select_source_tree(
+    source_root: Path,
+    *,
+    containment_root: Path | None = None,
+    glob_pattern: str = "*.gf",
+    include_regex: str = "",
+    exclude_regex: str = "",
+    max_files: int = 0,
+    filesystem: SelectionFilesystem | None = None,
+) -> tuple[list[Path], list[ExcludedFileEntry]]:
+    """Select one source inventory for path-resolved language probing."""
+
+    service = SelectionService(
+        filesystem=filesystem or _LOCAL_FILESYSTEM
+    )
+    return service.select_source_tree(
+        source_root,
+        containment_root=containment_root,
+        glob_pattern=glob_pattern,
+        include_regex=include_regex,
+        exclude_regex=exclude_regex,
+        max_files=max_files,
+    )
+
+
 def extract_module_name(
     file_path: Path,
 ) -> str:
+    """Delegate module-name extraction while preserving this API's errors."""
+
     if not isinstance(file_path, Path):
-        raise TypeError(
-            "file_path must be a pathlib.Path"
-        )
+        raise TypeError("file_path must be a pathlib.Path")
     if not file_path.name:
-        raise ValueError(
-            "file_path must identify a file"
-        )
-    return file_path.stem
+        raise ValueError("file_path must identify a file")
+    return _extract_module_name(file_path)
 
 
 def _compile_filters(
     run_config: RunConfig,
 ) -> _CompiledFilters:
     sources = run_config.project.sources
+    return _compile_filter_values(
+        include_regex=sources.include_regex,
+        exclude_regex=sources.exclude_regex,
+        include_field="sources.include_regex",
+        exclude_field="sources.exclude_regex",
+    )
+
+
+def _compile_filter_values(
+    *,
+    include_regex: str,
+    exclude_regex: str,
+    include_field: str,
+    exclude_field: str,
+) -> _CompiledFilters:
     return _CompiledFilters(
         include=_compile_optional_regex(
-            sources.include_regex,
-            field="sources.include_regex",
+            include_regex,
+            field=include_field,
         ),
         exclude=_compile_optional_regex(
-            sources.exclude_regex,
-            field="sources.exclude_regex",
+            exclude_regex,
+            field=exclude_field,
         ),
     )
 
@@ -1027,30 +1175,30 @@ def _regex_matches(
 
 def _validate_glob(
     value: str,
+    *,
+    field: str = "sources.glob",
 ) -> str:
     if not isinstance(value, str):
-        raise TypeError(
-            "sources.glob must be a string"
-        )
+        raise TypeError(f"{field} must be a string")
     if "\x00" in value:
         raise _configuration_error(
-            "sources.glob contains NUL.",
-            subject="sources.glob",
+            f"{field} contains NUL.",
+            subject=field,
             code="GF-WB-CONFIG-238",
         )
 
     normalized = value.strip()
     if not normalized:
         raise _configuration_error(
-            "sources.glob must not be empty.",
-            subject="sources.glob",
+            f"{field} must not be empty.",
+            subject=field,
             code="GF-WB-CONFIG-239",
         )
     if _is_absolute_text(normalized):
         raise _configuration_error(
-            "sources.glob must be project-relative.",
+            f"{field} must be relative.",
             detail=f"glob={normalized!r}",
-            subject="sources.glob",
+            subject=field,
             code="GF-WB-CONFIG-240",
         )
     return normalized

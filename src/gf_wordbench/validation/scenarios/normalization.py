@@ -556,6 +556,100 @@ class NormalizationProfileRegistry:
         )
 
 
+def validate_normalization_version(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError(
+            "normalization version must be a string"
+        )
+    if _NORMALIZATION_VERSION_RE.fullmatch(value) is None:
+        raise ValueError(
+            "normalization version must use MAJOR.MINOR.PATCH"
+        )
+    return value
+
+
+def _require_normalizable_text(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError("normalizable content must be a string")
+    if len(value) > _MAX_SECTION_CHARACTERS:
+        raise NormalizationError(
+            NormalizationErrorCode.LIMIT_EXCEEDED,
+            "Extracted scenario section exceeds the normalization limit.",
+        )
+    if "\x00" in value:
+        raise NormalizationError(
+            NormalizationErrorCode.INVALID_SECTION,
+            "Extracted scenario section must not contain NUL.",
+        )
+    return value
+
+
+def _validate_rule_id(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError("rule_id must be a string")
+    if _RULE_ID_RE.fullmatch(value) is None:
+        raise ValueError(
+            "rule_id must match NORM-<DOMAIN>-<NNN>"
+        )
+    return value
+
+
+def _validate_sha256(
+    value: object,
+    *,
+    field_name: str,
+) -> str:
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"[0-9a-f]{64}", value) is None
+    ):
+        raise ValueError(
+            f"{field_name} must be a lowercase SHA-256 digest"
+        )
+    return value
+
+
+def _validate_nonnegative_integer(
+    value: object,
+    *,
+    field_name: str,
+) -> int:
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < 0
+    ):
+        raise ValueError(
+            f"{field_name} must be a non-negative integer"
+        )
+    return value
+
+
+def _require_text(
+    value: object,
+    *,
+    field_name: str,
+) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be a string")
+    if not value or not value.strip():
+        raise ValueError(f"{field_name} must not be empty")
+    if "\x00" in value:
+        raise ValueError(
+            f"{field_name} must not contain NUL"
+        )
+    return value
+
+
+def _split_line_ending(line: str) -> tuple[str, str]:
+    if line.endswith("\r\n"):
+        return line[:-2], "\r\n"
+    if line.endswith("\n") or line.endswith("\r"):
+        return line[:-1], line[-1]
+    return line, ""
+
+
+
 DEFAULT_NORMALIZATION_PROFILE: Final[NormalizationProfile] = (
     NormalizationProfile(
         profile_id=DEFAULT_NORMALIZATION_PROFILE_ID,
@@ -569,18 +663,6 @@ DEFAULT_NORMALIZATION_REGISTRY: Final[
 ] = NormalizationProfileRegistry(
     (DEFAULT_NORMALIZATION_PROFILE,)
 )
-
-
-def validate_normalization_version(value: object) -> str:
-    if not isinstance(value, str):
-        raise TypeError(
-            "normalization version must be a string"
-        )
-    if _NORMALIZATION_VERSION_RE.fullmatch(value) is None:
-        raise ValueError(
-            "normalization version must use MAJOR.MINOR.PATCH"
-        )
-    return value
 
 
 def normalize_scenario_section(
@@ -720,86 +802,6 @@ def normalize_scenario_sections(
 
     return tuple(normalized_sections)
 
-
-def _require_normalizable_text(value: object) -> str:
-    if not isinstance(value, str):
-        raise TypeError("normalizable content must be a string")
-    if len(value) > _MAX_SECTION_CHARACTERS:
-        raise NormalizationError(
-            NormalizationErrorCode.LIMIT_EXCEEDED,
-            "Extracted scenario section exceeds the normalization limit.",
-        )
-    if "\x00" in value:
-        raise NormalizationError(
-            NormalizationErrorCode.INVALID_SECTION,
-            "Extracted scenario section must not contain NUL.",
-        )
-    return value
-
-
-def _validate_rule_id(value: object) -> str:
-    if not isinstance(value, str):
-        raise TypeError("rule_id must be a string")
-    if _RULE_ID_RE.fullmatch(value) is None:
-        raise ValueError(
-            "rule_id must match NORM-<DOMAIN>-<NNN>"
-        )
-    return value
-
-
-def _validate_sha256(
-    value: object,
-    *,
-    field_name: str,
-) -> str:
-    if (
-        not isinstance(value, str)
-        or re.fullmatch(r"[0-9a-f]{64}", value) is None
-    ):
-        raise ValueError(
-            f"{field_name} must be a lowercase SHA-256 digest"
-        )
-    return value
-
-
-def _validate_nonnegative_integer(
-    value: object,
-    *,
-    field_name: str,
-) -> int:
-    if (
-        not isinstance(value, int)
-        or isinstance(value, bool)
-        or value < 0
-    ):
-        raise ValueError(
-            f"{field_name} must be a non-negative integer"
-        )
-    return value
-
-
-def _require_text(
-    value: object,
-    *,
-    field_name: str,
-) -> str:
-    if not isinstance(value, str):
-        raise TypeError(f"{field_name} must be a string")
-    if not value or not value.strip():
-        raise ValueError(f"{field_name} must not be empty")
-    if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL"
-        )
-    return value
-
-
-def _split_line_ending(line: str) -> tuple[str, str]:
-    if line.endswith("\r\n"):
-        return line[:-2], "\r\n"
-    if line.endswith("\n") or line.endswith("\r"):
-        return line[:-1], line[-1]
-    return line, ""
 
 
 __all__ = (

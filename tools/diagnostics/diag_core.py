@@ -107,7 +107,8 @@ class DiagConfig:
     repo_root: Path
     app_name: str
     artifact_root: Path
-    project_root: Path
+    language_path: Path | None
+    validation_profile: Path | None
     output_root: Path | None
     gf_executable: str
     rgl_root: Path | None
@@ -135,10 +136,11 @@ def load_config() -> DiagConfig:
     suite_root = Path(__file__).resolve().parent
     repo_root = detect_repo_root(suite_root)
     defaults: dict[str, Any] = {
-        "schema": "wordbench.minidiag.config.v1",
+        "schema": "wordbench.minidiag.config.v2",
         "app_name": "GF Wordbench Mini Diagnostics",
         "artifact_dir": ".wordbench-diagnostics",
-        "project_root": "project",
+        "language_path": "",
+        "validation_profile": "",
         "output_root": "",
         "gf_executable": "gf",
         "rgl_root": "",
@@ -148,11 +150,13 @@ def load_config() -> DiagConfig:
             "src/gf_wordbench",
             "tests",
             "scripts",
-            "project",
+            "tools/diagnostics",
         ],
         "summary_globs": [
+            "_gf_wordbench/run_*/summary.json",
             "runs/run_*/summary.json",
             "run_*/summary.json",
+            "project/_gf_wordbench/run_*/summary.json",
             "project/runs/run_*/summary.json",
             "project/run_*/summary.json",
         ],
@@ -194,17 +198,47 @@ def load_config() -> DiagConfig:
     if root_override:
         repo_root = Path(root_override).expanduser().resolve()
 
-    def root_path(value: Any, default: str) -> Path:
-        text = str(value if value not in (None, "") else default)
-        path = Path(text).expanduser()
+    def repo_path(value: Any, default: str = "") -> Path | None:
+        text_value = str(value if value not in (None, "") else default).strip()
+        if not text_value:
+            return None
+        path = Path(text_value).expanduser()
         return path.resolve() if path.is_absolute() else (repo_root / path).resolve()
 
+    def profile_path(value: Any) -> Path | None:
+        candidate = repo_path(value)
+        if candidate is None:
+            return None
+        if candidate.is_dir():
+            direct = candidate / "project.toml"
+            nested = candidate / "project" / "project.toml"
+            if direct.is_file():
+                return direct.resolve()
+            if nested.is_file():
+                return nested.resolve()
+        return candidate
+
+    def legacy_profile_value() -> Any:
+        # Compatibility is intentionally one-way: the former project root may
+        # identify an optional profile, but it can never establish the active
+        # language path under ADR-0015.
+        return raw.get("project_root", "")
+
     artifact_dir = os.environ.get(
-        "WORDBENCH_DIAG_ARTIFACT_DIR", str(raw.get("artifact_dir", ".wordbench-diagnostics"))
+        "WORDBENCH_DIAG_ARTIFACT_DIR",
+        str(raw.get("artifact_dir", ".wordbench-diagnostics")),
     )
-    project_dir = os.environ.get(
-        "WORDBENCH_DIAG_PROJECT_ROOT", str(raw.get("project_root", "project"))
-    )
+    language_value = os.environ.get(
+        "WORDBENCH_DIAG_LANGUAGE_PATH",
+        str(raw.get("language_path", "")),
+    ).strip()
+    profile_default = raw.get("validation_profile", "")
+    if profile_default in (None, ""):
+        profile_default = legacy_profile_value()
+    profile_value = os.environ.get(
+        "WORDBENCH_DIAG_VALIDATION_PROFILE",
+        str(profile_default),
+    ).strip()
     output_value = os.environ.get(
         "WORDBENCH_DIAG_OUTPUT_ROOT", str(raw.get("output_root", ""))
     ).strip()
@@ -215,15 +249,20 @@ def load_config() -> DiagConfig:
         "WORDBENCH_DIAG_GF_EXECUTABLE", str(raw.get("gf_executable", "gf"))
     )
 
+    artifact_root = repo_path(artifact_dir, ".wordbench-diagnostics")
+    if artifact_root is None:  # Defensive; the default is non-empty.
+        raise ValueError("artifact_dir must resolve to a path")
+
     return DiagConfig(
         suite_root=suite_root,
         repo_root=repo_root,
         app_name=str(raw.get("app_name", defaults["app_name"])),
-        artifact_root=root_path(artifact_dir, ".wordbench-diagnostics"),
-        project_root=root_path(project_dir, "project"),
-        output_root=root_path(output_value, "runs") if output_value else None,
+        artifact_root=artifact_root,
+        language_path=repo_path(language_value),
+        validation_profile=profile_path(profile_value),
+        output_root=repo_path(output_value),
         gf_executable=gf_executable,
-        rgl_root=root_path(rgl_value, rgl_value) if rgl_value else None,
+        rgl_root=repo_path(rgl_value),
         raw=raw,
         config_path=chosen,
     )
@@ -233,12 +272,32 @@ def build_env(config: DiagConfig) -> dict[str, str]:
     env = os.environ.copy()
     source_root = config.repo_root / "src"
     existing = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = str(source_root) + (os.pathsep + existing if existing else "")
+    env["PYTHONPATH"] = str(source_root) + (
+        os.pathsep + existing if existing else ""
+    )
     env["WORDBENCH_DIAG_REPO_ROOT"] = str(config.repo_root)
+    env.pop("WORDBENCH_DIAG_PROJECT_ROOT", None)
+    if config.language_path is not None:
+        env["WORDBENCH_DIAG_LANGUAGE_PATH"] = str(config.language_path)
+    else:
+        env.pop("WORDBENCH_DIAG_LANGUAGE_PATH", None)
+    if config.validation_profile is not None:
+        env["WORDBENCH_DIAG_VALIDATION_PROFILE"] = str(
+            config.validation_profile
+        )
+    else:
+        env.pop("WORDBENCH_DIAG_VALIDATION_PROFILE", None)
+
+    # Remove undocumented or superseded predecessor spellings before launching
+    # child processes.
+    env.pop("GF_WORDBENCH_OUTPUT_ROOT", None)
+
+    if config.gf_executable:
+        env["GF_WORDBENCH_GF_EXE"] = config.gf_executable
     if config.output_root is not None:
-        env.setdefault("GF_WORDBENCH_OUTPUT_ROOT", str(config.output_root))
+        env["GF_WORDBENCH_OUT_ROOT"] = str(config.output_root)
     if config.rgl_root is not None:
-        env.setdefault("GF_WORDBENCH_RGL_ROOT", str(config.rgl_root))
+        env["GF_WORDBENCH_RGL_ROOT"] = str(config.rgl_root)
     return env
 
 
@@ -256,7 +315,8 @@ def _token_map(config: DiagConfig) -> dict[str, str]:
     return {
         "python": console_python(),
         "repo": str(config.repo_root),
-        "project": str(config.project_root),
+        "language": str(config.language_path or ""),
+        "profile": str(config.validation_profile or ""),
         "artifacts": str(config.artifact_root),
         "output": str(config.output_root or ""),
         "gf": config.gf_executable,
@@ -272,6 +332,14 @@ def expand_command(config: DiagConfig, command: Sequence[str]) -> list[str]:
         for key, value in mapping.items():
             text = text.replace("{" + key + "}", value)
         expanded.append(text)
+
+    # A .pyw level normally runs under pythonw.exe on Windows. Child commands
+    # must use python.exe so stdout/stderr and tracebacks remain capturable.
+    if expanded:
+        first = Path(expanded[0]).name.lower()
+        current = Path(sys.executable).name.lower()
+        if first in {"pythonw.exe", current} and current == "pythonw.exe":
+            expanded[0] = console_python()
     return expanded
 
 
@@ -282,14 +350,29 @@ def wordbench_command(config: DiagConfig, *arguments: str) -> list[str]:
     return [*expand_command(config, [str(item) for item in raw]), *arguments]
 
 
-def common_path_arguments(config: DiagConfig, *, include_output: bool) -> list[str]:
-    args = ["--project-root", str(config.project_root)]
+def common_path_arguments(
+    config: DiagConfig,
+    *,
+    include_output: bool,
+    include_profile: bool = True,
+) -> list[str]:
+    """Return canonical ADR-0015 language and local-environment arguments.
+
+    The function adds only values that are configured. Individual diagnostic
+    levels remain responsible for declaring whether a language path or profile
+    is required for the command they are about to run.
+    """
+    args: list[str] = []
+    if config.language_path is not None:
+        args.extend(["--language-path", str(config.language_path)])
+    if include_profile and config.validation_profile is not None:
+        args.extend(["--profile", str(config.validation_profile)])
     if config.gf_executable:
-        args.extend(["--gf-executable", config.gf_executable])
+        args.extend(["--gf-exe", config.gf_executable])
     if config.rgl_root is not None:
         args.extend(["--rgl-root", str(config.rgl_root)])
     if include_output and config.output_root is not None:
-        args.extend(["--output-root", str(config.output_root)])
+        args.extend(["--out-root", str(config.output_root)])
     return args
 
 
@@ -408,7 +491,8 @@ class DiagReport:
     started_at: str
     finished_at: str
     repo_root: str
-    project_root: str
+    language_path: str | None
+    validation_profile: str | None
     verdict: str
     artifact_dir: Path = field(repr=False)
     findings: list[Finding] = field(default_factory=list)
@@ -432,7 +516,7 @@ class DiagReport:
         artifact_dir.mkdir(parents=True, exist_ok=True)
         now = _now()
         return cls(
-            schema="wordbench.minidiag.report.v1",
+            schema="wordbench.minidiag.report.v2",
             suite="GF Wordbench Mini Diagnostics",
             level=level,
             name=name,
@@ -440,7 +524,14 @@ class DiagReport:
             started_at=now,
             finished_at=now,
             repo_root=str(config.repo_root),
-            project_root=str(config.project_root),
+            language_path=(
+                str(config.language_path) if config.language_path is not None else None
+            ),
+            validation_profile=(
+                str(config.validation_profile)
+                if config.validation_profile is not None
+                else None
+            ),
             verdict=PASS,
             artifact_dir=artifact_dir,
             metadata={
@@ -505,7 +596,8 @@ class DiagReport:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "repo_root": self.repo_root,
-            "project_root": self.project_root,
+            "language_path": self.language_path,
+            "validation_profile": self.validation_profile,
             "verdict": self.verdict,
             "summary": self.summary(),
             "findings": [asdict(item) for item in self.findings],
@@ -525,7 +617,8 @@ class DiagReport:
             f"GF Wordbench Mini Diagnostics — {self.level} {self.name}",
             f"Verdict: {self.verdict}",
             f"Repository: {self.repo_root}",
-            f"Project: {self.project_root}",
+            f"Language path: {self.language_path or 'not configured'}",
+            f"Validation profile: {self.validation_profile or 'not configured'}",
             f"Started: {self.started_at}",
             f"Finished: {self.finished_at}",
             "",
@@ -592,7 +685,7 @@ def execute_step(
         message = f"{title} returned exit code {result.exit_code}"
         recommendation = f"Review {log_path} and correct the failing Wordbench check."
 
-    tail = result.output[-2000:].strip() or None
+    tail = result.output[-4000:].strip() or None
     report.add(
         step_id,
         severity,
@@ -609,6 +702,10 @@ def execute_step(
         },
     )
     log(f"{severity} {title} ({result.duration_seconds:.3f}s)")
+    if severity != PASS and tail:
+        log("OUTPUT (tail):")
+        for line in tail.splitlines()[-30:]:
+            log(f"  {line}")
     return result
 
 
@@ -641,7 +738,7 @@ def execute_python_module(
         log,
         step_id=step_id,
         title=title,
-        command=[sys.executable, "-m", module, *arguments],
+        command=[console_python(), "-m", module, *arguments],
         timeout=timeout,
         required=required,
     )
@@ -723,11 +820,22 @@ def inspect_summary(
     report.add_artifact("wordbench-summary", summary_path, "Wordbench structured run summary")
     mode = _first_value(
         data,
-        (("mode",), ("validation_mode",), ("request", "mode"), ("context", "mode")),
+        (
+            ("metadata", "mode"),
+            ("mode",),
+            ("validation_mode",),
+            ("request", "mode"),
+            ("context", "mode"),
+        ),
     )
     status = _first_value(
         data,
-        (("overall_status",), ("status",), ("result", "overall_status")),
+        (
+            ("totals", "overall_status"),
+            ("overall_status",),
+            ("status",),
+            ("result", "overall_status"),
+        ),
     )
     report.add(
         "run.summary.read",
@@ -789,13 +897,9 @@ def open_path(path: Path) -> None:
 def report_exit_code(verdict: str) -> int:
     if verdict in {PASS, SKIP, WARN}:
         return 0
-    if verdict in {FAIL, BLOCKED, PARTIAL}:
+    if verdict in {FAIL, BLOCKED, PARTIAL, CONFIG_ERROR}:
         return 2
-    if verdict == INFRA_ERROR:
-        return 3
-    if verdict == CONFIG_ERROR:
-        return 4
-    return 5
+    return 3
 
 
 def run_headless(
@@ -862,7 +966,13 @@ class LevelWindow:
         self.root.minsize(780, 520)
         self._build()
         self.log(f"Repository: {self.config.repo_root}")
-        self.log(f"Project: {self.config.project_root}")
+        self.log(
+            f"Language path: {self.config.language_path or 'not configured'}"
+        )
+        self.log(
+            "Validation profile: "
+            f"{self.config.validation_profile or 'not configured'}"
+        )
         self.log(f"Configuration: {self.config.config_path or 'built-in defaults'}")
 
     def _build(self) -> None:
@@ -966,7 +1076,7 @@ def run_level_app(
 
 
 def launch_script(script: Path, *, headless: bool, wait: bool = False) -> subprocess.Popen[str]:
-    executable = sys.executable
+    executable = console_python() if headless or wait else sys.executable
     command = [executable, str(script)]
     if headless:
         command.append("--headless")

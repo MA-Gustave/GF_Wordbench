@@ -2,11 +2,11 @@
 
 **Document ID:** `GF-WB-ARCH-OVERVIEW`  
 **Status:** Normative architectural overview  
-**Applies to:** GF Wordbench framework, active language project, project template, generated run artifacts, and the public interoperability boundary  
+**Applies to:** GF Wordbench framework, path-resolved language startup, optional validation profiles, generated run artifacts, and the public interoperability boundary  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
-**Architecture version:** `2.0`  
-**Last reviewed:** 2026-07-24  
+**Architecture version:** `2.1`  
+**Last reviewed:** 2026-07-30  
 
 ---
 
@@ -22,10 +22,11 @@ It explains:
 - how the main components collaborate;
 - how GF is invoked;
 - how validation results and artifacts flow through the system;
-- how one active language project is separated from the permanent framework;
-- which architectural constraints prevent drift.
+- how one user-selected GF source location becomes one immutable resolved language context;
+- how optional validation profiles add scenarios, golds, release gates and project policy without becoming startup prerequisites;
+- which architectural constraints prevent drift and duplicate implementations.
 
-This document is an overview. Accepted ADRs and the documentation alignment lock govern cross-document interpretation. Detailed boundary contracts remain authoritative in:
+This document is an overview. Accepted ADRs and the documentation alignment lock govern cross-document interpretation. `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md` governs language startup and supersedes the catalog-driven startup model. Detailed boundary contracts remain authoritative in:
 
 ```text
 docs/DOCUMENTATION_ALIGNMENT_LOCK.md
@@ -36,49 +37,66 @@ project/docs/INTERFILE_CONTRACT_LOCK.md
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
+The project and template locks apply when an optional validation profile uses those layouts. They do not make `project/project.toml` mandatory for opening a language source tree.
+
 When documents appear to disagree, use the precedence defined by `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`. This overview must summarize owner documents rather than create a competing contract.
 
 ---
 
 ## 2. Product definition
 
-GF Wordbench is a local development, validation, diagnostic, and release workbench for one active Grammatical Framework language project.
+GF Wordbench is a local development, validation, diagnostic and release workbench for one active Grammatical Framework language context at a time.
 
-A GF Wordbench repository contains:
+A normal interactive session contains:
 
 ```text
 one permanent Python framework
-one active GF language project
-one reusable clean project template
+zero or one immutable resolved language context
+zero or one optional validation profile
 zero or more generated validation runs
 ```
 
-The intended workflow is:
+The intended basic workflow is:
 
 ```text
-clone GF Wordbench
+start GF Wordbench
         ↓
-initialize or migrate one language project
+select one GF language directory or one .gf file
         ↓
-develop and validate the language
+resolve and validate the source context through existing Wordbench services
         ↓
-produce evidence and release artifacts
+browse, scan or compile according to available capabilities
         ↓
-clone or reset another copy for another language
+optionally load a validation profile for scenarios, golds and release policy
+        ↓
+produce evidence and reports
 ```
 
-GF Wordbench does not manage several active languages concurrently inside one project configuration.
+Normal startup does not require:
 
-A multi-language GF grammar may still be compiled when the active project itself intentionally defines such a grammar. The architectural rule concerns project ownership and configuration, not GF’s language capabilities.
+```text
+rgl-language-catalog.json
+language.toml
+project/project.toml
+scenario files
+gold files
+language-specific Wordbench documentation
+```
 
-Multi-workspace registration, cross-project aggregation, portfolio readiness, comparison, and navigation belong to the independent companion product `gf-portfolio`. Interoperability is optional and uses public versioned GF Wordbench artifacts only.
+Those assets may exist as maintenance inventories or optional validation profiles. They are not authorities for basic source-ready or scan-ready startup.
+
+GF Wordbench does not keep several active language contexts concurrently. It may switch languages only by disposing the current runtime, returning to the introduction surface and resolving a new explicit source selection. Every ordinary run belongs to exactly one resolved language context.
+
+A multi-language GF grammar may still be compiled when the selected source context and explicit target define such a grammar. The architectural rule concerns Wordbench runtime identity and evidence isolation, not GF's language capabilities.
+
+Multi-workspace registration, cross-project aggregation, portfolio readiness, comparison and navigation belong to the independent companion product `gf-portfolio`. Interoperability is optional and uses public versioned GF Wordbench artifacts only.
 
 ```text
 gf-portfolio → public versioned GF Wordbench artifacts
 GF Wordbench -X→ gf-portfolio runtime, code, private schemas, storage, or configuration
 ```
 
-GF Wordbench must start, validate, report, release, and pass its tests without `gf-portfolio` installed or reachable.
+GF Wordbench must start, validate, report, release and pass its tests without `gf-portfolio` installed or reachable.
 
 ---
 
@@ -97,9 +115,11 @@ The architecture is designed to achieve the following goals.
 ### 3.2 Reusability
 
 - Keep the framework independent of any active language.
-- Store language-specific facts in `project/`.
-- Provide a clean `templates/project/` source for initialization.
-- Make project replacement possible without rewriting framework code.
+- Resolve language-specific source facts from one explicit user-selected path.
+- Reuse existing selection, path, preflight, GF and diagnostic services.
+- Keep optional validation policy in explicit profiles rather than framework defaults.
+- Provide `templates/project/` only for optional advanced validation-profile initialization.
+- Make language replacement possible without rewriting framework code.
 
 ### 3.3 Traceability
 
@@ -130,7 +150,7 @@ The architecture is designed to achieve the following goals.
 - Support Windows as a first-class platform.
 - Avoid dependence on shell-specific behavior.
 - Normalize persisted paths.
-- Keep local environment paths separate from portable project configuration.
+- Keep machine-local selected paths separate from portable language identity and optional profile configuration.
 - Avoid mandatory network services.
 
 ---
@@ -150,8 +170,8 @@ The architecture does not include:
 - a mandatory web server;
 - a package marketplace;
 - an unrestricted runtime plugin system;
-- simultaneous management of unrelated active language projects;
-- a Wordbench-owned registry of several workspaces;
+- simultaneous execution of unrelated active language contexts;
+- a Wordbench-owned portfolio registry of several workspaces;
 - cross-workspace or multilingual portfolio aggregation;
 - a mandatory dependency on `gf-portfolio` or another external product;
 - automatic linguistic design decisions;
@@ -169,19 +189,21 @@ These capabilities may exist in external tools or future companion products, but
 │                         User or CI                          │
 └─────────────────────────────┬───────────────────────────────┘
                               │
+                explicit directory or .gf file
+                              │
                      CLI or desktop GUI
                               │
 ┌─────────────────────────────▼───────────────────────────────┐
 │                      GF Wordbench                           │
 │                                                             │
-│  configuration → orchestration → validation → reporting    │
+│ language probe → resolved context → validation → reporting │
 └───────────────┬───────────────────────────────┬─────────────┘
                 │                               │
-         active project                    run artifacts
+     selected GF source tree               run artifacts
                 │                               │
 ┌───────────────▼──────────────┐   ┌────────────▼─────────────┐
-│ GF modules, .gfs, inputs,    │   │ raw logs, summaries,     │
-│ gold files, project docs     │   │ manifests, .gfo, .pgf    │
+│ .gf modules and optional     │   │ raw logs, summaries,     │
+│ profile/scenario/gold assets │   │ manifests, .gfo, .pgf    │
 └───────────────┬──────────────┘   └──────────────────────────┘
                 │
 ┌───────────────▼─────────────────────────────────────────────┐
@@ -193,13 +215,15 @@ External actors are:
 
 - the user;
 - CI or automation;
+- the selected GF source tree;
+- an optional explicit validation profile;
 - the GF executable;
 - the GF Resource Grammar Library;
 - the local filesystem;
 - optional explicitly contracted tools;
 - optional consumers of public versioned artifacts, including `gf-portfolio`.
 
-The core architecture does not require remote services. Optional consumers remain outside the Wordbench runtime boundary and cannot control project identity, validation semantics, or release outcomes.
+The core architecture does not require remote services. Optional consumers remain outside the Wordbench runtime boundary and cannot control resolved language identity, validation semantics or release outcomes.
 
 ---
 
@@ -222,7 +246,12 @@ The core architecture does not require remote services. Optional consumers remai
 
 ### 6.2 GF Wordbench is authoritative for
 
-- configuration loading and validation;
+- selected-path normalization and containment;
+- bounded language-candidate resolution;
+- deterministic source selection through the existing selection service;
+- centralized GF path resolution;
+- capability classification;
+- optional validation-profile loading and conflict checks;
 - executable selection;
 - command construction;
 - process launch;
@@ -241,21 +270,48 @@ The core architecture does not require remote services. Optional consumers remai
 - schema migration;
 - release gates.
 
-### 6.3 Active language project is authoritative for
+### 6.3 Selected GF source tree is authoritative for
 
-- project identity;
-- source layout;
-- entrypoints;
-- checkpoints;
+- observable source layout;
+- available `.gf` files;
+- exact module filenames;
+- source contents;
+- source-local RGL conventions;
+- source revision and fingerprints.
+
+The source tree does not by itself declare mandatory scenarios, golds or release policy.
+
+### 6.4 Resolved language context is authoritative for
+
+- the one active language identity of the session;
+- selected path and path kind;
+- language directory;
+- resolved RGL source root;
+- focused target, when one file was selected;
+- detected module suffix, when unambiguous;
+- available entrypoint candidates;
+- effective source inventory or inventory reference;
+- GF path requirements and provenance;
+- capability statuses;
+- runtime language and source facts used by run construction.
+
+The context is immutable. Changing its source selection, identity or path requirements requires a new resolution and a new runtime.
+
+### 6.5 Optional validation profile is authoritative for
+
+- explicit source include and exclude policy beyond the base source context;
+- required entrypoints and checkpoints;
 - required and optional scenarios;
 - expected gold output;
-- linguistic architecture;
+- PGF targets and expected artifacts;
+- linguistic architecture documentation;
 - category and lincat contracts;
-- morphology and syntax design;
 - release criteria;
 - known language-specific limitations.
 
-### 6.4 Framework maintainers are authoritative for
+An optional profile may use `project/project.toml` or another versioned profile contract. It cannot contradict or replace the resolved source context.
+
+### 6.6 Framework maintainers are authoritative for
 
 - framework architecture;
 - shared models;
@@ -267,29 +323,32 @@ The core architecture does not require remote services. Optional consumers remai
 - compatibility policy;
 - framework release policy.
 
-### 6.5 `gf-portfolio` is authoritative for
+### 6.7 `gf-portfolio` is authoritative for
 
-- registration of several isolated Wordbench workspaces;
+- registration of several isolated Wordbench workspaces or published runs;
 - cross-workspace and multilingual aggregation;
-- portfolio readiness, comparison, and navigation;
+- portfolio readiness, comparison and navigation;
 - consumer-specific ingestion adapters for Wordbench public artifacts.
 
-Wordbench documentation may define the artifacts it publishes. It must not define `gf-portfolio` internals, private storage, registry schemas, or runtime behavior.
+Wordbench documentation may define the artifacts it publishes. It must not define `gf-portfolio` internals, private storage, registry schemas or runtime behavior.
 
 ---
 
 ## 7. Repository partitions
 
-The repository is divided into four architectural partitions.
+The architecture distinguishes the Wordbench repository, externally selected GF sources, optional validation profiles and generated runs.
 
 ```text
 GF_Wordbench/
-├── app/                 permanent Python framework
-├── docs/                permanent framework documentation
-├── tests/               framework and contract tests
-├── project/             one active language project
-├── templates/project/   clean reusable project template
-└── <output-root>/       generated run directories
+├── src/gf_wordbench/       permanent Python framework
+├── docs/                   permanent framework documentation
+├── tests/                  framework and contract tests
+├── project/                optional validation-profile example
+├── templates/project/      optional profile template
+└── <output-root>/          generated run directories
+
+<selected-source-tree>/
+└── <language-directory>/   user-selected GF sources
 ```
 
 ### 7.1 Permanent framework
@@ -297,10 +356,12 @@ GF_Wordbench/
 The permanent framework contains:
 
 - application assembly;
+- path-resolved language probing;
 - configuration and schema loading;
 - orchestration;
+- deterministic source selection;
 - static scanning;
-- GF process execution;
+- GF path resolution and process execution;
 - scenario execution;
 - diagnostics;
 - result models;
@@ -308,29 +369,39 @@ The permanent framework contains:
 - state handling;
 - CLI and GUI interfaces.
 
-It must not contain active-language source facts.
+It must not contain hard-coded active-language paths, module names or linguistic policy.
 
-### 7.2 Active language project
+### 7.2 Selected language source tree
 
-The active project contains:
+The selected source tree is external input. A standard RGL selection may be:
+
+```text
+<rgl-root>/src/english
+<rgl-root>/src/english/LangEng.gf
+```
+
+Wordbench treats normal startup as read-only for the selected source tree. It derives a bounded candidate, validates it through existing services and publishes one immutable resolved language context.
+
+### 7.3 Optional validation profile
+
+An optional profile may contain:
 
 ```text
 project/
 ├── project.toml
 ├── README.md
 ├── docs/
-├── validation/
-│   ├── scenarios/
-│   ├── gold/
-│   └── inputs/
-└── language source tree or declared source references
+└── validation/
+    ├── scenarios/
+    ├── gold/
+    └── inputs/
 ```
 
-It contains exactly one project identity and one coherent validation policy.
+The profile adds explicit validation and release policy. It is not required to browse, select, fingerprint or statically scan standard GF sources.
 
-### 7.3 Project template
+### 7.4 Project template
 
-`templates/project/` mirrors the active-project structure but contains:
+`templates/project/` provides generic initialization material for optional validation profiles. It contains:
 
 - generic placeholders;
 - generic instructions;
@@ -339,19 +410,23 @@ It contains exactly one project identity and one coherent validation policy.
 - no stale gold expectations;
 - no generated artifacts.
 
-### 7.4 Generated runs
+The template is never rendered implicitly during normal startup.
+
+### 7.5 Generated runs
 
 Run directories contain evidence and derived reports.
 
-They are outputs, not source configuration.
+They are outputs, not startup configuration.
 
 A run must be reproducible from:
 
-- the project revision;
+- the resolved language-context evidence;
+- the selected source revision or fingerprints;
 - the resolved run configuration;
 - the GF version;
 - the captured command contracts;
-- the scenario and gold revisions.
+- the optional validation-profile revision and digest;
+- the scenario and gold revisions when those assets participate.
 
 ---
 
@@ -369,7 +444,7 @@ reporting
 
 | Module | Architectural ownership |
 |---|---|
-| `projects` | Active-project identity, project configuration, source declarations, template initialization, and project-owned policy loading. |
+| `projects` | Selected-path language probing, resolved language identity, source-boundary publication, optional validation-profile loading, template initialization, and source fingerprints. |
 | `runs` | Run identity, lifecycle, budgets, cancellation, finalization, history, and release-gate coordination. |
 | `validation` | File selection, static scanning, GF-backed compilation, PGF construction, scenarios, normalization, assertions, and gold comparison. |
 | `diagnostics` | Diagnostic vocabulary, normalization, causal classification, known-pattern handling, and controlled diagnostic-tool registry. |
@@ -408,18 +483,21 @@ Responsibilities:
 
 - define CLI syntax;
 - validate syntactic argument constraints;
-- request application and run configuration;
-- invoke the application orchestrator;
-- render concise terminal output;
+- accept one explicit language directory or `.gf` path;
+- accept an optional explicit validation-profile path;
+- invoke the shared language-probe application service;
+- invoke the run orchestrator only after a context is resolved;
+- render concise terminal and structured probe output;
 - convert completed outcomes into documented process exit codes.
 
 The CLI must not:
 
-- implement audit stages;
+- enumerate source trees independently;
+- infer a language through CLI-only rules;
 - launch GF directly;
 - parse GF diagnostics directly;
 - construct report files;
-- duplicate project-loading rules;
+- duplicate profile-loading rules;
 - invent its own artifact paths.
 
 ### 9.2 Desktop GUI
@@ -432,8 +510,11 @@ entrypoints.gui
 
 Responsibilities:
 
-- collect user choices;
-- display validated configuration;
+- show an introduction surface before the main runtime;
+- collect a language directory or `.gf` file selection;
+- offer revalidation of the last successful selected path;
+- display the resolved language context and capability statuses;
+- request explicit user choice when probe results are ambiguous;
 - start a run through the same application boundary as the CLI;
 - display progress and completed results;
 - persist disposable local preferences;
@@ -441,19 +522,21 @@ Responsibilities:
 
 The GUI must not:
 
+- enumerate or classify GF files in widgets;
+- resolve GF paths in view models;
 - launch GF from widgets;
-- own project semantics;
+- own language or profile semantics;
 - mutate gold files during a normal run;
 - derive results by scraping human reports;
-- hold a second implementation of validation logic.
+- hold a second implementation of probe or validation logic.
 
 ### 9.3 Shared interface rule
 
-CLI and GUI are alternative front ends over the same application services.
+CLI and GUI are alternative front ends over the same language-probe, configuration and run application services.
 
-Equivalent resolved inputs must produce equivalent validation behavior.
+Equivalent explicit selections and profile inputs must produce equivalent resolved contexts, diagnostics and validation behavior.
 
-Interface differences may affect presentation, not audit semantics.
+Interface differences may affect presentation and interactive remediation, not source identity, path resolution or audit semantics.
 
 ---
 
@@ -477,12 +560,27 @@ ports
 adapters
 ```
 
+Bootstrap has two composition phases.
+
+### 10.1 Startup composition
+
 Responsibilities:
 
 - load framework defaults;
-- load and validate `project/project.toml`;
+- load disposable local application state;
+- construct the introduction or CLI probe runtime;
+- wire the filesystem, selection, GF-path, preflight and diagnostic dependencies required by `LanguageProbeService`;
+- avoid constructing the main language runtime before one context resolves.
+
+### 10.2 Language-runtime composition
+
+Responsibilities:
+
+- receive one immutable `ResolvedLanguageContext`;
+- load an optional explicitly selected validation profile;
+- validate profile-to-context consistency;
 - apply local environment configuration;
-- apply explicit CLI or GUI overrides;
+- apply explicit CLI or GUI run overrides;
 - construct immutable or controlled run configuration;
 - construct run paths;
 - select required services;
@@ -492,17 +590,20 @@ Bootstrap is a composition boundary.
 
 It must not:
 
+- enumerate language files itself;
 - perform validation stages;
 - contain language-specific defaults;
 - generate reports;
 - call GF directly;
+- render templates during normal startup;
+- silently load the first `project.toml` found in an ancestor;
 - silently bypass release requirements.
 
 ---
 
 ## 11. Configuration model
 
-Configuration is divided by ownership.
+Configuration is divided by ownership and capability.
 
 ### 11.1 Framework defaults
 
@@ -519,37 +620,63 @@ Examples:
 - default timeout policy;
 - supported schema versions;
 - default output conventions;
-- framework-wide limits.
+- framework-wide limits;
+- supported standard source-layout predicates;
+- bounded discovery limits.
 
-Framework defaults must not name an active language or active-language module.
+Framework defaults must not name an active language, module or machine-local source path.
 
-### 11.2 Project configuration
+### 11.2 Explicit selected path
 
-Normative source:
-
-```text
-project/project.toml
-```
-
-Architectural loader:
+Normative source for startup intent:
 
 ```text
-projects.application through configuration ports and adapters
+one user- or caller-supplied directory or .gf file
 ```
 
 Examples:
 
-- project ID and language code;
-- source directory;
-- source inclusion rules;
-- GF path parts;
-- entrypoints;
-- checkpoints;
-- required scenarios;
-- optional scenarios;
-- release requirements.
+```text
+C:/work/gf-rgl/src/english
+C:/work/gf-rgl/src/english/LangEng.gf
+```
 
-### 11.3 Local application state
+The selected path is machine-local input. It is normalized and validated, not treated as a portable identity.
+
+### 11.3 Resolved language context
+
+Architectural owner:
+
+```text
+projects.application through LanguageProbeService
+```
+
+The context contains the validated language and source facts needed by the runtime, including selected-path evidence, language directory, RGL source root, focused target, module-suffix evidence, source inventory, GF-path requirements and capability statuses.
+
+It is constructed once and is immutable for the lifetime of the language runtime.
+
+### 11.4 Optional validation profile
+
+Possible normative source:
+
+```text
+an explicitly selected versioned profile
+including project/project.toml when used
+```
+
+Examples of profile-owned facts:
+
+- source inclusion and exclusion policy beyond the base context;
+- required entrypoints;
+- required checkpoints;
+- GF path requirements beyond standard resolution;
+- required and optional scenarios;
+- inputs and golds;
+- PGF and release requirements.
+
+A profile is optional for source-ready and scan-ready operation. It cannot contradict the resolved source context.
+
+### 11.5 Local application state
 
 Architectural owner:
 
@@ -560,43 +687,47 @@ local-state persistence adapter
 
 Examples:
 
-- local project root;
-- local RGL root;
+- last successful selected language path;
+- last explicitly selected validation profile;
 - local GF executable;
 - output root;
 - last selected mode;
 - display preferences;
 - previous run pointer.
 
-Local state is disposable.
+Local state is disposable and non-authoritative. Deleting it must not alter GF sources or validation profiles. Remembered paths are fully revalidated before reuse.
 
-Deleting it must not alter the language project.
-
-### 11.4 Explicit run overrides
+### 11.6 Explicit run overrides
 
 CLI or GUI values may override documented local defaults.
 
-They must not silently disable mandatory release gates.
+They must not replace selected-source identity, create path escapes or silently disable mandatory profile release gates.
 
-### 11.5 Configuration precedence
+### 11.7 Configuration precedence
 
-The resolved configuration follows:
+Startup resolution follows:
 
 ```text
 framework defaults
         ↓
-project configuration
+explicit selected path or revalidated remembered path
+        ↓
+bounded candidate resolution
+        ↓
+ResolvedLanguageContext
+        ↓
+optional explicit validation profile
         ↓
 local environment/state
         ↓
 explicit invocation overrides
         ↓
-cross-field validation
+cross-field and capability validation
         ↓
 resolved RunConfig
 ```
 
-The source of each significant resolved value should remain inspectable.
+The source and provenance of each significant resolved value must remain inspectable.
 
 ---
 
@@ -608,6 +739,12 @@ The contract model set includes, at minimum:
 
 ```text
 AppConfig
+LanguageProbeRequest
+LanguageCandidate
+LanguageProbeDiagnostic
+ResolvedLanguageContext
+CapabilityStatus
+ValidationProfile
 ProjectConfig
 RunConfig
 RunBudget
@@ -678,20 +815,21 @@ The orchestrator coordinates the run but does not absorb stage implementation.
 
 Responsibilities:
 
-1. validate the resolved run configuration;
-2. create the run directory;
-3. initialize logging and run metadata;
-4. establish the global run budget, stage budgets, and finalization reserve;
-5. probe GF when required;
-6. select files, checkpoints, entrypoints, and scenarios;
-7. invoke validation stages in mode-defined order;
-8. collect stage results;
-9. classify causal relationships;
-10. compare with the previous compatible run;
-11. evaluate release gates;
-12. finalize the run through the designated finalizer;
-13. invoke report writers and manifest creation within the reserved budget;
-14. return one authoritative `RunResult`.
+1. require one immutable resolved language context;
+2. validate capability compatibility and the resolved run configuration;
+3. create the run directory;
+4. initialize logging and run metadata;
+5. establish the global run budget, stage budgets, and finalization reserve;
+6. probe GF when required by the requested capability;
+7. select files and optional profile-owned checkpoints, entrypoints, and scenarios;
+8. invoke validation stages in mode-defined order;
+9. collect stage results;
+10. classify causal relationships;
+11. compare with the previous compatible language-context run;
+12. evaluate applicable release gates;
+13. finalize the run through the designated finalizer;
+14. invoke report writers and manifest creation within the reserved budget;
+15. return one authoritative `RunResult`.
 
 ### 13.1 Run budget and finalization
 
@@ -720,9 +858,11 @@ The orchestrator must not:
 Validation is a pipeline of independent stages coordinated by the orchestrator.
 
 ```text
-configuration validation
+resolved-language and capability validation
         ↓
-tool/version probe
+optional profile validation
+        ↓
+tool/version probe when required
         ↓
 file discovery
         ↓
@@ -768,34 +908,58 @@ A stage must not modify another stage’s result after ownership has transferred
 
 ---
 
-## 15. File discovery
+## 15. File discovery and language probing
 
-Architectural owner:
+Architectural owners:
 
 ```text
-validation.application
+projects.application       language-probe orchestration
+validation.application     source enumeration and target selection
 ```
 
-The stage consumes resolved project identity and source rules from `projects.application`.
+The language probe interprets one explicit selected path and coordinates existing public services. It does not implement a second source scanner.
 
-Responsibilities:
+The existing selection service owns:
 
-- resolve the configured source directory;
-- enumerate candidate `.gf` files;
-- apply inclusion and exclusion rules;
-- enforce maximum-file constraints;
+- source-root validation;
+- candidate `.gf` enumeration;
+- readability and regular-file checks;
+- path containment;
+- inclusion and exclusion rules;
+- maximum-file constraints;
+- deduplication;
+- deterministic ordering;
+- explicit target resolution;
+- module-name expectation from filenames;
+- exclusion reasons.
+
+The probe owns only:
+
+- candidate language-directory derivation from the selected path;
+- bounded RGL source-root detection through selected-path ancestors;
+- classification of standard module-role candidates;
+- collection of structural diagnostics;
+- decisions about when explicit user input is required;
+- construction of the immutable resolved language context.
+
+Run-time file selection consumes the resolved context and optional profile policy to:
+
+- select a focused file for a file-based request;
 - select target files for `quick`;
-- select checkpoints for `checkpoint`;
-- select complete project scope for `diagnostic` or `release`;
-- return deterministic project-relative paths.
+- select explicit profile checkpoints for `checkpoint`;
+- select the resolved language source scope for `diagnostic`;
+- select explicit profile release scope for `release`;
+- return deterministic paths relative to the resolved source root or profile root as appropriate.
 
-File discovery must not:
+File discovery and probing must not:
 
-- parse GF modules;
-- infer import graphs from compiler prose;
-- launch GF;
-- classify failures;
-- write reports.
+- build a competing GF import graph;
+- launch GF directly;
+- parse GF diagnostics independently;
+- write reports;
+- enumerate every RGL language during normal startup;
+- add every RGL source directory to the GF path;
+- choose an ambiguous suffix or entrypoint silently.
 
 ---
 
@@ -822,7 +986,7 @@ It is not a substitute for GF compilation.
 
 A scanner finding must not be described as a GF type error unless GF independently reports such an error.
 
-Language-specific lint rules must be declared by project policy or implemented through an explicit extension boundary.
+Language-specific lint rules must be declared by an explicit validation profile or implemented through an explicit extension boundary.
 
 ---
 
@@ -926,13 +1090,13 @@ validation.application
 
 Responsibilities:
 
-- select configured release entrypoints;
+- select explicit profile-owned release entrypoints;
 - submit a typed PGF-build operation through `GfToolPort`;
 - require the anti-corruption layer to verify the expected `.pgf`;
 - catalog the verified artifact;
 - return a process-backed build result with raw-evidence references.
 
-PGF construction is required only when the active project and validation mode require it.
+PGF construction is required only when an explicit validation profile and validation mode require it.
 
 The PGF builder must not:
 
@@ -1422,13 +1586,15 @@ Readers do not rewrite artifacts owned by another component.
 Canonical persisted schemas include:
 
 ```text
-gf-wordbench.project/1.0
-gf-wordbench.app-state/1.0
+gf-wordbench.project/1.0                 optional validation profile
+gf-wordbench.app-state/1.1               machine-local convenience state
 gf-wordbench.run-summary/1.0
 gf-wordbench.artifact-manifest/1.0
 gf-wordbench.scenario-output/1.0
 gf-wordbench.scenario-gold/1.0
 ```
+
+The resolved language context is a runtime model. Persisted run schemas record its portable identity, source-root-relative facts, effective GF path evidence and optional profile identity. They do not persist an executable context as future startup authority.
 
 Persistence rules include:
 
@@ -1436,11 +1602,14 @@ Persistence rules include:
 - explicit schema version;
 - UTF-8;
 - deterministic ordering;
-- portable project-relative and run-relative paths;
+- portable source-root-relative, profile-relative and run-relative paths where applicable;
 - explicit UTC timestamps;
 - atomic writes;
 - tested migration;
-- no secret persistence.
+- no secret persistence;
+- no automatic trust of stale absolute selected paths.
+
+Application state may contain machine-local absolute paths such as `last_selected_language_path`. Those paths are revalidated on every load and are not portable project facts.
 
 No new unversioned machine-readable format may be introduced.
 
@@ -1448,31 +1617,51 @@ No new unversioned machine-readable format may be introduced.
 
 ## 29. Path architecture
 
-Paths belong to one of three classes.
+Paths belong to four classes.
 
-### 29.1 Project-owned paths
+### 29.1 Selected source paths
 
 Examples:
 
 ```text
-lib/src/french/GrammarFre.gf
-validation/scenarios/parse.gfs
+C:/work/gf-rgl/src/english
+C:/work/gf-rgl/src/english/LangEng.gf
 ```
 
 Rules:
 
-- relative to the project root;
-- `/` separators in canonical persistence;
-- no path escape;
-- portable across clones.
+- supplied explicitly or restored from disposable local state;
+- may be absolute machine-local paths;
+- normalized and containment-checked before use;
+- revalidated on every load;
+- recorded only in permitted local evidence;
+- converted to portable source-root-relative facts for interoperable artifacts;
+- never guessed through an unbounded filesystem search.
 
-### 29.2 Run-owned paths
+### 29.2 Validation-profile paths
 
 Examples:
 
 ```text
-raw/compile/GrammarFre.stdout.txt
-artifacts/pgf/Grammar.pgf
+validation/scenarios/parse.gfs
+validation/gold/parse.gold
+```
+
+Rules:
+
+- relative to the explicit profile root;
+- `/` separators in canonical persistence;
+- no path escape;
+- portable across profile clones;
+- optional for source-ready and scan-ready operation.
+
+### 29.3 Run-owned paths
+
+Examples:
+
+```text
+raw/compile/LangEng.stdout.txt
+artifacts/pgf/Lang.pgf
 ```
 
 Rules:
@@ -1481,7 +1670,7 @@ Rules:
 - owned by `RunPaths`;
 - never reconstructed through duplicated filename logic.
 
-### 29.3 Environment paths
+### 29.4 Environment paths
 
 Examples:
 
@@ -1494,8 +1683,9 @@ Rules:
 
 - may be absolute;
 - resolved before execution;
-- recorded for traceability;
-- not stored as portable project facts.
+- recorded according to local-evidence and redaction policy;
+- not stored as portable validation-profile facts;
+- reused through one centralized path resolution.
 
 ---
 
@@ -1505,13 +1695,18 @@ Rules:
 
 ```text
 CLI ─┐
-     ├→ bootstrap → orchestrator → stages → process runner
-GUI ─┘                     │            │
-                           │            └→ GF
-                           ↓
-                         models
-                           ↓
-                    reports/persistence
+     ├→ startup runtime → LanguageProbeService → public selection/path/preflight contracts
+GUI ─┘                                      │
+                                             ↓
+                                  ResolvedLanguageContext
+                                             │
+                                             ↓
+                 bootstrap → orchestrator → stages → process runner → GF
+                                             │
+                                             ↓
+                                           models
+                                             ↓
+                                      reports/persistence
 ```
 
 ### 30.2 Prohibited directions
@@ -1522,13 +1717,17 @@ The following are prohibited:
 - process utilities importing reports;
 - reports importing CLI or GUI;
 - reports launching validation;
-- GUI widgets importing compiler internals;
+- GUI widgets enumerating source files or resolving GF paths;
+- language probe launching GF or subprocesses directly;
+- language probe duplicating selection filtering, ordering or containment;
+- language probe importing private helpers from another functional module;
 - scanner importing report writers;
 - classifier launching external tools;
-- project loader importing active-language Python code;
-- framework defaults importing project-specific constants;
-- active project source mutating framework files;
-- template files depending on active project content.
+- optional profile loader importing active-language Python code;
+- framework defaults importing language-specific constants;
+- selected source mutation of framework files;
+- template files depending on selected-source content;
+- runtime catalog readers controlling normal language startup.
 
 ### 30.3 Shared utility rule
 
@@ -1538,6 +1737,8 @@ A utility module is permitted only when:
 - it has more than one legitimate consumer;
 - it does not become a hidden service locator;
 - it does not own business policy that belongs to a domain component.
+
+When an existing owner already provides file selection, path resolution, process execution or diagnostics, new orchestration code must use its public contract rather than create another implementation.
 
 ---
 
@@ -1549,12 +1750,17 @@ The architecture separates failures by layer.
 
 Examples:
 
-- missing project file;
-- invalid schema;
+- selected path does not exist or is unreadable;
+- selected file is not an eligible `.gf` file;
+- selected directory contains no eligible GF sources;
+- RGL source root cannot be determined for the requested standard mode;
+- module suffix or missing-module remediation is ambiguous;
+- optional profile schema is invalid;
+- optional profile conflicts with the resolved source context;
 - unresolved required path;
 - duplicate scenario ID.
 
-Normally terminal before validation begins.
+A structural language-resolution failure is terminal before the main runtime is composed. A capability-specific configuration failure disables or fails that capability without erasing valid source-ready or scan-ready status.
 
 ### 31.2 Launch failure
 
@@ -1582,7 +1788,7 @@ A zero exit code does not override this failure.
 
 ### 31.6 Validation failure
 
-The operation executed correctly but the language project failed the required criterion.
+The operation executed correctly but the resolved language context or explicit validation profile failed the required criterion.
 
 ### 31.7 Reporting failure
 
@@ -1600,10 +1806,10 @@ GF Wordbench is a local developer tool, but it executes external processes and e
 
 Treat as untrusted:
 
-- project paths;
+- selected language paths and source trees;
 - `.gfs` scenarios;
 - validation input files;
-- project configuration;
+- optional validation profiles;
 - external executable paths;
 - legacy persisted files.
 
@@ -1793,7 +1999,7 @@ project fixture
 
 ## 35. Backward compatibility
 
-The architecture supports migration from the GF Audit baseline.
+The architecture supports migration from both the GF Audit baseline and the catalog-driven startup design.
 
 Legacy elements include:
 
@@ -1806,33 +2012,42 @@ ai_brief_path
 absolute artifact paths
 SHA-1 short fingerprints
 language defaults in app/config.py
+project/project.toml as mandatory startup authority
+rgl-language-catalog.json as runtime authority
+mandatory language-bundle configuration
+last_language_id without a selected path
 ```
 
 Canonical replacements include:
 
 ```text
-.gf_wordbench_state.json
+.gf_wordbench_state.json with revalidated last_selected_language_path
 versioned run summary
 mode=quick
 mode=diagnostic
 artifacts.ai_ready
 run-relative artifact paths
 SHA-256 fingerprints
-project/project.toml
+explicit selected directory or .gf file
+immutable ResolvedLanguageContext
+optional explicit validation profile
+path-resolved language identity and effective GF-path evidence
 ```
 
 Migration principles:
 
-- read legacy;
+- read legacy through isolated compatibility adapters;
 - validate what can be validated;
 - preserve the source;
 - write canonical output separately;
 - report ambiguous or lossy conversions;
+- do not search the filesystem globally to convert a stale catalog ID;
+- allow an existing `project.toml` to be selected explicitly as a validation profile;
 - emit only canonical formats from new writers.
 
-Compatibility code must remain isolated in loaders or migrators.
+A temporary catalog compatibility adapter may translate an explicit catalog selection into an explicit source path during a documented compatibility period. The resolved runtime must not preserve catalog authority.
 
-It must not spread legacy aliases through current domain logic.
+Compatibility code must remain isolated in loaders or migrators. It must not spread legacy aliases or startup assumptions through current domain logic.
 
 ---
 
@@ -1867,7 +2082,7 @@ Cancellation is cooperative through the application and process boundaries.
 
 ## 37. Release architecture
 
-A framework release and a language-project release are related but distinct.
+A framework release and a language-profile release are related but distinct.
 
 ### 37.1 Framework release
 
@@ -1880,22 +2095,23 @@ Proves:
 - framework tests;
 - documentation consistency.
 
-### 37.2 Language-project release
+### 37.2 Language-profile release
 
 Proves:
 
-- project configuration validity;
+- resolved language-context validity;
+- explicit validation-profile validity;
 - required module compilation;
 - required PGF build;
 - required scenario success;
 - required gold matches;
-- project release criteria;
+- profile release criteria;
 - no unresolved blocking issues;
 - complete evidence manifest.
 
-A framework version does not imply that an active language project is releasable.
+A framework version does not imply that a selected source tree is release-ready. Source-ready, scan-ready and compile-ready capabilities may exist without a release profile.
 
-A language project release must record the GF Wordbench and GF versions used.
+A language-profile release must record the resolved language identity, source revision, profile digest, GF Wordbench version and GF version used.
 
 ---
 
@@ -1903,27 +2119,31 @@ A language project release must record the GF Wordbench and GF versions used.
 
 | Decision | Accepted choice |
 |---|---|
-| Active project model | One active language project per repository copy |
+| Active language model | Zero or one immutable resolved language context per session; one language identity per ordinary run |
+| Startup input | One explicit language directory or `.gf` file |
+| Startup resolution | Bounded `LanguageProbeService` coordination using existing public selection, path, preflight and diagnostic contracts |
+| Runtime catalog | No static language catalog authority in normal startup |
+| Validation profile | Optional explicit profile; `project/project.toml` is supported as a profile rather than mandatory startup configuration |
+| Capability model | Source-ready, scan-ready, compile-ready, scenario-ready and release-ready are distinct |
 | GF semantics | Delegated to native GF |
-| Framework role | Orchestration, evidence, classification, comparison, reporting |
-| Interfaces | Shared application boundary for CLI and GUI |
+| Framework role | Orchestration, evidence, classification, comparison and reporting |
+| Interfaces | Shared language-probe and application boundaries for CLI and GUI |
 | Scenario format | Native `.gfs` |
-| Regression expectations | Versioned normalized output and reviewed `.gold` |
+| Regression expectations | Versioned normalized output and reviewed `.gold` when an explicit profile requires them |
 | Machine result | Versioned `summary.json` |
 | Artifact integrity | Versioned `manifest.json` with SHA-256 |
-| Persistent project config | `project/project.toml` |
-| Local preferences | `.gf_wordbench_state.json` |
+| Local preferences | `.gf_wordbench_state.json`; remembered paths are revalidated |
 | Product structure | One deployable hexagonal modular monolith |
 | Functional modules | `projects`, `runs`, `validation`, `diagnostics`, `reporting` |
 | GF boundary | `GfToolPort` and a dedicated anti-corruption layer |
 | Process execution | Centralized, shell-free by default |
-| Run lifecycle | Global budget, bounded stages, and reserved finalization |
+| Run lifecycle | Global budget, bounded stages and reserved finalization |
 | Diagnostic tools | Static allowlist with explicit contracts and limits |
 | Portfolio boundary | Independent `gf-portfolio`; optional public-artifact consumption only |
 | Storage | Filesystem; no mandatory database |
 | Extensibility | Controlled explicit extension points |
-| Compatibility | Versioned schemas and tested migrations |
-| Anti-drift | Alignment, correction-ledger, interfile, external-tool, persisted-schema, active-project, and template locks |
+| Compatibility | Versioned schemas, isolated adapters and tested migrations |
+| Anti-drift | Alignment, correction-ledger, interfile, external-tool, persisted-schema and optional-profile/template locks |
 
 ---
 
@@ -1931,32 +2151,40 @@ A language project release must record the GF Wordbench and GF versions used.
 
 The following invariants define the architecture.
 
-1. Exactly one active project configuration exists per GF Wordbench copy.
-2. Every run resolves one active project identity and one normative language target.
-3. The permanent framework contains no active-language defaults.
-4. GF remains authoritative for GF semantics.
-5. GF interaction passes through `GfToolPort` and the dedicated anti-corruption layer.
-6. CLI and GUI use the same application and orchestration boundaries.
-7. Wordbench remains one deployable hexagonal modular monolith.
-8. External execution is centralized.
-9. Every external process has an explicit executable, ordered arguments, working directory, and finite timeout.
-10. Every run reserves time for safe finalization.
-11. Stdout and stderr are preserved separately.
-12. Raw evidence is captured before normalization.
-13. Reports consume results and never rerun validation.
-14. Every generated artifact has one owner.
-15. Machine-consumed data uses explicit versioned schemas.
-16. Project paths and run paths use explicit path models.
-17. Required release artifacts must exist; exit code alone is insufficient.
-18. Gold files change only through an explicit update workflow.
-19. Validation status, execution state, error kind, and diagnostic class remain distinct.
-20. Executable diagnostic tools are statically allowlisted with explicit contracts.
-21. Legacy compatibility remains isolated in loaders and migrators.
-22. GF Wordbench has no runtime, storage, or private-schema dependency on `gf-portfolio`.
-23. A component may change internally when its external contracts remain compatible.
-24. A cross-file contract change is one coordinated change.
-25. A failure in a later stage must not erase valid earlier evidence.
-26. Complexity must correspond to a stable responsibility or contract.
+1. A running Wordbench session has zero or one immutable resolved language context.
+2. Every ordinary run records exactly one portable language identity and one resolved source context.
+3. Normal startup begins from one explicit directory or `.gf` file selection.
+4. Normal startup does not require a language catalog, language bundle, scenario, gold or `project.toml`.
+5. Remembered paths are convenience state and are fully revalidated.
+6. The permanent framework contains no active-language defaults, paths or module names.
+7. The language probe coordinates public services and does not duplicate file selection, GF-path resolution, process execution or diagnostic parsing.
+8. Source enumeration and target selection remain owned by the existing selection service.
+9. One centralized GF-path resolution is reused by all GF operations in a run.
+10. GF remains authoritative for GF semantics and dependency resolution.
+11. GF interaction passes through `GfToolPort` and the dedicated anti-corruption layer.
+12. CLI and GUI use the same probe, configuration and orchestration boundaries.
+13. Wordbench remains one deployable hexagonal modular monolith.
+14. External execution is centralized.
+15. Every external process has an explicit executable, ordered arguments, working directory and finite timeout.
+16. Every run reserves time for safe finalization.
+17. Stdout and stderr are preserved separately.
+18. Raw evidence is captured before normalization.
+19. Reports consume results and never rerun validation.
+20. Every generated artifact has one owner.
+21. Machine-consumed data uses explicit versioned schemas.
+22. Selected-source, optional-profile and run paths use explicit path models.
+23. Optional validation profiles cannot contradict the resolved source context.
+24. Required release artifacts must exist; exit code alone is insufficient.
+25. Gold files change only through an explicit update workflow.
+26. Validation status, execution state, error kind, diagnostic class and capability status remain distinct.
+27. Executable diagnostic tools are statically allowlisted with explicit contracts.
+28. Legacy and catalog compatibility remains isolated in loaders or migrators.
+29. GF Wordbench has no runtime, storage or private-schema dependency on `gf-portfolio`.
+30. Switching language disposes the old runtime and is prohibited during an active run.
+31. A component may change internally when its external contracts remain compatible.
+32. A cross-file contract change is one coordinated change.
+33. A failure in a later stage must not erase valid earlier evidence or capabilities.
+34. Complexity must correspond to a stable responsibility or contract.
 
 ---
 
@@ -1966,14 +2194,26 @@ A codebase is architecture-compliant when:
 
 ```text
 [ ] Framework code contains no active-language paths or module names
-[ ] project.toml is the active-project authority
-[ ] CLI and GUI resolve the same RunConfig for equivalent inputs
+[ ] GUI always starts with an introduction or explicit language-open flow
+[ ] CLI and GUI accept equivalent language-directory or .gf-file inputs
+[ ] normal startup does not require rgl-language-catalog.json
+[ ] normal startup does not require language.toml or project.toml
+[ ] one immutable ResolvedLanguageContext gates main-runtime construction
+[ ] remembered selected paths are revalidated before reuse
+[ ] LanguageProbeService uses public selection, path, preflight and diagnostic contracts
+[ ] LanguageProbeService does not launch GF or subprocesses directly
+[ ] source enumeration and ordering are not duplicated outside the selection owner
+[ ] one effective GFPathResolution is reused across GF consumers
+[ ] source-ready and scan-ready operation can work without GF installed
+[ ] compile-ready operation requires GF-specific preflight
+[ ] optional profiles cannot override or escape the resolved source context
+[ ] CLI and GUI resolve equivalent RunConfig values for equivalent inputs
 [ ] runs.application is the only run orchestrator
 [ ] functional modules respect hexagonal dependency direction
 [ ] all GF operations pass through GfToolPort and the GF anti-corruption layer
 [ ] all process launches use the shared process runner
-[ ] compilation, PGF, and scenarios have distinct stage owners
-[ ] every run has global, stage, and finalization budgets
+[ ] compilation, PGF and scenarios have distinct stage owners
+[ ] every run has global, stage and finalization budgets
 [ ] executable diagnostic tools are statically allowlisted
 [ ] Wordbench starts and runs without gf-portfolio
 [ ] public interoperability uses versioned Wordbench artifacts only
@@ -1982,15 +2222,16 @@ A codebase is architecture-compliant when:
 [ ] reports do not launch GF or rescan sources
 [ ] summary.json is versioned and reloadable
 [ ] manifest.json verifies required artifacts
-[ ] project and run paths are canonical and contained
-[ ] state is disposable and contains no project architecture
+[ ] selected-source, profile and run paths are canonical and contained
+[ ] state is disposable and contains no executable language architecture
 [ ] gold updates are explicit
 [ ] required release gates cannot be silently bypassed
 [ ] status vocabularies are centralized
-[ ] compatibility aliases are not emitted by canonical writers
+[ ] compatibility aliases and catalog authority are not emitted by canonical writers
+[ ] switching language recreates the runtime and leaves no old path contamination
 [ ] contract tests cover component boundaries
 [ ] schema tests cover canonical and legacy forms
-[ ] end-to-end tests produce a complete run directory
+[ ] end-to-end tests cover at least two structurally different language selections
 [ ] documentation ownership contains no conflicting normative duplicates
 ```
 
@@ -2024,10 +2265,14 @@ project/docs/INTERFILE_CONTRACT_LOCK.md
 templates/project/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
+The project and template locks govern optional validation profiles and templates, not normal path-resolved startup.
+
 ### GF and validation
 
 ```text
 docs/gf/GF_TOOLCHAIN_INTEGRATION.md
+docs/gf/GF_PATH_RESOLUTION.md
+docs/validation/FILE_SELECTION.md
 docs/validation/VALIDATION_PIPELINE.md
 docs/validation/VALIDATION_MODES.md
 docs/scenarios/SCENARIO_FORMAT.md
@@ -2039,6 +2284,8 @@ docs/diagnostics/TOOL_CATALOG.md
 ### Configuration and reports
 
 ```text
+docs/configuration/CONFIGURATION_OVERVIEW.md
+docs/configuration/ENVIRONMENT_AND_PATHS.md
 docs/configuration/PROJECT_TOML_REFERENCE.md
 docs/configuration/APPLICATION_STATE_REFERENCE.md
 docs/reports/SUMMARY_JSON_REFERENCE.md
@@ -2061,7 +2308,11 @@ docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
 docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
 docs/decisions/ADR-0013-DIAGNOSTIC-TOOL-REGISTRY.md
+docs/decisions/ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md
+docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md
 ```
+
+ADR-0014 is retained as a superseded historical decision. ADR-0015 governs normal startup.
 
 ---
 
@@ -2072,7 +2323,10 @@ GF Wordbench is not a collection of independent utilities.
 It is one coordinated validation system in which:
 
 ```text
-the project defines what must be validated
+the user selects one source location
+the language probe coordinates existing owners
+the resolved language context defines the active source boundary
+an optional profile defines advanced validation and release policy
 GF executes GF semantics
 the framework controls and records the execution
 models carry explicit results
@@ -2081,4 +2335,4 @@ schemas preserve them across time
 contracts keep every boundary aligned
 ```
 
-A local implementation change is acceptable only when the complete architectural path remains coherent.
+A local implementation change is acceptable only when the complete architectural path remains coherent and no second implementation of selection, path resolution, external execution or diagnostic parsing is introduced.

@@ -17,6 +17,7 @@ from gf_wordbench.projects.models import ProjectConfig
 
 if TYPE_CHECKING:
     from gf_wordbench.config.precedence import ConfigurationSource
+    from gf_wordbench.projects.languages.models import ResolvedLanguageContext
 
 
 EvidenceLevel = Literal["bounded", "standard", "complete", "expanded"]
@@ -33,6 +34,17 @@ class IssueSeverity(StrEnum):
     ERROR = "error"
     WARNING = "warning"
     INFO = "info"
+
+
+@unique
+class LanguageCapability(StrEnum):
+    """Capability vocabulary shared by startup and run configuration."""
+
+    SOURCE_READY = "source-ready"
+    SCAN_READY = "scan-ready"
+    COMPILE_READY = "compile-ready"
+    SCENARIO_READY = "scenario-ready"
+    RELEASE_READY = "release-ready"
 
 
 def _require_plain_int(
@@ -166,6 +178,129 @@ def _require_unique_non_empty_texts(
             )
 
         seen.add(value)
+
+
+def _require_optional_non_empty_text(
+    name: str,
+    value: str | None,
+) -> None:
+    if value is None:
+        return
+    _require_non_empty_text(name, value)
+    if value != value.strip():
+        raise ValueError(
+            f"{name} must not contain surrounding whitespace"
+        )
+
+
+def _require_contained_path(
+    name: str,
+    value: Path,
+    *,
+    parent: Path,
+    allow_equal: bool = True,
+) -> None:
+    _require_absolute_normalized_path(name, value)
+    _require_absolute_normalized_path(f"{name} parent", parent)
+
+    try:
+        relative = value.relative_to(parent)
+    except ValueError as exc:
+        raise ValueError(
+            f"{name} must remain inside {parent!s}"
+        ) from exc
+
+    if not allow_equal and not relative.parts:
+        raise ValueError(
+            f"{name} must identify a child of {parent!s}"
+        )
+
+
+def _require_paths_contained(
+    name: str,
+    values: tuple[Path, ...],
+    *,
+    parent: Path,
+) -> None:
+    _require_unique_paths(name, values)
+    for index, value in enumerate(values):
+        _require_contained_path(
+            f"{name}[{index}]",
+            value,
+            parent=parent,
+        )
+
+
+def _require_unique_capabilities(
+    name: str,
+    values: tuple[LanguageCapability, ...],
+) -> None:
+    _require_tuple(name, values)
+    seen: set[LanguageCapability] = set()
+    for index, value in enumerate(values):
+        if not isinstance(value, LanguageCapability):
+            raise TypeError(
+                f"{name}[{index}] must be a LanguageCapability"
+            )
+        if value in seen:
+            raise ValueError(
+                f"{name} must not contain duplicate capabilities"
+            )
+        seen.add(value)
+
+
+def _require_resolved_language_context(
+    name: str,
+    value: object,
+) -> None:
+    """Validate the public surface required from the projects-owned context."""
+
+    required_paths = (
+        "selected_path",
+        "language_directory",
+        "rgl_source_root",
+    )
+    for attribute in required_paths:
+        path = getattr(value, attribute, None)
+        if not isinstance(path, Path):
+            raise TypeError(
+                f"{name}.{attribute} must be a pathlib.Path"
+            )
+        _require_absolute_normalized_path(
+            f"{name}.{attribute}",
+            path,
+        )
+
+    language_key = getattr(value, "language_key", None)
+    if not isinstance(language_key, str):
+        raise TypeError(
+            f"{name}.language_key must be a string"
+        )
+    _require_non_empty_text(
+        f"{name}.language_key",
+        language_key,
+    )
+
+    source_inventory = getattr(value, "source_inventory", None)
+    if not isinstance(source_inventory, tuple):
+        raise TypeError(
+            f"{name}.source_inventory must be a tuple"
+        )
+    _require_paths_contained(
+        f"{name}.source_inventory",
+        source_inventory,
+        parent=getattr(value, "language_directory"),
+    )
+    if not source_inventory:
+        raise ValueError(
+            f"{name}.source_inventory must not be empty"
+        )
+
+    _require_contained_path(
+        f"{name}.language_directory",
+        getattr(value, "language_directory"),
+        parent=getattr(value, "rgl_source_root"),
+    )
 
 
 def _require_evidence_level(
@@ -318,10 +453,11 @@ def _has_error(
 
 @dataclass(frozen=True, slots=True)
 class EnvironmentOverrides:
-    """Raw optional process-environment values.
+    """Raw optional machine-local configuration values.
 
-    Values are not expanded, normalized, resolved, or discovered here. Empty
-    strings use the canonical absence representation ``None``.
+    ``project_root`` is retained as a legacy validation-profile input. New
+    startup flows use ``selected_language_path`` and may supply an explicit
+    ``validation_profile_path`` independently.
     """
 
     project_root: str | None = None
@@ -329,6 +465,9 @@ class EnvironmentOverrides:
     rgl_root: str | None = None
     output_root: str | None = None
     state_path: str | None = None
+    selected_language_path: str | None = None
+    validation_profile_path: str | None = None
+    rgl_source_root: str | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -337,6 +476,9 @@ class EnvironmentOverrides:
             "rgl_root",
             "output_root",
             "state_path",
+            "selected_language_path",
+            "validation_profile_path",
+            "rgl_source_root",
         ):
             object.__setattr__(
                 self,
@@ -437,12 +579,26 @@ class SchemaSupport:
     app_state_major: int
     run_summary_major: int
     artifact_manifest_major: int
+    validation_profile_major: int | None = None
 
     def __post_init__(self) -> None:
         _require_plain_int(
             "project_major",
             self.project_major,
             minimum=1,
+        )
+        profile_major = self.validation_profile_major
+        if profile_major is None:
+            profile_major = self.project_major
+        _require_plain_int(
+            "validation_profile_major",
+            profile_major,
+            minimum=1,
+        )
+        object.__setattr__(
+            self,
+            "validation_profile_major",
+            profile_major,
         )
         _require_plain_int(
             "app_state_major",
@@ -558,19 +714,30 @@ class ValidationTarget:
 
 @dataclass(frozen=True, slots=True)
 class ResolvedEnvironment:
-    """Validated machine-local paths used by one run."""
+    """Validated machine-local paths used by one run.
 
-    project_root: Path
+    ``project_root`` is a compatibility field for an optional legacy
+    validation profile. ``language_directory`` and ``rgl_source_root`` are the
+    canonical source-context paths for path-resolved startup.
+    """
+
+    project_root: Path | None
     rgl_root: Path
     gf_executable: Path
     output_root: Path
     gf_path: tuple[Path, ...]
+    language_directory: Path | None = None
+    rgl_source_root: Path | None = None
+    validation_profile_root: Path | None = None
 
     def __post_init__(self) -> None:
-        _require_absolute_normalized_path(
-            "project_root",
-            self.project_root,
-        )
+        project_root = self.project_root
+        if project_root is not None:
+            _require_absolute_normalized_path(
+                "project_root",
+                project_root,
+            )
+
         _require_absolute_normalized_path(
             "rgl_root",
             self.rgl_root,
@@ -588,10 +755,69 @@ class ResolvedEnvironment:
             self.gf_path,
         )
 
+        language_directory = self.language_directory
+        if language_directory is None:
+            language_directory = project_root
+        if language_directory is None:
+            raise ValueError(
+                "language_directory is required when project_root is absent"
+            )
+        _require_absolute_normalized_path(
+            "language_directory",
+            language_directory,
+        )
+
+        rgl_source_root = self.rgl_source_root
+        if rgl_source_root is None:
+            rgl_source_root = Path(
+                os.path.normpath(
+                    os.fspath(self.rgl_root / "src")
+                )
+            )
+        _require_absolute_normalized_path(
+            "rgl_source_root",
+            rgl_source_root,
+        )
+        _require_contained_path(
+            "rgl_source_root",
+            rgl_source_root,
+            parent=self.rgl_root,
+        )
+        _require_contained_path(
+            "language_directory",
+            language_directory,
+            parent=rgl_source_root,
+        )
+
+        profile_root = self.validation_profile_root
+        if profile_root is None:
+            profile_root = project_root
+        if profile_root is not None:
+            _require_absolute_normalized_path(
+                "validation_profile_root",
+                profile_root,
+            )
+
+        object.__setattr__(
+            self,
+            "language_directory",
+            language_directory,
+        )
+        object.__setattr__(
+            self,
+            "rgl_source_root",
+            rgl_source_root,
+        )
+        object.__setattr__(
+            self,
+            "validation_profile_root",
+            profile_root,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ConfigurationIssue:
-    """One structured configuration finding."""
+    """One structured configuration or language-resolution finding."""
 
     severity: IssueSeverity
     source: ConfigurationSource
@@ -599,6 +825,11 @@ class ConfigurationIssue:
     provided_value: object
     message: str
     remediation: str
+    stage: str = "configuration"
+    error_kind: str = "configuration"
+    technical_detail: str = ""
+    relevant_path: Path | None = None
+    candidate_choices: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(
@@ -625,6 +856,31 @@ class ConfigurationIssue:
             "remediation",
             self.remediation,
         )
+        _require_non_empty_text(
+            "stage",
+            self.stage,
+        )
+        _require_non_empty_text(
+            "error_kind",
+            self.error_kind,
+        )
+        if not isinstance(self.technical_detail, str):
+            raise TypeError(
+                "technical_detail must be a string"
+            )
+        if "\x00" in self.technical_detail:
+            raise ValueError(
+                "technical_detail must not contain a NUL character"
+            )
+        if self.relevant_path is not None:
+            _require_absolute_normalized_path(
+                "relevant_path",
+                self.relevant_path,
+            )
+        _require_unique_non_empty_texts(
+            "candidate_choices",
+            self.candidate_choices,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -633,8 +889,8 @@ class ConfigurationProvenance:
 
     field_path: str
     source: ConfigurationSource
-    provided_value: object
-    resolved_value: object
+    provided_value: object = None
+    resolved_value: object = None
 
     def __post_init__(self) -> None:
         _require_field_path(
@@ -649,16 +905,15 @@ class ConfigurationProvenance:
 
 @dataclass(frozen=True, slots=True)
 class ConfigurationResolutionRequest:
-    """Complete immutable input to configuration resolution.
+    """Complete immutable input to run-configuration resolution.
 
-    ``source_values`` contains decoded candidates grouped by their owning
-    configuration source. Framework defaults, project-owned values, and raw
-    environment overrides remain in their owner models and are composed by the
-    precedence and environment stages.
+    ``language_context`` is the canonical source authority for path-resolved
+    startup. ``project`` is retained as an optional legacy validation profile.
+    At least one of them must be supplied during the compatibility period.
     """
 
     defaults: AppConfig
-    project: ProjectConfig
+    project: ProjectConfig | None
     environment: EnvironmentOverrides = field(
         default_factory=EnvironmentOverrides
     )
@@ -666,6 +921,7 @@ class ConfigurationResolutionRequest:
         ConfigurationSource,
         Mapping[str, object],
     ] = field(default_factory=dict)
+    language_context: ResolvedLanguageContext | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(
@@ -675,12 +931,25 @@ class ConfigurationResolutionRequest:
             raise TypeError(
                 "defaults must be an AppConfig"
             )
-        if not isinstance(
-            self.project,
-            ProjectConfig,
+        if (
+            self.project is not None
+            and not isinstance(
+                self.project,
+                ProjectConfig,
+            )
         ):
             raise TypeError(
-                "project must be a ProjectConfig"
+                "project must be a ProjectConfig or None"
+            )
+        if self.language_context is not None:
+            _require_resolved_language_context(
+                "language_context",
+                self.language_context,
+            )
+        if self.project is None and self.language_context is None:
+            raise ValueError(
+                "language_context is required when no legacy project "
+                "profile is supplied"
             )
         if not isinstance(
             self.environment,
@@ -691,6 +960,13 @@ class ConfigurationResolutionRequest:
                 "an EnvironmentOverrides"
             )
 
+        if self.project is not None and self.language_context is not None:
+            if self.project.source_root != self.language_context.language_directory:
+                raise ValueError(
+                    "the validation profile source_root must equal the "
+                    "resolved language_directory"
+                )
+
         object.__setattr__(
             self,
             "source_values",
@@ -698,6 +974,12 @@ class ConfigurationResolutionRequest:
                 self.source_values
             ),
         )
+
+    @property
+    def validation_profile(self) -> ProjectConfig | None:
+        """Return the optional legacy validation profile."""
+
+        return self.project
 
 
 @dataclass(frozen=True, slots=True)
@@ -757,9 +1039,14 @@ class EnvironmentResolution:
 
 @dataclass(frozen=True, slots=True)
 class RunConfig:
-    """Fully resolved configuration for one non-interactive run."""
+    """Fully resolved immutable configuration for one run.
 
-    project: ProjectConfig
+    ``language_context`` owns active-language and source facts. ``project`` is
+    an optional validation profile retained for compatibility with the current
+    project schema.
+    """
+
+    project: ProjectConfig | None
     environment: ResolvedEnvironment
     mode: ValidationMode
     target: ValidationTarget | None
@@ -776,14 +1063,29 @@ class RunConfig:
     release_requires_pgf: bool
     evidence_level: EvidenceLevel
     compatibility_warnings: tuple[str, ...] = ()
+    language_context: ResolvedLanguageContext | None = None
+    effective_capabilities: tuple[LanguageCapability, ...] = ()
 
     def __post_init__(self) -> None:
-        if not isinstance(
-            self.project,
-            ProjectConfig,
+        if (
+            self.project is not None
+            and not isinstance(
+                self.project,
+                ProjectConfig,
+            )
         ):
             raise TypeError(
-                "project must be a ProjectConfig"
+                "project must be a ProjectConfig or None"
+            )
+        if self.language_context is not None:
+            _require_resolved_language_context(
+                "language_context",
+                self.language_context,
+            )
+        if self.project is None and self.language_context is None:
+            raise ValueError(
+                "a run requires a resolved language context or a "
+                "legacy project profile"
             )
         if not isinstance(
             self.environment,
@@ -866,6 +1168,39 @@ class RunConfig:
             "compatibility_warnings",
             self.compatibility_warnings,
         )
+        _require_unique_capabilities(
+            "effective_capabilities",
+            self.effective_capabilities,
+        )
+
+        context = self.language_context
+        if context is not None:
+            if self.environment.language_directory != context.language_directory:
+                raise ValueError(
+                    "environment.language_directory must equal the "
+                    "resolved language_directory"
+                )
+            if self.environment.rgl_source_root != context.rgl_source_root:
+                raise ValueError(
+                    "environment.rgl_source_root must equal the resolved "
+                    "rgl_source_root"
+                )
+            _require_paths_contained(
+                "selected_checkpoints",
+                self.selected_checkpoints,
+                parent=context.language_directory,
+            )
+            _require_paths_contained(
+                "selected_entrypoints",
+                self.selected_entrypoints,
+                parent=context.language_directory,
+            )
+            if self.project is not None:
+                if self.project.source_root != context.language_directory:
+                    raise ValueError(
+                        "the validation profile source_root must equal the "
+                        "resolved language_directory"
+                    )
 
         if (
             self.mode is ValidationMode.QUICK
@@ -875,23 +1210,54 @@ class RunConfig:
                 "quick mode requires a resolved target"
             )
 
-        if (
-            self.mode is ValidationMode.CHECKPOINT
-            and not self.selected_checkpoints
-        ):
+        if self.mode is ValidationMode.CHECKPOINT:
+            if self.project is None:
+                raise ValueError(
+                    "checkpoint mode requires an explicit validation profile"
+                )
+            if not self.selected_checkpoints:
+                raise ValueError(
+                    "checkpoint mode requires at least one checkpoint"
+                )
+
+        if self.mode is ValidationMode.RELEASE:
+            if self.project is None:
+                raise ValueError(
+                    "release mode requires an explicit validation profile"
+                )
+            if not self.selected_entrypoints:
+                raise ValueError(
+                    "release mode requires at least one entrypoint"
+                )
+
+        if self.release_requires_pgf and self.project is None:
             raise ValueError(
-                "checkpoint mode requires at least "
-                "one checkpoint"
+                "release_requires_pgf requires an explicit validation profile"
             )
 
-        if (
-            self.mode is ValidationMode.RELEASE
-            and not self.selected_entrypoints
-        ):
-            raise ValueError(
-                "release mode requires at least "
-                "one entrypoint"
-            )
+    @property
+    def validation_profile(self) -> ProjectConfig | None:
+        """Return the optional validation profile."""
+
+        return self.project
+
+    @property
+    def language_key(self) -> str:
+        """Return the portable language key used by this run."""
+
+        if self.language_context is not None:
+            return self.language_context.language_key
+        assert self.project is not None
+        return str(self.project.identity.language_code)
+
+    @property
+    def source_root(self) -> Path:
+        """Return the effective language source directory."""
+
+        if self.language_context is not None:
+            return self.language_context.language_directory
+        assert self.project is not None
+        return self.project.source_root
 
 
 @dataclass(frozen=True, slots=True)
@@ -995,6 +1361,7 @@ __all__ = (
     "EnvironmentResolution",
     "EvidenceLevel",
     "IssueSeverity",
+    "LanguageCapability",
     "OutputDefaults",
     "ResolvedEnvironment",
     "RunConfig",

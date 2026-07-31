@@ -32,6 +32,19 @@ class _InstalledMetadata(TypedDict):
     package_version: str
     package_file: str
     entry_points: dict[str, str]
+    startup_runtime_builder: bool
+    gui_main_callable: bool
+    qt_eagerly_imported: bool
+
+
+class _InstalledCliContract(TypedDict):
+    probe_command: str
+    probe_language_path: str
+    probe_profile: str
+    validate_command: str
+    validate_language_path: str
+    validate_profile: str
+    validate_target: str
 
 
 def _repository_root() -> Path:
@@ -153,12 +166,18 @@ def _inspect_installed_distribution(
     cwd: Path,
     environment: Mapping[str, str],
 ) -> _InstalledMetadata:
+    """Inspect installed metadata and the lazy GUI startup composition boundary."""
     script = """
+import importlib
 import json
 from importlib.metadata import distribution
 from pathlib import Path
+import sys
+
 import gf_wordbench
 
+bootstrap = importlib.import_module("gf_wordbench.bootstrap")
+gui_main = importlib.import_module("gf_wordbench.entrypoints.gui.main")
 dist = distribution("gf-wordbench")
 entry_points = {
     f"{entry.group}:{entry.name}": entry.value
@@ -170,6 +189,14 @@ print(json.dumps({
     "package_version": gf_wordbench.__version__,
     "package_file": str(Path(gf_wordbench.__file__).resolve()),
     "entry_points": entry_points,
+    "startup_runtime_builder": callable(
+        getattr(bootstrap, "build_startup_gui_runtime", None)
+    ),
+    "gui_main_callable": callable(getattr(gui_main, "main", None)),
+    "qt_eagerly_imported": any(
+        name == "PySide6" or name.startswith("PySide6.")
+        for name in sys.modules
+    ),
 }, sort_keys=True))
 """
     result = _run_checked(
@@ -185,12 +212,18 @@ print(json.dumps({
     package_version = raw_payload.get("package_version")
     package_file = raw_payload.get("package_file")
     raw_entry_points = raw_payload.get("entry_points")
+    startup_runtime_builder = raw_payload.get("startup_runtime_builder")
+    gui_main_callable = raw_payload.get("gui_main_callable")
+    qt_eagerly_imported = raw_payload.get("qt_eagerly_imported")
 
     assert isinstance(distribution_version, str)
     assert distribution_version
     assert isinstance(package_version, str)
     assert isinstance(package_file, str)
     assert isinstance(raw_entry_points, dict)
+    assert type(startup_runtime_builder) is bool
+    assert type(gui_main_callable) is bool
+    assert type(qt_eagerly_imported) is bool
 
     entry_points: dict[str, str] = {}
     for key, value in raw_entry_points.items():
@@ -203,12 +236,93 @@ print(json.dumps({
         "package_version": package_version,
         "package_file": package_file,
         "entry_points": entry_points,
+        "startup_runtime_builder": startup_runtime_builder,
+        "gui_main_callable": gui_main_callable,
+        "qt_eagerly_imported": qt_eagerly_imported,
     }
 
 
+def _inspect_installed_cli_contract(
+    python_executable: Path,
+    *,
+    cwd: Path,
+    environment: Mapping[str, str],
+    language_path: Path,
+    validation_profile: Path,
+) -> _InstalledCliContract:
+    """Parse canonical ADR-0015 requests from the installed wheel."""
+    script = """
+import json
+import os
+from pathlib import Path
+import sys
+
+from gf_wordbench.entrypoints.cli.parser import parse_cli_request
+
+language_path = Path(sys.argv[1])
+validation_profile = Path(sys.argv[2])
+probe = parse_cli_request([
+    "language",
+    "probe",
+    os.fspath(language_path),
+    "--profile",
+    os.fspath(validation_profile),
+])
+validate = parse_cli_request([
+    "validate",
+    "--language-path",
+    os.fspath(language_path),
+    "--profile",
+    os.fspath(validation_profile),
+    "--mode",
+    "quick",
+])
+print(json.dumps({
+    "probe_command": probe.command.value,
+    "probe_language_path": os.fspath(probe.require("language_path")),
+    "probe_profile": os.fspath(probe.require("validation_profile")),
+    "validate_command": validate.command.value,
+    "validate_language_path": os.fspath(validate.require("language_path")),
+    "validate_profile": os.fspath(validate.require("validation_profile")),
+    "validate_target": os.fspath(validate.require("target")),
+}, sort_keys=True))
+"""
+    result = _run_checked(
+        [
+            str(python_executable),
+            "-I",
+            "-c",
+            script,
+            str(language_path),
+            str(validation_profile),
+        ],
+        cwd=cwd,
+        environment=environment,
+        timeout=_COMMAND_TIMEOUT_SECONDS,
+    )
+    raw_payload = json.loads(result.stdout)
+    assert isinstance(raw_payload, dict)
+
+    expected_fields = (
+        "probe_command",
+        "probe_language_path",
+        "probe_profile",
+        "validate_command",
+        "validate_language_path",
+        "validate_profile",
+        "validate_target",
+    )
+    payload: dict[str, str] = {}
+    for field_name in expected_fields:
+        value = raw_payload.get(field_name)
+        assert isinstance(value, str)
+        payload[field_name] = value
+    return _InstalledCliContract(**payload)
+
+
 @pytest.mark.slow
-def test_wheel_installs_and_exposes_supported_entrypoints(tmp_path: Path) -> None:
-    """A wheel must work outside the checkout through installed entrypoints."""
+def test_wheel_installs_and_exposes_path_resolved_entrypoints(tmp_path: Path) -> None:
+    """A wheel must expose the installed ADR-0015 startup and CLI contracts."""
     repository_root = _repository_root()
     clean_home = tmp_path / "home"
     clean_home.mkdir()
@@ -250,6 +364,9 @@ def test_wheel_installs_and_exposes_supported_entrypoints(tmp_path: Path) -> Non
     assert package_version == distribution_version
     assert _is_within(package_file, environment_root)
     assert not _is_within(package_file, repository_root)
+    assert metadata["startup_runtime_builder"] is True
+    assert metadata["gui_main_callable"] is True
+    assert metadata["qt_eagerly_imported"] is False
     for key, expected_value in _EXPECTED_ENTRY_POINTS.items():
         assert entry_points.get(key) == expected_value
 
@@ -275,6 +392,7 @@ def test_wheel_installs_and_exposes_supported_entrypoints(tmp_path: Path) -> Non
     help_text = help_result.stdout
     assert "usage:" in help_text.casefold()
     for command_name in (
+        "language",
         "validate",
         "project",
         "scenarios",
@@ -284,10 +402,57 @@ def test_wheel_installs_and_exposes_supported_entrypoints(tmp_path: Path) -> Non
     ):
         assert command_name in help_text
 
-    command_help = _run_checked(
+    language_help = _run_checked(
+        [str(cli), "language", "probe", "--help"],
+        cwd=tmp_path,
+        environment=environment,
+        timeout=_COMMAND_TIMEOUT_SECONDS,
+    ).stdout
+    assert "usage:" in language_help.casefold()
+    assert "LANGUAGE-PATH" in language_help
+    assert "--profile" in language_help
+    assert "--gf-exe" in language_help
+    assert "--rgl-root" in language_help
+    assert "--project-root" not in language_help
+
+    validate_help = _run_checked(
+        [str(cli), "validate", "--help"],
+        cwd=tmp_path,
+        environment=environment,
+        timeout=_COMMAND_TIMEOUT_SECONDS,
+    ).stdout
+    assert "usage:" in validate_help.casefold()
+    assert "--language-path" in validate_help
+    assert "--last-language" in validate_help
+    assert "--profile" in validate_help
+    assert "--project-root" not in validate_help
+
+    project_help = _run_checked(
         [str(cli), "project", "check", "--help"],
         cwd=tmp_path,
         environment=environment,
         timeout=_COMMAND_TIMEOUT_SECONDS,
+    ).stdout
+    assert "usage:" in project_help.casefold()
+    assert "--language-path" in project_help
+    assert "--profile" in project_help
+    assert "--project-root" not in project_help
+
+    language_path = tmp_path / "gf-rgl" / "src" / "english" / "LangEng.gf"
+    validation_profile = tmp_path / "profiles" / "english-release.toml"
+    cli_contract = _inspect_installed_cli_contract(
+        python_executable,
+        cwd=tmp_path,
+        environment=environment,
+        language_path=language_path,
+        validation_profile=validation_profile,
     )
-    assert "usage:" in command_help.stdout.casefold()
+    assert cli_contract == {
+        "probe_command": "language.probe",
+        "probe_language_path": str(language_path),
+        "probe_profile": str(validation_profile),
+        "validate_command": "validate",
+        "validate_language_path": str(language_path),
+        "validate_profile": str(validation_profile),
+        "validate_target": str(language_path),
+    }

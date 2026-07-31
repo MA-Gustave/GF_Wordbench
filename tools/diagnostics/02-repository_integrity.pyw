@@ -8,6 +8,7 @@ import sys
 from diag_core import (
     FAIL,
     DiagConfig,
+    console_python,
     DiagReport,
     execute_python_module,
     execute_step,
@@ -40,7 +41,7 @@ def run_checks(config: DiagConfig, report: DiagReport, log) -> None:
         step_id="repository.compileall",
         title="Compile Python sources",
         command=[
-            sys.executable,
+            console_python(),
             "-m",
             "compileall",
             "-q",
@@ -65,7 +66,7 @@ def run_checks(config: DiagConfig, report: DiagReport, log) -> None:
                 log,
                 step_id=step_id,
                 title=title,
-                command=[sys.executable, str(script)],
+                command=[console_python(), str(script)],
                 timeout=config.timeout("normal", 180),
             )
 
@@ -74,7 +75,7 @@ def run_checks(config: DiagConfig, report: DiagReport, log) -> None:
         report,
         log,
         module="ruff",
-        arguments=["check", "."],
+        arguments=["check", "src", "tests", "scripts"],
         step_id="repository.ruff",
         title="Ruff lint",
         timeout=config.timeout("normal", 180),

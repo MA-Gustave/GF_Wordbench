@@ -14,6 +14,16 @@ from gf_wordbench.kernel.ids import (
     DiagnosticPatternId,
     validate_diagnostic_pattern_id,
 )
+from gf_wordbench.diagnostics.models import (
+    DiagnosticEvidence as _CanonicalDiagnosticEvidence,
+    DiagnosticLine as EvidenceLine,
+    DiagnosticPattern as _CanonicalDiagnosticPattern,
+    DiagnosticSeverity as _CanonicalDiagnosticSeverity,
+    DiagnosticStream as _CanonicalDiagnosticStream,
+    PatternConfidence as _CanonicalPatternConfidence,
+    PatternMatch as _CanonicalPatternMatch,
+)
+
 from gf_wordbench.kernel.statuses import ErrorKind
 
 PARSER_PATTERN_VERSION: Final[str] = "1.0"
@@ -207,6 +217,17 @@ ExtractedFields: TypeAlias = Mapping[str, str]
 
 @dataclass(frozen=True, slots=True)
 class PatternMatch:
+    def __new__(cls, *args: object, **kwargs: object) -> object:
+        if (
+            cls is PatternMatch
+            and (
+                "source_stream" in kwargs
+                or "line_number" in kwargs
+            )
+        ):
+            return _build_legacy_compilation_match(*args, **kwargs)
+        return object.__new__(cls)
+
     pattern_id: DiagnosticPatternId
     error_kind: ErrorKind | None
     severity: DiagnosticSeverity | None
@@ -273,6 +294,18 @@ class DiagnosticPatternMatcher(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class DiagnosticPattern:
+    def __new__(cls, *args: object, **kwargs: object) -> object:
+        if (
+            cls is DiagnosticPattern
+            and (
+                "operations" in kwargs
+                or "streams" in kwargs
+                or "priority" in kwargs
+            )
+        ):
+            return _CanonicalDiagnosticPattern(*args, **kwargs)
+        return object.__new__(cls)
+
     pattern_id: DiagnosticPatternId
     lifecycle_state: PatternLifecycle
     supported_operations: frozenset[DiagnosticOperation]
@@ -403,6 +436,207 @@ class DiagnosticPattern:
         return result
 
 
+
+
+def _canonical_evidence_lines(
+    evidence: _CanonicalDiagnosticEvidence,
+) -> tuple[EvidenceLine, ...]:
+    lines: list[EvidenceLine] = []
+
+    for stream, value in (
+        (_CanonicalDiagnosticStream.STDOUT, evidence.stdout_text),
+        (_CanonicalDiagnosticStream.STDERR, evidence.stderr_text),
+    ):
+        if value is None:
+            continue
+        for line_number, line_text in enumerate(
+            value.splitlines(),
+            start=1,
+        ):
+            lines.append(
+                EvidenceLine(
+                    stream=stream,
+                    line_number=line_number,
+                    text=line_text,
+                )
+            )
+
+    return tuple(lines)
+
+
+if not hasattr(_CanonicalDiagnosticEvidence, "lines"):
+    setattr(
+        _CanonicalDiagnosticEvidence,
+        "lines",
+        property(_canonical_evidence_lines),
+    )
+
+
+_LEGACY_COMPILATION_MATCH_METADATA: Final[
+    Mapping[
+        str,
+        tuple[
+            ErrorKind,
+            _CanonicalDiagnosticSeverity,
+            _CanonicalPatternConfidence,
+        ],
+    ]
+] = MappingProxyType(
+    {
+        "DP-GFINT-001": (
+            ErrorKind.INTERNAL,
+            _CanonicalDiagnosticSeverity.FATAL,
+            _CanonicalPatternConfidence.HIGH,
+        ),
+        "DP-GFTYPE-001": (
+            ErrorKind.TYPE,
+            _CanonicalDiagnosticSeverity.ERROR,
+            _CanonicalPatternConfidence.HIGH,
+        ),
+        "DP-GFSYN-001": (
+            ErrorKind.SYNTAX,
+            _CanonicalDiagnosticSeverity.ERROR,
+            _CanonicalPatternConfidence.MEDIUM,
+        ),
+    }
+)
+
+
+def _build_legacy_compilation_match(
+    *args: object,
+    **kwargs: object,
+) -> _CanonicalPatternMatch:
+    if args:
+        raise TypeError(
+            "legacy compilation PatternMatch requires keyword arguments"
+        )
+
+    values = dict(kwargs)
+    pattern_id = _require_text(
+        values.pop("pattern_id", None),
+        field_name="pattern_id",
+        allow_empty=False,
+        maximum=256,
+    )
+    source_stream = values.pop("source_stream", None)
+    line_number = values.pop("line_number", None)
+    message = values.pop("message", None)
+    detail = values.pop("detail", "")
+    raw_excerpt = values.pop("raw_excerpt", "")
+
+    if values:
+        unexpected = ", ".join(sorted(values))
+        raise TypeError(
+            f"unexpected legacy PatternMatch fields: {unexpected}"
+        )
+
+    if source_stream == "combined":
+        canonical_stream: _CanonicalDiagnosticStream | None = None
+        metadata: Mapping[str, str] = MappingProxyType(
+            {"legacy_source_stream": "combined"}
+        )
+    else:
+        try:
+            canonical_stream = (
+                None
+                if source_stream is None
+                else _CanonicalDiagnosticStream(str(source_stream))
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "source_stream must be stdout, stderr, combined, or None"
+            ) from exc
+        metadata = MappingProxyType({})
+
+    if line_number is not None:
+        if type(line_number) is not int or line_number < 1:
+            raise ValueError("line_number must be a positive integer or None")
+
+    try:
+        error_kind, severity, confidence = (
+            _LEGACY_COMPILATION_MATCH_METADATA[pattern_id]
+        )
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported legacy compilation pattern ID: {pattern_id}"
+        ) from exc
+
+    return _CanonicalPatternMatch(
+        pattern_id=pattern_id,
+        operation="compile",
+        stream=canonical_stream,
+        start_line=line_number,
+        end_line=line_number,
+        severity=severity,
+        error_kind=error_kind,
+        message=_require_text(
+            message,
+            field_name="message",
+            allow_empty=False,
+            maximum=MAX_FIELD_CHARACTERS,
+        ),
+        detail=_require_text(
+            detail,
+            field_name="detail",
+            allow_empty=True,
+            maximum=MAX_FIELD_CHARACTERS,
+        ),
+        raw_excerpt=_require_text(
+            raw_excerpt,
+            field_name="raw_excerpt",
+            allow_empty=True,
+            maximum=MAX_EXCERPT_CHARACTERS,
+        ),
+        confidence=confidence,
+        metadata=metadata,
+    )
+
+
+def select_diagnostic_patterns(
+    evidence: _CanonicalDiagnosticEvidence,
+) -> tuple[_CanonicalDiagnosticPattern, ...]:
+    """Return the deterministic canonical pattern catalog for evidence.
+
+    Imports are intentionally lazy so the common contract module remains free
+    of eager catalog registration and circular imports.
+    """
+
+    if not isinstance(evidence, _CanonicalDiagnosticEvidence):
+        raise TypeError("evidence must be DiagnosticEvidence")
+
+    from .compilation import COMPILATION_PATTERNS
+    from .scenarios import SCENARIO_PATTERNS
+
+    candidates = (
+        *COMPILATION_PATTERNS,
+        *SCENARIO_PATTERNS,
+    )
+    identifiers: set[str] = set()
+    selected: list[_CanonicalDiagnosticPattern] = []
+
+    for pattern in candidates:
+        if not isinstance(pattern, _CanonicalDiagnosticPattern):
+            raise TypeError(
+                "diagnostic catalogs must contain canonical "
+                "DiagnosticPattern values"
+            )
+        if pattern.pattern_id in identifiers:
+            raise ValueError(
+                f"duplicate diagnostic pattern ID: {pattern.pattern_id}"
+            )
+        identifiers.add(pattern.pattern_id)
+        selected.append(pattern)
+
+    return tuple(
+        sorted(
+            selected,
+            key=lambda pattern: (
+                pattern.priority,
+                pattern.pattern_id,
+            ),
+        )
+    )
+
 def match_internal_generate_pmcfg(
     evidence: DiagnosticPatternInput,
 ) -> PatternMatch | None:
@@ -517,104 +751,6 @@ def match_source_syntax(
             ),
         )
     return None
-
-
-INTERNAL_GENERATE_PMCFG_PATTERN: Final[DiagnosticPattern] = DiagnosticPattern(
-    pattern_id=INTERNAL_GENERATE_PMCFG_PATTERN_ID,
-    lifecycle_state=PatternLifecycle.ACTIVE,
-    supported_operations=frozenset(
-        {
-            DiagnosticOperation.COMPILE_MODULE,
-            DiagnosticOperation.BUILD_PGF,
-            DiagnosticOperation.RUN_SCENARIO,
-        }
-    ),
-    supported_gf_versions=("tested",),
-    supported_platforms=frozenset({"windows", "posix"}),
-    stream_scope=DiagnosticStreamScope.EITHER,
-    precedence=100,
-    confidence=PatternConfidence.STRONG,
-    error_kind=ErrorKind.INTERNAL,
-    severity=DiagnosticSeverity.FATAL,
-    matcher=match_internal_generate_pmcfg,
-    false_positive_guards=(
-        "tool-output evidence only",
-        "case-sensitive confirmed anchor",
-    ),
-    fixtures=(
-        "internal_generate_pmcfg_stdout",
-        "internal_generate_pmcfg_stderr",
-        "internal_generate_pmcfg_negative",
-    ),
-)
-
-EXPECTED_INFERRED_TYPE_PATTERN: Final[DiagnosticPattern] = DiagnosticPattern(
-    pattern_id=EXPECTED_INFERRED_TYPE_PATTERN_ID,
-    lifecycle_state=PatternLifecycle.ACTIVE,
-    supported_operations=frozenset(
-        {
-            DiagnosticOperation.COMPILE_MODULE,
-            DiagnosticOperation.BUILD_PGF,
-            DiagnosticOperation.RUN_SCENARIO,
-        }
-    ),
-    supported_gf_versions=("tested",),
-    supported_platforms=frozenset({"windows", "posix"}),
-    stream_scope=DiagnosticStreamScope.BOTH_STRUCTURE,
-    precedence=200,
-    confidence=PatternConfidence.STRONG,
-    error_kind=ErrorKind.TYPE,
-    severity=DiagnosticSeverity.ERROR,
-    matcher=match_expected_inferred_type,
-    false_positive_guards=(
-        "both expected and inferred lines are required",
-        "each structural line is anchored",
-    ),
-    fixtures=(
-        "expected_inferred_stdout",
-        "expected_inferred_stderr",
-        "expected_inferred_split_streams",
-        "expected_only_negative",
-        "inferred_only_negative",
-    ),
-)
-
-SOURCE_SYNTAX_PATTERN: Final[DiagnosticPattern] = DiagnosticPattern(
-    pattern_id=SOURCE_SYNTAX_PATTERN_ID,
-    lifecycle_state=PatternLifecycle.ACTIVE,
-    supported_operations=frozenset(
-        {
-            DiagnosticOperation.COMPILE_MODULE,
-            DiagnosticOperation.BUILD_PGF,
-            DiagnosticOperation.RUN_SCENARIO,
-        }
-    ),
-    supported_gf_versions=("tested",),
-    supported_platforms=frozenset({"windows", "posix"}),
-    stream_scope=DiagnosticStreamScope.EITHER,
-    precedence=300,
-    confidence=PatternConfidence.STRONG,
-    error_kind=ErrorKind.SYNTAX,
-    severity=DiagnosticSeverity.ERROR,
-    matcher=match_source_syntax,
-    false_positive_guards=(
-        "tool-output evidence only",
-        "complete diagnostic line retained",
-        "operation scope required",
-    ),
-    fixtures=(
-        "syntax_error",
-        "parse_error",
-        "unexpected_token",
-        "linguistic_zero_parse_negative",
-    ),
-)
-
-COMMON_PATTERNS: Final[tuple[DiagnosticPattern, ...]] = (
-    INTERNAL_GENERATE_PMCFG_PATTERN,
-    EXPECTED_INFERRED_TYPE_PATTERN,
-    SOURCE_SYNTAX_PATTERN,
-)
 
 
 def match_common_patterns(
@@ -1031,6 +1167,103 @@ def _require_text(
     return value
 
 
+INTERNAL_GENERATE_PMCFG_PATTERN: Final[DiagnosticPattern] = DiagnosticPattern(
+    pattern_id=INTERNAL_GENERATE_PMCFG_PATTERN_ID,
+    lifecycle_state=PatternLifecycle.ACTIVE,
+    supported_operations=frozenset(
+        {
+            DiagnosticOperation.COMPILE_MODULE,
+            DiagnosticOperation.BUILD_PGF,
+            DiagnosticOperation.RUN_SCENARIO,
+        }
+    ),
+    supported_gf_versions=("tested",),
+    supported_platforms=frozenset({"windows", "posix"}),
+    stream_scope=DiagnosticStreamScope.EITHER,
+    precedence=100,
+    confidence=PatternConfidence.STRONG,
+    error_kind=ErrorKind.INTERNAL,
+    severity=DiagnosticSeverity.FATAL,
+    matcher=match_internal_generate_pmcfg,
+    false_positive_guards=(
+        "tool-output evidence only",
+        "case-sensitive confirmed anchor",
+    ),
+    fixtures=(
+        "internal_generate_pmcfg_stdout",
+        "internal_generate_pmcfg_stderr",
+        "internal_generate_pmcfg_negative",
+    ),
+)
+
+EXPECTED_INFERRED_TYPE_PATTERN: Final[DiagnosticPattern] = DiagnosticPattern(
+    pattern_id=EXPECTED_INFERRED_TYPE_PATTERN_ID,
+    lifecycle_state=PatternLifecycle.ACTIVE,
+    supported_operations=frozenset(
+        {
+            DiagnosticOperation.COMPILE_MODULE,
+            DiagnosticOperation.BUILD_PGF,
+            DiagnosticOperation.RUN_SCENARIO,
+        }
+    ),
+    supported_gf_versions=("tested",),
+    supported_platforms=frozenset({"windows", "posix"}),
+    stream_scope=DiagnosticStreamScope.BOTH_STRUCTURE,
+    precedence=200,
+    confidence=PatternConfidence.STRONG,
+    error_kind=ErrorKind.TYPE,
+    severity=DiagnosticSeverity.ERROR,
+    matcher=match_expected_inferred_type,
+    false_positive_guards=(
+        "both expected and inferred lines are required",
+        "each structural line is anchored",
+    ),
+    fixtures=(
+        "expected_inferred_stdout",
+        "expected_inferred_stderr",
+        "expected_inferred_split_streams",
+        "expected_only_negative",
+        "inferred_only_negative",
+    ),
+)
+
+SOURCE_SYNTAX_PATTERN: Final[DiagnosticPattern] = DiagnosticPattern(
+    pattern_id=SOURCE_SYNTAX_PATTERN_ID,
+    lifecycle_state=PatternLifecycle.ACTIVE,
+    supported_operations=frozenset(
+        {
+            DiagnosticOperation.COMPILE_MODULE,
+            DiagnosticOperation.BUILD_PGF,
+            DiagnosticOperation.RUN_SCENARIO,
+        }
+    ),
+    supported_gf_versions=("tested",),
+    supported_platforms=frozenset({"windows", "posix"}),
+    stream_scope=DiagnosticStreamScope.EITHER,
+    precedence=300,
+    confidence=PatternConfidence.STRONG,
+    error_kind=ErrorKind.SYNTAX,
+    severity=DiagnosticSeverity.ERROR,
+    matcher=match_source_syntax,
+    false_positive_guards=(
+        "tool-output evidence only",
+        "complete diagnostic line retained",
+        "operation scope required",
+    ),
+    fixtures=(
+        "syntax_error",
+        "parse_error",
+        "unexpected_token",
+        "linguistic_zero_parse_negative",
+    ),
+)
+
+COMMON_PATTERNS: Final[tuple[DiagnosticPattern, ...]] = (
+    INTERNAL_GENERATE_PMCFG_PATTERN,
+    EXPECTED_INFERRED_TYPE_PATTERN,
+    SOURCE_SYNTAX_PATTERN,
+)
+
 __all__ = (
     "COMMON_PATTERNS",
     "EXPECTED_INFERRED_TYPE_PATTERN",
@@ -1047,6 +1280,7 @@ __all__ = (
     "SOURCE_SYNTAX_PATTERN_ID",
     "UNKNOWN_PATTERN_ID",
     "DiagnosticLine",
+    "EvidenceLine",
     "DiagnosticOperation",
     "DiagnosticPattern",
     "DiagnosticPatternInput",
@@ -1067,5 +1301,6 @@ __all__ = (
     "match_internal_generate_pmcfg",
     "match_source_syntax",
     "render_evidence_lines",
+    "select_diagnostic_patterns",
     "select_fallback_candidate_line",
 )

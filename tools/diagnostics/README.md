@@ -143,3 +143,7 @@ N01 through N03 are static or read-only except for normal Python cache files and
 N04 creates a Wordbench run only when `runtime_smoke.run_quick` is enabled.
 
 N05 intentionally starts a full release validation and may take significant time. Launching N05 is the explicit user action authorizing that run.
+
+## Troubleshooting CLI-wide failures
+
+If package and GUI imports pass but `--help`, `--version`, and all CLI checks fail, inspect the displayed output tail or the per-command `.log` files. This usually indicates a shared CLI entrypoint/import problem rather than a GF or project failure.

@@ -17,9 +17,17 @@ from gf_wordbench.kernel.errors import (
     SchemaValidationError,
     UnsupportedVersionError,
 )
+from gf_wordbench.entrypoints.cli.exit_codes import (
+    EXIT_CANCELLED,
+    EXIT_OK,
+    EXIT_RUNTIME_ERROR,
+    EXIT_USAGE_ERROR,
+    EXIT_VALIDATION_FAILED,
+    exit_code_for_overall_status,
+    is_canonical_exit_code,
+)
 from gf_wordbench.kernel.serialization import dumps_canonical_json
 from gf_wordbench.kernel.statuses import OverallStatus, ValidationMode, ValidationStatus
-from gf_wordbench.reporting.manifest.verifier import verify_manifest
 from gf_wordbench.reporting.schemas.summary_v1 import (
     SUMMARY_JSON_FILENAME,
     SummaryV1Issue,
@@ -29,11 +37,6 @@ from gf_wordbench.runs.public import RunConfig, RunPaths, RunResult
 
 AUTOMATION_RESULT_SCHEMA_ID: Final[str] = "gf-wordbench.automation-result"
 AUTOMATION_RESULT_SCHEMA_VERSION: Final[str] = "1.0"
-
-EXIT_OK: Final[int] = 0
-EXIT_VALIDATION_FAILED: Final[int] = 1
-EXIT_USAGE_OR_CONFIG: Final[int] = 2
-EXIT_RUNTIME_ERROR: Final[int] = 3
 
 _MANIFEST_FILENAME: Final[str] = "manifest.json"
 _MAX_MESSAGE_LENGTH: Final[int] = 2_000
@@ -50,7 +53,7 @@ class AutomationIssueSeverity(StrEnum):
 class AutomationIssue:
     code: str
     message: str
-    path: str | None = None
+    path: Path | str | None = None
     severity: AutomationIssueSeverity = AutomationIssueSeverity.ERROR
 
     def __post_init__(self) -> None:
@@ -72,11 +75,7 @@ class AutomationIssue:
             object.__setattr__(
                 self,
                 "path",
-                _require_text(
-                    self.path,
-                    field="path",
-                    max_length=2_048,
-                ),
+                _normalize_issue_path(self.path),
             )
         if not isinstance(self.severity, AutomationIssueSeverity):
             raise TypeError("severity must be AutomationIssueSeverity")
@@ -85,6 +84,7 @@ class AutomationIssue:
 @dataclass(frozen=True, slots=True)
 class AutomationVerificationRequest:
     summary_path: Path
+    run_dir: Path | None = None
     expected_mode: ValidationMode | str | None = None
     expected_project_id: str | None = None
     expected_run_id: str | None = None
@@ -94,12 +94,27 @@ class AutomationVerificationRequest:
     require_success: bool = False
 
     def __post_init__(self) -> None:
-        summary_path = _coerce_path(self.summary_path, field="summary_path")
+        summary_path = _coerce_path(
+            self.summary_path,
+            field="summary_path",
+        )
         if summary_path.name != SUMMARY_JSON_FILENAME:
             raise ValueError(
                 f"summary_path must end with {SUMMARY_JSON_FILENAME!r}"
             )
+
+        run_dir = _coerce_path(
+            self.run_dir if self.run_dir is not None else summary_path.parent,
+            field="run_dir",
+        )
+        _require_contained_path(
+            summary_path,
+            run_dir,
+            field="summary_path",
+        )
+
         object.__setattr__(self, "summary_path", summary_path)
+        object.__setattr__(self, "run_dir", run_dir)
 
         if self.expected_mode is not None:
             object.__setattr__(
@@ -131,6 +146,11 @@ class AutomationVerificationRequest:
                 raise ValueError(
                     f"manifest_path must end with {_MANIFEST_FILENAME!r}"
                 )
+            _require_contained_path(
+                manifest_path,
+                run_dir,
+                field="manifest_path",
+            )
             object.__setattr__(self, "manifest_path", manifest_path)
 
         for field_name in (
@@ -144,7 +164,6 @@ class AutomationVerificationRequest:
         if self.require_manifest and not self.verify_manifest_integrity:
             object.__setattr__(self, "verify_manifest_integrity", True)
 
-
 @dataclass(frozen=True, slots=True)
 class AutomationVerificationResult:
     summary_path: Path
@@ -153,10 +172,10 @@ class AutomationVerificationResult:
     project_id: str | None
     mode: ValidationMode | None
     overall_status: OverallStatus | None
-    exit_code: int
     summary_valid: bool
-    manifest_verified: bool
+    manifest_verified: bool | None
     issues: tuple[AutomationIssue, ...]
+    exit_code: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -194,24 +213,41 @@ class AutomationVerificationResult:
             OverallStatus,
         ):
             raise TypeError("overall_status must be OverallStatus or None")
-        if self.exit_code not in {
-            EXIT_OK,
-            EXIT_VALIDATION_FAILED,
-            EXIT_USAGE_OR_CONFIG,
-            EXIT_RUNTIME_ERROR,
-        }:
-            raise ValueError("exit_code is not canonical")
         if type(self.summary_valid) is not bool:
             raise TypeError("summary_valid must be bool")
-        if type(self.manifest_verified) is not bool:
-            raise TypeError("manifest_verified must be bool")
+        if (
+            self.manifest_verified is not None
+            and type(self.manifest_verified) is not bool
+        ):
+            raise TypeError("manifest_verified must be bool or None")
 
         prepared = tuple(self.issues)
         if any(not isinstance(item, AutomationIssue) for item in prepared):
             raise TypeError("issues must contain AutomationIssue values")
         object.__setattr__(self, "issues", prepared)
 
-        if self.exit_code == EXIT_OK:
+        exit_code = self.exit_code
+        if exit_code is None:
+            has_errors = any(
+                issue.severity is AutomationIssueSeverity.ERROR
+                for issue in prepared
+            )
+            if (
+                has_errors
+                or not self.summary_valid
+                or self.overall_status is None
+                or self.overall_status is OverallStatus.ERROR
+            ):
+                exit_code = EXIT_RUNTIME_ERROR
+            else:
+                exit_code = exit_code_for_overall_status(
+                    self.overall_status
+                )
+            object.__setattr__(self, "exit_code", exit_code)
+        elif not is_canonical_exit_code(exit_code):
+            raise ValueError("exit_code is not canonical")
+
+        if exit_code == EXIT_OK:
             if self.overall_status is not OverallStatus.OK:
                 raise ValueError("exit 0 requires overall_status=OK")
             if not self.summary_valid:
@@ -256,6 +292,14 @@ class AutomationExecutionResult:
     @property
     def exit_code(self) -> int:
         return self.verification.exit_code
+
+    @property
+    def succeeded(self) -> bool:
+        return self.verification.succeeded
+
+    @property
+    def has_errors(self) -> bool:
+        return self.verification.has_errors
 
 
 @runtime_checkable
@@ -333,13 +377,22 @@ def execute_automation(
             verification=_failure_result(
                 run_paths.summary_json,
                 run_paths.manifest_json,
-                EXIT_USAGE_OR_CONFIG,
+                EXIT_USAGE_ERROR,
                 "AUTOMATION_CONFIGURATION_INVALID",
                 exc,
             )
         )
+    except CancellationRequested as exc:
+        return AutomationExecutionResult(
+            verification=_failure_result(
+                run_paths.summary_json,
+                run_paths.manifest_json,
+                EXIT_CANCELLED,
+                "AUTOMATION_CANCELLED",
+                exc,
+            )
+        )
     except (
-        CancellationRequested,
         ContractViolationError,
         GFWordbenchError,
         OSError,
@@ -367,6 +420,7 @@ def execute_automation(
     project_id = _project_id(run_config)
     request = AutomationVerificationRequest(
         summary_path=run_paths.summary_json,
+        run_dir=run_paths.run_dir,
         expected_mode=run_config.mode,
         expected_project_id=project_id,
         expected_run_id=run_paths.run_id,
@@ -397,8 +451,10 @@ def execute_automation(
             ),
         )
 
-    if verification.exit_code in {
-        EXIT_USAGE_OR_CONFIG,
+    if verification.exit_code == EXIT_CANCELLED:
+        final_exit = EXIT_CANCELLED
+    elif verification.exit_code in {
+        EXIT_USAGE_ERROR,
         EXIT_RUNTIME_ERROR,
     } or any(
         issue.severity is AutomationIssueSeverity.ERROR
@@ -492,7 +548,7 @@ def verify_completed_run(
                 str,
             ):
                 manifest_path = _resolve_run_relative_file(
-                    request.summary_path.parent,
+                    request.run_dir,
                     declared_manifest,
                     issues,
                     code="AUTOMATION_MANIFEST_PATH_INVALID",
@@ -545,8 +601,11 @@ def verify_completed_run(
     )
 
     if error_present or not summary_valid:
+        if overall_status is None:
+            overall_status = OverallStatus.ERROR
         exit_code = EXIT_RUNTIME_ERROR
     elif overall_status is None:
+        overall_status = OverallStatus.ERROR
         exit_code = EXIT_RUNTIME_ERROR
     else:
         exit_code = exit_code_for_overall_status(overall_status)
@@ -565,46 +624,35 @@ def verify_completed_run(
     )
 
 
-def exit_code_for_overall_status(
-    status: OverallStatus,
-) -> int:
-    if not isinstance(status, OverallStatus):
-        raise TypeError("status must be OverallStatus")
-    if status is OverallStatus.OK:
-        return EXIT_OK
-    if status is OverallStatus.FAIL:
-        return EXIT_VALIDATION_FAILED
-    return EXIT_RUNTIME_ERROR
-
-
 def automation_result_document(
-    result: AutomationVerificationResult,
+    result: AutomationExecutionResult | AutomationVerificationResult,
 ) -> dict[str, object]:
-    if not isinstance(result, AutomationVerificationResult):
-        raise TypeError(
-            "result must be AutomationVerificationResult"
-        )
+    verification = _coerce_verification_result(result)
 
     return {
         "schema_id": AUTOMATION_RESULT_SCHEMA_ID,
         "schema_version": AUTOMATION_RESULT_SCHEMA_VERSION,
-        "exit_code": result.exit_code,
-        "succeeded": result.succeeded,
-        "summary_valid": result.summary_valid,
-        "manifest_verified": result.manifest_verified,
-        "run_id": result.run_id,
-        "project_id": result.project_id,
-        "mode": result.mode.value if result.mode is not None else None,
+        "exit_code": verification.exit_code,
+        "succeeded": verification.succeeded,
+        "summary_valid": verification.summary_valid,
+        "manifest_verified": verification.manifest_verified,
+        "run_id": verification.run_id,
+        "project_id": verification.project_id,
+        "mode": (
+            verification.mode.value
+            if verification.mode is not None
+            else None
+        ),
         "overall_status": (
-            result.overall_status.value
-            if result.overall_status is not None
+            verification.overall_status.value
+            if verification.overall_status is not None
             else None
         ),
         "paths": {
-            "summary": result.summary_path.as_posix(),
+            "summary": verification.summary_path.as_posix(),
             "manifest": (
-                result.manifest_path.as_posix()
-                if result.manifest_path is not None
+                verification.manifest_path.as_posix()
+                if verification.manifest_path is not None
                 else None
             ),
         },
@@ -612,16 +660,16 @@ def automation_result_document(
             {
                 "severity": issue.severity.value,
                 "code": issue.code,
-                "path": issue.path,
+                "path": _render_issue_path(issue.path),
                 "message": issue.message,
             }
-            for issue in result.issues
+            for issue in verification.issues
         ],
     }
 
 
 def dumps_automation_result(
-    result: AutomationVerificationResult,
+    result: AutomationExecutionResult | AutomationVerificationResult,
 ) -> str:
     return dumps_canonical_json(
         automation_result_document(result)
@@ -629,13 +677,25 @@ def dumps_automation_result(
 
 
 def write_automation_result(
-    result: AutomationVerificationResult,
+    result: AutomationExecutionResult | AutomationVerificationResult,
     stream: TextIO,
 ) -> None:
-    if not hasattr(stream, "write"):
+    if not callable(getattr(stream, "write", None)):
         raise TypeError("stream must provide write()")
     stream.write(dumps_automation_result(result))
 
+
+def _coerce_verification_result(
+    result: AutomationExecutionResult | AutomationVerificationResult,
+) -> AutomationVerificationResult:
+    if isinstance(result, AutomationExecutionResult):
+        return result.verification
+    if isinstance(result, AutomationVerificationResult):
+        return result
+    raise TypeError(
+        "result must be AutomationExecutionResult or "
+        "AutomationVerificationResult"
+    )
 
 def _read_summary(
     summary_path: Path,
@@ -715,7 +775,7 @@ def _verify_manifest(
     mode: ValidationMode | None,
     issues: list[AutomationIssue],
 ) -> bool:
-    run_root = request.summary_path.parent
+    run_root = request.run_dir
     try:
         resolved_manifest = manifest_path.resolve(strict=False)
         resolved_root = run_root.resolve(strict=False)
@@ -725,8 +785,21 @@ def _verify_manifest(
             issues,
             AutomationIssue(
                 code="AUTOMATION_MANIFEST_PATH_INVALID",
-                path=str(manifest_path),
+                path=manifest_path,
                 message="manifest must remain inside the run directory",
+            ),
+        )
+        return False
+
+    try:
+        from gf_wordbench.reporting.manifest.verifier import verify_manifest
+    except Exception as exc:
+        _append_issue(
+            issues,
+            AutomationIssue(
+                code="AUTOMATION_MANIFEST_VERIFIER_UNAVAILABLE",
+                path=manifest_path,
+                message=_exception_message(exc),
             ),
         )
         return False
@@ -741,11 +814,22 @@ def _verify_manifest(
         expected_run_id=request.expected_run_id or run_id,
         require_pgf=mode is ValidationMode.RELEASE,
     )
-    verification = verify_manifest(
-        manifest_path,
-        run_root,
-        policy,
-    )
+    try:
+        verification = verify_manifest(
+            manifest_path,
+            run_root,
+            policy,
+        )
+    except Exception as exc:
+        _append_issue(
+            issues,
+            AutomationIssue(
+                code="AUTOMATION_MANIFEST_VERIFICATION_ERROR",
+                path=manifest_path,
+                message=_exception_message(exc),
+            ),
+        )
+        return False
     if not isinstance(verification.status, ValidationStatus):
         _append_issue(
             issues,
@@ -972,7 +1056,11 @@ def _failure_result(
         run_id=None,
         project_id=None,
         mode=None,
-        overall_status=None,
+        overall_status=(
+            None
+            if exit_code == EXIT_CANCELLED
+            else OverallStatus.ERROR
+        ),
         exit_code=exit_code,
         summary_valid=False,
         manifest_verified=False,
@@ -1041,7 +1129,39 @@ def _coerce_path(value: object, *, field: str) -> Path:
         raise TypeError(f"{field} must be a path")
     if "\x00" in str(path):
         raise ValueError(f"{field} must not contain NUL")
-    return path
+    return path.expanduser().resolve(strict=False)
+
+
+def _require_contained_path(
+    path: Path,
+    root: Path,
+    *,
+    field: str,
+) -> None:
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(
+            f"{field} must remain inside run_dir"
+        ) from exc
+
+
+def _normalize_issue_path(value: object) -> Path | str:
+    if isinstance(value, Path):
+        return value.expanduser().resolve(strict=False)
+    if isinstance(value, str):
+        return _require_text(
+            value,
+            field="path",
+            max_length=2_048,
+        )
+    raise TypeError("path must be pathlib.Path, string, or None")
+
+
+def _render_issue_path(value: Path | str | None) -> str | None:
+    if isinstance(value, Path):
+        return value.as_posix()
+    return value
 
 
 def _require_text(
@@ -1081,9 +1201,10 @@ __all__ = (
     "AutomationRunApplication",
     "AutomationVerificationRequest",
     "AutomationVerificationResult",
+    "EXIT_CANCELLED",
     "EXIT_OK",
     "EXIT_RUNTIME_ERROR",
-    "EXIT_USAGE_OR_CONFIG",
+    "EXIT_USAGE_ERROR",
     "EXIT_VALIDATION_FAILED",
     "automation_result_document",
     "dumps_automation_result",

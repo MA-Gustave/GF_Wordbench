@@ -2,36 +2,37 @@
 
 **Document ID:** `GF-WB-ARCH-EXECUTION-FLOW`  
 **Status:** Normative architecture specification  
-**Applies to:** one GF Wordbench run for one active project and one normative language target  
+**Applies to:** one GF Wordbench run for one resolved language context and, when supplied, one explicit validation profile  
 **Owner:** GF Wordbench maintainers  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Framework boundary:** `docs/INTERFILE_CONTRACT_LOCK.md`  
 **External-tool boundary:** `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`  
 **Persisted-artifact boundary:** `docs/PERSISTED_SCHEMA_LOCK.md`  
-**Last structural review:** `2026-07-24`
+**Governing startup decision:** `docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`  
+**Last structural review:** `2026-07-30`
 
 ---
 
 ## 1. Purpose
 
-This document defines the canonical execution flow of GF Wordbench from user request to finalized run artifacts.
+This document defines the canonical execution flow of GF Wordbench from an explicit language-path selection to finalized run artifacts.
 
 It answers:
 
-- where execution begins;
-- how configuration is resolved;
-- how the active project is loaded;
+- where GUI, CLI and automation execution begins;
+- how one selected language directory or `.gf` file becomes a resolved language context;
+- how optional validation profiles are loaded without becoming startup authorities;
 - how validation mode selects stages;
-- when files are selected, scanned, fingerprinted, and compiled;
+- when files are selected, scanned, fingerprinted and compiled;
 - when scenarios and gold comparisons run;
 - when a PGF release build runs;
 - how results are classified and aggregated;
 - how previous runs are compared;
 - how reports and manifests are finalized;
-- how partial failures, timeouts, and cancellation are represented;
-- what CLI and GUI layers may and may not do.
+- how partial failures, timeouts and cancellation are represented;
+- what entrypoints and orchestration layers may and may not do.
 
-This file describes orchestration order and stage boundaries.
+This file describes startup orchestration, run ordering and stage boundaries.
 
 It does not duplicate:
 
@@ -39,48 +40,65 @@ It does not duplicate:
 - persisted field-by-field schemas;
 - file-to-file public contracts;
 - language-specific module dependencies;
-- report layout details.
+- report layout details;
+- validation-profile field definitions.
 
 Those are owned by the corresponding contract and reference documents.
 
 ---
 
-## Product and run boundary
+## Product, language and run boundary
 
-One GF Wordbench workspace contains exactly one active GF language project. One execution resolves exactly one project identity and one normative language target.
+GF Wordbench is multi-language capable but single-language at runtime.
 
-GF Wordbench owns validation orchestration, evidence capture, classification, comparison, reporting and run finalization for that project.
+Before the main runtime exists, the user or caller explicitly supplies one language directory or one `.gf` file. Wordbench resolves that selection through the shared language-probe, file-selection, GF-path and preflight boundaries. A running session then contains exactly one immutable `ResolvedLanguageContext`, and one ordinary run records exactly one language identity.
+
+An optional validation profile may add scenarios, golds, checkpoints, entrypoints and release policy. It is not required for browsing, static scanning or targeted compilation of a standard RGL language source tree.
+
+GF Wordbench owns validation orchestration, evidence capture, classification, comparison, reporting and run finalization for the resolved language context.
 
 GF Wordbench does not:
 
-- discover or orchestrate several Wordbench workspaces in one run;
+- maintain several simultaneously active language contexts;
+- mutate language identity during a run;
+- discover unrelated workspaces or source trees through an unbounded search;
 - maintain a portfolio registry;
-- aggregate multilingual readiness across projects;
+- aggregate multilingual readiness across contexts;
 - depend on `gf-portfolio` code, runtime, schemas, storage or configuration.
 
 The independent `gf-portfolio` product may consume finalized, public, versioned Wordbench artifacts. That consumer relationship does not alter Wordbench execution flow.
 
 ---
 
-## 2. Core execution rule
+## 2. Core execution rules
 
-> Every supported validation request passes through one authoritative application use case.
+> Every supported validation request passes through one authoritative application use case, and no run begins without one validated resolved language context.
 
-The canonical logical operation is:
+The canonical logical operations are:
 
 ```python
+probe_language(
+    request: LanguageProbeRequest,
+) -> LanguageProbeResult
+
 execute_run(
     request: RunRequest,
 ) -> RunResult
 ```
 
-`RunRequest` represents resolved user intent for one active project. Private class and function names may vary, but all entrypoints call the same application boundary.
+`LanguageProbeRequest` represents the explicit selected language path and any explicit nonstandard-layout or profile choices.
+
+`RunRequest` represents resolved user intent for one `ResolvedLanguageContext`, one mode and one optional validation profile.
+
+Private class and function names may vary, but all supported entrypoints call the same application boundaries.
 
 Equivalent resolved requests produce equivalent:
 
+- language identity;
+- source selection;
 - stage selection;
 - stage ordering;
-- path resolution;
+- GF path resolution;
 - evidence policy;
 - success and failure semantics;
 - artifact contracts.
@@ -93,7 +111,7 @@ This rule applies whether the request originates from:
 - tests;
 - a supported API adapter.
 
-CLI, GUI and adapters must not reconstruct the pipeline independently.
+CLI, GUI and adapters must not reconstruct the probe or run pipeline independently.
 
 ---
 
@@ -103,17 +121,22 @@ CLI, GUI and adapters must not reconstruct the pipeline independently.
 
 CLI, GUI and supported API adapters own:
 
-- collecting user intent;
-- presenting input errors when possible;
+- collecting explicit user intent;
+- accepting one language directory or `.gf` file;
+- presenting candidate choices and remediation when the probe reports ambiguity;
+- accepting an optional validation profile;
 - converting external values into application requests;
-- invoking the run application use case;
-- rendering the returned result;
-- mapping the result to an exit code, response or GUI state.
+- invoking the language-probe and run application use cases;
+- rendering returned structured results;
+- mapping results to an exit code, response or GUI state.
 
 Entrypoints do not own:
 
-- project selection rules;
+- filesystem language discovery rules;
 - source selection;
+- path containment;
+- module-name extraction;
+- GF path construction;
 - static scanning;
 - GF command construction;
 - process execution;
@@ -123,23 +146,31 @@ Entrypoints do not own:
 - report generation;
 - artifact naming.
 
-### 3.2 The projects module owns project resolution
+### 3.2 The projects module owns language-context resolution
 
-The `projects` module owns:
+The `projects` module owns the bounded `LanguageProbeService` application use case.
 
-- loading `project/project.toml`;
-- resolving the one active project;
-- validating project identity;
-- resolving project-relative paths;
-- validating entrypoints, checkpoints and scenario registrations;
-- producing the project portion of the resolved run request.
+It coordinates public services to:
 
-Application state and entrypoint state cannot override project identity.
+- interpret the explicit selected path;
+- derive the candidate language directory;
+- locate a supported RGL source root by walking selected-path ancestors only;
+- request deterministic GF source enumeration from the existing file selector;
+- classify standard RGL module candidates without claiming GF semantic validity;
+- request centralized GF path resolution;
+- collect structural diagnostics and capability statuses;
+- validate an explicitly supplied optional profile against the selected context;
+- produce one immutable `ResolvedLanguageContext`.
+
+The projects module does not implement a second recursive selector, GF compiler, process runner, GF diagnostic parser or reporting system.
+
+Application state and entrypoint state cannot override resolved language identity.
 
 ### 3.3 The runs module owns orchestration and lifecycle
 
 The `runs` module owns:
 
+- accepting one resolved language context;
 - creating the run identity;
 - resolving or creating run paths;
 - building the execution plan;
@@ -156,17 +187,18 @@ The runs module depends on application ports, not concrete GUI, CLI, filesystem 
 
 | Module or stage | Responsibility |
 |---|---|
-| Projects | Resolve and validate the active project |
+| Projects — language probe | Coordinate one selected path into one resolved language context |
+| Projects — optional profile | Load and validate explicit advanced validation policy |
 | Runs | Plan, orchestrate and finalize one run |
 | Validation — file selector | Determine included and excluded GF source files |
 | Validation — scanner | Produce heuristic source findings |
 | Validation — fingerprint provider | Produce source identity |
 | Validation — compiler | Request GF file compilation |
 | Diagnostics — classifier | Determine direct, downstream, ambiguous, noise or skipped |
-| Validation — scenario runner | Execute project-owned `.gfs` scenarios through the GF port |
+| Validation — scenario runner | Execute explicit profile-owned `.gfs` scenarios through the GF port |
 | Validation — gold comparator | Compare normalized scenario output with reviewed gold |
-| Validation — PGF stage | Build and verify the release PGF |
-| Runs — diff stage | Compare with a prior structured run |
+| Validation — PGF stage | Build and verify an explicitly configured release PGF |
+| Runs — diff stage | Compare with a compatible prior structured run |
 | Reporting | Serialize existing structured evidence |
 | Reporting — manifest writer | Inventory finalized run artifacts |
 
@@ -176,7 +208,7 @@ No module may silently assume ownership of another module's behavior.
 
 Application ports define requests and results for:
 
-- project storage;
+- selected-path and optional-profile storage;
 - filesystem access;
 - clocks and identifiers;
 - GF and diagnostic tool execution;
@@ -195,20 +227,30 @@ User / automation
         v
 CLI / GUI / API adapter
         |
+        +--> explicit language directory or .gf file
+        |
+        v
+LanguageProbeService
+        |
+        +--> normalize selected path
+        +--> derive language directory and RGL source root
+        +--> enumerate source candidates through SelectionService
+        +--> classify candidate module roles
+        +--> resolve candidate GF path through the central resolver
+        +--> validate optional profile when supplied
+        +--> publish ResolvedLanguageContext
+        |
         v
 Build RunRequest
         |
         v
-Projects module resolves active project
-        |
-        v
 Runs application use case
         |
-        +--> validate resolved request
+        +--> validate resolved request and requested capability
         |
         +--> create run identity and paths
         |
-        +--> external-tool preflight
+        +--> external-tool preflight when required
         |
         +--> resolve execution plan
         |
@@ -222,7 +264,7 @@ Runs application use case
         |
         +--> classify file results
         |
-        +--> execute selected scenarios
+        +--> execute selected profile scenarios when configured
         |       run GF
         |       preserve raw output
         |       verify markers
@@ -230,11 +272,11 @@ Runs application use case
         |       compare gold
         |       build ScenarioResult
         |
-        +--> build PGF when required
+        +--> build PGF when explicitly required
         |
         +--> aggregate RunResult
         |
-        +--> compare with previous structured run
+        +--> compare with a compatible previous structured run
         |
         +--> publish reports and aggregate logs
         |
@@ -246,9 +288,7 @@ Runs application use case
 Return RunResult
         |
         +--> CLI renders summary and exit code
-        |
         +--> GUI renders result and stores convenience state
-        |
         +--> API adapter returns the documented representation
 ```
 
@@ -259,8 +299,8 @@ Return RunResult
 The execution flow is divided into twelve phases.
 
 ```text
-Phase 0   Request intake
-Phase 1   Configuration resolution
+Phase 0   Request intake and language-context resolution
+Phase 1   Run configuration and optional-profile resolution
 Phase 2   Run initialization
 Phase 3   External-tool preflight
 Phase 4   Execution-plan resolution
@@ -270,14 +310,12 @@ Phase 7   Cross-file classification
 Phase 8   Scenario validation
 Phase 9   PGF and release gates
 Phase 10  Aggregation and regression comparison
-Phase 11  Reporting, manifest, and completion
+Phase 11  Reporting, manifest and completion
 ```
 
 A phase may contain multiple stages, but phase order is stable.
 
----
-
-# 6. Phase 0 — Request intake
+# 6. Phase 0 — Request intake and language-context resolution
 
 ## 6.1 CLI path
 
@@ -285,85 +323,116 @@ Canonical logical flow:
 
 ```text
 parse arguments
-    -> convert values to plain Python types
-    -> call shared configuration builder
-    -> invoke the run application use case
-    -> print returned result summary
-    -> map result to process exit code
+    → convert values to plain Python types
+    → require one explicit language path or an explicit remembered-path action
+    → call the shared LanguageProbeService
+    → render structured ambiguity or invalid-selection diagnostics when needed
+    → obtain ResolvedLanguageContext
+    → call the shared run-request builder
+    → invoke the run application use case
+    → print returned result summary
+    → map result to process exit code
 ```
 
 The CLI must not determine success by parsing generated reports.
 
-The CLI must use structured fields on `RunResult`.
+The CLI must use structured probe and `RunResult` fields.
+
+In noninteractive mode, unresolved ambiguity is an explicit invocation error unless the caller supplies the missing choice.
 
 ## 6.2 GUI path
 
 Canonical logical flow:
 
 ```text
-read form and persisted convenience state
-    -> validate obvious UI errors
-    -> convert widget values to plain Python types
-    -> call shared configuration builder
-    -> invoke the run application use case in the supported execution context
-    -> render returned result
-    -> save convenience state
+create QApplication
+    → load persisted convenience state
+    → show the introduction window
+    → choose Open last language, Choose language path or Quit
+    → call the shared LanguageProbeService in the supported worker context
+    → present exact candidates or remediation when required
+    → obtain ResolvedLanguageContext
+    → compose the main runtime
+    → convert widgets and preferences to plain run-request values
+    → invoke the run application use case
+    → render returned result
+    → save convenience state
 ```
+
+The main Wordbench window must not be composed before a resolved language context exists.
 
 The GUI must not call:
 
+- recursive filesystem enumeration directly;
 - `compile_file`;
 - `scan_file`;
+- GF path serialization;
 - scenario execution;
 - report writers;
 - manifest generation.
 
-GUI validation may fail earlier than bootstrap, but it must not replace bootstrap validation.
+GUI validation may reject obvious input earlier than the probe or bootstrap, but it must not replace application validation.
 
 ## 6.3 Automation path
 
-Automation uses the same public request builder and run application use case.
+Automation uses the same public language-probe, request-builder and run application use cases.
 
 It may:
 
 - disable interactive output;
+- provide an explicit language directory or `.gf` file;
+- provide an explicit optional validation profile;
 - select strict mode;
 - choose deterministic output roots;
-- inspect `summary.json`;
+- inspect structured probe output and `summary.json`;
 - use exit codes.
 
-It must not bypass required release gates.
+It must not:
 
----
+- choose the first ambiguous candidate;
+- bypass required release gates;
+- restore a stale resolved context without revalidation;
+- use the retired catalog as a startup authority.
 
-# 7. Phase 1 — Configuration resolution
+# 7. Phase 1 — Run configuration and optional-profile resolution
 
 ## 7.1 Configuration sources
 
-Configuration is resolved from these domains:
+Run configuration is resolved from these domains:
 
 ```text
+immutable ResolvedLanguageContext
 application metadata and safe framework defaults
-active project configuration
 environment-specific tool paths
-CLI or GUI explicit overrides
+explicit CLI or GUI run values
+optional explicitly selected validation profile
 documented compatibility aliases
 ```
 
-The active project configuration is authoritative for:
+`ResolvedLanguageContext` is authoritative for:
 
-- project identity;
-- language identity;
-- source directory;
+- portable language key;
+- selected-path provenance;
+- language directory;
+- RGL source root and RGL root when resolved;
+- optional module suffix;
+- focused target when a file was selected;
+- detected entrypoint candidates;
+- source inventory or stable inventory reference;
+- GF path requirements and provenance;
+- base capability statuses.
+
+An optional validation profile is authoritative only for explicitly configured advanced policy:
+
 - source glob and filters;
-- GF path parts owned by the project;
-- entrypoints;
+- required entrypoints;
 - checkpoints;
-- required scenarios;
-- optional scenarios;
-- release requirements.
+- required and optional scenarios;
+- inputs and golds;
+- release targets;
+- release requirements and gates.
 
-The application state is not authoritative project configuration.
+The application state is not authoritative language or run configuration.
 
 ## 7.2 Precedence
 
@@ -371,24 +440,25 @@ Recommended precedence from lowest to highest:
 
 ```text
 1. framework-safe defaults
-2. active project configuration
-3. environment-specific configured values
-4. explicit CLI or GUI values
+2. immutable resolved language context
+3. explicit optional validation profile
+4. environment-specific configured tool values
+5. explicit CLI or GUI run values permitted by policy
 ```
 
 Correctness-critical values must not rely silently on inherited environment variables.
 
-Explicit values may override project defaults only where the project contract permits it.
+Explicit values may override profile defaults only where the profile contract permits it.
 
-Required release constraints must not be bypassed silently.
+An override must not change language identity, escape the resolved roots or bypass required release constraints silently.
 
 ## 7.3 Compatibility aliases
 
-Legacy aliases may be accepted at input or migration boundaries:
+Legacy mode aliases may be accepted at input or migration boundaries:
 
 ```text
-file -> quick
-all  -> diagnostic
+file → quick
+all  → diagnostic
 ```
 
 Canonical resolved modes are:
@@ -402,42 +472,59 @@ diagnostic
 
 Canonical writers and reports must emit canonical mode values only.
 
+A temporary catalog-era compatibility adapter may translate an explicit legacy catalog selection into a selected path. It must not preserve catalog authority in the resolved context.
+
 ## 7.4 Configuration validation
 
 Validation occurs before external execution.
 
-At minimum, validate:
+Base validation includes:
 
-- project root exists;
-- active project configuration exists and is readable;
-- schema ID and schema version are supported;
-- source directory is valid;
-- GF executable resolves;
-- RGL root is valid when required;
+- one immutable resolved language context exists;
+- selected path and language directory remain valid and readable;
+- language directory remains contained in the resolved source root;
+- source inventory is deterministic and non-empty for source-backed modes;
+- mode is supported;
 - output root is permitted and writable;
 - timeout values are positive;
-- mode is supported;
-- target file is present when required;
-- entrypoints and checkpoints are deterministic;
-- required scenario IDs are unique;
-- required scenario files exist;
-- required gold files exist where the project contract requires them;
-- project-owned paths remain inside the project root;
+- explicit target is present when required;
+- GF path requirements remain valid;
 - run-owned paths remain inside the output root.
 
-A configuration failure before run-path creation normally produces no run directory.
+When an optional profile is supplied, also validate:
 
-A configuration failure after run-path creation must be represented in the partial run evidence.
+- schema ID and version are supported;
+- profile identity agrees with the resolved language context;
+- profile-owned paths remain inside approved language or profile roots;
+- configured entrypoints and checkpoints are deterministic;
+- required scenario IDs are unique;
+- required scenario files exist;
+- required inputs exist;
+- required gold files exist where profile policy requires them;
+- release requirements are complete for release mode.
+
+When the requested capability uses GF, also validate:
+
+- GF executable resolves;
+- effective GF path is valid;
+- working directory policy is valid.
+
+A probe or configuration failure before run-path creation normally produces no run directory.
+
+A configuration failure after run-path creation must be represented in partial run evidence.
 
 ## 7.5 Resolved configuration
 
-The output of configuration resolution is one immutable logical request:
+The outputs of startup and run configuration are:
 
 ```text
+ResolvedLanguageContext
 RunRequest
 ```
 
-The runs module derives the immutable execution configuration used by stages.
+The language context is produced before the main runtime is composed.
+
+The runs module derives the immutable execution configuration used by stages from the language context, requested mode, explicit target and optional profile.
 
 Once execution begins, stages read only the resolved execution request and run context.
 
@@ -446,10 +533,10 @@ They must not independently consult:
 - GUI widgets;
 - command-line parser objects;
 - mutable application state;
+- the retired runtime catalog;
 - undeclared environment values;
-- language-specific framework constants.
-
----
+- hard-coded language-specific constants;
+- implicit ancestor project files.
 
 # 8. Phase 2 — Run initialization
 
@@ -510,8 +597,10 @@ The master evidence should record:
 
 - run ID;
 - canonical mode;
-- project ID;
-- project root;
+- portable language key;
+- selected-path kind;
+- language directory relative to the RGL source root;
+- optional validation-profile identity and digest;
 - resolved GF executable;
 - effective GF path;
 - RGL root;
@@ -548,7 +637,7 @@ Absence must not be represented through an undocumented sentinel.
 
 ## 9.1 Purpose
 
-Preflight confirms that the external execution boundary is usable before expensive project validation begins.
+Preflight confirms that the external execution boundary is usable before expensive language validation begins.
 
 ## 9.2 Required checks
 
@@ -596,16 +685,17 @@ The process layer does not classify linguistic or dependency errors.
 
 ## 10.1 Purpose
 
-The resolved mode determines which stages are required, optional, or disabled.
+The resolved mode and capability status determine which stages are required, optional or disabled.
 
 The execution plan is derived from:
 
 - canonical mode;
-- project configuration;
-- explicit target;
+- immutable resolved language context;
+- optional validation profile;
+- explicit focused target or target selection;
 - strictness;
 - documented feature flags;
-- release requirements.
+- release requirements when configured.
 
 It must not be derived separately by CLI and GUI.
 
@@ -613,20 +703,20 @@ It must not be derived separately by CLI and GUI.
 
 | Stage | quick | checkpoint | release | diagnostic |
 |---|---:|---:|---:|---:|
-| Configuration validation | Required | Required | Required | Required |
-| GF preflight | Required | Required | Required | Required |
-| Targeted source selection | Required | Project-defined | No | No |
-| Project checkpoint selection | No | Required | Included where applicable | Optional |
-| Broad source selection | No | No | Required | Required |
+| Language-context validation | Required | Required | Required | Required |
+| GF preflight | Required when compiling | Required | Required | Required when GF work is enabled |
+| Targeted source selection | Required | Profile-defined or explicit | No | Optional |
+| Checkpoint selection | No | Required from explicit profile | Included where applicable | Optional |
+| Broad source selection | No | No | Required by release profile | Required |
 | Static scan | Required | Required | Required | Required |
 | Fingerprint | Required | Required | Required | Required |
-| Per-file compile | Required unless explicitly skipped | Required | Required | Required unless diagnostic option disables it |
+| Per-file compile | Required unless explicitly skipped | Required | Required | Required unless disabled by diagnostic policy |
 | File classification | Required | Required | Required | Required |
-| Required checkpoint scenarios | Project-defined | Required | Required where declared | Required where declared |
-| Required release scenarios | No | No | Required | Optional unless explicitly selected |
-| Optional diagnostic scenarios | No | Optional | Optional | Included by policy |
+| Checkpoint scenarios | No unless explicitly selected | Required where profile declares them | Required where declared | Required where declared |
+| Release scenarios | No | No | Required where declared | Optional when selected |
+| Optional diagnostic scenarios | No | Optional | Optional | Included by profile policy |
 | Gold comparison | When selected scenario declares gold | Required where declared | Required where declared | When selected |
-| PGF build | No | No | Required when project requires it | Optional diagnostic build |
+| PGF build | No | No | Required when release profile requires it | Optional diagnostic build |
 | Release gates | No | No | Required | No |
 | Previous-run diff | Optional | Optional | Recommended | Recommended |
 | Full reports | Required | Required | Required | Required |
@@ -646,10 +736,11 @@ Fast feedback on an explicit target.
 
 Expected behavior:
 
-- requires a target file or an explicitly resolved quick target;
+- uses the selected `.gf` file or requires an explicit target from the resolved language inventory;
 - selects exactly the valid target set defined by policy;
 - scans and fingerprints selected files;
 - compiles selected files unless compilation is explicitly disabled;
+- does not require a validation profile;
 - does not perform a release PGF build;
 - does not run release-only scenarios;
 - still produces a complete run result and reports.
@@ -659,27 +750,31 @@ Expected behavior:
 Purpose:
 
 ```text
-Validate a project-defined development layer.
+Validate an explicitly configured development layer.
 ```
 
 Expected behavior:
 
+- requires an optional validation profile that declares checkpoints;
 - selects configured checkpoint modules or checkpoint entrypoints;
-- runs required checkpoint scenarios;
-- applies checkpoint gold comparisons;
+- runs required checkpoint scenarios when declared;
+- applies checkpoint gold comparisons when declared;
 - does not claim release readiness;
 - preserves deterministic checkpoint order.
+
+Without a checkpoint profile, the mode is unavailable rather than guessed from filenames.
 
 ## 10.5 Release mode
 
 Purpose:
 
 ```text
-Prove that the active project satisfies its declared release contract.
+Prove that the resolved language context satisfies one explicit release profile.
 ```
 
 Expected behavior:
 
+- requires an explicit complete release-capable validation profile;
 - uses strict configuration and external-tool checks;
 - validates the complete required source set;
 - runs all required release scenarios;
@@ -690,49 +785,51 @@ Expected behavior:
 - writes a complete manifest;
 - returns `OK` only when all required gates pass.
 
+A source-ready language without a release profile cannot claim release readiness.
+
 ## 10.6 Diagnostic mode
 
 Purpose:
 
 ```text
-Collect broad evidence for debugging and project analysis.
+Collect broad evidence for debugging and language-source analysis.
 ```
 
 Expected behavior:
 
-- selects the broad configured source set;
+- selects the broad resolved source set;
 - scans and normally compiles all selected files;
-- runs required diagnostic scenarios;
-- may run optional scenarios;
-- collects richer evidence;
+- runs explicit diagnostic scenarios when a profile provides them;
 - may continue after non-blocking failures;
+- collects richer evidence;
+- does not require a profile for file-level analysis;
 - does not imply release readiness.
-
----
 
 # 11. Phase 5 — Source selection
 
 ## 11.1 Single authority
 
-Source selection belongs to the file selector.
+Source selection belongs to the existing file selector.
 
-The runs application service supplies configuration and consumes the selection.
+The language probe and runs application service supply configuration and consume its result.
 
-It must not duplicate filtering rules.
+Neither may duplicate enumeration, filtering, containment, deduplication or ordering rules.
 
 ## 11.2 Selection inputs
 
 Selection uses:
 
-- project root;
-- configured source directory;
-- glob;
+- resolved language directory;
+- resolved RGL source root where required for containment;
+- source glob;
 - include pattern;
 - exclude pattern;
 - canonical mode;
-- explicit target;
-- checkpoint registry;
+- explicit focused target;
+- optional profile checkpoint or entrypoint registry;
 - maximum-file policy when applicable.
+
+Base path-resolved startup supplies safe generic source-selection defaults. An explicit validation profile may narrow or extend those defaults within approved roots.
 
 ## 11.3 Selection output
 
@@ -747,10 +844,12 @@ noise exclusions
 
 ## 11.4 Invariants
 
-- included files satisfy the configured policy;
+- included files satisfy the resolved policy;
+- every included file remains inside the approved source boundary;
 - excluded files are never compiled accidentally;
 - order is deterministic;
 - a quick explicit target resolves to exactly the intended target set;
+- source identity is language-directory-relative for portable comparison;
 - selection does not create run directories;
 - selection does not scan;
 - selection does not invoke GF;
@@ -758,13 +857,9 @@ noise exclusions
 
 ## 11.5 Empty selection
 
-An empty required selection is a configuration or validation error.
+An empty required selection is a configuration or planning failure.
 
-It must not be reported as a successful run with zero files.
-
-An intentionally empty optional selection may be represented as skipped with a documented reason.
-
----
+It must not silently become a successful run.
 
 # 12. Phase 6 — Per-file validation
 
@@ -774,7 +869,7 @@ For every selected source file:
 
 ```text
 1. mark file start in master evidence
-2. resolve project-relative identity
+2. resolve language-context-relative identity
 3. extract module name
 4. run static scan
 5. build source fingerprint
@@ -811,7 +906,7 @@ Module-name extraction occurs before result construction.
 
 The module name is not inferred from report formatting.
 
-Project-relative file identity is canonical for cross-run comparison.
+Language-directory-relative file identity is canonical for cross-run comparison.
 
 ## 12.4 Static scan
 
@@ -982,13 +1077,13 @@ If classification itself fails:
 
 Scenario IDs are selected from:
 
-- project configuration;
+- the explicit optional validation profile;
 - canonical mode;
 - required/optional status;
 - strictness;
 - explicit supported scenario selectors.
 
-Ordering follows project declaration order.
+Ordering follows explicit profile declaration order.
 
 ## 14.2 Required and optional scenarios
 
@@ -998,7 +1093,7 @@ Optional scenarios:
 
 - still produce `ScenarioResult`;
 - still preserve evidence;
-- may fail without failing the run only when project policy explicitly allows it;
+- may fail without failing the run only when explicit profile policy allows it;
 - must never be silently promoted to required or demoted from required.
 
 ## 14.3 Canonical scenario order
@@ -1033,7 +1128,7 @@ It does not implement a competing:
 - GF type checker;
 - PGF runtime.
 
-Scenario files remain project assets.
+Scenario files remain explicit validation-profile assets.
 
 ## 14.5 Raw evidence first
 
@@ -1134,15 +1229,17 @@ PGF construction is a separate stage.
 
 ## 15.2 PGF build input
 
-The PGF build uses:
+The PGF build requires an explicit release-capable validation profile and uses:
 
-- project-declared entrypoints;
+- profile-declared entrypoints;
 - deterministic entrypoint order;
 - resolved GF executable;
-- resolved GF path;
-- project root as working directory;
+- one resolved effective GF path;
+- the validated language or profile working directory;
 - release-build timeout;
 - run-owned PGF output directory.
+
+Detected standard entrypoint candidates may assist profile authoring, but they do not become release authority automatically.
 
 ## 15.3 PGF build success
 
@@ -1159,12 +1256,13 @@ PGF build success requires:
 
 ## 15.4 Release gates
 
-Release mode evaluates all project-declared required gates.
+Release mode evaluates all required gates declared by the explicit validation profile.
 
 Typical gates:
 
 ```text
-configuration valid
+resolved language context valid
+release profile valid
 GF version supported
 required files selected
 required file compilation successful
@@ -1176,15 +1274,13 @@ manifest valid
 no blocking framework error
 ```
 
-The authoritative gate set is defined by project configuration and release documentation.
+The authoritative gate set is defined by the explicit validation profile and its release documentation.
 
 ## 15.5 Diagnostic PGF build
 
-Diagnostic mode may execute a PGF build when explicitly selected.
+Diagnostic mode may execute a PGF build when explicitly selected and sufficiently configured.
 
 A diagnostic PGF result does not by itself declare release readiness.
-
----
 
 # 16. Phase 10 — Aggregation
 
@@ -1279,6 +1375,8 @@ The diff stage searches for the most recent eligible earlier run under the confi
 
 It must exclude the current run directory.
 
+Eligibility requires compatible resolved-language identity and comparison policy.
+
 ## 17.3 Structured source
 
 The source of previous-run truth is:
@@ -1291,29 +1389,37 @@ Markdown reports are not parsed for regression comparison.
 
 ## 17.4 Compatibility
 
+At minimum, compatibility considers:
+
+- portable language key;
+- language-directory identity relative to the RGL source root;
+- relevant source or profile digest policy;
+- target or mode compatibility;
+- persisted schema compatibility.
+
 The loader may read supported legacy summary forms through explicit migration logic.
 
-It must not silently reinterpret unsupported schema meaning.
+It must not silently reinterpret unsupported schema meaning or compare evidence from another language context.
 
 ## 17.5 Failure behavior
 
-A missing previous run produces:
+A missing compatible previous run produces:
 
 ```text
 no diff
 ```
 
-An invalid previous run:
+An invalid or incompatible previous run:
 
 - does not corrupt current results;
-- produces a warning;
+- produces a warning when useful;
 - yields an empty diff unless strict policy requires failure.
 
 ## 17.6 Diff identity
 
-File identity uses normalized project-relative paths.
+File identity uses normalized paths relative to the resolved language directory or another explicitly versioned portable source identity.
 
-Scenario identity uses stable scenario IDs.
+Scenario identity uses stable scenario IDs from the explicit profile.
 
 Change kinds:
 
@@ -1327,8 +1433,6 @@ removed
 
 Diff ordering is deterministic.
 
----
-
 # 18. Phase 11 — Reporting and finalization
 
 ## 18.1 Reporting principle
@@ -1341,7 +1445,7 @@ They must not:
 - rescan source;
 - reclassify results;
 - reconstruct hidden configuration;
-- mutate project files;
+- mutate source or validation-profile files;
 - update gold files.
 
 ## 18.2 Report order
@@ -1444,13 +1548,17 @@ An explicit completion marker, when used, is schema-controlled.
 
 ## 19.1 Before run creation
 
-Errors before run-path creation normally propagate as configuration or invocation errors.
+Errors before run-path creation normally propagate as probe, configuration or invocation errors.
 
 Examples:
 
 - unsupported CLI arguments;
-- missing project root;
-- unreadable project configuration;
+- missing or unreadable selected language path;
+- selected non-`.gf` file;
+- selected directory with no eligible GF sources;
+- unresolved or ambiguous RGL source root;
+- ambiguous module suffix or candidate choice;
+- invalid optional validation profile;
 - invalid mode;
 - missing required target;
 - unsafe output root.
@@ -1494,7 +1602,7 @@ Execution must stop when:
 - process termination fails and an owned process remains active;
 - disk exhaustion prevents safe evidence capture;
 - cancellation is requested;
-- project source mutation is detected;
+- selected source mutation is detected;
 - a security policy is violated;
 - result integrity can no longer be trusted.
 
@@ -1707,36 +1815,49 @@ The CLI must not map every non-zero GF exit directly to the process exit code.
 
 The GUI displays:
 
-- overall status;
+- active portable language key and language directory;
+- focused target when applicable;
+- capability statuses;
+- overall run status;
 - important counts;
 - direct failures;
-- scenario failures;
+- scenario failures when configured;
 - artifact paths;
 - warnings;
 - run directory.
 
-GUI convenience state may store recent paths and preferences.
+GUI convenience state may store the last successfully selected language path, explicit profile path and preferences.
 
-It must not store the full `RunResult` as application state.
-
----
+It must not store the full `ResolvedLanguageContext` or `RunResult` as future execution authority.
 
 # 25. Canonical orchestration pseudocode
 
 ```python
+def open_language(request: LanguageProbeRequest) -> ResolvedLanguageContext:
+    probe_result = projects.probe_language_path(
+        selected_path=request.selected_path,
+        explicit_profile=request.validation_profile,
+    )
+    if not probe_result.is_resolved:
+        raise LanguageResolutionError(probe_result.diagnostics)
+    return probe_result.context
+
+
 def execute_run(request: RunRequest) -> RunResult:
-    resolved = projects.resolve_active_project(request)
-    validate_resolved_request(resolved)
+    validate_resolved_language_context(request.language_context)
+    resolved = runs.resolve_run_request(request)
 
     started_at = clock.utc_now()
     started_clock = clock.monotonic_now()
     run = runs.initialize(resolved, started_at)
 
     try:
-        preflight = validation.preflight_external_tools(
-            project=resolved.project,
-            policy=resolved.tool_policy,
+        preflight = validation.preflight_requested_capability(
+            language_context=resolved.language_context,
+            profile=resolved.validation_profile,
+            tool_policy=resolved.tool_policy,
             run_paths=run.paths,
+            mode=resolved.mode,
         )
 
         plan = runs.resolve_execution_plan(
@@ -1749,7 +1870,7 @@ def execute_run(request: RunRequest) -> RunResult:
         file_results = [
             validation.run_file_pipeline(
                 file_path=file_path,
-                project=resolved.project,
+                language_context=resolved.language_context,
                 run_paths=run.paths,
                 plan=plan,
             )
@@ -1760,7 +1881,8 @@ def execute_run(request: RunRequest) -> RunResult:
 
         scenario_results = validation.run_selected_scenarios(
             plan=plan,
-            project=resolved.project,
+            language_context=resolved.language_context,
+            profile=resolved.validation_profile,
             run_paths=run.paths,
             file_results=file_results,
         )
@@ -1772,7 +1894,8 @@ def execute_run(request: RunRequest) -> RunResult:
 
         pgf_result = validation.run_pgf_stage_if_required(
             plan=plan,
-            project=resolved.project,
+            language_context=resolved.language_context,
+            profile=resolved.validation_profile,
             run_paths=run.paths,
         )
 
@@ -1814,9 +1937,34 @@ def execute_run(request: RunRequest) -> RunResult:
 
 This pseudocode defines ordering, ownership and dependency direction. It does not prescribe private helper names or concrete adapter classes.
 
----
+# 26. Startup and run state machines
 
-# 26. Run state machine
+## 26.1 Startup state machine
+
+```text
+INTRODUCTION
+   |
+   v
+PATH_SELECTED
+   |
+   v
+PROBING_LANGUAGE
+   |
+   +--> NEEDS_USER_INPUT --> INTRODUCTION or PROBING_LANGUAGE
+   +--> INVALID_SELECTION --> INTRODUCTION
+   |
+   v
+LANGUAGE_RESOLVED
+   |
+   v
+RUNTIME_COMPOSED
+```
+
+The main runtime exists only after `LANGUAGE_RESOLVED`.
+
+A language switch disposes `RUNTIME_COMPOSED` and returns to `INTRODUCTION`.
+
+## 26.2 Run state machine
 
 ```text
 CREATED
@@ -1867,8 +2015,6 @@ Only `FINALIZED` represents a fully completed run directory.
 
 A partial run may still contain useful evidence.
 
----
-
 # 27. Observability
 
 ## 27.1 Master evidence
@@ -1878,6 +2024,7 @@ Master evidence records stage transitions and important decisions.
 Recommended events:
 
 ```text
+language_context_resolved
 run_start
 configuration_resolved
 preflight_start
@@ -1932,7 +2079,7 @@ Non-zero external-tool exit still produces:
 - External processes use ordered arguments.
 - Normal GF execution uses no implicit shell.
 - Working directories are explicit.
-- Project-controlled paths are validated.
+- Selected source and validation-profile paths are validated.
 - Run-owned output remains inside approved roots.
 - `.gfs` scenarios are treated as executable input.
 - Shell-capable scenario commands are disabled unless explicitly authorized.
@@ -1991,6 +2138,7 @@ Recommended test structure:
 
 ```text
 tests/execution/
+├── test_language_probe_flow.py
 ├── test_cli_flow.py
 ├── test_gui_flow.py
 ├── test_configuration_flow.py
@@ -2008,26 +2156,35 @@ tests/execution/
 └── test_deterministic_flow.py
 ```
 
-## 30.1 Entry-point tests
+## 30.1 Entry-point and startup tests
 
 Verify:
 
-- CLI and GUI produce equivalent `RunConfig` for equivalent values;
-- both invoke the run application use case;
-- neither calls stages directly;
-- CLI exit code derives from `RunResult`.
+- GUI always begins at the introduction surface;
+- CLI and GUI produce equivalent `LanguageProbeRequest` for equivalent values;
+- both accept a language directory and a `.gf` file;
+- both invoke the same language-probe application use case;
+- neither enumerates GF sources or builds GF paths directly;
+- the main runtime is not composed after unresolved or invalid probe results;
+- remembered paths are fully revalidated;
+- CLI exit code derives from structured probe or `RunResult` status.
 
-## 30.2 Configuration tests
+## 30.2 Language-context and configuration tests
 
 Verify:
 
-- precedence;
-- canonical mode aliases;
-- project-relative paths;
-- invalid required scenarios;
-- invalid target;
-- unsafe output root;
-- state does not override project identity.
+- selected file maps to its parent language directory;
+- selected directory remains the candidate language directory;
+- nearest supported RGL source root is resolved deterministically;
+- unsupported layouts fail closed or require an explicit profile;
+- source inventory is delegated to the file selector;
+- module suffix detection is unique or explicitly ambiguous;
+- focused target is preserved;
+- application state does not override language identity;
+- optional profile conflicts are rejected;
+- release mode requires a release-capable profile;
+- source-ready and scan-ready operation can succeed without GF;
+- unsafe output or source roots are rejected.
 
 ## 30.3 File-flow tests
 
@@ -2044,7 +2201,20 @@ classify
 
 Verify one file error does not erase earlier evidence.
 
-## 30.4 Scenario-flow tests
+Verify file identity is portable and relative to the resolved language context.
+
+## 30.4 GF-path and compilation tests
+
+Verify:
+
+- one effective GF path resolution is reused by compilation, scenarios and PGF work;
+- the probe does not construct subprocess commands;
+- exact missing-module remediation is bounded;
+- zero, one and multiple exact matches have distinct results;
+- no all-language GF path is constructed;
+- raw GF evidence is preserved.
+
+## 30.5 Scenario-flow tests
 
 Verify:
 
@@ -2057,22 +2227,26 @@ compare gold
 build result
 ```
 
+Verify scenarios require an explicit profile or registration.
+
 Verify normal execution does not modify gold.
 
-## 30.5 Release-flow tests
+## 30.6 Release-flow tests
 
 Verify:
 
+- release mode without a release profile is unavailable;
 - required scenarios run;
 - PGF build is distinct from file compilation;
 - missing PGF fails release;
 - invalid manifest prevents release success;
 - optional diagnostic success cannot bypass required release failure.
 
-## 30.6 Partial-flow tests
+## 30.7 Partial-flow tests
 
 Verify:
 
+- probe failure before run creation;
 - configuration failure before run creation;
 - failure after run creation;
 - best-effort independent report writing;
@@ -2080,13 +2254,24 @@ Verify:
 - cancellation;
 - timeout;
 - manifest failure;
-- previous-run diff failure does not corrupt current evidence.
+- previous-run incompatibility does not corrupt current evidence.
 
-## 30.7 Determinism tests
+## 30.8 Language-switch isolation tests
+
+Verify:
+
+- switching is rejected during an active run;
+- switching disposes the old runtime before resolving the new one;
+- source files, GF paths, targets, scenarios, golds and previous-run baselines from language A do not survive in language B;
+- exactly one language identity appears in every ordinary run.
+
+## 30.9 Determinism tests
 
 Verify stable:
 
 - source order;
+- candidate role order;
+- GF path order and provenance;
 - scenario order;
 - result order;
 - top errors;
@@ -2094,19 +2279,20 @@ Verify stable:
 - manifest;
 - report sections.
 
----
-
 # 31. Change control
 
-A change to execution order or stage selection must identify:
+A change to startup resolution, execution order or stage selection must identify:
 
 ```text
-Affected phase:
-Current order:
-New order:
+Affected startup or run phase:
+Current behavior:
+New behavior:
 Reason:
+Selected-path impact:
+ResolvedLanguageContext impact:
 Modes affected:
-Configuration impact:
+Optional-profile impact:
+GF-path impact:
 External-tool impact:
 Result-model impact:
 Artifact impact:
@@ -2120,23 +2306,31 @@ Tests:
 Required checklist:
 
 ```text
+[ ] ADR-0015 reviewed
+[ ] language-probe ownership reviewed
+[ ] public file-selection contracts reviewed
+[ ] ResolvedLanguageContext reviewed
 [ ] run orchestration updated
 [ ] all affected stages reviewed
-[ ] RunConfig reviewed
+[ ] RunRequest and RunConfig reviewed
 [ ] RunPaths reviewed
 [ ] RunResult reviewed
+[ ] application-state migration reviewed
+[ ] GF-path resolver reviewed
 [ ] external-tool lock reviewed
 [ ] interfile lock reviewed
 [ ] persisted-schema lock reviewed
 [ ] mode documentation updated
+[ ] GUI and CLI startup documentation updated
 [ ] report documentation updated
 [ ] security impact reviewed
 [ ] unit tests updated
 [ ] integration tests updated
+[ ] two-language isolation test updated
 [ ] migration documented when needed
 ```
 
-A local reordering that changes observable evidence is an architectural change.
+A local change that alters selected-path interpretation, resolved identity, effective GF path or observable evidence is an architectural change.
 
 ---
 
@@ -2158,8 +2352,15 @@ docs/PERSISTED_SCHEMA_LOCK.md
 docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md
 docs/decisions/ADR-0002-GF-AS-EXECUTION-ENGINE.md
 docs/decisions/ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md
+docs/decisions/ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md
 docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md
 docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md
+docs/decisions/ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md
+docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md
+docs/configuration/APPLICATION_STATE_REFERENCE.md
+docs/configuration/PROJECT_TOML_REFERENCE.md
+docs/gf/GF_PATH_RESOLUTION.md
+docs/validation/FILE_SELECTION.md
 docs/validation/VALIDATION_PIPELINE.md
 docs/validation/VALIDATION_MODES.md
 docs/scenarios/SCENARIO_FORMAT.md
@@ -2168,18 +2369,25 @@ docs/reference/STATUS_VALUES.md
 SECURITY.md
 ```
 
+ADR-0014 is retained as a superseded historical decision and is not a runtime authority.
+
 ---
 
 # 33. Governing rule
 
-GF Wordbench is an orchestrator.
+GF Wordbench is a path-resolved, single-language runtime orchestrator.
 
-GF remains authoritative for grammar execution.
+The user or caller remains authoritative for the initial selected language path.
 
-The active project remains authoritative for language-specific validation requirements.
+`ResolvedLanguageContext` remains authoritative for the active language, source boundary and startup path facts during the session.
+
+An explicit validation profile remains authoritative only for the advanced policy it declares, such as checkpoints, scenarios, golds and release gates.
+
+GF remains authoritative for grammar parsing, type checking, compilation and module resolution.
 
 GF Wordbench remains authoritative for:
 
+- bounded language-path probing;
 - configuration resolution;
 - stage ordering;
 - evidence capture;
@@ -2190,4 +2398,4 @@ GF Wordbench remains authoritative for:
 
 Therefore:
 
-> No caller may bypass the orchestration flow, no stage may silently take ownership of another stage, and no run may be declared complete before its required evidence, reports, artifacts, and manifest are finalized.
+> No caller may bypass language-context resolution or run orchestration, no stage may silently take ownership of another stage, and no run may be declared complete before its required evidence, reports, artifacts and manifest are finalized.

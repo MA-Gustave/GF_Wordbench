@@ -1,9 +1,9 @@
 """Pure, field-specific configuration precedence resolution.
 
 This module owns source authority, equal-tier conflict detection, and provenance
-for scalar run options. Filesystem validation, executable discovery, project
-loading, and final ``RunConfig`` construction belong to the environment and
-composition resolvers.
+for startup selections and scalar run options. Filesystem validation, language
+probing, executable discovery, validation-profile loading, and final ``RunConfig``
+construction belong to their dedicated application and composition services.
 """
 
 from __future__ import annotations
@@ -37,10 +37,13 @@ class ConfigurationSource(StrEnum):
 
     PACKAGE_METADATA = "package_metadata"
     FRAMEWORK_DEFAULT = "framework_default"
+    VALIDATION_PROFILE = "validation_profile"
     PROJECT_TOML = "project_toml"
     APPLICATION_STATE = "application_state"
     ENVIRONMENT_VARIABLE = "environment_variable"
     PATH_DISCOVERY = "path_discovery"
+    LANGUAGE_PROBE = "language_probe"
+    SELECTION_SERVICE = "selection_service"
     CLI = "cli"
     GUI = "gui"
     AUTOMATION = "automation"
@@ -53,13 +56,16 @@ class ConfigurationSource(StrEnum):
 class ConfigurationDomain(StrEnum):
     """Configuration domains with distinct precedence rules."""
 
-    PROJECT_ROOT = "project_root"
+    SELECTED_LANGUAGE_PATH = "selected_language_path"
+    VALIDATION_PROFILE = "validation_profile"
     GF_EXECUTABLE = "gf_executable"
     RGL_ROOT = "rgl_root"
     OUTPUT_ROOT = "output_root"
     STATE_PATH = "state_path"
-    PROJECT_FIELD = "project_field"
+    PROFILE_FIELD = "profile_field"
     MODE = "mode"
+    PROJECT_ROOT = "project_root"
+    PROJECT_FIELD = "project_field"
     TARGET = "target"
     TIMEOUT = "timeout"
     RUN_OPTION = "run_option"
@@ -151,13 +157,20 @@ _RUN_OPTION_TIERS: Final[tuple[tuple[ConfigurationSource, ...], ...]] = (
 _PRECEDENCE_POLICIES: Final[
     dict[ConfigurationDomain, PrecedencePolicy]
 ] = {
-    ConfigurationDomain.PROJECT_ROOT: PrecedencePolicy(
-        domain=ConfigurationDomain.PROJECT_ROOT,
+    ConfigurationDomain.SELECTED_LANGUAGE_PATH: PrecedencePolicy(
+        domain=ConfigurationDomain.SELECTED_LANGUAGE_PATH,
         tiers=(
             _EXPLICIT_STARTUP,
-            (ConfigurationSource.ENVIRONMENT_VARIABLE,),
             (ConfigurationSource.APPLICATION_STATE,),
-            (ConfigurationSource.FRAMEWORK_DEFAULT,),
+            (ConfigurationSource.LEGACY_MIGRATION,),
+        ),
+    ),
+    ConfigurationDomain.VALIDATION_PROFILE: PrecedencePolicy(
+        domain=ConfigurationDomain.VALIDATION_PROFILE,
+        tiers=(
+            _EXPLICIT_STARTUP,
+            (ConfigurationSource.APPLICATION_STATE,),
+            (ConfigurationSource.LEGACY_MIGRATION,),
         ),
     ),
     ConfigurationDomain.GF_EXECUTABLE: PrecedencePolicy(
@@ -172,6 +185,7 @@ _PRECEDENCE_POLICIES: Final[
     ConfigurationDomain.RGL_ROOT: PrecedencePolicy(
         domain=ConfigurationDomain.RGL_ROOT,
         tiers=(
+            (ConfigurationSource.LANGUAGE_PROBE,),
             _EXPLICIT_INVOCATION,
             (ConfigurationSource.ENVIRONMENT_VARIABLE,),
             (ConfigurationSource.APPLICATION_STATE,),
@@ -195,17 +209,18 @@ _PRECEDENCE_POLICIES: Final[
             (ConfigurationSource.FRAMEWORK_DEFAULT,),
         ),
     ),
-    ConfigurationDomain.PROJECT_FIELD: PrecedencePolicy(
-        domain=ConfigurationDomain.PROJECT_FIELD,
+    ConfigurationDomain.PROFILE_FIELD: PrecedencePolicy(
+        domain=ConfigurationDomain.PROFILE_FIELD,
         tiers=(
+            (ConfigurationSource.VALIDATION_PROFILE,),
             (ConfigurationSource.PROJECT_TOML,),
-            (ConfigurationSource.FRAMEWORK_DEFAULT,),
         ),
     ),
     ConfigurationDomain.MODE: PrecedencePolicy(
         domain=ConfigurationDomain.MODE,
         tiers=(
             _EXPLICIT_INVOCATION,
+            (ConfigurationSource.VALIDATION_PROFILE,),
             (ConfigurationSource.PROJECT_TOML,),
             (ConfigurationSource.FRAMEWORK_DEFAULT,),
         ),
@@ -214,6 +229,8 @@ _PRECEDENCE_POLICIES: Final[
         domain=ConfigurationDomain.TARGET,
         tiers=(
             _EXPLICIT_INVOCATION,
+            (ConfigurationSource.LANGUAGE_PROBE,),
+            (ConfigurationSource.VALIDATION_PROFILE,),
             (ConfigurationSource.PROJECT_TOML,),
             (ConfigurationSource.RUNTIME_DERIVED,),
         ),
@@ -222,6 +239,7 @@ _PRECEDENCE_POLICIES: Final[
         domain=ConfigurationDomain.TIMEOUT,
         tiers=(
             _EXPLICIT_INVOCATION,
+            (ConfigurationSource.VALIDATION_PROFILE,),
             (ConfigurationSource.PROJECT_TOML,),
             (ConfigurationSource.FRAMEWORK_DEFAULT,),
         ),
@@ -229,6 +247,19 @@ _PRECEDENCE_POLICIES: Final[
     ConfigurationDomain.RUN_OPTION: PrecedencePolicy(
         domain=ConfigurationDomain.RUN_OPTION,
         tiers=_RUN_OPTION_TIERS,
+    ),
+    # Compatibility-only domains. They must not become normal startup authority.
+    ConfigurationDomain.PROJECT_ROOT: PrecedencePolicy(
+        domain=ConfigurationDomain.PROJECT_ROOT,
+        tiers=(
+            (ConfigurationSource.LEGACY_MIGRATION,),
+        ),
+    ),
+    ConfigurationDomain.PROJECT_FIELD: PrecedencePolicy(
+        domain=ConfigurationDomain.PROJECT_FIELD,
+        tiers=(
+            (ConfigurationSource.PROJECT_TOML,),
+        ),
     ),
 }
 
@@ -256,8 +287,14 @@ from .models import (  # noqa: E402
 
 @dataclass(frozen=True, slots=True)
 class PrecedenceValues:
-    """Effective values selected without filesystem access or discovery."""
+    """Effective values selected without filesystem access or discovery.
 
+    ``project_root`` is retained only as a legacy migration value. New startup
+    code uses ``selected_language_path`` and an optional ``validation_profile``.
+    """
+
+    selected_language_path: str | os.PathLike[str] | None
+    validation_profile: str | os.PathLike[str] | None
     project_root: str | os.PathLike[str] | None
     gf_executable: str | os.PathLike[str] | None
     rgl_root: str | os.PathLike[str] | None
@@ -407,6 +444,16 @@ _FIELD_SPECIFICATIONS: Final[
     Mapping[str, _FieldSpecification]
 ] = MappingProxyType(
     {
+        "selected_language_path": _FieldSpecification(
+            ConfigurationDomain.SELECTED_LANGUAGE_PATH,
+            _optional_path,
+            required=False,
+        ),
+        "validation_profile": _FieldSpecification(
+            ConfigurationDomain.VALIDATION_PROFILE,
+            _optional_path,
+            required=False,
+        ),
         "project_root": _FieldSpecification(
             ConfigurationDomain.PROJECT_ROOT,
             _optional_path,
@@ -486,7 +533,12 @@ _MISSING: Final = object()
 def resolve_precedence(
     request: ConfigurationResolutionRequest,
 ) -> PrecedenceResolution:
-    """Resolve configured values using only supplied immutable inputs."""
+    """Resolve supplied immutable values without filesystem access.
+
+    A validation profile is optional. ``request.project`` is accepted only as a
+    compatibility representation of a profile until the request model migration
+    is complete.
+    """
 
     if not isinstance(request, ConfigurationResolutionRequest):
         raise TypeError(
@@ -510,22 +562,38 @@ def resolve_precedence(
         resolved[name] = value
         if source is not None:
             provenance.append(
-                ConfigurationProvenance(
+                _provenance(
                     field_path=name,
                     source=source,
+                    provided_value=value,
+                    resolved_value=value,
                 )
             )
 
-    project = request.project
-    provenance.extend(
-        ConfigurationProvenance(field_path=name, source=ConfigurationSource.PROJECT_TOML)
-        for name in (
-            "selected_checkpoints",
-            "selected_entrypoints",
-            "selected_scenarios",
-            "release_requires_pgf",
+    (
+        selected_checkpoints,
+        selected_entrypoints,
+        selected_scenarios,
+        release_requires_pgf,
+        profile_source,
+    ) = _profile_policy(request)
+
+    if profile_source is not None:
+        profile_values = {
+            "selected_checkpoints": selected_checkpoints,
+            "selected_entrypoints": selected_entrypoints,
+            "selected_scenarios": selected_scenarios,
+            "release_requires_pgf": release_requires_pgf,
+        }
+        provenance.extend(
+            _provenance(
+                field_path=name,
+                source=profile_source,
+                provided_value=value,
+                resolved_value=value,
+            )
+            for name, value in profile_values.items()
         )
-    )
 
     ordered_issues = _ordered_issues(issues)
     ordered_provenance = tuple(
@@ -544,15 +612,57 @@ def resolve_precedence(
     return PrecedenceResolution(
         values=PrecedenceValues(
             **resolved,
-            selected_checkpoints=project.modules.checkpoints,
-            selected_entrypoints=project.modules.entrypoints,
-            selected_scenarios=project.validation.all_scenarios,
-            release_requires_pgf=project.validation.release_requires_pgf,
+            selected_checkpoints=selected_checkpoints,
+            selected_entrypoints=selected_entrypoints,
+            selected_scenarios=selected_scenarios,
+            release_requires_pgf=release_requires_pgf,
         ),
         issues=ordered_issues,
         provenance=ordered_provenance,
     )
 
+
+def _profile_policy(
+    request: ConfigurationResolutionRequest,
+) -> tuple[
+    tuple[Path, ...],
+    tuple[Path, ...],
+    tuple[str, ...],
+    bool,
+    ConfigurationSource | None,
+]:
+    """Return optional profile-owned policy without making it startup authority."""
+
+    profile = getattr(request, "validation_profile", None)
+    source: ConfigurationSource | None = None
+
+    if profile is not None:
+        source = ConfigurationSource.VALIDATION_PROFILE
+    else:
+        profile = getattr(request, "project", None)
+        if profile is not None:
+            source = ConfigurationSource.PROJECT_TOML
+
+    if profile is None:
+        return (), (), (), False, None
+
+    modules = getattr(profile, "modules", None)
+    validation = getattr(profile, "validation", None)
+    checkpoints = tuple(getattr(modules, "checkpoints", ()))
+    entrypoints = tuple(getattr(modules, "entrypoints", ()))
+    scenarios = tuple(getattr(validation, "all_scenarios", ()))
+    release_requires_pgf = getattr(
+        validation,
+        "release_requires_pgf",
+        False,
+    )
+    return (
+        checkpoints,
+        entrypoints,
+        scenarios,
+        release_requires_pgf,
+        source,
+    )
 
 def _collect_candidates(
     request: ConfigurationResolutionRequest,
@@ -563,7 +673,12 @@ def _collect_candidates(
     candidates: dict[ConfigurationSource, dict[str, object]] = {}
     issues: list[ConfigurationIssue] = []
 
-    for source, values in request.candidates_by_source.items():
+    source_values = getattr(
+        request,
+        "source_values",
+        getattr(request, "candidates_by_source", {}),
+    )
+    for source, values in source_values.items():
         if not isinstance(source, ConfigurationSource):
             raise TypeError(
                 "candidates_by_source keys must be ConfigurationSource values"
@@ -587,17 +702,26 @@ def _collect_candidates(
         {
             name: value
             for name, value in {
-                "project_root": environment.project_root,
-                "gf_executable": environment.gf_executable,
-                "rgl_root": environment.rgl_root,
-                "output_root": environment.output_root,
-                "state_path": environment.state_path,
+                "gf_executable": getattr(environment, "gf_executable", None),
+                "rgl_root": getattr(environment, "rgl_root", None),
+                "output_root": getattr(environment, "output_root", None),
+                "state_path": getattr(environment, "state_path", None),
             }.items()
             if value is not None
         },
         issues,
         owner="request.environment",
     )
+
+    legacy_project_root = getattr(environment, "project_root", None)
+    if legacy_project_root is not None:
+        _merge_candidates(
+            candidates,
+            ConfigurationSource.LEGACY_MIGRATION,
+            {"project_root": legacy_project_root},
+            issues,
+            owner="request.environment.project_root",
+        )
 
     selection = request.defaults.selection_defaults
     output = request.defaults.output_defaults
@@ -745,6 +869,21 @@ def _resolve_field(
         )
     )
     return _MISSING, None, issues
+
+
+def _provenance(
+    *,
+    field_path: str,
+    source: ConfigurationSource,
+    provided_value: object,
+    resolved_value: object,
+) -> ConfigurationProvenance:
+    return ConfigurationProvenance(
+        field_path=field_path,
+        source=source,
+        provided_value=provided_value,
+        resolved_value=resolved_value,
+    )
 
 
 def _error(

@@ -3,6 +3,10 @@
 This module defines the validated in-memory shape of private GF Wordbench
 application state. Schema identity, defaults, migration, serialization, and
 filesystem persistence are owned by the other modules in ``gf_wordbench.state``.
+
+Application state is convenience state only. In particular, remembered language
+and profile paths must be fully revalidated before they can contribute to a
+``ResolvedLanguageContext`` or a resolved run configuration.
 """
 
 from __future__ import annotations
@@ -109,23 +113,36 @@ class EnvironmentState:
     """Remembered machine-local paths.
 
     Values remain strings because they may be stale at the next startup. They
-    become authoritative runtime paths only after configuration resolution and
-    validation.
+    are never portable language identity and never constitute a previously
+    resolved executable context.
+
+    ``last_selected_language_path`` may identify either a language directory or
+    a ``.gf`` file. ``last_selected_validation_profile`` is an optional explicit
+    profile path. ``last_rgl_root`` is only a convenience hint for a later
+    bounded resolution attempt.
+
+    Every value becomes usable only after the owning path, environment, profile,
+    or language-resolution service validates it again.
     """
 
-    project_root: str | None
-    rgl_root: str | None
+    last_selected_language_path: str | None
+    last_selected_validation_profile: str | None
+    last_rgl_root: str | None
     gf_executable: str | None
     output_root: str | None
 
     def __post_init__(self) -> None:
         _require_optional_path_text(
-            self.project_root,
-            field_name="project_root",
+            self.last_selected_language_path,
+            field_name="last_selected_language_path",
         )
         _require_optional_path_text(
-            self.rgl_root,
-            field_name="rgl_root",
+            self.last_selected_validation_profile,
+            field_name="last_selected_validation_profile",
+        )
+        _require_optional_path_text(
+            self.last_rgl_root,
+            field_name="last_rgl_root",
         )
         _require_optional_path_text(
             self.gf_executable,
@@ -139,7 +156,12 @@ class EnvironmentState:
 
 @dataclass(frozen=True, slots=True)
 class SelectionState:
-    """Non-authoritative remembered validation preferences."""
+    """Non-authoritative remembered validation preferences.
+
+    These values help reconstruct user intent after a language context has been
+    resolved. They do not identify a language, source root, configured
+    checkpoint, scenario registry, or release policy.
+    """
 
     mode: ValidationMode
     target_file: str
@@ -199,7 +221,12 @@ class SelectionState:
 
 @dataclass(frozen=True, slots=True)
 class LastRunState:
-    """Convenience pointers to the most recently recorded run evidence."""
+    """Convenience pointers to the most recently recorded run evidence.
+
+    Previous-run evidence is never a startup language selector. Compatibility
+    with the current resolved language context must be checked separately before
+    any comparison is performed.
+    """
 
     run_dir: str | None
     summary_path: str | None
@@ -225,8 +252,9 @@ class LastRunState:
 class AppState:
     """Validated canonical application state.
 
-    Runtime-only values such as active processes, current run objects, loading
-    warnings, and GUI state are intentionally absent from this persisted model.
+    Runtime-only values such as ``ResolvedLanguageContext``, active processes,
+    current run objects, capability decisions, loading warnings, and GUI runtime
+    state are intentionally absent from this persisted model.
     """
 
     schema_id: str

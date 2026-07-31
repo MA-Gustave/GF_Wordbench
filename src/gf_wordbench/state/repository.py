@@ -1,7 +1,8 @@
 """Load, migrate, save, and reset GF Wordbench application state.
 
 Application state is disposable, machine-local convenience data. This repository
-never treats it as project identity, project configuration, or release evidence.
+never treats remembered paths as portable language identity, a validated
+``ResolvedLanguageContext``, validation-profile policy, or release evidence.
 """
 
 from __future__ import annotations
@@ -61,9 +62,10 @@ _LOG = logging.getLogger(__name__)
 class StateRepository:
     """Filesystem repository for disposable application state.
 
-    ``workspace_root`` identifies the GF Wordbench workspace that owns the
-    canonical state file. An explicit ``state_path`` is reserved for tests and
-    documented portable or diagnostic invocations.
+    ``workspace_root`` identifies the local GF Wordbench workspace that owns the
+    canonical state file. It does not identify the active language. An explicit
+    ``state_path`` is reserved for tests and documented portable or diagnostic
+    invocations.
     """
 
     workspace_root: Path
@@ -103,7 +105,7 @@ class StateRepository:
 
     @property
     def resolved_state_path(self) -> Path:
-        """Return the explicit or workspace-owned state destination."""
+        """Return the explicit or local-workspace-owned state destination."""
 
         if self.state_path is not None:
             return resolve_for_output(self.state_path)
@@ -209,7 +211,7 @@ class StateRepository:
         *,
         replace_with_defaults: bool = False,
     ) -> Path | None:
-        """Clear convenience state without touching projects, runs, or templates."""
+        """Clear convenience state without touching language sources, validation profiles, runs, or templates."""
 
         if type(replace_with_defaults) is not bool:
             raise TypeError("replace_with_defaults must be a bool")
@@ -521,7 +523,7 @@ def load_app_state(
     state_path: Path | None = None,
     quarantine_invalid: bool = False,
 ) -> AppState:
-    """Load application state from a canonical or explicit path."""
+    """Load disposable local state from a canonical or explicit path."""
 
     return StateRepository(
         workspace_root=workspace_root,
@@ -537,7 +539,7 @@ def save_app_state(
     state_path: Path | None = None,
     create_alternate_parent: bool = False,
 ) -> Path:
-    """Atomically save validated application state."""
+    """Atomically save validated disposable application state."""
 
     return StateRepository(
         workspace_root=workspace_root,

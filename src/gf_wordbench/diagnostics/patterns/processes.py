@@ -1,9 +1,11 @@
+"""Authoritative process-state diagnostic patterns."""
+
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
+import math
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, TypeAlias
@@ -20,6 +22,64 @@ ProcessMetadata: TypeAlias = Mapping[str, ProcessMetadataValue]
 
 _EMPTY_METADATA: Final[ProcessMetadata] = MappingProxyType({})
 _MAX_DETAIL_LENGTH: Final[int] = 4_000
+
+def _text(value: object, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be a string")
+    if not value.strip():
+        raise ValueError(f"{field_name} must not be empty")
+    if "\x00" in value:
+        raise ValueError(f"{field_name} must not contain NUL")
+    return value
+
+
+def _optional_text(value: object, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be a string")
+    if "\x00" in value:
+        raise ValueError(f"{field_name} must not contain NUL")
+    return value
+
+
+def _bounded_optional_text(
+    value: object,
+    field_name: str,
+) -> str:
+    text = _optional_text(value, field_name)
+    if len(text) > _MAX_DETAIL_LENGTH:
+        return text[: _MAX_DETAIL_LENGTH - 1] + "…"
+    return text
+
+
+def _optional_positive_number(
+    value: object,
+    field_name: str,
+) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{field_name} must be a number or None")
+    result = float(value)
+    if not math.isfinite(result) or result <= 0:
+        raise ValueError(f"{field_name} must be finite and positive")
+    return result
+
+
+def _optional_positive_int(
+    value: object,
+    field_name: str,
+) -> int | None:
+    if value is None:
+        return None
+    if type(value) is not int:
+        raise TypeError(f"{field_name} must be an integer or None")
+    if value <= 0:
+        raise ValueError(f"{field_name} must be positive")
+    return value
+
+
+def _boolean(value: bool) -> str:
+    return "true" if value else "false"
 
 
 @unique
@@ -181,6 +241,11 @@ class ProcessPatternMatch:
             _freeze_metadata(self.metadata),
         )
 
+# ``ErrorKind`` is the canonical coarse technical category. Process-specific
+# meanings such as cancellation and output-limit exhaustion remain represented
+# by ``ProcessPatternId`` and structured metadata rather than duplicate enum
+# members.
+
 
 TIMEOUT_PATTERN: Final = ProcessPatternSpec(
     pattern_id=ProcessPatternId.TIMEOUT,
@@ -203,7 +268,7 @@ LAUNCH_FAILURE_PATTERN: Final = ProcessPatternSpec(
 OUTPUT_LIMIT_PATTERN: Final = ProcessPatternSpec(
     pattern_id=ProcessPatternId.OUTPUT_LIMIT,
     title="Output limit exceeded",
-    error_kind=ErrorKind.OUTPUT_LIMIT,
+    error_kind=ErrorKind.IO,
     severity=ProcessPatternSeverity.ERROR,
     message="External process exceeded its output limit.",
     precedence=30,
@@ -212,7 +277,7 @@ OUTPUT_LIMIT_PATTERN: Final = ProcessPatternSpec(
 CANCELLATION_PATTERN: Final = ProcessPatternSpec(
     pattern_id=ProcessPatternId.CANCELLATION,
     title="Process cancellation",
-    error_kind=ErrorKind.CANCELLED,
+    error_kind=ErrorKind.OTHER,
     severity=ProcessPatternSeverity.ERROR,
     message="External process was cancelled.",
     precedence=40,
@@ -513,64 +578,6 @@ def _paths(
             unique[key] = value
     return tuple(unique.values())
 
-
-def _text(value: object, field_name: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError(f"{field_name} must be a string")
-    if not value.strip():
-        raise ValueError(f"{field_name} must not be empty")
-    if "\x00" in value:
-        raise ValueError(f"{field_name} must not contain NUL")
-    return value
-
-
-def _optional_text(value: object, field_name: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError(f"{field_name} must be a string")
-    if "\x00" in value:
-        raise ValueError(f"{field_name} must not contain NUL")
-    return value
-
-
-def _bounded_optional_text(
-    value: object,
-    field_name: str,
-) -> str:
-    text = _optional_text(value, field_name)
-    if len(text) > _MAX_DETAIL_LENGTH:
-        return text[: _MAX_DETAIL_LENGTH - 1] + "…"
-    return text
-
-
-def _optional_positive_number(
-    value: object,
-    field_name: str,
-) -> float | None:
-    if value is None:
-        return None
-    if type(value) not in (int, float):
-        raise TypeError(f"{field_name} must be a number or None")
-    result = float(value)
-    if not math.isfinite(result) or result <= 0:
-        raise ValueError(f"{field_name} must be finite and positive")
-    return result
-
-
-def _optional_positive_int(
-    value: object,
-    field_name: str,
-) -> int | None:
-    if value is None:
-        return None
-    if type(value) is not int:
-        raise TypeError(f"{field_name} must be an integer or None")
-    if value <= 0:
-        raise ValueError(f"{field_name} must be positive")
-    return value
-
-
-def _boolean(value: bool) -> str:
-    return "true" if value else "false"
 
 
 __all__ = (

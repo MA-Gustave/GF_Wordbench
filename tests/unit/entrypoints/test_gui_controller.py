@@ -5,9 +5,9 @@ import dataclasses
 import inspect
 import threading
 from collections.abc import Callable
-from dataclasses import MISSING, dataclass, fields
+from dataclasses import dataclass, fields
 from enum import Enum
-from types import ModuleType
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -28,105 +28,58 @@ from gf_wordbench.entrypoints.gui.controller import (
 )
 
 
-_REQUEST = object()
-_PLAN = object()
-_RESULT = object()
 _PROGRESS = object()
+_RESULT_A = object()
+_RESULT_B = object()
 
 
-def _required_fields(cls: type[Any]) -> tuple[dataclasses.Field[Any], ...]:
-    return tuple(
-        field
-        for field in fields(cls)
-        if field.default is MISSING and field.default_factory is MISSING
-    )
+@dataclass(frozen=True, slots=True)
+class _ResolvedLanguageRunRequest:
+    """Opaque request already bound to one resolved language runtime.
+
+    The real GUI request model may contain more fields. These tests intentionally
+    retain only the identity-bearing values needed to prove that the generic run
+    controller neither reloads a project nor changes language identity.
+    """
+
+    language_key: str
+    selected_language_path: Path
+    validation_profile_path: Path | None
+    target_file: str
 
 
-def _enum_member(enum_type: type[Enum], *tokens: str) -> Enum:
-    normalized = tuple(token.casefold() for token in tokens)
-    for member in enum_type:
-        candidate = f"{member.name} {member.value}".casefold()
-        if any(token in candidate for token in normalized):
-            return member
-    raise AssertionError(
-        f"{enum_type.__name__} has no member matching {tokens!r}: "
-        f"{tuple(enum_type)!r}"
-    )
+@dataclass(frozen=True, slots=True)
+class _RunPlan:
+    request: _ResolvedLanguageRunRequest
 
 
-def _default_value(field: dataclasses.Field[Any]) -> Any:
-    if field.default is not MISSING:
-        return field.default
-    if field.default_factory is not MISSING:
-        return field.default_factory()
-
-    name = field.name.casefold()
-    if "phase" in name:
-        return _enum_member(ControllerPhase, "ready", "idle")
-    if "error" in name or "result" in name or "worker" in name:
-        return None
-    if "close" in name or name.startswith("is_") or name.startswith("has_"):
-        return False
-    if "generation" in name or "sequence" in name or "count" in name:
-        return 0
-    if "thread" in name:
-        return threading.get_ident()
-    if "title" in name:
-        return "Validation error"
-    if "message" in name:
-        return "The validation request could not be completed."
-    if "details" in name or "trace" in name:
-        return "technical details"
-    if "code" in name or "kind" in name or "category" in name:
-        return "runtime_error"
-    if "recover" in name or "retry" in name:
-        return False
-    raise AssertionError(
-        f"No test value is defined for required field "
-        f"{field.name!r} on {field._field_type!r}"
-    )
+@dataclass(frozen=True, slots=True)
+class _RunConfig:
+    language_key: str
+    selected_language_path: Path
+    validation_profile_path: Path | None
+    target_file: str
 
 
-def _construct(cls: type[Any], **overrides: Any) -> Any:
-    values = {
-        field.name: overrides.get(field.name, _default_value(field))
-        for field in fields(cls)
-    }
-    return cls(**values)
+_REQUEST_A = _ResolvedLanguageRunRequest(
+    language_key="english",
+    selected_language_path=Path("C:/work/gf-rgl/src/english"),
+    validation_profile_path=None,
+    target_file="LangEng.gf",
+)
 
-
-def _callback_value(name: str, harness: "_Harness") -> Callable[..., Any]:
-    token = name.casefold()
-
-    if "validate" in token:
-        return lambda request: harness.validation_errors
-    if "plan" in token or "preview" in token or "resolve" in token:
-        return lambda request: harness.plan
-    if "worker" in token and (
-        "create" in token or "factory" in token or "build" in token
-    ):
-        return harness.create_worker
-    if "persist" in token or "save" in token or "store" in token:
-        return harness.persist
-    if "error" in token or "exception" in token:
-        return default_controller_error
-    if "queue" in token or "dispatch" in token or "invoke" in token:
-        return lambda callback: callback()
-    if "thread" in token and "id" in token:
-        return threading.get_ident
-    if "current" in token and "thread" in token:
-        return lambda: True
-    if "clock" in token or token.endswith("now"):
-        return lambda: 0.0
-    if "warning" in token:
-        return harness.warnings.append
-
-    raise AssertionError(f"Unhandled GuiControllerServices field: {name}")
+_REQUEST_B = _ResolvedLanguageRunRequest(
+    language_key="french",
+    selected_language_path=Path("C:/work/gf-rgl/src/french/LangFre.gf"),
+    validation_profile_path=Path("C:/work/profiles/french-release.toml"),
+    target_file="LangFre.gf",
+)
 
 
 @dataclass(slots=True)
 class _Worker:
-    callbacks: WorkerCallbacks[Any, Any]
+    config: _RunConfig
+    callbacks: WorkerCallbacks[object, object]
     started: int = 0
     cancellations: int = 0
     disposals: int = 0
@@ -144,11 +97,11 @@ class _Worker:
 
 class _View:
     def __init__(self) -> None:
-        self.request: object = _REQUEST
+        self.request = _REQUEST_A
         self.confirmed = True
         self.close_confirmed = True
-        self.validation_errors: list[object] = []
-        self.plans: list[object] = []
+        self.validation_errors: list[tuple[str, ...]] = []
+        self.plans: list[_RunPlan] = []
         self.snapshots: list[ControllerSnapshot] = []
         self.progress: list[object] = []
         self.results: list[object] = []
@@ -156,16 +109,17 @@ class _View:
         self.warnings: list[str] = []
         self.close_requests = 0
 
-    def collect_request(self) -> object:
+    def collect_request(self) -> _ResolvedLanguageRunRequest:
         return self.request
 
-    def show_validation_errors(self, errors: object) -> None:
+    def show_validation_errors(self, errors: tuple[str, ...]) -> None:
         self.validation_errors.append(errors)
 
-    def show_plan(self, plan: object) -> None:
+    def show_plan(self, plan: _RunPlan) -> None:
         self.plans.append(plan)
 
-    def confirm_run(self, plan: object) -> bool:
+    def confirm_run(self, plan: _RunPlan) -> bool:
+        del plan
         return self.confirmed
 
     def show_controller_state(self, snapshot: ControllerSnapshot) -> None:
@@ -193,50 +147,86 @@ class _View:
 class _Harness:
     def __init__(self) -> None:
         self.view = _View()
-        self.plan = _PLAN
         self.validation_errors: tuple[str, ...] = ()
         self.workers: list[_Worker] = []
-        self.persisted: list[object] = []
-        self.warnings: list[str] = []
+        self.recorded_results: list[object] = []
+        self.persist_calls = 0
+        self.persist_failure: Exception | None = None
 
-    def create_worker(self, *args: Any, **kwargs: Any) -> _Worker:
-        callbacks = next(
-            (
-                value
-                for value in (*args, *kwargs.values())
-                if isinstance(value, WorkerCallbacks)
-            ),
-            None,
+    def validate_request(
+        self,
+        request: _ResolvedLanguageRunRequest,
+    ) -> tuple[str, ...]:
+        assert isinstance(request, _ResolvedLanguageRunRequest)
+        return self.validation_errors
+
+    @staticmethod
+    def validation_has_errors(validation: tuple[str, ...]) -> bool:
+        return bool(validation)
+
+    @staticmethod
+    def preview_run(request: _ResolvedLanguageRunRequest) -> _RunPlan:
+        return _RunPlan(request=request)
+
+    @staticmethod
+    def run_config_from_plan(plan: _RunPlan) -> _RunConfig:
+        request = plan.request
+        return _RunConfig(
+            language_key=request.language_key,
+            selected_language_path=request.selected_language_path,
+            validation_profile_path=request.validation_profile_path,
+            target_file=request.target_file,
         )
-        assert callbacks is not None, "worker factory did not receive WorkerCallbacks"
-        worker = _Worker(callbacks)
+
+    def create_worker(
+        self,
+        config: _RunConfig,
+        callbacks: WorkerCallbacks[object, object],
+    ) -> _Worker:
+        worker = _Worker(config=config, callbacks=callbacks)
         self.workers.append(worker)
         return worker
 
-    def persist(self, *values: object) -> None:
-        self.persisted.extend(values or (None,))
+    def record_completed_run(self, result: object) -> None:
+        self.recorded_results.append(result)
 
-    def services(self) -> GuiControllerServices[Any, Any, Any, Any]:
-        kwargs = {
-            field.name: _callback_value(field.name, self)
-            for field in _required_fields(GuiControllerServices)
-        }
-        return GuiControllerServices(**kwargs)
+    def persist_state(self) -> None:
+        self.persist_calls += 1
+        if self.persist_failure is not None:
+            raise self.persist_failure
 
-    def controller(self) -> GuiController[Any, Any, Any, Any]:
-        parameters = inspect.signature(GuiController).parameters
-        kwargs: dict[str, object] = {}
-        for name, parameter in parameters.items():
-            if name == "self":
-                continue
-            token = name.casefold()
-            if "view" in token:
-                kwargs[name] = self.view
-            elif "service" in token:
-                kwargs[name] = self.services()
-            elif parameter.default is inspect.Parameter.empty:
-                raise AssertionError(f"Unhandled GuiController parameter: {name}")
-        return GuiController(**kwargs)
+    def services(
+        self,
+    ) -> GuiControllerServices[
+        _ResolvedLanguageRunRequest,
+        tuple[str, ...],
+        _RunPlan,
+        _RunConfig,
+        object,
+        object,
+    ]:
+        return GuiControllerServices(
+            validate_request=self.validate_request,
+            validation_has_errors=self.validation_has_errors,
+            preview_run=self.preview_run,
+            run_config_from_plan=self.run_config_from_plan,
+            create_worker=self.create_worker,
+            record_completed_run=self.record_completed_run,
+            persist_state=self.persist_state,
+            error_from_exception=default_controller_error,
+        )
+
+    def controller(
+        self,
+    ) -> GuiController[
+        _ResolvedLanguageRunRequest,
+        tuple[str, ...],
+        _RunPlan,
+        _RunConfig,
+        object,
+        object,
+    ]:
+        return GuiController(view=self.view, services=self.services())
 
 
 def _assert_disposition(value: Enum, *tokens: str) -> None:
@@ -244,16 +234,25 @@ def _assert_disposition(value: Enum, *tokens: str) -> None:
     assert any(token.casefold() in text for token in tokens), value
 
 
-def _emit(callbacks: WorkerCallbacks[Any, Any], token: str, value: Any = None) -> None:
-    for field in fields(callbacks):
-        if token in field.name.casefold():
-            callback = getattr(callbacks, field.name)
-            if value is None:
-                callback()
-            else:
-                callback(value)
-            return
-    raise AssertionError(f"WorkerCallbacks has no {token!r} callback")
+def _emit(
+    callbacks: WorkerCallbacks[object, object],
+    token: str,
+    value: object | None = None,
+) -> None:
+    callback = next(
+        (
+            getattr(callbacks, field.name)
+            for field in fields(callbacks)
+            if token in field.name.casefold()
+        ),
+        None,
+    )
+    if callback is None:
+        raise AssertionError(f"WorkerCallbacks has no {token!r} callback")
+    if value is None:
+        callback()
+    else:
+        callback(value)
 
 
 def test_controller_module_owns_the_locked_public_surface() -> None:
@@ -301,12 +300,21 @@ def test_snapshot_capabilities_never_allow_start_and_cancel_together() -> None:
     observed_cancel = False
 
     for phase in ControllerPhase:
-        overrides = {
-            field.name: phase
-            for field in fields(ControllerSnapshot)
-            if "phase" in field.name.casefold()
-        }
-        snapshot = _construct(ControllerSnapshot, **overrides)
+        snapshot = ControllerSnapshot(
+            phase=phase,
+            generation=1,
+            has_active_worker=phase
+            in {
+                ControllerPhase.STARTING,
+                ControllerPhase.RUNNING,
+                ControllerPhase.CANCELLING,
+                ControllerPhase.FINISHING,
+            },
+            cancellation_requested=phase is ControllerPhase.CANCELLING,
+            close_pending=phase is ControllerPhase.CLOSING,
+            has_last_result=False,
+            has_last_error=False,
+        )
         observed_start |= snapshot.can_start
         observed_cancel |= snapshot.can_cancel
         assert not (snapshot.can_start and snapshot.can_cancel)
@@ -347,17 +355,37 @@ def test_runtime_protocols_describe_only_transport_and_presentation() -> None:
 
 
 def test_callback_and_service_bundles_reject_non_callable_dependencies() -> None:
-    for cls in (WorkerCallbacks, GuiControllerServices):
-        required = _required_fields(cls)
-        assert required
-        valid = {field.name: (lambda *args, **kwargs: None) for field in required}
-        cls(**valid)
+    callback_values: dict[str, Callable[..., None]] = {
+        field.name: (lambda *args, **kwargs: None)
+        for field in fields(WorkerCallbacks)
+    }
+    WorkerCallbacks(**callback_values)
 
-        for field in required:
-            invalid = dict(valid)
-            invalid[field.name] = object()
-            with pytest.raises(TypeError):
-                cls(**invalid)
+    for field in fields(WorkerCallbacks):
+        invalid = dict(callback_values)
+        invalid[field.name] = object()  # type: ignore[assignment]
+        with pytest.raises(TypeError):
+            WorkerCallbacks(**invalid)
+
+    required_services = {
+        "validate_request": lambda request: (),
+        "validation_has_errors": lambda validation: False,
+        "preview_run": lambda request: _RunPlan(request),
+        "run_config_from_plan": lambda plan: _RunConfig(
+            language_key=plan.request.language_key,
+            selected_language_path=plan.request.selected_language_path,
+            validation_profile_path=plan.request.validation_profile_path,
+            target_file=plan.request.target_file,
+        ),
+        "create_worker": lambda config, callbacks: _Worker(config, callbacks),
+    }
+    GuiControllerServices(**required_services)
+
+    for name in required_services:
+        invalid = dict(required_services)
+        invalid[name] = object()
+        with pytest.raises(TypeError):
+            GuiControllerServices(**invalid)
 
 
 def test_invalid_request_does_not_create_or_start_worker() -> None:
@@ -380,24 +408,64 @@ def test_rejected_confirmation_does_not_create_worker() -> None:
 
     disposition = controller.request_run()
 
-    _assert_disposition(disposition, "cancel", "declin", "reject")
-    assert harness.view.plans == [_PLAN]
+    _assert_disposition(disposition, "reject")
+    assert harness.view.plans == [_RunPlan(_REQUEST_A)]
     assert not harness.workers
 
 
-def test_one_worker_is_started_and_second_run_is_rejected() -> None:
+def test_resolved_language_identity_reaches_the_worker_unchanged() -> None:
+    harness = _Harness()
+    controller = harness.controller()
+
+    disposition = controller.request_run()
+
+    _assert_disposition(disposition, "start")
+    assert len(harness.workers) == 1
+    config = harness.workers[0].config
+    assert config.language_key == "english"
+    assert config.selected_language_path == Path("C:/work/gf-rgl/src/english")
+    assert config.validation_profile_path is None
+    assert config.target_file == "LangEng.gf"
+
+
+def test_second_language_request_is_rejected_while_first_run_is_active() -> None:
     harness = _Harness()
     controller = harness.controller()
 
     first = controller.request_run()
+    harness.view.request = _REQUEST_B
     second = controller.request_run()
 
     _assert_disposition(first, "start")
     _assert_disposition(second, "busy", "active", "reject")
     assert len(harness.workers) == 1
+    assert harness.workers[0].config.language_key == "english"
     assert harness.workers[0].started == 1
-    assert controller.snapshot().can_cancel
-    assert not controller.snapshot().can_start
+    assert controller.snapshot.can_cancel
+    assert not controller.snapshot.can_start
+
+
+def test_new_language_request_can_start_only_after_previous_worker_stops() -> None:
+    harness = _Harness()
+    controller = harness.controller()
+
+    controller.request_run()
+    first_worker = harness.workers[0]
+    _emit(first_worker.callbacks, "finish", _RESULT_A)
+    _emit(first_worker.callbacks, "stop")
+
+    harness.view.request = _REQUEST_B
+    disposition = controller.request_run()
+
+    _assert_disposition(disposition, "start")
+    assert [worker.config.language_key for worker in harness.workers] == [
+        "english",
+        "french",
+    ]
+    assert first_worker.disposals == 1
+    assert harness.workers[1].config.validation_profile_path == Path(
+        "C:/work/profiles/french-release.toml"
+    )
 
 
 def test_progress_result_persistence_and_worker_cleanup_are_routed() -> None:
@@ -408,17 +476,18 @@ def test_progress_result_persistence_and_worker_cleanup_are_routed() -> None:
 
     _emit(worker.callbacks, "start")
     _emit(worker.callbacks, "progress", _PROGRESS)
-    _emit(worker.callbacks, "finish", _RESULT)
+    _emit(worker.callbacks, "finish", _RESULT_A)
     _emit(worker.callbacks, "stop")
 
     assert harness.view.progress == [_PROGRESS]
-    assert harness.view.results == [_RESULT]
-    assert controller.last_result is _RESULT
+    assert harness.view.results == [_RESULT_A]
+    assert controller.last_result is _RESULT_A
     assert controller.last_error is None
-    assert harness.persisted
+    assert harness.recorded_results == [_RESULT_A]
+    assert harness.persist_calls == 1
     assert worker.disposals == 1
-    assert controller.snapshot().can_start
-    assert not controller.snapshot().can_cancel
+    assert controller.snapshot.can_start
+    assert not controller.snapshot.can_cancel
 
 
 def test_cancellation_is_forwarded_to_the_active_worker() -> None:
@@ -427,11 +496,12 @@ def test_cancellation_is_forwarded_to_the_active_worker() -> None:
     controller.request_run()
     worker = harness.workers[0]
 
-    disposition = controller.cancel_run()
+    accepted = controller.cancel_run()
 
-    _assert_disposition(disposition, "request", "cancel")
+    assert accepted is True
+    assert controller.cancel_run() is False
     assert worker.cancellations == 1
-    assert not controller.snapshot().can_start
+    assert not controller.snapshot.can_start
 
 
 def test_close_during_run_requires_confirmation_and_cancellation() -> None:
@@ -443,12 +513,12 @@ def test_close_during_run_requires_confirmation_and_cancellation() -> None:
     harness.view.close_confirmed = False
     declined = controller.request_close()
     assert worker.cancellations == 0
-    _assert_disposition(declined, "continue", "stay", "reject")
+    _assert_disposition(declined, "stay", "open")
 
     harness.view.close_confirmed = True
     accepted = controller.request_close()
     assert worker.cancellations == 1
-    _assert_disposition(accepted, "wait", "cancel", "defer")
+    _assert_disposition(accepted, "wait", "run")
 
     _emit(worker.callbacks, "stop")
     assert harness.view.close_requests == 1
@@ -456,34 +526,18 @@ def test_close_during_run_requires_confirmation_and_cancellation() -> None:
 
 def test_state_save_failure_is_presented_as_warning_not_run_failure() -> None:
     harness = _Harness()
+    harness.persist_failure = OSError("state store unavailable")
+    controller = harness.controller()
 
-    def fail_persist(*values: object) -> None:
-        raise OSError("state store unavailable")
-
-    services = harness.services()
-    replacements = {
-        field.name: fail_persist
-        for field in fields(services)
-        if any(token in field.name.casefold() for token in ("persist", "save", "store"))
-    }
-    assert replacements
-    services = dataclasses.replace(services, **replacements)
-
-    parameters = inspect.signature(GuiController).parameters
-    kwargs = {
-        name: harness.view if "view" in name.casefold() else services
-        for name, parameter in parameters.items()
-        if name != "self" and parameter.default is inspect.Parameter.empty
-    }
-    controller = GuiController(**kwargs)
     controller.request_run()
     worker = harness.workers[0]
-    _emit(worker.callbacks, "finish", _RESULT)
+    _emit(worker.callbacks, "finish", _RESULT_A)
     _emit(worker.callbacks, "stop")
 
-    assert harness.view.results == [_RESULT]
+    assert harness.view.results == [_RESULT_A]
     assert harness.view.errors == []
     assert harness.view.warnings
+    assert controller.last_result is _RESULT_A
 
 
 def test_default_controller_error_is_bounded_and_actionable() -> None:
@@ -500,11 +554,23 @@ def test_default_controller_error_is_bounded_and_actionable() -> None:
     assert len(text) < 20_000
 
 
-def test_controller_module_has_no_validation_stage_dependency() -> None:
+def test_controller_does_not_own_language_probe_or_project_loading() -> None:
     source = inspect.getsource(controller_module)
+    lowered = source.casefold()
+
+    forbidden_text = {
+        "languageprobeservice",
+        "resolvedlanguagecontext",
+        "projectconfig",
+        "project.toml",
+        "rgl-language-catalog",
+        "qfiledialog",
+        "pyside6",
+    }
+    assert all(token not in lowered for token in forbidden_text)
+
     tree = ast.parse(source)
     imported_roots: set[str] = set()
-
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported_roots.update(alias.name.split(".", 1)[0] for alias in node.names)

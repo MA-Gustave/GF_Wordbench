@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -14,17 +15,47 @@ from .models import (
     ProjectDiagnosticSeverity,
     ProjectValidationResult,
 )
-from .paths import is_within, module_path, scenario_path
+from .paths import (
+    ProjectPaths,
+    resolve_module_path,
+    resolve_project_paths,
+    resolve_scenario_path,
+)
 from .policies import (
     REQUIRED_PROJECT_ASSETS,
     find_unresolved_placeholder,
     validate_project_semantics,
 )
-from .ports import ProjectFileSystem
+from .ports import ProjectFilesystem
 
-__all__ = ["ensure_project_valid", "validate_project"]
+__all__ = (
+    "ProjectValidator",
+    "check_project",
+    "ensure_project_valid",
+    "validate_project",
+)
 
 _MAX_ERROR_DETAIL_ITEMS: Final[int] = 8
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectValidator:
+    """Filesystem-backed validator used by the canonical project loader."""
+
+    filesystem: ProjectFilesystem
+
+    def validate_for_load(
+        self,
+        project: ProjectConfig,
+    ) -> ProjectValidationResult:
+        """Require one fully valid project before returning it from the loader."""
+
+        return ensure_project_valid(
+            project,
+            self.filesystem,
+            scope=ProjectCheckScope.NORMAL,
+            strict=True,
+        )
 
 
 def _diagnostic(
@@ -63,21 +94,45 @@ def _filesystem_error(
             "Filesystem validation could not be completed "
             f"({type(error).__name__})."
         ),
-        suggestion="Correct permissions or filesystem state, then repeat the check.",
+        suggestion=(
+            "Correct permissions or filesystem state, then repeat the check."
+        ),
+        subject=path,
+    )
+
+
+def _outside_diagnostic(
+    project: ProjectConfig,
+    *,
+    field: str,
+    path: Path,
+    kind: str,
+    root_name: str,
+) -> ProjectDiagnostic:
+    return _diagnostic(
+        project,
+        code="PROJECT_SOURCE_ROOT_OUTSIDE",
+        field=field,
+        message=f"Configured {kind} resolves outside the {root_name}.",
+        suggestion=(
+            f"Use a project-relative path contained beneath the {root_name}."
+        ),
         subject=path,
     )
 
 
 def _check_project_paths(
     project: ProjectConfig,
-    filesystem: ProjectFileSystem,
+    project_paths: ProjectPaths,
+    filesystem: ProjectFilesystem,
 ) -> list[ProjectDiagnostic]:
     diagnostics: list[ProjectDiagnostic] = []
+
     try:
-        config_file = filesystem.resolve(project.project_file, strict=False)
-        config_parent = filesystem.resolve(project.project_file.parent, strict=False)
-        project_root = filesystem.resolve(project.project_root, strict=False)
-        source_root = filesystem.resolve(project.source_root, strict=False)
+        config_file = filesystem.resolve(project_paths.config_file)
+        config_parent = filesystem.resolve(project_paths.config_file.parent)
+        project_root = filesystem.resolve(project_paths.root)
+        source_root = filesystem.resolve(project.source_root)
     except (OSError, GFWordbenchError) as error:
         return [
             _filesystem_error(
@@ -108,10 +163,11 @@ def _check_project_paths(
                     project,
                     code="PROJECT_CONFIG_MISSING",
                     field="project_file",
-                    message="Canonical project.toml does not exist as a regular file.",
+                    message=(
+                        "Canonical project.toml does not exist as a regular file."
+                    ),
                     suggestion=(
-                        "Restore project/project.toml at the configured "
-                        "location."
+                        "Restore project/project.toml at the configured location."
                     ),
                     subject=config_file,
                 )
@@ -127,29 +183,43 @@ def _check_project_paths(
                     "Schema 1.0 requires the project root to equal the directory "
                     "containing project.toml."
                 ),
-                suggestion="Keep project.root = '.' and resolve it from project.toml.",
+                suggestion=(
+                    "Keep project.root = '.' and resolve it from project.toml."
+                ),
                 subject=project_root,
             )
         )
 
-    if not is_within(source_root, project_root):
+    try:
+        filesystem.require_contained(
+            source_root,
+            root=project_root,
+            allow_root=False,
+        )
+    except (ProjectConfigurationError, ValueError):
         diagnostics.append(
-            _diagnostic(
+            _outside_diagnostic(
                 project,
-                code="PROJECT_SOURCE_ROOT_OUTSIDE",
                 field="sources.directory",
-                message="Resolved source root is outside the active project root.",
-                suggestion=(
-                    "Use a project-relative source directory contained beneath the "
-                    "active project root."
-                ),
-                subject=source_root,
+                path=source_root,
+                kind="source root",
+                root_name="active project root",
+            )
+        )
+        return diagnostics
+    except (OSError, GFWordbenchError) as error:
+        diagnostics.append(
+            _filesystem_error(
+                project,
+                field="sources.directory",
+                path=source_root,
+                error=error,
             )
         )
         return diagnostics
 
     try:
-        source_exists = filesystem.exists(source_root) and filesystem.is_dir(
+        source_exists = filesystem.exists(source_root) and filesystem.is_directory(
             source_root
         )
     except (OSError, GFWordbenchError) as error:
@@ -168,21 +238,27 @@ def _check_project_paths(
                     project,
                     code="PROJECT_SOURCE_ROOT_MISSING",
                     field="sources.directory",
-                    message="Configured source root does not exist as a directory.",
-                    suggestion="Create the source directory or correct project.toml.",
+                    message=(
+                        "Configured source root does not exist as a directory."
+                    ),
+                    suggestion=(
+                        "Create the source directory or correct project.toml."
+                    ),
                     subject=source_root,
                 )
             )
+
     return diagnostics
 
 
 def _check_modules(
     project: ProjectConfig,
-    filesystem: ProjectFileSystem,
+    filesystem: ProjectFilesystem,
 ) -> list[ProjectDiagnostic]:
     diagnostics: list[ProjectDiagnostic] = []
+
     try:
-        source_root = filesystem.resolve(project.source_root, strict=False)
+        source_root = filesystem.resolve(project.source_root)
     except (OSError, GFWordbenchError) as error:
         return [
             _filesystem_error(
@@ -197,34 +273,48 @@ def _check_modules(
         ("entrypoint", "modules.entrypoints", project.modules.entrypoints),
         ("checkpoint", "modules.checkpoints", project.modules.checkpoints),
     )
+
     for kind, field, targets in groups:
-        code = (
+        missing_code = (
             "PROJECT_ENTRYPOINT_MISSING"
             if kind == "entrypoint"
             else "PROJECT_CHECKPOINT_MISSING"
         )
+
         for index, target in enumerate(targets):
             item_field = f"{field}[{index}]"
-            path = module_path(project, target)
+            path = resolve_module_path(project.source_root, target)
+
             try:
-                resolved = filesystem.resolve(path, strict=False)
-                if not is_within(resolved, source_root):
-                    diagnostics.append(
-                        _diagnostic(
-                            project,
-                            code="PROJECT_SOURCE_ROOT_OUTSIDE",
-                            field=item_field,
-                            message=(
-                                f"Configured {kind} resolves outside the "
-                                "source root."
-                            ),
-                            suggestion=(
-                                "Use the exact source-root-relative GF module path."
-                            ),
-                            subject=path,
-                        )
+                resolved = filesystem.resolve(path)
+                filesystem.require_contained(
+                    resolved,
+                    root=source_root,
+                    allow_root=False,
+                )
+            except (ProjectConfigurationError, ValueError):
+                diagnostics.append(
+                    _outside_diagnostic(
+                        project,
+                        field=item_field,
+                        path=path,
+                        kind=kind,
+                        root_name="source root",
                     )
-                    continue
+                )
+                continue
+            except (OSError, GFWordbenchError) as error:
+                diagnostics.append(
+                    _filesystem_error(
+                        project,
+                        field=item_field,
+                        path=path,
+                        error=error,
+                    )
+                )
+                continue
+
+            try:
                 present = filesystem.exists(path) and filesystem.is_file(path)
             except (OSError, GFWordbenchError) as error:
                 diagnostics.append(
@@ -236,26 +326,28 @@ def _check_modules(
                     )
                 )
                 continue
+
             if not present:
                 diagnostics.append(
                     _diagnostic(
                         project,
-                        code=code,
+                        code=missing_code,
                         field=item_field,
                         message=f"Configured {kind} file does not exist.",
                         suggestion=(
-                            "Create the declared module or correct "
-                            "project.toml."
+                            "Create the declared module or correct project.toml."
                         ),
                         subject=path,
                     )
                 )
+
     return diagnostics
 
 
 def _check_scenarios(
     project: ProjectConfig,
-    filesystem: ProjectFileSystem,
+    project_paths: ProjectPaths,
+    filesystem: ProjectFilesystem,
 ) -> list[ProjectDiagnostic]:
     diagnostics: list[ProjectDiagnostic] = []
     groups = (
@@ -270,9 +362,11 @@ def _check_scenarios(
             project.validation.optional_scenarios,
         ),
     )
+
     for required, field, scenario_ids in groups:
         for index, scenario_id in enumerate(scenario_ids):
-            path = scenario_path(project, scenario_id)
+            path = resolve_scenario_path(project_paths, str(scenario_id))
+
             try:
                 present = filesystem.exists(path) and filesystem.is_file(path)
             except (OSError, GFWordbenchError) as error:
@@ -285,6 +379,7 @@ def _check_scenarios(
                     )
                 )
                 continue
+
             if not present:
                 diagnostics.append(
                     _diagnostic(
@@ -306,18 +401,22 @@ def _check_scenarios(
                         subject=path,
                     )
                 )
+
     return diagnostics
 
 
 def _check_required_assets(
     project: ProjectConfig,
-    filesystem: ProjectFileSystem,
+    project_paths: ProjectPaths,
+    filesystem: ProjectFilesystem,
     *,
     inspect_placeholders: bool,
 ) -> list[ProjectDiagnostic]:
     diagnostics: list[ProjectDiagnostic] = []
+
     for relative_path in REQUIRED_PROJECT_ASSETS:
-        path = project.project_root / relative_path
+        path = project_paths.root / relative_path
+
         try:
             present = filesystem.exists(path) and filesystem.is_file(path)
             if not present:
@@ -338,8 +437,10 @@ def _check_required_assets(
                     )
                 )
                 continue
+
             if not inspect_placeholders or path.suffix.lower() != ".md":
                 continue
+
             text = filesystem.read_text(path, encoding="utf-8")
         except (OSError, UnicodeError, GFWordbenchError) as error:
             diagnostics.append(
@@ -370,48 +471,87 @@ def _check_required_assets(
                     subject=path,
                 )
             )
+
     return diagnostics
 
 
 def validate_project(
     project: ProjectConfig,
-    filesystem: ProjectFileSystem,
+    filesystem: ProjectFilesystem,
     *,
     scope: ProjectCheckScope = ProjectCheckScope.NORMAL,
     strict: bool = False,
 ) -> ProjectValidationResult:
     """Validate one immutable project without executing GF or changing assets."""
+
+    if not isinstance(project, ProjectConfig):
+        raise TypeError("project must be ProjectConfig")
     if not isinstance(scope, ProjectCheckScope):
         raise TypeError("scope must be a ProjectCheckScope")
-    if not isinstance(strict, bool):
+    if type(strict) is not bool:
         raise TypeError("strict must be a bool")
 
     diagnostics = list(validate_project_semantics(project, strict=strict))
-    if scope is not ProjectCheckScope.CONFIGURATION:
-        diagnostics.extend(_check_project_paths(project, filesystem))
-        diagnostics.extend(_check_modules(project, filesystem))
-        diagnostics.extend(_check_scenarios(project, filesystem))
-        diagnostics.extend(
-            _check_required_assets(
-                project,
-                filesystem,
-                inspect_placeholders=(
-                    strict or scope is ProjectCheckScope.RELEASE
-                ),
-            )
+
+    if scope is ProjectCheckScope.CONFIGURATION:
+        return ProjectValidationResult(tuple(diagnostics))
+
+    project_paths = resolve_project_paths(project)
+    diagnostics.extend(_check_project_paths(project, project_paths, filesystem))
+    diagnostics.extend(_check_modules(project, filesystem))
+    diagnostics.extend(
+        _check_scenarios(
+            project,
+            project_paths,
+            filesystem,
         )
+    )
+    diagnostics.extend(
+        _check_required_assets(
+            project,
+            project_paths,
+            filesystem,
+            inspect_placeholders=(
+                strict or scope is ProjectCheckScope.RELEASE
+            ),
+        )
+    )
+
     return ProjectValidationResult(tuple(diagnostics))
+
+
+def check_project(
+    project: ProjectConfig,
+    filesystem: ProjectFilesystem,
+    *,
+    scope: ProjectCheckScope = ProjectCheckScope.NORMAL,
+    strict: bool = False,
+) -> ProjectValidationResult:
+    """Run the canonical read-only project check."""
+
+    return validate_project(
+        project,
+        filesystem,
+        scope=scope,
+        strict=strict,
+    )
 
 
 def ensure_project_valid(
     project: ProjectConfig,
-    filesystem: ProjectFileSystem,
+    filesystem: ProjectFilesystem,
     *,
     scope: ProjectCheckScope = ProjectCheckScope.NORMAL,
     strict: bool = False,
 ) -> ProjectValidationResult:
     """Return a valid result or raise one bounded project-configuration error."""
-    result = validate_project(project, filesystem, scope=scope, strict=strict)
+
+    result = validate_project(
+        project,
+        filesystem,
+        scope=scope,
+        strict=strict,
+    )
     if result.ok:
         return result
 
@@ -424,6 +564,7 @@ def ensure_project_valid(
         detail += (
             f"; and {len(errors) - _MAX_ERROR_DETAIL_ITEMS} additional error(s)"
         )
+
     raise ProjectConfigurationError(
         "Active project validation failed",
         code="GF-WB-PROJECT-001",

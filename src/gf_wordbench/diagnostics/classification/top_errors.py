@@ -13,7 +13,7 @@ from gf_wordbench.kernel.statuses import (
     ErrorKind,
     ValidationStatus,
 )
-from gf_wordbench.runs.models.results import TopError
+from gf_wordbench.diagnostics.models import TopError
 
 _SUBJECT_KINDS: Final[frozenset[str]] = frozenset({"file", "scenario", "run"})
 _SPACE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")

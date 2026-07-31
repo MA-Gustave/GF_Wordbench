@@ -46,9 +46,24 @@ def _write_json(path: Path, document: object) -> None:
     )
 
 
-def test_complete_supported_legacy_state_maps_to_current_document_shape() -> None:
+def test_default_state_uses_path_resolved_environment_fields() -> None:
+    document = _defaults()
+
+    assert document["environment"] == {
+        "last_selected_language_path": None,
+        "last_selected_validation_profile": None,
+        "last_rgl_root": None,
+        "gf_executable": None,
+        "output_root": None,
+    }
+
+
+def test_complete_supported_legacy_state_maps_to_path_resolved_shape() -> None:
     defaults = _defaults()
     legacy = {
+        # A former project root cannot be converted safely into a selected
+        # language path without loading project configuration and inspecting the
+        # filesystem. Pure state migration therefore discards it.
         "selected_project_root": r"C:\work\GF Wordbench",
         "selected_rgl_root": r"C:\gf\rgl",
         "selected_gf_exe": r"C:\gf\bin\gf.exe",
@@ -75,8 +90,9 @@ def test_complete_supported_legacy_state_maps_to_current_document_shape() -> Non
     assert migration.payload["schema_id"] == APP_STATE_SCHEMA_ID
     assert migration.payload["schema_version"] == APP_STATE_SCHEMA_VERSION
     assert migration.payload["environment"] == {
-        "project_root": "C:/work/GF Wordbench",
-        "rgl_root": "C:/gf/rgl",
+        "last_selected_language_path": None,
+        "last_selected_validation_profile": None,
+        "last_rgl_root": "C:/gf/rgl",
         "gf_executable": "C:/gf/bin/gf.exe",
         "output_root": "C:/work/runs",
     }
@@ -96,15 +112,63 @@ def test_complete_supported_legacy_state_maps_to_current_document_shape() -> Non
         "summary_path": "C:/work/runs/run_001/summary.json",
         "status_message": "release validation completed",
     }
-    assert migration.warnings == ()
-    assert migration.discarded_fields == ()
+    assert _warning_pairs(migration) == {
+        ("discarded_legacy_field", "selected_project_root")
+    }
+    assert migration.discarded_fields == ("selected_project_root",)
     assert migration.unknown_fields == ()
-    assert migration.consumed_fields == tuple(sorted(legacy))
+    assert migration.consumed_fields == tuple(
+        sorted(set(legacy).difference({"selected_project_root"}))
+    )
 
     state, warnings = parse_app_state(migration.payload, strict=False)
     validate_app_state(state)
     assert warnings == ()
+    assert state.environment.last_selected_language_path is None
+    assert state.environment.last_selected_validation_profile is None
+    assert state.environment.last_rgl_root == "C:/gf/rgl"
     assert state.selection.mode is ValidationMode.RELEASE
+
+
+def test_canonical_state_remembers_paths_without_restoring_language_truth() -> None:
+    document = _defaults()
+    environment = document["environment"]
+    assert isinstance(environment, dict)
+    environment.update(
+        {
+            "last_selected_language_path": (
+                "C:/gf/rgl/src/english/LangEng.gf"
+            ),
+            "last_selected_validation_profile": (
+                "C:/work/profiles/english/project.toml"
+            ),
+            "last_rgl_root": "C:/gf/rgl",
+        }
+    )
+
+    state, warnings = parse_app_state(document, strict=False)
+
+    assert warnings == ()
+    assert (
+        state.environment.last_selected_language_path
+        == "C:/gf/rgl/src/english/LangEng.gf"
+    )
+    assert (
+        state.environment.last_selected_validation_profile
+        == "C:/work/profiles/english/project.toml"
+    )
+    assert state.environment.last_rgl_root == "C:/gf/rgl"
+
+    serialized = json.dumps(document, sort_keys=True)
+    for forbidden in (
+        "language_key",
+        "language_directory",
+        "rgl_source_root",
+        "module_suffix",
+        "source_inventory",
+        "resolved_language_context",
+    ):
+        assert forbidden not in serialized
 
 
 @pytest.mark.parametrize(
@@ -225,7 +289,7 @@ def test_invalid_scalar_values_retain_canonical_defaults() -> None:
     }
 
 
-def test_path_migration_preserves_identity_without_resolving_filesystem() -> None:
+def test_path_migration_preserves_local_paths_without_resolving_filesystem() -> None:
     defaults = _defaults()
     migration = migrate_legacy_state(
         {
@@ -247,21 +311,24 @@ def test_path_migration_preserves_identity_without_resolving_filesystem() -> Non
     assert isinstance(selection, dict)
     assert isinstance(last_run, dict)
     assert environment == {
-        "project_root": None,
-        "rgl_root": None,
+        "last_selected_language_path": None,
+        "last_selected_validation_profile": None,
+        "last_rgl_root": None,
         "gf_executable": "relative/gf.exe",
         "output_root": "out/runs",
     }
     assert selection["target_file"] == ""
     assert last_run["run_dir"] == "run_001"
     assert last_run["summary_path"] == "run_001/summary.json"
-    assert migration.warnings == ()
+    assert _warning_pairs(migration) == {
+        ("discarded_legacy_field", "selected_project_root")
+    }
+    assert migration.discarded_fields == ("selected_project_root",)
 
 
 @pytest.mark.parametrize(
     "field",
     [
-        "selected_project_root",
         "selected_rgl_root",
         "selected_gf_exe",
         "selected_out_root",
@@ -282,6 +349,28 @@ def test_invalid_legacy_paths_are_ignored(field: str) -> None:
         ("invalid_legacy_path", field)
     }
     assert migration.consumed_fields == (field,)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "last_selected_language_path",
+        "last_selected_validation_profile",
+        "last_rgl_root",
+        "gf_executable",
+        "output_root",
+    ],
+)
+def test_invalid_canonical_environment_paths_are_defaulted(field: str) -> None:
+    document = _defaults()
+    environment = document["environment"]
+    assert isinstance(environment, dict)
+    environment[field] = "bad\x00path"
+
+    state, warnings = parse_app_state(document, strict=False)
+
+    assert getattr(state.environment, field) is None
+    assert any(f"$.environment.{field}" in warning for warning in warnings)
 
 
 def test_status_message_is_normalized_and_bounded() -> None:
@@ -312,8 +401,12 @@ def test_invalid_status_message_retains_default() -> None:
     }
 
 
-def test_project_runtime_and_evidence_fields_are_discarded() -> None:
+def test_language_identity_runtime_and_evidence_fields_are_discarded() -> None:
     discarded = {
+        "selected_project_root": r"C:\workspace\project",
+        "last_language_id": "Eng",
+        "catalog_path": r"C:\workspace\rgl-language-catalog.json",
+        "last_catalog_entry": "Eng",
         "selected_scan_dir": "src",
         "selected_scan_glob": "*.gf",
         "selected_gf_path": ["src"],
@@ -505,6 +598,7 @@ def test_repository_migrates_once_publishes_canonical_and_preserves_source(
     canonical_path = tmp_path / APP_STATE_FILENAME
     legacy_document = {
         "selected_project_root": r"C:\workspace\project",
+        "selected_rgl_root": r"C:\gf\rgl",
         "selected_mode": "file",
         "selected_timeout_sec": "75",
         "selected_no_compile": "yes",
@@ -522,7 +616,9 @@ def test_repository_migrates_once_publishes_canonical_and_preserves_source(
     assert result.state.selection.mode is ValidationMode.QUICK
     assert result.state.selection.timeout_sec == 75
     assert result.state.selection.no_compile is True
-    assert result.state.environment.project_root == "C:/workspace/project"
+    assert result.state.environment.last_selected_language_path is None
+    assert result.state.environment.last_selected_validation_profile is None
+    assert result.state.environment.last_rgl_root == "C:/gf/rgl"
     assert result.state.last_run.status_message == "migrated from legacy"
     assert any(
         diagnostic.code is StateDiagnosticCode.MIGRATED
@@ -539,6 +635,7 @@ def test_repository_migrates_once_publishes_canonical_and_preserves_source(
     assert canonical_document["schema_id"] == APP_STATE_SCHEMA_ID
     assert canonical_document["schema_version"] == APP_STATE_SCHEMA_VERSION
     assert "producer" in canonical_document
+    assert "project_root" not in canonical_document["environment"]
     assert "language_name" not in canonical_document
     assert "unknown_future_field" not in canonical_document
 
