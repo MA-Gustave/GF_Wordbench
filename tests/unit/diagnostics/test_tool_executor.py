@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -14,11 +15,12 @@ from gf_wordbench.diagnostics.tools.executor import (
 )
 from gf_wordbench.infrastructure.process import (
     ArtifactExpectation,
+    CancellationToken,
     ProcessInput,
     ProcessRequest,
     ProcessResult,
 )
-from gf_wordbench.infrastructure.process.models import ProcessOperationKind
+from gf_wordbench.infrastructure.process.models import ProcessEvent, ProcessOperationKind
 from gf_wordbench.kernel.errors import ContractViolationError
 from gf_wordbench.kernel.statuses import ExecutionState
 
@@ -42,17 +44,28 @@ class _ValidatedRequest:
     approved_write_roots: tuple[Path, ...]
     stdin: ProcessInput
     environment_policy: str
-    env_overrides: dict[str, str]
-    env_removals: frozenset[str]
-    sensitive_env_keys: frozenset[str]
-    sensitive_arg_indexes: frozenset[int]
+    env_overrides: Mapping[str, str]
+    env_removals: Collection[str]
+    sensitive_env_keys: Collection[str]
+    sensitive_arg_indexes: Collection[int]
     termination_grace_sec: float
     output_limit_bytes: int
     expected_artifacts: tuple[ArtifactExpectation, ...]
-    metadata: dict[str, str]
+    metadata: Mapping[str, str]
     mutability_class: str
     network_policy: str
     evidence_policy: str
+
+
+@dataclass(frozen=True, slots=True)
+class _CancellationToken:
+    cancelled: bool = False
+
+    def is_cancelled(self) -> bool:
+        return self.cancelled
+
+    def reason(self) -> str | None:
+        return "unit-test" if self.cancelled else None
 
 
 def _request(tmp_path: Path, **overrides: Any) -> _ValidatedRequest:
@@ -179,8 +192,8 @@ def test_build_request_adds_owned_traceability_metadata_and_freezes_it(
     }
     assert isinstance(request.metadata, MappingProxyType)
 
-    source.metadata["origin"] = "changed"
-    source.env_overrides["GF_TOOL_PROFILE"] = "changed"
+    cast(dict[str, str], source.metadata)["origin"] = "changed"
+    cast(dict[str, str], source.env_overrides)["GF_TOOL_PROFILE"] = "changed"
 
     assert request.metadata["origin"] == "unit-test"
     assert request.env_overrides["GF_TOOL_PROFILE"] == "diagnostic"
@@ -189,9 +202,7 @@ def test_build_request_adds_owned_traceability_metadata_and_freezes_it(
 def test_build_request_omits_subject_list_when_no_subjects_are_selected(
     tmp_path: Path,
 ) -> None:
-    request = build_diagnostic_process_request(
-        _request(tmp_path, subject_ids=())
-    )
+    request = build_diagnostic_process_request(_request(tmp_path, subject_ids=()))
 
     assert request.metadata["subject_count"] == "0"
     assert "subject_ids" not in request.metadata
@@ -216,9 +227,7 @@ def test_build_request_rejects_invalid_identity_fields(
     exception_type: type[Exception],
 ) -> None:
     with pytest.raises(exception_type):
-        build_diagnostic_process_request(
-            _request(tmp_path, **{field_name: value})
-        )
+        build_diagnostic_process_request(_request(tmp_path, **{field_name: value}))
 
 
 def test_build_request_rejects_duplicate_or_invalid_subject_ids(
@@ -228,17 +237,13 @@ def test_build_request_rejects_duplicate_or_invalid_subject_ids(
         ContractViolationError,
         match="subject_ids must not contain duplicates",
     ):
-        build_diagnostic_process_request(
-            _request(tmp_path, subject_ids=("Syntax.gf", "Syntax.gf"))
-        )
+        build_diagnostic_process_request(_request(tmp_path, subject_ids=("Syntax.gf", "Syntax.gf")))
 
     with pytest.raises(
         ContractViolationError,
         match=r"subject_ids\[1\]",
     ):
-        build_diagnostic_process_request(
-            _request(tmp_path, subject_ids=("Syntax.gf", ""))
-        )
+        build_diagnostic_process_request(_request(tmp_path, subject_ids=("Syntax.gf", "")))
 
 
 def test_build_request_rejects_conflicting_owned_metadata(
@@ -281,21 +286,29 @@ def test_execute_forwards_only_the_generic_process_boundary(
     tmp_path: Path,
 ) -> None:
     source = _request(tmp_path)
-    cancellation_token = object()
-    events: list[object] = []
-    event_sink = events.append
+    cancellation_token: CancellationToken = _CancellationToken()
+    events: list[ProcessEvent] = []
+
+    def event_sink(event: ProcessEvent) -> None:
+        events.append(event)
     captured: dict[str, object] = {}
     expected = _result(source)
 
-    def runner(process_request: object, **kwargs: object) -> ProcessResult:
+    def runner(
+        process_request: ProcessRequest,
+        *,
+        cancellation_token: CancellationToken | None = None,
+        event_sink: Callable[[ProcessEvent], None] | None = None,
+    ) -> ProcessResult:
         captured["request"] = process_request
-        captured.update(kwargs)
+        captured["cancellation_token"] = cancellation_token
+        captured["event_sink"] = event_sink
         return expected
 
     result = execute_diagnostic_tool(
         source,
-        cancellation_token=cancellation_token,  # type: ignore[arg-type]
-        event_sink=event_sink,  # type: ignore[arg-type]
+        cancellation_token=cancellation_token,
+        event_sink=event_sink,
         process_runner=runner,
     )
 
@@ -321,9 +334,13 @@ def test_execute_rejects_non_process_result(tmp_path: Path) -> None:
         ContractViolationError,
         match="returned an invalid result",
     ):
+        def invalid_runner(*args: object, **kwargs: object) -> ProcessResult:
+            del args, kwargs
+            return cast(ProcessResult, object())
+
         execute_diagnostic_tool(
             _request(tmp_path),
-            process_runner=lambda *args, **kwargs: object(),
+            process_runner=invalid_runner,
         )
 
 

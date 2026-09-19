@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import pytest
 
@@ -30,13 +30,15 @@ from gf_wordbench.validation.compilation.pgf_build import (
     evaluate_pgf_build,
     skipped_pgf_build,
 )
+from gf_wordbench.validation.ports import GfToolPort
 
 _SHA256 = "a" * 64
 _STARTED_AT = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
 _FINISHED_AT = _STARTED_AT + timedelta(milliseconds=25)
+_T = TypeVar("_T")
 
 
-def _unchecked_instance(model: type[Any], /, **values: Any) -> Any:
+def _unchecked_instance(model: type[_T], /, **values: object) -> _T:
     """Create a contract instance without coupling tests to constructor order."""
 
     instance = object.__new__(model)
@@ -196,6 +198,7 @@ def test_release_build_is_ok_only_with_complete_current_evidence(
     assert result.status is ValidationStatus.OK
     assert result.error_kind is ErrorKind.OK
     assert result.execution_state is ExecutionState.COMPLETED
+    assert result.artifact is not None
     assert result.artifact.path == request.expected_pgf_path
     assert result.release_evidence_eligible is True
     assert result.warnings == ()
@@ -208,7 +211,7 @@ def test_build_release_pgf_delegates_once_to_gf_boundary(
     execution = _execution(request)
     gf_tool = _GfTool(execution)
 
-    result = build_release_pgf(request, gf_tool=gf_tool)
+    result = build_release_pgf(request, gf_tool=cast(GfToolPort, gf_tool))
 
     assert gf_tool.requests == [request]
     assert result.status is ValidationStatus.OK
@@ -223,7 +226,7 @@ def test_build_release_pgf_rejects_invalid_boundary_result(
         TypeError,
         match="must return PgfBuildExecution",
     ):
-        build_release_pgf(request, gf_tool=_GfTool(object()))
+        build_release_pgf(request, gf_tool=cast(GfToolPort, _GfTool(object())))
 
 
 def test_nonoptimized_diagnostic_build_is_not_release_evidence(

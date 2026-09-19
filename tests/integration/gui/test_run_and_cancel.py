@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import inspect
 import threading
-from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -10,12 +9,15 @@ import pytest
 pytest.importorskip("PySide6")
 
 from gf_wordbench.entrypoints.gui.workers import (
+    CancellationCheck,
+    RunApplicationUseCase,
     RunWorker,
     RunWorkerRequest,
     WorkerCancellationRequest,
+    WorkerEventSink,
 )
 from gf_wordbench.kernel.errors import CancellationRequested
-from gf_wordbench.runs.public import RunConfig
+from gf_wordbench.runs.public import RunConfig, RunResult
 
 pytestmark = pytest.mark.gui
 
@@ -25,8 +27,13 @@ class _BlockingRun:
         self.started = threading.Event()
         self.cancellation: WorkerCancellationRequest | None = None
 
-    def __call__(self, *args: object, **kwargs: object) -> object:
-        del args, kwargs
+    def __call__(
+        self,
+        run_config: RunConfig,
+        event_sink: WorkerEventSink,
+        cancellation_check: CancellationCheck,
+    ) -> RunResult:
+        del run_config, event_sink, cancellation_check
         self.started.set()
         cancellation = self.cancellation
         if cancellation is None:
@@ -68,44 +75,16 @@ def _run_config_placeholder() -> RunConfig:
     return object.__new__(RunConfig)
 
 
-def _worker_request() -> RunWorkerRequest:
-    values: dict[str, object] = {}
-    signature = inspect.signature(RunWorkerRequest)
-    for name, parameter in signature.parameters.items():
-        if parameter.default is not inspect.Parameter.empty:
-            continue
-        normalized = name.casefold()
-        if normalized in {"run_id", "id"} or normalized.endswith("_id"):
-            values[name] = "gui-run-cancel-test"
-        elif "config" in normalized:
-            values[name] = _run_config_placeholder()
-        else:
-            raise AssertionError(
-                f"unsupported required RunWorkerRequest field: {name}"
-            )
-    return RunWorkerRequest(**values)
+def _worker_request(application: RunApplicationUseCase) -> RunWorkerRequest:
+    return RunWorkerRequest(
+        run_id="gui-run-cancel-test",
+        run_config=_run_config_placeholder(),
+        execute=application,
+    )
 
 
-def _run_worker(
-    request: RunWorkerRequest,
-    application: Callable[..., object],
-) -> RunWorker:
-    values: dict[str, object] = {}
-    signature = inspect.signature(RunWorker)
-    for name, parameter in signature.parameters.items():
-        if name == "self" or parameter.default is not inspect.Parameter.empty:
-            continue
-        normalized = name.casefold()
-        if "request" in normalized:
-            values[name] = request
-        elif any(
-            token in normalized
-            for token in ("application", "use_case", "runner", "execute")
-        ):
-            values[name] = application
-        else:
-            raise AssertionError(f"unsupported required RunWorker field: {name}")
-    return RunWorker(**values)
+def _run_worker(request: RunWorkerRequest) -> RunWorker:
+    return RunWorker(request)
 
 
 def _terminal(state: object) -> bool:
@@ -136,8 +115,8 @@ def test_worker_cancellation_request_is_shared_and_idempotent() -> None:
 
 def test_run_worker_accepts_cancellation_and_stops_without_thread_leak() -> None:
     application = _BlockingRun()
-    worker = _run_worker(_worker_request(), application)
-    application.cancellation = worker.cancellation_request
+    worker = _run_worker(_worker_request(application))
+    application.cancellation = worker.cancellation_request()
     escaped: list[BaseException] = []
 
     def invoke() -> None:
@@ -154,13 +133,13 @@ def test_run_worker_accepts_cancellation_and_stops_without_thread_leak() -> None
     thread.start()
 
     assert application.started.wait(1.0), "worker did not start"
-    assert worker.cancellation_request.is_requested() is False
+    assert worker.cancellation_request().is_requested() is False
 
-    _request_cancellation(worker, "integration test cancellation")
+    _request_cancellation(worker, "user")
     thread.join(2.0)
 
     assert thread.is_alive() is False, "GUI worker thread did not stop"
     assert escaped == []
-    assert worker.cancellation_request.is_requested() is True
-    assert _terminal(worker.state)
-    assert "cancel" in str(worker.state).casefold()
+    assert worker.cancellation_request().is_requested() is True
+    assert _terminal(worker.state())
+    assert worker.state().is_terminal

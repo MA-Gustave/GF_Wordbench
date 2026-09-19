@@ -5,11 +5,16 @@ from __future__ import annotations
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
 import sys
+from types import ModuleType, SimpleNamespace
+
+import pytest
 
 
-def _load_control_panel(repo_root: Path, monkeypatch):
+def _load_control_panel(
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> ModuleType:
     diagnostics_root = repo_root / "tools" / "diagnostics"
     monkeypatch.syspath_prepend(str(diagnostics_root))
     loader = SourceFileLoader(
@@ -24,7 +29,7 @@ def _load_control_panel(repo_root: Path, monkeypatch):
 
 
 def test_control_panel_logs_adr0015_paths_without_legacy_project_root(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repo_root = Path(__file__).resolve().parents[3]
     module = _load_control_panel(repo_root, monkeypatch)
@@ -75,9 +80,9 @@ def test_control_panel_logs_adr0015_paths_without_legacy_project_root(
 
 def test_batch_launcher_retries_visibly_after_pythonw_failure() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    launcher = (
-        repo_root / "tools" / "diagnostics" / "launch_diagnostics.bat"
-    ).read_text(encoding="utf-8")
+    launcher = (repo_root / "tools" / "diagnostics" / "launch_diagnostics.bat").read_text(
+        encoding="utf-8"
+    )
 
     assert 'pyw "%~dp0\\00-control_panel.pyw"' in launcher
     assert ":console_fallback" in launcher

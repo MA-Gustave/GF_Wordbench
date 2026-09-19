@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
+import io
+import os
+import signal
+import subprocess
+import time
 from types import SimpleNamespace
-from typing import Any, Final
+from typing import IO, Any, Final
 
 import pytest
 
@@ -20,15 +24,17 @@ from gf_wordbench.infrastructure.process.termination import (
 _PID: Final = 41_001
 
 
-class _Stdin:
+class _Stdin(io.BytesIO):
+    """Instrumented binary stream satisfying the production IO contract."""
+
     def __init__(self, *, error: BaseException | None = None) -> None:
-        self.closed = False
+        super().__init__()
         self.close_calls = 0
         self._error = error
 
     def close(self) -> None:
         self.close_calls += 1
-        self.closed = True
+        super().close()
         if self._error is not None:
             raise self._error
 
@@ -36,7 +42,7 @@ class _Stdin:
 @dataclass(slots=True)
 class _Process:
     pid: int = _PID
-    stdin: _Stdin | None = field(default_factory=_Stdin)
+    stdin: IO[bytes] | IO[str] | None = field(default_factory=_Stdin)
     running: bool = True
     return_code: int = 0
     stop_on_terminate: bool = True
@@ -59,7 +65,7 @@ class _Process:
     def wait(self, timeout: float | None = None) -> int:
         self.wait_timeouts.append(timeout)
         if self.running:
-            raise termination.subprocess.TimeoutExpired("fake", timeout)
+            raise subprocess.TimeoutExpired("fake", timeout)
         return self.return_code
 
     def send_signal(self, sig: int) -> None:
@@ -88,6 +94,14 @@ class _Process:
             raise self.kill_error
         if self.stop_on_kill:
             self.running = False
+
+
+def _test_stdin(process: _Process) -> _Stdin:
+    """Return the instrumented stdin used by one test process."""
+
+    stream = process.stdin
+    assert isinstance(stream, _Stdin)
+    return stream
 
 
 @dataclass(slots=True)
@@ -119,8 +133,8 @@ def _install_clock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> _Clock:
     clock = _Clock()
-    monkeypatch.setattr(termination.time, "monotonic", clock.monotonic)
-    monkeypatch.setattr(termination.time, "sleep", clock.sleep)
+    monkeypatch.setattr(time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(time, "sleep", clock.sleep)
     return clock
 
 
@@ -140,8 +154,7 @@ def test_already_stopped_process_requires_no_termination() -> None:
         process_tree_contained=False,
         termination_error=None,
     )
-    assert process.stdin is not None
-    assert process.stdin.close_calls == 0
+    assert _test_stdin(process).close_calls == 0
     assert process.terminate_calls == 0
     assert process.kill_calls == 0
 
@@ -160,9 +173,9 @@ def test_root_process_soft_termination_closes_stdin_and_succeeds() -> None:
     assert outcome.termination_succeeded is True
     assert outcome.process_tree_contained is False
     assert outcome.termination_error is None
-    assert process.stdin is not None
-    assert process.stdin.closed is True
-    assert process.stdin.close_calls == 1
+    stdin = _test_stdin(process)
+    assert stdin.closed is True
+    assert stdin.close_calls == 1
     assert process.terminate_calls == 1
     assert process.kill_calls == 0
     assert process.wait_timeouts == [0]
@@ -210,8 +223,7 @@ def test_unconfirmed_force_termination_is_bounded_and_reported(
     assert outcome.forced_termination_attempted is True
     assert outcome.termination_succeeded is False
     assert outcome.termination_error == (
-        "confirmation: owned process termination could not be confirmed "
-        "within policy limits"
+        "confirmation: owned process termination could not be confirmed within policy limits"
     )
     assert clock.now == pytest.approx(0.2)
     assert all(duration <= 0.05 for duration in clock.sleeps)
@@ -276,13 +288,13 @@ def test_posix_soft_termination_targets_only_the_owned_group(
 
     def killpg(group_id: int, sig: int) -> None:
         calls.append((group_id, sig))
-        if sig == termination.signal.SIGTERM:
+        if sig == signal.SIGTERM:
             process.running = False
         elif sig == 0:
             raise ProcessLookupError
 
-    monkeypatch.setattr(termination.os, "getpgrp", lambda: process.pid + 1)
-    monkeypatch.setattr(termination.os, "killpg", killpg)
+    monkeypatch.setattr(os, "getpgrp", lambda: process.pid + 1)
+    monkeypatch.setattr(os, "killpg", killpg)
 
     containment = ProcessContainment(
         kind=ContainmentKind.POSIX_PROCESS_GROUP,
@@ -299,7 +311,7 @@ def test_posix_soft_termination_targets_only_the_owned_group(
     assert outcome.forced_termination_attempted is False
     assert outcome.process_tree_contained is True
     assert calls == [
-        (process.pid, termination.signal.SIGTERM),
+        (process.pid, signal.SIGTERM),
         (process.pid, 0),
     ]
     assert process.terminate_calls == 0
@@ -317,15 +329,15 @@ def test_posix_remaining_child_forces_group_kill(
     def killpg(group_id: int, sig: int) -> None:
         nonlocal group_alive
         calls.append((group_id, sig))
-        if sig == termination.signal.SIGTERM:
+        if sig == signal.SIGTERM:
             process.running = False
-        elif sig == termination.signal.SIGKILL:
+        elif sig == signal.SIGKILL:
             group_alive = False
         elif sig == 0 and not group_alive:
             raise ProcessLookupError
 
-    monkeypatch.setattr(termination.os, "getpgrp", lambda: process.pid + 1)
-    monkeypatch.setattr(termination.os, "killpg", killpg)
+    monkeypatch.setattr(os, "getpgrp", lambda: process.pid + 1)
+    monkeypatch.setattr(os, "killpg", killpg)
 
     outcome = terminate_owned_processes(
         process,
@@ -341,9 +353,9 @@ def test_posix_remaining_child_forces_group_kill(
     assert outcome.termination_succeeded is True
     assert outcome.forced_termination_attempted is True
     assert calls == [
-        (process.pid, termination.signal.SIGTERM),
+        (process.pid, signal.SIGTERM),
         (process.pid, 0),
-        (process.pid, termination.signal.SIGKILL),
+        (process.pid, signal.SIGKILL),
         (process.pid, 0),
     ]
 
@@ -406,9 +418,7 @@ def test_unavailable_windows_ctrl_break_escalates_and_records_error(
 
     assert outcome.termination_succeeded is True
     assert outcome.forced_termination_attempted is True
-    assert outcome.termination_error == (
-        "soft_termination: CTRL_BREAK_EVENT is unavailable"
-    )
+    assert outcome.termination_error == ("soft_termination: CTRL_BREAK_EVENT is unavailable")
     assert process.kill_calls == 1
 
 
@@ -598,7 +608,7 @@ def test_current_posix_process_group_is_never_targeted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = _Process()
-    monkeypatch.setattr(termination.os, "getpgrp", lambda: process.pid)
+    monkeypatch.setattr(os, "getpgrp", lambda: process.pid)
 
     with pytest.raises(
         ValueError,
@@ -642,10 +652,10 @@ def test_platform_incompatible_containment_is_rejected(
 
 def test_public_termination_surface_has_one_canonical_owner() -> None:
     assert termination.__all__ == (
-        "CancellationToken",
-        "ContainmentKind",
         "DEFAULT_FORCE_WAIT_SEC",
         "DEFAULT_POLL_INTERVAL_SEC",
+        "CancellationToken",
+        "ContainmentKind",
         "ProcessContainment",
         "TerminableProcess",
         "TerminationOutcome",

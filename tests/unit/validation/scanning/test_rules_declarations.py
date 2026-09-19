@@ -35,28 +35,20 @@ def test_rule_registry_is_stable_ordered_and_canonical() -> None:
         SINGLE_SLASH_EQ_RULE,
         DOUBLE_SLASH_DASH_RULE,
     )
-    assert SINGLE_SLASH_EQ_RULE == DeclarationRule(
+    assert DeclarationRule(
         rule_id="SCAN-NOTATION-001",
         field_name="single_slash_eq",
         count_unit="matching source line",
-        default_interpretation=(
-            "suspicious single-backslash before '=>'"
-        ),
-    )
-    assert DOUBLE_SLASH_DASH_RULE == DeclarationRule(
+        default_interpretation=("suspicious single-backslash before '=>'"),
+    ) == SINGLE_SLASH_EQ_RULE
+    assert DeclarationRule(
         rule_id="SCAN-NOTATION-002",
         field_name="double_slash_dash",
         count_unit="matching source line",
-        default_interpretation=(
-            "suspicious double-backslash before '->'"
-        ),
-    )
-    assert len({rule.rule_id for rule in DECLARATION_RULES}) == len(
-        DECLARATION_RULES
-    )
-    assert len({rule.field_name for rule in DECLARATION_RULES}) == len(
-        DECLARATION_RULES
-    )
+        default_interpretation=("suspicious double-backslash before '->'"),
+    ) == DOUBLE_SLASH_DASH_RULE
+    assert len({rule.rule_id for rule in DECLARATION_RULES}) == len(DECLARATION_RULES)
+    assert len({rule.field_name for rule in DECLARATION_RULES}) == len(DECLARATION_RULES)
 
 
 def test_rule_and_result_models_are_frozen() -> None:
@@ -195,8 +187,7 @@ def test_single_slash_before_fat_arrow_is_reported_with_precise_evidence() -> No
     assert finding.end_column == source.index("=>") + len("=>")
     assert finding.excerpt == source
     assert finding.message == (
-        "Suspicious single backslash appears before '=>' "
-        "in the same statement segment."
+        "Suspicious single backslash appears before '=>' in the same statement segment."
     )
     assert result.counts == {
         "single_slash_eq": 1,
@@ -219,8 +210,7 @@ def test_double_slash_before_thin_arrow_is_reported_with_precise_evidence() -> N
     assert finding.end_column == source.index("->") + len("->")
     assert finding.excerpt == source
     assert finding.message == (
-        "Suspicious double backslash appears before '->' "
-        "in the same statement segment."
+        "Suspicious double backslash appears before '->' in the same statement segment."
     )
     assert result.counts == {
         "single_slash_eq": 0,
@@ -335,14 +325,20 @@ def test_wrapper_functions_return_the_corresponding_finding_group() -> None:
         views.string_masked_lines,
     )
 
-    assert scan_single_slash_eq(
-        views.original_lines,
-        views.string_masked_lines,
-    ) == complete.single_slash_eq
-    assert scan_double_slash_dash(
-        views.original_lines,
-        views.string_masked_lines,
-    ) == complete.double_slash_dash
+    assert (
+        scan_single_slash_eq(
+            views.original_lines,
+            views.string_masked_lines,
+        )
+        == complete.single_slash_eq
+    )
+    assert (
+        scan_double_slash_dash(
+            views.original_lines,
+            views.string_masked_lines,
+        )
+        == complete.double_slash_dash
+    )
 
 
 def test_count_helpers_use_matching_source_lines_without_original_view() -> None:
@@ -397,10 +393,7 @@ def test_string_input_and_iterable_input_have_identical_semantics() -> None:
         "oper one = \\x => x ;\r\n",
         "oper two = \\\\y -> y ;\n",
     )
-    masked = tuple(
-        build_source_views(line).string_masked
-        for line in lines
-    )
+    masked = tuple(build_source_views(line).string_masked for line in lines)
 
     tuple_result = scan_declaration_rules(lines, masked)
     generator_result = scan_declaration_rules(

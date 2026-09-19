@@ -7,8 +7,8 @@ silently normalized.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
+import re
 from typing import Final, NewType
 
 ProjectId = NewType("ProjectId", str)
@@ -22,12 +22,8 @@ MigrationId = NewType("MigrationId", str)
 ErrorCode = NewType("ErrorCode", str)
 DiagnosticPatternId = NewType("DiagnosticPatternId", str)
 
-_KEBAB_ID_PATTERN_TEXT: Final = (
-    "[a-z][a-z0-9]*(?:-[a-z0-9]+)*"
-)
-_KEBAB_ID_RE: Final[re.Pattern[str]] = re.compile(
-    rf"^{_KEBAB_ID_PATTERN_TEXT}$"
-)
+_KEBAB_ID_PATTERN_TEXT: Final = "[a-z][a-z0-9]*(?:-[a-z0-9]+)*"
+_KEBAB_ID_RE: Final[re.Pattern[str]] = re.compile(rf"^{_KEBAB_ID_PATTERN_TEXT}$")
 
 _SCHEMA_COMPONENT: Final = _KEBAB_ID_PATTERN_TEXT
 _SCHEMA_ID_RE: Final[re.Pattern[str]] = re.compile(
@@ -40,15 +36,9 @@ _RUN_ID_RE: Final[re.Pattern[str]] = re.compile(
     r"(?:_(?P<collision>0[2-9]|[1-9][0-9]+))?$"
 )
 
-_CONTRACT_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?:IFC|PIFC|EXT)-[A-Z][A-Z0-9]*-[0-9]{3}$"
-)
-_MIGRATION_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^MIG-[A-Z][A-Z0-9]*-[0-9]{3}$"
-)
-_ERROR_CODE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^GF-WB-(?P<domain>[A-Z][A-Z0-9]*)-[0-9]{3}$"
-)
+_CONTRACT_ID_RE: Final[re.Pattern[str]] = re.compile(r"^(?:IFC|PIFC|EXT)-[A-Z][A-Z0-9]*-[0-9]{3}$")
+_MIGRATION_ID_RE: Final[re.Pattern[str]] = re.compile(r"^MIG-[A-Z][A-Z0-9]*-[0-9]{3}$")
+_ERROR_CODE_RE: Final[re.Pattern[str]] = re.compile(r"^GF-WB-(?P<domain>[A-Z][A-Z0-9]*)-[0-9]{3}$")
 _DIAGNOSTIC_PATTERN_ID_RE: Final[re.Pattern[str]] = re.compile(
     r"^GF-DIAG-"
     r"(?:SYNTAX|TYPE|INTERNAL|SCRIPT|TOOL|WARNING|LOCATION|CONTEXT)"
@@ -79,19 +69,13 @@ _ERROR_CODE_DOMAINS: Final[frozenset[str]] = frozenset(
 
 def _require_string(value: object, *, field: str) -> str:
     if not isinstance(value, str):
-        raise TypeError(
-            f"{field} must be a string, got {type(value).__name__}"
-        )
+        raise TypeError(f"{field} must be a string, got {type(value).__name__}")
     if not value:
         raise ValueError(f"{field} must not be empty")
     if "\x00" in value:
-        raise ValueError(
-            f"Invalid {field} {value!r}: NUL is prohibited"
-        )
+        raise ValueError(f"Invalid {field} {value!r}: NUL is prohibited")
     if not value.isascii():
-        raise ValueError(
-            f"Invalid {field} {value!r}: identifiers must use ASCII only"
-        )
+        raise ValueError(f"Invalid {field} {value!r}: identifiers must use ASCII only")
     return value
 
 
@@ -107,8 +91,7 @@ def _validate_pattern(
 
     if pattern.fullmatch(candidate) is None:
         raise ValueError(
-            f"Invalid {field} {candidate!r}. "
-            f"Expected {expected}; for example {example!r}"
+            f"Invalid {field} {candidate!r}. Expected {expected}; for example {example!r}"
         )
 
     return candidate
@@ -124,10 +107,7 @@ def _validate_kebab_id(
         value,
         field=field,
         pattern=_KEBAB_ID_RE,
-        expected=(
-            "lowercase kebab case matching "
-            f"{_KEBAB_ID_PATTERN_TEXT}"
-        ),
+        expected=(f"lowercase kebab case matching {_KEBAB_ID_PATTERN_TEXT}"),
         example=example,
     )
 
@@ -208,10 +188,7 @@ def validate_schema_id(
             value,
             field=field,
             pattern=_SCHEMA_ID_RE,
-            expected=(
-                "a lowercase dotted identifier beginning with "
-                "'gf-wordbench.'"
-            ),
+            expected=("a lowercase dotted identifier beginning with 'gf-wordbench.'"),
             example="gf-wordbench.run-summary",
         )
     )
@@ -229,10 +206,7 @@ def validate_contract_id(
             value,
             field=field,
             pattern=_CONTRACT_ID_RE,
-            expected=(
-                "IFC-, PIFC-, or EXT-, an uppercase domain, "
-                "and a three-digit number"
-            ),
+            expected=("IFC-, PIFC-, or EXT-, an uppercase domain, and a three-digit number"),
             example="IFC-WB-001",
         )
     )
@@ -250,9 +224,7 @@ def validate_migration_id(
             value,
             field=field,
             pattern=_MIGRATION_ID_RE,
-            expected=(
-                "MIG-, an uppercase domain, and a three-digit number"
-            ),
+            expected=("MIG-, an uppercase domain, and a three-digit number"),
             example="MIG-STATE-001",
         )
     )
@@ -269,18 +241,13 @@ def validate_error_code(
         value,
         field=field,
         pattern=_ERROR_CODE_RE,
-        expected=(
-            "GF-WB-, a canonical uppercase domain, "
-            "and a three-digit number"
-        ),
+        expected=("GF-WB-, a canonical uppercase domain, and a three-digit number"),
         example="GF-WB-PROCESS-001",
     )
 
     match = _ERROR_CODE_RE.fullmatch(candidate)
     if match is None:
-        raise AssertionError(
-            "validated error code no longer matches its pattern"
-        )
+        raise AssertionError("validated error code no longer matches its pattern")
 
     domain = match.group("domain")
     if domain not in _ERROR_CODE_DOMAINS:
@@ -305,10 +272,7 @@ def validate_diagnostic_pattern_id(
             value,
             field=field,
             pattern=_DIAGNOSTIC_PATTERN_ID_RE,
-            expected=(
-                "GF-DIAG-<DOMAIN>-<NNN> using a canonical "
-                "diagnostic domain"
-            ),
+            expected=("GF-DIAG-<DOMAIN>-<NNN> using a canonical diagnostic domain"),
             example="GF-DIAG-SYNTAX-001",
         )
     )
@@ -325,18 +289,13 @@ def validate_run_id(
         value,
         field=field,
         pattern=_RUN_ID_RE,
-        expected=(
-            "YYYYMMDD_HHMMSS with an optional collision suffix "
-            "beginning at _02"
-        ),
+        expected=("YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02"),
         example="20260724_145945_02",
     )
 
     match = _RUN_ID_RE.fullmatch(candidate)
     if match is None:
-        raise AssertionError(
-            "validated run ID no longer matches its pattern"
-        )
+        raise AssertionError("validated run ID no longer matches its pattern")
 
     try:
         datetime.strptime(

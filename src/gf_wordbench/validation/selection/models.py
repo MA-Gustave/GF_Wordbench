@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Final, TypeAlias, cast
+from typing import Final, TypeAlias
 
 from gf_wordbench.kernel.statuses import ValidationMode
 
@@ -100,17 +100,11 @@ class SelectionCandidate:
             declared_order = None
         if self.origin is SelectionOrigin.DISCOVERED:
             if self.required:
-                raise ValueError(
-                    "discovered candidates cannot be required targets"
-                )
+                raise ValueError("discovered candidates cannot be required targets")
             if declared_order is not None:
-                raise ValueError(
-                    "discovered candidates cannot have declared_order"
-                )
+                raise ValueError("discovered candidates cannot have declared_order")
         elif declared_order is None:
-            raise ValueError(
-                "explicit selection candidates require declared_order"
-            )
+            raise ValueError("explicit selection candidates require declared_order")
         object.__setattr__(self, "file_path", file_path)
         object.__setattr__(
             self,
@@ -169,9 +163,7 @@ class SelectionCounts:
             field="files_excluded",
         )
         if files_seen != files_included + files_excluded:
-            raise ValueError(
-                "files_seen must equal files_included + files_excluded"
-            )
+            raise ValueError("files_seen must equal files_included + files_excluded")
         object.__setattr__(self, "files_seen", files_seen)
         object.__setattr__(self, "files_included", files_included)
         object.__setattr__(self, "files_excluded", files_excluded)
@@ -196,39 +188,26 @@ class FileSelection:
             field="excluded_files",
         )
 
-        included_keys = {
-            _path_identity(path)
-            for path in included_files
-        }
+        included_keys = {_path_identity(path) for path in included_files}
         excluded_keys: set[str] = set()
         for index, entry in enumerate(excluded_files):
             key = _path_identity(entry.file_path)
             if key in included_keys:
-                raise ValueError(
-                    "included and excluded file identities must not overlap"
-                )
+                raise ValueError("included and excluded file identities must not overlap")
             if key in excluded_keys:
                 raise ValueError(
-                    "excluded_files must not contain duplicate identities: "
-                    f"index {index}"
+                    f"excluded_files must not contain duplicate identities: index {index}"
                 )
             excluded_keys.add(key)
 
         if self.mode is ValidationMode.QUICK and len(included_files) != 1:
-            raise ValueError(
-                "quick mode requires exactly one included file"
-            )
+            raise ValueError("quick mode requires exactly one included file")
         if self.mode in {
             ValidationMode.CHECKPOINT,
             ValidationMode.RELEASE,
         }:
-            if any(
-                entry.reason is SelectionReason.EXCLUDED_BY_LIMIT
-                for entry in excluded_files
-            ):
-                raise ValueError(
-                    "checkpoint and release selections cannot be truncated"
-                )
+            if any(entry.reason is SelectionReason.EXCLUDED_BY_LIMIT for entry in excluded_files):
+                raise ValueError("checkpoint and release selections cannot be truncated")
 
         object.__setattr__(self, "included_files", included_files)
         object.__setattr__(self, "excluded_files", excluded_files)
@@ -292,16 +271,12 @@ def _require_selection_reason(
     value: SelectionReason | str,
 ) -> SelectionReason:
     if not isinstance(value, str):
-        raise TypeError(
-            "excluded_reason must be a SelectionReason or string"
-        )
+        raise TypeError("excluded_reason must be a SelectionReason or string")
     try:
         return SelectionReason(value)
     except ValueError as exc:
         allowed = ", ".join(reason.value for reason in SelectionReason)
-        raise ValueError(
-            f"excluded_reason must be one of: {allowed}"
-        ) from exc
+        raise ValueError(f"excluded_reason must be one of: {allowed}") from exc
 
 
 def _require_path_tuple(
@@ -322,9 +297,7 @@ def _require_path_tuple(
         )
         identity = _path_identity(path)
         if identity in seen:
-            raise ValueError(
-                f"{field} must not contain duplicate file identities"
-            )
+            raise ValueError(f"{field} must not contain duplicate file identities")
         seen.add(identity)
         paths.append(path)
     return tuple(paths)
@@ -340,9 +313,7 @@ def _require_excluded_tuple(
     entries: list[ExcludedFileEntry] = []
     for index, item in enumerate(value):
         if not isinstance(item, ExcludedFileEntry):
-            raise TypeError(
-                f"{field}[{index}] must be an ExcludedFileEntry"
-            )
+            raise TypeError(f"{field}[{index}] must be an ExcludedFileEntry")
         entries.append(item)
     return tuple(entries)
 
@@ -365,9 +336,7 @@ def _require_absolute_normalized_path(
     if normalized != value:
         raise ValueError(f"{field} must be lexically normalized")
     if any(part == ".." for part in value.parts):
-        raise ValueError(
-            f"{field} must not contain unresolved parent traversal"
-        )
+        raise ValueError(f"{field} must not contain unresolved parent traversal")
     if require_gf_suffix and value.suffix.casefold() != _GF_SUFFIX:
         raise ValueError(f"{field} must end in '.gf'")
     if require_gf_suffix and not value.stem:
@@ -383,28 +352,18 @@ def _require_portable_relative_path(
     if not isinstance(value, str):
         raise TypeError(f"{field} must be a string")
     if not value or value != value.strip():
-        raise ValueError(
-            f"{field} must be a non-empty path without surrounding whitespace"
-        )
+        raise ValueError(f"{field} must be a non-empty path without surrounding whitespace")
     if "\x00" in value or "\\" in value:
-        raise ValueError(
-            f"{field} must use canonical '/' separators and contain no NUL"
-        )
+        raise ValueError(f"{field} must use canonical '/' separators and contain no NUL")
 
     path = PurePosixPath(value)
     windows_path = PureWindowsPath(value)
-    if (
-        path.is_absolute()
-        or windows_path.is_absolute()
-        or windows_path.drive
-    ):
+    if path.is_absolute() or windows_path.is_absolute() or windows_path.drive:
         raise ValueError(f"{field} must be relative")
     if value != path.as_posix():
         raise ValueError(f"{field} must be canonically normalized")
     if any(part in {"", ".", ".."} for part in path.parts):
-        raise ValueError(
-            f"{field} must not contain empty, current, or parent segments"
-        )
+        raise ValueError(f"{field} must not contain empty, current, or parent segments")
     return value
 
 
@@ -421,9 +380,7 @@ def _require_non_negative_integer(
 
 
 def _path_identity(path: Path) -> str:
-    return os.path.normcase(
-        os.path.normpath(os.fspath(path))
-    )
+    return os.path.normcase(os.path.normpath(os.fspath(path)))
 
 
 def _coerce_path(
@@ -431,12 +388,23 @@ def _coerce_path(
     *,
     field: str,
 ) -> Path:
-    raw = os.fspath(value)
-    if isinstance(raw, bytes):
-        raise TypeError(f"{field} must be a text path")
+    raw = _text_path(value, field=field)
     if "\x00" in raw:
         raise ValueError(f"{field} must not contain NUL")
     return Path(raw)
+
+
+def _text_path(value: object, *, field: str) -> str:
+    if isinstance(value, bytes):
+        raise TypeError(f"{field} must be a text path")
+    if isinstance(value, str):
+        return value
+    if isinstance(value, os.PathLike):
+        raw = os.fspath(value)
+        if isinstance(raw, bytes):
+            raise TypeError(f"{field} must be a text path")
+        return raw
+    raise TypeError(f"{field} must be a string or path-like value")
 
 
 ExclusionReason = SelectionReason

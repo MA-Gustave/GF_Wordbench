@@ -2,17 +2,32 @@
 
 **Document ID:** `GF-WB-VALIDATION-OVERVIEW`  
 **Status:** Normative  
-**Applies to:** GF Wordbench validation architecture and one active GF language project  
+**Applies to:** GF Wordbench validation architecture and one selected GF language context  
 **Owner:** GF Wordbench maintainers  
 **Validation contract version:** `1.0.0`  
 **Canonical path:** `docs/validation/VALIDATION_OVERVIEW.md`  
-**Last structural review:** 2026-07-24
+**Last structural review:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
-GF Wordbench validates the coherence, compilability, behavior, release readiness, and regression stability of exactly one active Grammatical Framework language project per workspace and per run.
+GF Wordbench validates the coherence, compilability, behavior, release readiness, and regression stability of exactly one selected Grammatical Framework language context per workspace and per run.
 
 This document defines the validation system at overview level:
 
@@ -23,7 +38,7 @@ This document defines the validation system at overview level:
 - how the four canonical modes differ;
 - how statuses, failures, evidence, and release decisions relate;
 - which outputs every run must preserve;
-- which responsibilities belong to the framework and which belong to the active language project.
+- which responsibilities belong to the framework and which belong to the selected language context.
 
 This document is normative for GF Wordbench validation.
 
@@ -39,7 +54,7 @@ The central rule is:
 
 A GF Wordbench run answers one or more of the following questions:
 
-1. Is the active project configuration valid?
+1. Is the selected language context configuration valid?
 2. Are the intended GF source files present and correctly selected?
 3. Do source-level checks detect known suspicious patterns?
 4. Can the required modules compile with the configured GF toolchain?
@@ -95,8 +110,8 @@ GF Wordbench validation does not:
 - silently fix GF source files;
 - silently update gold files;
 - silently change release requirements;
-- execute arbitrary Python supplied by the active project;
-- support multiple active language profiles or several active projects in one workspace;
+- execute arbitrary Python supplied by the selected language context;
+- support multiple active language profiles or several selected language contexts in one workspace;
 - perform cross-workspace or multilingual portfolio aggregation;
 - treat human-readable reports as the primary machine data source;
 - use a zero process exit code as the only success criterion;
@@ -154,11 +169,11 @@ GF Wordbench is authoritative for:
 - manifests;
 - persistent schema compatibility.
 
-### 5.3 Active project is authoritative for
+### 5.3 Validation profile is authoritative for
 
-The active language project is authoritative for:
+The selected language context is authoritative for:
 
-- project identity;
+- resolved language identity;
 - language-specific GF modules;
 - source root;
 - module suffix;
@@ -192,7 +207,7 @@ No component may create a second source of truth for a responsibility owned else
 
 Examples:
 
-- GUI state must not replace `project/project.toml`;
+- GUI state must not replace `<validation-profile-root>/project.toml`;
 - reports must not recompute validation independently;
 - the compiler must not classify downstream failures;
 - scenario files must not choose a different project implicitly;
@@ -292,11 +307,11 @@ Normal validation must not modify:
 
 Explicit maintenance commands may update controlled assets under separate policy.
 
-### 6.7 One active project
+### 6.7 One selected language context
 
-One GF Wordbench workspace validates exactly one active language project.
+One GF Wordbench workspace validates exactly one selected language context.
 
-The project identity is resolved from the active project configuration, not from:
+The resolved language identity is resolved from the selected language context configuration, not from:
 
 - previous output;
 - UI history;
@@ -414,7 +429,7 @@ Checkpoint success proves only the declared checkpoint contract.
 
 **Purpose**
 
-Decide whether the active project satisfies all configured release requirements.
+Decide whether the selected language context satisfies all configured release requirements.
 
 **Typical scope**
 
@@ -513,7 +528,7 @@ Examples:
 
 - project file exists;
 - schema is supported;
-- project identity is complete;
+- resolved language identity is complete;
 - source root exists;
 - entrypoints and checkpoints are registered;
 - scenario IDs are unique;
@@ -727,7 +742,7 @@ The request resolution phase determines:
 
 - canonical mode;
 - target file or checkpoint when applicable;
-- active project root;
+- selected language context root;
 - environment paths;
 - GF executable;
 - output root;
@@ -761,7 +776,7 @@ framework defaults
 Project identity remains authoritative in:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 The resolved configuration must be explicit enough to reproduce the run.
@@ -830,7 +845,7 @@ Examples:
 Target selection consumes:
 
 - mode;
-- project source root;
+- resolved source root;
 - configured source glob;
 - include and exclude policy;
 - target file;
@@ -1582,7 +1597,7 @@ The release policy requires:
 12. required documentation and project contracts are current;
 13. final reports and manifest are valid.
 
-The active project may add stricter language-specific gates.
+The selected language context may add stricter language-specific gates.
 
 It must not weaken mandatory framework integrity or security gates.
 
@@ -1659,9 +1674,9 @@ Legacy compatibility never restores a multi-project model, duplicates project au
 | CLI | `app/main_cli.py` |
 | GUI | `app/main_gui.py`, `app/gui/` |
 | Persistent UI state | `app/state.py` |
-| Project validation policy | `project/project.toml` |
-| Project scenarios | `project/validation/scenarios/` |
-| Project gold files | `project/validation/gold/` |
+| Project validation policy | `<validation-profile-root>/project.toml` |
+| Project scenarios | `<validation-profile-root>/validation/scenarios/` |
+| Project gold files | `<validation-profile-root>/validation/gold/` |
 
 Concrete filenames may evolve through coordinated contract changes, but responsibility ownership remains singular and documented.
 
@@ -1730,7 +1745,7 @@ Language-neutral defaults such as:
 
 Language-specific project contracts such as:
 
-- project identity;
+- resolved language identity;
 - source root;
 - source glob;
 - entrypoints;
@@ -1918,7 +1933,7 @@ The following invariants apply to every mode.
 
 ### 48.1 Configuration invariants
 
-- active project identity is explicit;
+- selected language context identity is explicit;
 - canonical mode is known;
 - required mode inputs exist;
 - all resolved paths are normalized;
@@ -1992,8 +2007,8 @@ Probable validation drift exists when:
 - a zero exit code overrides missing markers;
 - a required PGF is absent but release passes;
 - previous-run Markdown is parsed instead of JSON;
-- project identity comes from UI state;
-- one run resolves several active projects;
+- resolved language identity comes from UI state;
+- one run resolves several selected language contexts;
 - Wordbench validation reads a `gf-portfolio` registry or private state;
 - source selection depends on filesystem order;
 - language-specific paths appear in framework defaults;
@@ -2059,7 +2074,7 @@ docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 ---

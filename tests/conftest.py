@@ -10,7 +10,6 @@ import shutil
 from typing import Final
 
 import pytest
-
 from tests.helpers.fixture_paths import FixturePaths, discover_repository_root
 
 _GF_EXECUTABLE_ENV: Final[str] = "GF_WORDBENCH_TEST_GF_EXE"
@@ -216,9 +215,7 @@ def isolated_test_environment(clean_test_environment: None) -> None:
 def real_gf_executable() -> Path:
     configured = _configured_environment_value(_GF_EXECUTABLE_ENV)
     if configured is None:
-        pytest.skip(
-            f"real-GF test requires {_GF_EXECUTABLE_ENV} to be configured"
-        )
+        pytest.skip(f"real-GF test requires {_GF_EXECUTABLE_ENV} to be configured")
     return _resolve_executable(configured, variable=_GF_EXECUTABLE_ENV)
 
 

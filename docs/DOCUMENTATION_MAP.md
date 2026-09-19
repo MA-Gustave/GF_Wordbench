@@ -10,6 +10,35 @@
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
+
+## 2026-08-05 — ADR-0015 source/profile terminology alignment
+
+Corrected user, validation, GF-toolchain, release, development and reference documentation so that:
+
+- Wordbench opens selected GF/RGL sources in place;
+- `ResolvedLanguageContext` owns source and identity facts;
+- `ValidationProfile` is explicit, optional and policy-only;
+- `project/project.toml` and root `project/` are legacy compatibility inputs, not startup requirements;
+- `templates/validation-profile/` is the reusable policy template;
+- run outputs are separated from selected source trees.
+
+Historical migration examples retain legacy paths only when explicitly labeled as legacy.
+
 ## 1. Purpose
 
 This file is the canonical map of the GF Wordbench documentation system.
@@ -48,8 +77,8 @@ A lower-authority document must link to the authoritative source instead of rede
 | [`docs/INTERFILE_CONTRACT_LOCK.md`](INTERFILE_CONTRACT_LOCK.md) | Python and framework file-boundary contracts. |
 | [`docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`](EXTERNAL_TOOL_CONTRACT_LOCK.md) | GF, process, filesystem, environment and platform contracts. |
 | [`docs/PERSISTED_SCHEMA_LOCK.md`](PERSISTED_SCHEMA_LOCK.md) | Persisted formats, schema versions, paths and migrations. |
-| [`project/docs/INTERFILE_CONTRACT_LOCK.md`](../project/docs/INTERFILE_CONTRACT_LOCK.md) | Active-language GF module, scenario, gold and artifact contracts. |
-| [`templates/project/docs/INTERFILE_CONTRACT_LOCK.md`](../templates/project/docs/INTERFILE_CONTRACT_LOCK.md) | Reusable project-lock structure for a new active language. |
+| Explicit validation profile | Owns profile-local checkpoints, scenarios, golds, artifacts and release policy when loaded. |
+| [`templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md`](../templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md) | Reusable profile-local contract structure. |
 
 ---
 
@@ -66,13 +95,11 @@ A lower-authority document must link to the authoritative source instead of rede
 
 ### 3.2 Language-project maintainer
 
-1. [`project/README.md`](../project/README.md)
-1. [`project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md`](../project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md)
-1. [`project/docs/LANGUAGE_ARCHITECTURE.md`](../project/docs/LANGUAGE_ARCHITECTURE.md)
-1. [`project/docs/INTERFILE_CONTRACT_LOCK.md`](../project/docs/INTERFILE_CONTRACT_LOCK.md)
-1. [`project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`](../project/docs/VALIDATION_SPEC__PROJECT_DOCS.md)
-1. [`project/docs/STATUS_LEDGER__PROJECT_DOCS.md`](../project/docs/STATUS_LEDGER__PROJECT_DOCS.md)
-1. [`project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`](../project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md)
+1. Select the language directory or `.gf` file in its existing RGL/GF source tree.
+1. Read [`docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`](decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md).
+1. Read [`docs/usage/QUICK_START.md`](usage/QUICK_START.md).
+1. When advanced policy is required, start from [`templates/validation-profile/README.md`](../templates/validation-profile/README.md).
+1. Maintain profile-local scenarios, golds and release criteria outside the selected source tree.
 
 ### 3.3 Framework contributor
 
@@ -90,7 +117,7 @@ A lower-authority document must link to the authoritative source instead of rede
 1. [`docs/release/RELEASE_PROCESS.md`](release/RELEASE_PROCESS.md)
 1. [`docs/validation/RELEASE_GATES.md`](validation/RELEASE_GATES.md)
 1. [`docs/PERSISTED_SCHEMA_LOCK.md`](PERSISTED_SCHEMA_LOCK.md)
-1. [`project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`](../project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md)
+1. Release criteria from the explicitly loaded validation profile, when release mode is used
 1. [`CHANGELOG.md`](../CHANGELOG.md)
 
 ### 3.5 Diagnostics investigator
@@ -144,10 +171,10 @@ A lower-authority document must link to the authoritative source instead of rede
 | Project configuration | [`docs/configuration/PROJECT_TOML_REFERENCE.md`](configuration/PROJECT_TOML_REFERENCE.md) |
 | CLI | [`docs/usage/CLI_REFERENCE.md`](usage/CLI_REFERENCE.md) |
 | GUI | [`docs/usage/GUI_REFERENCE.md`](usage/GUI_REFERENCE.md) |
-| Active language identity | [`project/project.toml`](../project/project.toml) |
-| Active-language architecture | [`project/docs/LANGUAGE_ARCHITECTURE.md`](../project/docs/LANGUAGE_ARCHITECTURE.md) |
-| Active-language contracts | [`project/docs/INTERFILE_CONTRACT_LOCK.md`](../project/docs/INTERFILE_CONTRACT_LOCK.md) |
-| Active-language release criteria | [`project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`](../project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md) |
+| Resolved language identity | `ResolvedLanguageContext` built from the selected source |
+| Language architecture | selected source repository documentation or explicit profile reference |
+| Profile-local validation contracts | explicit `ValidationProfile` |
+| Release criteria | explicit validation profile |
 
 ---
 
@@ -269,7 +296,7 @@ The inventory below defines the permanent target documentation set.
 | Path | Responsibility |
 |---|---|
 | [`docs/configuration/CONFIGURATION_OVERVIEW.md`](configuration/CONFIGURATION_OVERVIEW.md) | Configuration layers, precedence and ownership. |
-| [`docs/configuration/PROJECT_TOML_REFERENCE.md`](configuration/PROJECT_TOML_REFERENCE.md) | Complete `project/project.toml` reference. |
+| [`docs/configuration/PROJECT_TOML_REFERENCE.md`](configuration/PROJECT_TOML_REFERENCE.md) | Legacy profile format and compatibility reference; not startup authority. |
 | [`docs/configuration/APPLICATION_STATE_REFERENCE.md`](configuration/APPLICATION_STATE_REFERENCE.md) | Disposable local UI/application state reference. |
 | [`docs/configuration/ENVIRONMENT_AND_PATHS.md`](configuration/ENVIRONMENT_AND_PATHS.md) | Executable, RGL, output and environment-path behavior. |
 
@@ -326,7 +353,7 @@ The inventory below defines the permanent target documentation set.
 | Path | Responsibility |
 |---|---|
 | [`docs/decisions/README.md`](decisions/README.md) | ADR conventions, status values and index. |
-| [`docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md`](decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md) | Decision to resolve one active GF language project per Wordbench workspace and run. |
+| [`docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md`](decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md) | Decision to resolve one selected GF language context per Wordbench workspace and run. |
 | [`docs/decisions/ADR-0002-GF-AS-EXECUTION-ENGINE.md`](decisions/ADR-0002-GF-AS-EXECUTION-ENGINE.md) | Decision to keep GF authoritative for GF semantics. |
 | [`docs/decisions/ADR-0003-SEPARATE-SCAN-AND-COMPILE.md`](decisions/ADR-0003-SEPARATE-SCAN-AND-COMPILE.md) | Decision to separate static scanning from native compilation. |
 | [`docs/decisions/ADR-0004-NATIVE-GFS-SCENARIOS.md`](decisions/ADR-0004-NATIVE-GFS-SCENARIOS.md) | Decision to use native GF shell scenarios. |
@@ -354,59 +381,28 @@ The inventory below defines the permanent target documentation set.
 
 ### 5.18 Active language project
 
-| Path | Responsibility |
+The selected language is not stored under a canonical repository-local `project/` directory.
+
+Current authorities:
+
+| Subject | Authority |
 |---|---|
-| [`project/README.md`](../project/README.md) | Entry point for the active language project. |
-| [`project/project.toml`](../project/project.toml) | Authoritative active-project identity and validation configuration. |
-| [`project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md`](../project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md) | Project-documentation entry point and reading order. |
-| [`project/docs/INTERFILE_CONTRACT_LOCK.md`](../project/docs/INTERFILE_CONTRACT_LOCK.md) | Normative active-project module and scenario contracts. |
-| [`project/docs/LANGUAGE_OVERVIEW.md`](../project/docs/LANGUAGE_OVERVIEW.md) | Language scope, linguistic goals and supported coverage. |
-| [`project/docs/LANGUAGE_ARCHITECTURE.md`](../project/docs/LANGUAGE_ARCHITECTURE.md) | Project-specific GF architecture and layers. |
-| [`project/docs/MODULE_DEPENDENCY_MAP.md`](../project/docs/MODULE_DEPENDENCY_MAP.md) | Authoritative GF module dependency map. |
-| [`project/docs/CATEGORY_AND_LINCAT_CONTRACT.md`](../project/docs/CATEGORY_AND_LINCAT_CONTRACT.md) | Cross-module category and lincat contracts. |
-| [`project/docs/MORPHOLOGY_SPEC.md`](../project/docs/MORPHOLOGY_SPEC.md) | Language-specific morphology specification. |
-| [`project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md`](../project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md) | Language-specific syntax and constructor policies. |
-| [`project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`](../project/docs/VALIDATION_SPEC__PROJECT_DOCS.md) | Project acceptance criteria and scenario requirements. |
-| [`project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md`](../project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md) | Coverage mapping from requirements to evidence. |
-| [`project/docs/STATUS_LEDGER__PROJECT_DOCS.md`](../project/docs/STATUS_LEDGER__PROJECT_DOCS.md) | Material exceptions, unresolved blockers, temporary waivers and required follow-up affecting validation or release. |
-| [`project/docs/DECISION_LOG.md`](../project/docs/DECISION_LOG.md) | Project-specific decisions not requiring framework ADRs. |
-| [`project/docs/KNOWN_ISSUES.md`](../project/docs/KNOWN_ISSUES.md) | Known project defects and limitations. |
-| [`project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`](../project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md) | Language-project release conditions. |
-| [`project/docs/RESEARCH_EVIDENCE.md`](../project/docs/RESEARCH_EVIDENCE.md) | Sources and evidence supporting linguistic decisions. |
-| [`project/validation/README.md`](../project/validation/README.md) | Project validation layout and execution guidance. |
-| [`project/validation/scenarios/README.md`](../project/validation/scenarios/README.md) | Scenario registry and authoring conventions. |
-| [`project/validation/gold/README.md`](../project/validation/gold/README.md) | Gold-file ownership and update rules. |
-| [`project/validation/inputs/README.md`](../project/validation/inputs/README.md) | Canonical validation-input formats and ownership. |
+| Selected path, source root, RGL root, language identity and discovered entrypoints | `ResolvedLanguageContext` |
+| GF executable and environment facts | environment/tool configuration |
+| Checkpoints, scenarios, inputs, golds, PGF targets, artifact requirements and release gates | explicitly loaded `ValidationProfile` |
+| Run logs, reports and artifacts | configured output root |
+
+Legacy `project/` paths belong only to compatibility and migration documentation.
 
 ### 5.19 Project template
 
-`templates/project/` mirrors the active project structure. Template documents contain generic placeholders and must not contain active-language facts.
+The reusable optional policy template is:
 
-| Path | Responsibility |
-|---|---|
-| [`templates/project/README.md`](../templates/project/README.md) | Entry point for the template project template. |
-| [`templates/project/project.toml`](../templates/project/project.toml) | Authoritative template-project identity and validation configuration. |
-| [`templates/project/docs/00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md) | Project-documentation entry point and reading order. |
-| [`templates/project/docs/INTERFILE_CONTRACT_LOCK.md`](../templates/project/docs/INTERFILE_CONTRACT_LOCK.md) | Generic normative project-lock template. |
-| [`templates/project/docs/LANGUAGE_OVERVIEW.md`](../templates/project/docs/LANGUAGE_OVERVIEW.md) | Language scope, linguistic goals and supported coverage. |
-| [`templates/project/docs/LANGUAGE_ARCHITECTURE.md`](../templates/project/docs/LANGUAGE_ARCHITECTURE.md) | Project-specific GF architecture and layers. |
-| [`templates/project/docs/MODULE_DEPENDENCY_MAP.md`](../templates/project/docs/MODULE_DEPENDENCY_MAP.md) | Authoritative GF module dependency map. |
-| [`templates/project/docs/CATEGORY_AND_LINCAT_CONTRACT.md`](../templates/project/docs/CATEGORY_AND_LINCAT_CONTRACT.md) | Cross-module category and lincat contracts. |
-| [`templates/project/docs/MORPHOLOGY_SPEC.md`](../templates/project/docs/MORPHOLOGY_SPEC.md) | Language-specific morphology specification. |
-| [`templates/project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md`](../templates/project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md) | Language-specific syntax and constructor policies. |
-| [`templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md) | Project acceptance criteria and scenario requirements. |
-| [`templates/project/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md) | Coverage mapping from requirements to evidence. |
-| [`templates/project/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md) | Generic structure for material exceptions, unresolved blockers, temporary waivers and required follow-up. |
-| [`templates/project/docs/DECISION_LOG.md`](../templates/project/docs/DECISION_LOG.md) | Project-specific decisions not requiring framework ADRs. |
-| [`templates/project/docs/KNOWN_ISSUES.md`](../templates/project/docs/KNOWN_ISSUES.md) | Known project defects and limitations. |
-| [`templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md`](../templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md) | Language-project release conditions. |
-| [`templates/project/docs/RESEARCH_EVIDENCE.md`](../templates/project/docs/RESEARCH_EVIDENCE.md) | Sources and evidence supporting linguistic decisions. |
-| [`templates/project/validation/README.md`](../templates/project/validation/README.md) | Project validation layout and execution guidance. |
-| [`templates/project/validation/scenarios/README.md`](../templates/project/validation/scenarios/README.md) | Scenario registry and authoring conventions. |
-| [`templates/project/validation/gold/README.md`](../templates/project/validation/gold/README.md) | Gold-file ownership and update rules. |
-| [`templates/project/validation/inputs/README.md`](../templates/project/validation/inputs/README.md) | Canonical validation-input formats and ownership. |
+```text
+templates/validation-profile/
+```
 
----
+It contains profile-local documentation, scenarios, inputs, golds and release policy. It must not contain selected-language identity, source paths, GF executable paths, output roots or run state.
 
 ## 6. Framework, project and template separation
 
@@ -418,33 +414,15 @@ It must not depend on the identity of the active language except in explicitly m
 
 ### 6.2 Active-project documentation
 
-Documentation under `project/` describes the current language only.
+Language-specific documentation may remain with the language source repository or be referenced by an explicit validation profile.
 
-It may contain:
-
-- concrete module names;
-- language-specific lincat structures;
-- project entrypoints and checkpoints;
-- scenario-to-gold mappings;
-- known linguistic limitations;
-- project release criteria.
-
-It must not contain a Portfolio registry, cross-workspace orchestration rules or a reverse dependency on `gf-portfolio`.
+Wordbench does not require a root `project/docs/` tree. Profile-local documents may describe non-derivable validation policy, known limitations, scenario coverage and release criteria, but they must not redefine resolved source facts.
 
 ### 6.3 Template documentation
 
-Documentation under `templates/project/` defines the reusable shape of a project.
+Documentation under `templates/validation-profile/` defines the reusable shape of optional validation policy.
 
-It must:
-
-- retain placeholders where project facts are required;
-- remain synchronized structurally with `project/`;
-- avoid active-language identifiers;
-- preserve corresponding required document roles; the five disambiguated template documents use `__TEMPLATES_PROJECT_DOCS.md`, while their active-project counterparts use `__PROJECT_DOCS.md`;
-- exclude Portfolio registries and cross-workspace orchestration;
-- be updated whenever the active-project documentation contract changes.
-
----
+It must retain generic placeholders, remain source-location neutral and avoid machine-local paths. It is not a template for copying the selected RGL language tree.
 
 ## 7. Duplication rules
 

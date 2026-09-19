@@ -7,10 +7,25 @@
 **Owner:** GF Wordbench maintainers  
 **Operations contract version:** `1.1.0`  
 **Target path:** `docs/operations/AUTOMATION_AND_CI.md`  
-**Last structural review:** `2026-07-24`
+**Last structural review:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines how GF Wordbench is executed safely and reproducibly by automation.
@@ -133,15 +148,15 @@ docs/release/VERSIONING_POLICY.md
 docs/release/RELEASE_PROCESS.md
 docs/reference/EXIT_CODES.md
 docs/reference/COMMAND_REFERENCE.md
-project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
-project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 When a CI rule overlaps a persisted artifact schema, `PERSISTED_SCHEMA_LOCK.md` is authoritative.
 
 When it overlaps GF process behavior, `EXTERNAL_TOOL_CONTRACT_LOCK.md` is authoritative.
 
-When it overlaps project release policy, `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` may add stricter requirements but may not weaken framework integrity requirements.
+When it overlaps project release policy, `<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` may add stricter requirements but may not weaken framework integrity requirements.
 
 ---
 
@@ -231,7 +246,7 @@ Artifact upload and workflow-gate evaluation must be designed so validation fail
 Normal CI validation must not modify:
 
 - GF source files;
-- `project/project.toml`;
+- `<validation-profile-root>/project.toml`;
 - `.gfs` scenarios;
 - scenario inputs;
 - `.gold` files;
@@ -278,12 +293,12 @@ Each GF Wordbench validation job operates on:
 
 ```text
 one workspace
-one active project
+one selected language context
 one normative language target
 one run directory
 ```
 
-A Wordbench workflow must not aggregate several projects or select project identity from external portfolio state.
+A Wordbench workflow must not aggregate several projects or select resolved language identity from external portfolio state.
 
 `gf-portfolio` may consume public versioned `summary.json`, `manifest.json`, and other documented artifacts after a Wordbench run is published.
 
@@ -947,7 +962,7 @@ valid UTF-8 JSON
 recognized schema_id
 supported schema_version
 recognized producer
-expected project identity
+expected resolved language identity
 expected source/run identity when represented
 expected canonical mode
 recognized overall status
@@ -999,7 +1014,7 @@ Manifest verification is required for:
 manifest exists
 schema is supported
 run identity matches summary
-project identity matches summary
+resolved language identity matches summary
 required roles are present
 paths resolve within authorized roots
 sizes match
@@ -1323,14 +1338,14 @@ temporary directory
 optional tool paths
 ```
 
-These values must not be written into `project/project.toml`.
+These values must not be written into `<validation-profile-root>/project.toml`.
 
 ## 28.2 Project-owned values
 
 The project supplies:
 
 ```text
-project identity
+resolved language identity
 source root
 source selection
 entrypoints
@@ -1811,7 +1826,7 @@ Release automation must reject or explicitly review moved tags.
 
 Branch names are metadata.
 
-They must not select a different active language project.
+They must not select a different selected language context.
 
 ---
 
@@ -2453,7 +2468,7 @@ Every automation responsibility must have one owner.
 |---|---|
 | Workflow trigger policy | Repository operations policy |
 | Canonical mode semantics | GF Wordbench validation policy |
-| Project requiredness | `project/project.toml` and project release criteria |
+| Project requiredness | `<validation-profile-root>/project.toml` and project release criteria |
 | CLI syntax | `CLI_REFERENCE.md` and CLI component |
 | Exit codes | `EXIT_CODES.md` and CLI component |
 | GF process contract | External-tool contract owner |

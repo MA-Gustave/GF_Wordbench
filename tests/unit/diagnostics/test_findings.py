@@ -67,11 +67,7 @@ def _finding(
         kind=kind,
         message=message,
         target=target,
-        evidence_refs=(
-            (_evidence(),)
-            if evidence_refs is None
-            else evidence_refs
-        ),
+        evidence_refs=((_evidence(),) if evidence_refs is None else evidence_refs),
         producer=_PRODUCER,
         diagnostic_class=diagnostic_class,
         error_kind=error_kind,

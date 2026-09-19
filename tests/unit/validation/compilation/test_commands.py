@@ -21,16 +21,15 @@ from gf_wordbench.validation.compilation.commands import (
 )
 
 
-def _profile(
-    *,
-    style: ValueOptionStyle = ValueOptionStyle.EQUALS,
-    **overrides: object,
-) -> GfCommandProfile:
+def _profile(**overrides: object) -> GfCommandProfile:
     values: dict[str, object] = {
         "profile_id": "gf-tested-v1",
         "path_separator": os.pathsep,
-        "value_option_style": style,
+        "value_option_style": ValueOptionStyle.EQUALS,
     }
+    style = overrides.pop("style", None)
+    if style is not None:
+        values["value_option_style"] = style
     values.update(overrides)
     return GfCommandProfile(**values)  # type: ignore[arg-type]
 
@@ -145,11 +144,7 @@ def test_module_command_preserves_structured_execution_values(
     assert command.arguments[-1] == os.fspath(source)
     assert command.arguments.count(os.fspath(source)) == 1
     assert all(
-        not (
-            len(argument) >= 2
-            and argument[0] == argument[-1]
-            and argument[0] in {'"', "'"}
-        )
+        not (len(argument) >= 2 and argument[0] == argument[-1] and argument[0] in {'"', "'"})
         for argument in command.argv
     )
 
@@ -380,17 +375,17 @@ def test_command_rejects_shell_control_characters_and_scalar_arguments() -> None
     with pytest.raises(ValueError, match="control characters"):
         GfCommand(
             operation="compile_module",
-            executable="gf",
+            executable=Path("gf"),
             arguments=("Demo.gf\n--version",),
-            working_directory=".",
+            working_directory=Path("."),
         )
 
     with pytest.raises(TypeError, match="iterable of strings"):
         GfCommand(
             operation="compile_module",
-            executable="gf",
+            executable=Path("gf"),
             arguments="Demo.gf",  # type: ignore[arg-type]
-            working_directory=".",
+            working_directory=Path("."),
         )
 
 

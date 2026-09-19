@@ -387,9 +387,7 @@ def test_run_ids_reject_impossible_dates_and_times(value: str) -> None:
     with pytest.raises(ValueError) as captured:
         validate_run_id(value)
 
-    assert "timestamp component is not a valid UTC date and time" in str(
-        captured.value
-    )
+    assert "timestamp component is not a valid UTC date and time" in str(captured.value)
 
 
 @pytest.mark.parametrize(

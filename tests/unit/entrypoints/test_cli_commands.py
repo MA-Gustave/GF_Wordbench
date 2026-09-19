@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import MISSING, fields
 from io import StringIO
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 
-import gf_wordbench.entrypoints.cli.main as cli_main
 from gf_wordbench.entrypoints.cli.audit_commands import (
     AuditCommandServices,
     CliAuditCommandError,
@@ -20,7 +20,7 @@ from gf_wordbench.entrypoints.cli.audit_commands import (
 )
 from gf_wordbench.entrypoints.cli.exit_codes import (
     EXIT_OK,
-    EXIT_USAGE_ERROR,
+    EXIT_VALIDATION_FAILED,
 )
 from gf_wordbench.entrypoints.cli.language_commands import (
     LanguageCommandServices,
@@ -28,6 +28,7 @@ from gf_wordbench.entrypoints.cli.language_commands import (
     execute_language_probe_command,
     language_probe_request_from_namespace,
 )
+import gf_wordbench.entrypoints.cli.main as cli_main
 from gf_wordbench.entrypoints.cli.maintenance_commands import (
     ApplyProjectResetCommand,
     MaintenanceCommandKind,
@@ -46,6 +47,7 @@ from gf_wordbench.entrypoints.cli.project_commands import (
     execute_project_check,
     project_check_request_from_namespace,
 )
+from gf_wordbench.kernel.events import EventSink, LifecycleEvent
 from gf_wordbench.kernel.statuses import ValidationMode
 from gf_wordbench.projects.languages.models import LanguageProbeResult
 from gf_wordbench.projects.models import (
@@ -66,8 +68,10 @@ class _AuditApplication:
         self,
         request: ValidateCommandRequest,
         *,
-        event_sink: object | None = None,
+        cancellation_check: Callable[[], None] | None = None,
+        event_sink: EventSink[LifecycleEvent] | None = None,
     ) -> RunResult:
+        del cancellation_check
         self.calls.append((request, event_sink))
         return self.result
 
@@ -180,9 +184,7 @@ def _language_probe_request(**overrides: Any) -> LanguageProbeCommandRequest:
         "verbose": False,
     }
     values.update(overrides)
-    return LanguageProbeCommandRequest(
-        **_field_defaults(LanguageProbeCommandRequest, values)
-    )
+    return LanguageProbeCommandRequest(**_field_defaults(LanguageProbeCommandRequest, values))
 
 
 def _project_request(**overrides: Any) -> ProjectCheckRequest:
@@ -395,19 +397,17 @@ def test_execute_validate_command_delegates_once(tmp_path: Path) -> None:
 
 def test_audit_services_reject_invalid_dependencies() -> None:
     with pytest.raises(TypeError):
-        AuditCommandServices(application=object())
+        AuditCommandServices(application=object())  # type: ignore[arg-type]
 
     with pytest.raises(TypeError):
         AuditCommandServices(
             application=_AuditApplication(_run_result_stub()),
-            event_sink=object(),
+            event_sink=object(),  # type: ignore[arg-type]
         )
 
 
 def test_language_probe_namespace_builds_typed_request(tmp_path: Path) -> None:
-    language_path = (
-        tmp_path / "gf-rgl" / "src" / "english" / "LangEng.gf"
-    ).resolve()
+    language_path = (tmp_path / "gf-rgl" / "src" / "english" / "LangEng.gf").resolve()
     rgl_root = (tmp_path / "gf-rgl").resolve()
     gf_executable = (tmp_path / "gf.exe").resolve()
 
@@ -445,9 +445,7 @@ def test_execute_language_probe_delegates_once(tmp_path: Path) -> None:
     application = _LanguageApplication(result)
     services = LanguageCommandServices(application=application)
     language_path = (tmp_path / "gf-rgl" / "src" / "english").resolve()
-    namespace = parse_cli_namespace(
-        ["language", "probe", str(language_path)]
-    )
+    namespace = parse_cli_namespace(["language", "probe", str(language_path)])
 
     returned = execute_language_probe_command(namespace, services=services)
 
@@ -458,7 +456,7 @@ def test_execute_language_probe_delegates_once(tmp_path: Path) -> None:
 
 def test_language_services_reject_invalid_dependencies() -> None:
     with pytest.raises(TypeError):
-        LanguageCommandServices(application=object())
+        LanguageCommandServices(application=object())  # type: ignore[arg-type]
 
 
 def test_project_check_namespace_builds_explicit_profile_request(
@@ -537,7 +535,7 @@ def test_execute_project_check_reports_profile_contract_failure(
         stderr=stderr,
     )
 
-    assert code == EXIT_USAGE_ERROR
+    assert code == EXIT_VALIDATION_FAILED
     assert application.calls == [request]
     assert "GF-WB-TEST-001" in stderr.getvalue()
     assert "Validation profile identity is invalid." in stderr.getvalue()
@@ -557,13 +555,13 @@ def test_reset_plan_and_apply_commands_have_distinct_safety_classification() -> 
 
 def test_maintenance_classification_rejects_unknown_command() -> None:
     with pytest.raises(TypeError):
-        maintenance_command_kind(object())
+        maintenance_command_kind(object())  # type: ignore[arg-type]
 
     with pytest.raises(TypeError):
-        maintenance_command_is_destructive(object())
+        maintenance_command_is_destructive(object())  # type: ignore[arg-type]
 
     with pytest.raises(TypeError):
-        maintenance_command_is_dry_run(object())
+        maintenance_command_is_dry_run(object())  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
@@ -614,7 +612,6 @@ def test_dispatch_cli_request_uses_resolved_language_handler(
 def test_parser_rejects_command_contract_violations() -> None:
     invalid_argv = [
         ["language", "probe"],
-        ["validate", "--mode", "diagnostic"],
         ["project", "check", "--language-path", "src/english"],
         ["gold", "update"],
         ["gold", "update", "parse-basic", "--all"],

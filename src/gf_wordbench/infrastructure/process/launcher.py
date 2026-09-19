@@ -7,18 +7,16 @@ the runner can normalize them into the canonical process result.
 
 from __future__ import annotations
 
-import os
-import subprocess
 from collections.abc import Mapping, Sequence
+import os
 from pathlib import Path
+import subprocess
 from typing import BinaryIO, Final, TypeAlias
 
 ProcessHandle: TypeAlias = subprocess.Popen[bytes]
 StandardInput: TypeAlias = BinaryIO | int | None
 
-_WINDOWS_NEW_PROCESS_GROUP: Final[int] = int(
-    getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-)
+_WINDOWS_NEW_PROCESS_GROUP: Final[int] = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
 
 
 def launch_without_shell(

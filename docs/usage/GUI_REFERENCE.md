@@ -5,7 +5,7 @@
 **Applies to:** GF Wordbench desktop GUI, shared language-probe and validation services, application state, optional validation profiles and generated run artifacts  
 **Owner:** GF Wordbench maintainers  
 **Document version:** `3.0.0`  
-**Last reviewed:** `2026-07-30`  
+**Last reviewed:** 2026-08-05  
 **Primary platform:** Windows  
 **GUI toolkit:** PySide6 / Qt Widgets  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
@@ -14,6 +14,21 @@
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines the GF Wordbench desktop graphical interface.
@@ -101,7 +116,7 @@ docs/reports/RAW_LOGS_REFERENCE.md
 
 Specialized locks and owner documents govern their respective contracts.
 
-Where an older document still makes the catalog, a language bundle or `project/project.toml` mandatory for startup, ADR-0015 and this reference govern the GUI behavior until the coordinated documentation update is complete.
+Where an older document still makes the catalog, a language bundle or `<validation-profile-root>/project.toml` mandatory for startup, ADR-0015 and this reference govern the GUI behavior until the coordinated documentation update is complete.
 
 ---
 
@@ -737,7 +752,7 @@ expected artifacts
 project-specific documentation
 ```
 
-An existing `project/project.toml` may be loaded explicitly as such a profile.
+An existing legacy `project/project.toml`, or a profile created from `templates/validation-profile/`, may be loaded explicitly as a validation profile.
 
 The profile is not required for basic startup, browsing, source selection, static scan or focused compilation.
 

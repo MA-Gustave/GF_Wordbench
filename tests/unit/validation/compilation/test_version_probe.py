@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -22,12 +22,12 @@ from gf_wordbench.validation.compilation.version_probe import (
     DEFAULT_VERSION_PROBE_OUTPUT_LIMIT_BYTES,
     DEFAULT_VERSION_PROBE_TIMEOUT_SEC,
     DEFAULT_VERSION_REQUEST_ID,
+    UNKNOWN_VERSION_TEXT,
     GFVersion,
     GFVersionCompatibility,
     GFVersionCompatibilityResult,
     GFVersionPolicy,
     GFVersionProbeOutcome,
-    UNKNOWN_VERSION_TEXT,
     build_gf_version_probe_request,
     evaluate_gf_version_compatibility,
     interpret_gf_version_probe,
@@ -67,14 +67,10 @@ def _process_result(
         ExecutionState.CANCELLED,
     }
     cancellation_reason = (
-        CancellationReason.USER
-        if execution_state is ExecutionState.CANCELLED
-        else None
+        CancellationReason.USER if execution_state is ExecutionState.CANCELLED else None
     )
     launch_error_kind = (
-        ProcessErrorKind.LAUNCH
-        if execution_state is ExecutionState.LAUNCH_FAILED
-        else None
+        ProcessErrorKind.LAUNCH if execution_state is ExecutionState.LAUNCH_FAILED else None
     )
 
     return ProcessResult(
@@ -111,7 +107,7 @@ def _tested_policy() -> GFVersionPolicy:
         tested_versions=("3.11", "3.12"),
         known_incompatible_versions=("3.10",),
         capabilities_by_version={
-            "3.12": {"pgf-build", "unicode-paths"},
+            "3.12": frozenset({"pgf-build", "unicode-paths"}),
         },
     )
 
@@ -160,15 +156,13 @@ def test_gf_version_policy_uses_highest_minimum_and_freezes_capabilities() -> No
         minimum_supported_version="3.10",
         project_minimum_version="3.12",
         tested_versions=("3.12.0", "3.12"),
-        capabilities_by_version=source_capabilities,
+        capabilities_by_version=cast("dict[str, frozenset[str]]", source_capabilities),
     )
     source_capabilities["3.12.0"].add("mutated-later")
 
     assert policy.effective_minimum_version == GFVersion.parse("3.12")
     assert policy.tested_versions == (GFVersion.parse("3.12"),)
-    assert policy.capabilities_for("3.12") == frozenset(
-        {"pgf-build", "unicode-paths"}
-    )
+    assert policy.capabilities_for("3.12") == frozenset({"pgf-build", "unicode-paths"})
 
     with pytest.raises(TypeError):
         policy.capabilities_by_version["3.12"] = frozenset()  # type: ignore[index]

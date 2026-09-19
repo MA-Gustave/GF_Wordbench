@@ -59,7 +59,7 @@ def _require_optional_path_text(
     )
     if path_text != path_text.strip():
         raise ValueError(f"{field_name} must not contain surrounding whitespace")
-    return path_text
+    return path_text.replace("\\", "/")
 
 
 def _require_bool(value: object, *, field_name: str) -> bool:
@@ -108,7 +108,7 @@ class StateDiagnosticCode(StrEnum):
     WRITE_FAILED = "write_failed"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class EnvironmentState:
     """Remembered machine-local paths.
 
@@ -131,27 +131,72 @@ class EnvironmentState:
     gf_executable: str | None
     output_root: str | None
 
+    def __init__(
+        self,
+        last_selected_language_path: str | None = None,
+        last_selected_validation_profile: str | None = None,
+        last_rgl_root: str | None = None,
+        gf_executable: str | None = None,
+        output_root: str | None = None,
+        *,
+        project_root: str | None = None,
+        rgl_root: str | None = None,
+    ) -> None:
+        if project_root is not None:
+            if (
+                last_selected_language_path is not None
+                and last_selected_language_path != project_root
+            ):
+                raise ValueError("project_root conflicts with last_selected_language_path")
+            last_selected_language_path = project_root
+        if rgl_root is not None:
+            if last_rgl_root is not None and last_rgl_root != rgl_root:
+                raise ValueError("rgl_root conflicts with last_rgl_root")
+            last_rgl_root = rgl_root
+
+        object.__setattr__(
+            self,
+            "last_selected_language_path",
+            last_selected_language_path,
+        )
+        object.__setattr__(
+            self,
+            "last_selected_validation_profile",
+            last_selected_validation_profile,
+        )
+        object.__setattr__(self, "last_rgl_root", last_rgl_root)
+        object.__setattr__(self, "gf_executable", gf_executable)
+        object.__setattr__(self, "output_root", output_root)
+        self.__post_init__()
+
+    @property
+    def project_root(self) -> str | None:
+        """Compatibility alias for the remembered selected language path."""
+
+        return self.last_selected_language_path
+
+    @property
+    def rgl_root(self) -> str | None:
+        """Compatibility alias for the remembered RGL root."""
+
+        return self.last_rgl_root
+
     def __post_init__(self) -> None:
-        _require_optional_path_text(
-            self.last_selected_language_path,
-            field_name="last_selected_language_path",
-        )
-        _require_optional_path_text(
-            self.last_selected_validation_profile,
-            field_name="last_selected_validation_profile",
-        )
-        _require_optional_path_text(
-            self.last_rgl_root,
-            field_name="last_rgl_root",
-        )
-        _require_optional_path_text(
-            self.gf_executable,
-            field_name="gf_executable",
-        )
-        _require_optional_path_text(
-            self.output_root,
-            field_name="output_root",
-        )
+        for field_name in (
+            "last_selected_language_path",
+            "last_selected_validation_profile",
+            "last_rgl_root",
+            "gf_executable",
+            "output_root",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _require_optional_path_text(
+                    getattr(self, field_name),
+                    field_name=field_name,
+                ),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,9 +228,7 @@ class SelectionState:
             allow_empty=True,
         )
         if target_file and target_file != target_file.strip():
-            raise ValueError(
-                "target_file must not contain surrounding whitespace"
-            )
+            raise ValueError("target_file must not contain surrounding whitespace")
 
         _require_int(
             self.timeout_sec,
@@ -233,13 +276,15 @@ class LastRunState:
     status_message: str
 
     def __post_init__(self) -> None:
-        _require_optional_path_text(
-            self.run_dir,
-            field_name="run_dir",
+        object.__setattr__(
+            self,
+            "run_dir",
+            _require_optional_path_text(self.run_dir, field_name="run_dir"),
         )
-        _require_optional_path_text(
-            self.summary_path,
-            field_name="summary_path",
+        object.__setattr__(
+            self,
+            "summary_path",
+            _require_optional_path_text(self.summary_path, field_name="summary_path"),
         )
         _require_string(
             self.status_message,
@@ -279,9 +324,7 @@ class AppState:
         if schema_id != schema_id.strip():
             raise ValueError("schema_id must not contain surrounding whitespace")
         if schema_version != schema_version.strip():
-            raise ValueError(
-                "schema_version must not contain surrounding whitespace"
-            )
+            raise ValueError("schema_version must not contain surrounding whitespace")
 
         if self.producer is not None and not isinstance(
             self.producer,
@@ -341,14 +384,9 @@ class StateLoadResult:
 
         for index, diagnostic in enumerate(diagnostics):
             if not isinstance(diagnostic, StateDiagnostic):
-                raise TypeError(
-                    f"diagnostics[{index}] must be a StateDiagnostic"
-                )
+                raise TypeError(f"diagnostics[{index}] must be a StateDiagnostic")
 
         if self.migrated and not any(
-            diagnostic.code is StateDiagnosticCode.MIGRATED
-            for diagnostic in self.diagnostics
+            diagnostic.code is StateDiagnosticCode.MIGRATED for diagnostic in self.diagnostics
         ):
-            raise ValueError(
-                "migrated results must include a MIGRATED diagnostic"
-            )
+            raise ValueError("migrated results must include a MIGRATED diagnostic")

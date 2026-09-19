@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import FrozenInstanceError
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+from typing import cast
+
 import pytest
 
 from gf_wordbench.kernel.errors import (
@@ -92,7 +94,7 @@ def test_manifest_schema_constants_are_locked() -> None:
 
 
 def test_manifest_schema_has_exact_canonical_vocabularies() -> None:
-    assert CANONICAL_ARTIFACT_ROLES == frozenset(
+    assert frozenset(
         {
             "machine_summary",
             "human_summary",
@@ -111,15 +113,15 @@ def test_manifest_schema_has_exact_canonical_vocabularies() -> None:
             "pgf",
             "other",
         }
-    )
-    assert CANONICAL_MEDIA_TYPES == frozenset(
+    ) == CANONICAL_ARTIFACT_ROLES
+    assert frozenset(
         {
             "application/json",
             "text/markdown; charset=utf-8",
             "text/plain; charset=utf-8",
             "application/octet-stream",
         }
-    )
+    ) == CANONICAL_MEDIA_TYPES
 
 
 def test_canonicalization_sorts_entries_and_normalizes_paths() -> None:
@@ -169,9 +171,10 @@ def test_parse_and_serialize_round_trip_through_immutable_models() -> None:
         strict=True,
     )
 
-    model = parse_artifact_manifest(document, strict=True)
+    parsed_model = parse_artifact_manifest(document, strict=True)
 
-    assert isinstance(model, ArtifactManifest)
+    assert type(parsed_model) is ArtifactManifest
+    model = cast(ArtifactManifest, parsed_model)
     assert model.run_id == _RUN_ID
     assert model.entry_count == 2
     assert model.required_entry_count == 2
@@ -276,12 +279,8 @@ def test_artifact_paths_reject_self_reference_and_unsafe_values(path: str) -> No
 
 
 def test_artifact_path_comparison_is_portable_and_case_insensitive() -> None:
-    assert normalize_artifact_path("raw//compile/./stdout.log") == (
-        "raw/compile/stdout.log"
-    )
-    assert artifact_path_comparison_key("Logs/Result.JSON") == (
-        "logs/result.json"
-    )
+    assert normalize_artifact_path("raw//compile/./stdout.log") == ("raw/compile/stdout.log")
+    assert artifact_path_comparison_key("Logs/Result.JSON") == ("logs/result.json")
 
     duplicate = _document(
         artifacts=[
@@ -308,9 +307,7 @@ def test_artifact_path_comparison_is_portable_and_case_insensitive() -> None:
     ],
 )
 def test_role_media_type_pairs_are_enforced(role: str, media_type: str) -> None:
-    document = _document(
-        artifacts=[_entry(role=role, media_type=media_type)]
-    )
+    document = _document(artifacts=[_entry(role=role, media_type=media_type)])
     with pytest.raises(SchemaValidationError, match="incompatible with role"):
         canonicalize_artifact_manifest_document(document, strict=True)
 
@@ -320,9 +317,7 @@ def test_unknown_roles_and_noncanonical_producer_ids_are_rejected() -> None:
     with pytest.raises(SchemaValidationError, match="unknown artifact role"):
         canonicalize_artifact_manifest_document(unknown_role, strict=True)
 
-    bad_creator = _document(
-        artifacts=[_entry(created_by="Reporting JSON")]
-    )
+    bad_creator = _document(artifacts=[_entry(created_by="Reporting JSON")])
     with pytest.raises(SchemaValidationError, match="lower_snake_case"):
         canonicalize_artifact_manifest_document(bad_creator, strict=True)
 
@@ -393,10 +388,7 @@ def test_manifest_aliases_reference_the_canonical_implementations() -> None:
     assert manifest_v1.parse_manifest is parse_artifact_manifest
     assert manifest_v1.serialize_manifest is serialize_artifact_manifest
     assert manifest_v1.validate_manifest is validate_artifact_manifest
-    assert (
-        manifest_v1.canonicalize_manifest_document
-        is canonicalize_artifact_manifest_document
-    )
+    assert manifest_v1.canonicalize_manifest_document is canonicalize_artifact_manifest_document
 
 
 def test_canonicalization_does_not_mutate_untrusted_input() -> None:

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import PurePath
+import re
 from typing import Final, TypeAlias
 
 PathText: TypeAlias = str | PurePath
@@ -22,15 +22,9 @@ _COORDINATE_TAIL: Final[str] = (
     r"|-(?P<line_range_end>[1-9][0-9]*)"
     r")?"
 )
-_WINDOWS_ABSOLUTE: Final[str] = (
-    r"[A-Za-z]:[\\/][^:\r\n]*?"
-)
-_UNC_ABSOLUTE: Final[str] = (
-    r"\\\\[^\\/\r\n:]+[\\/][^:\r\n]*?"
-)
-_POSIX_ABSOLUTE: Final[str] = (
-    r"/[^:\r\n]*?"
-)
+_WINDOWS_ABSOLUTE: Final[str] = r"[A-Za-z]:[\\/][^:\r\n]*?"
+_UNC_ABSOLUTE: Final[str] = r"\\\\[^\\/\r\n:]+[\\/][^:\r\n]*?"
+_POSIX_ABSOLUTE: Final[str] = r"/[^:\r\n]*?"
 _RELATIVE_PATH: Final[str] = (
     r"(?:\.{1,2}[\\/])?"
     r"(?:[^\s:\(\)\[\]\{\}<>'\"]+[\\/])*"
@@ -89,9 +83,7 @@ class SourceLocation:
             and column is not None
             and end_column < column
         ):
-            raise ValueError(
-                "end_column must not precede column on the same line"
-            )
+            raise ValueError("end_column must not precede column on the same line")
 
         object.__setattr__(self, "source_path_raw", raw)
         object.__setattr__(
@@ -134,9 +126,7 @@ class LocationMatch:
         if "\x00" in self.matched_text:
             raise ValueError("matched_text must not contain NUL")
         if len(self.matched_text) != self.end - self.start:
-            raise ValueError(
-                "matched_text length must match the source span"
-            )
+            raise ValueError("matched_text length must match the source span")
 
 
 def parse_source_location(
@@ -267,13 +257,19 @@ def _location_pattern(
     allow_trailing_separator: bool,
 ) -> re.Pattern[str]:
     suffixes = _normalize_suffixes(allowed_suffixes)
-    suffix_expression = "(?:" + "|".join(
-        re.escape(suffix[1:]) for suffix in suffixes
-    ) + ")"
-    path_with_suffix = (
-        rf"(?:{_QUOTED_PATH}|{_UNQUOTED_PATH})"
-        rf"\.{suffix_expression}"
+    suffix_expression = "(?:" + "|".join(re.escape(suffix[1:]) for suffix in suffixes) + ")"
+    quoted_path = (
+        rf"(?P<quote>[\"'])"
+        rf"(?P<quoted_path>[^\"'\r\n]+?\.{suffix_expression})"
+        rf"(?P=quote)"
     )
+    unquoted_path = (
+        rf"(?P<unquoted_path>"
+        rf"(?:{_WINDOWS_ABSOLUTE}|{_UNC_ABSOLUTE}|"
+        rf"{_POSIX_ABSOLUTE}|{_RELATIVE_PATH})"
+        rf"\.{suffix_expression})"
+    )
+    path_with_suffix = rf"(?:{quoted_path}|{unquoted_path})"
     start = r"^\s*" if anchored else _PREFIX_BOUNDARY
     trailing = r"(?=:\s|\s|$|[\]\)\}>,;])" if allow_trailing_separator else ""
     return re.compile(
@@ -300,11 +296,7 @@ def _location_from_match(
 
     column = int(column_text) if column_text is not None else None
     end_line = int(end_line_text) if end_line_text is not None else None
-    end_column = (
-        int(end_column_text)
-        if end_column_text is not None
-        else None
-    )
+    end_column = int(end_column_text) if end_column_text is not None else None
 
     if line_range_end is not None:
         end_line = int(line_range_end)
@@ -328,9 +320,7 @@ def _normalize_suffixes(
     values: Iterable[str],
 ) -> tuple[str, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "allowed_suffixes must be an iterable of suffix strings"
-        )
+        raise TypeError("allowed_suffixes must be an iterable of suffix strings")
 
     normalized: list[str] = []
     seen: set[str] = set()
@@ -424,10 +414,7 @@ def _comparison_parts(value: str) -> tuple[str, ...]:
 
 
 def _is_windows_style(value: str) -> bool:
-    return bool(
-        re.match(r"^[A-Za-z]:/", value)
-        or value.startswith("//")
-    )
+    return bool(re.match(r"^[A-Za-z]:/", value) or value.startswith("//"))
 
 
 def _require_input(value: object) -> str:

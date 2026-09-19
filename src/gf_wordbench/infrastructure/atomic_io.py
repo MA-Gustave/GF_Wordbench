@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 import errno
 import math
 import os
+from pathlib import Path
 import stat
 import tempfile
 import time
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
-from pathlib import Path
 from typing import BinaryIO, TextIO, TypeAlias, TypeVar
 
 from .filesystem import require_directory, require_within, resolve_for_output
@@ -29,9 +29,7 @@ _PathLike: TypeAlias = str | os.PathLike[str]
 _StreamT = TypeVar("_StreamT", BinaryIO, TextIO)
 
 _RETRYABLE_ERRNOS = frozenset(
-    value
-    for value in (errno.EACCES, errno.EBUSY, errno.EPERM)
-    if value is not None
+    value for value in (errno.EACCES, errno.EBUSY, errno.EPERM) if value is not None
 )
 _RETRYABLE_WINDOWS_ERRORS = frozenset({5, 32, 33})
 
@@ -403,8 +401,9 @@ def _validate_temporary_path(
 
 def _absolute_destination_path(destination: _PathLike) -> Path:
     raw = os.fspath(destination)
+    raw_value: object = raw
 
-    if isinstance(raw, bytes):
+    if isinstance(raw_value, bytes):
         raise TypeError("destination paths must be text, not bytes")
     if "\x00" in raw:
         raise ValueError("destination path contains NUL")
@@ -452,9 +451,7 @@ def _reject_link_like(
     role: str,
 ) -> None:
     is_junction = getattr(path, "is_junction", None)
-    is_link_like = path.is_symlink() or (
-        is_junction is not None and is_junction()
-    )
+    is_link_like = path.is_symlink() or (is_junction is not None and is_junction())
 
     if not is_link_like:
         return
@@ -478,9 +475,7 @@ def _validate_text_options(
     if "\x00" in encoding:
         raise ValueError("encoding cannot contain NUL")
     if newline not in {None, "", "\n", "\r", "\r\n"}:
-        raise ValueError(
-            "newline must be None, '', '\\n', '\\r', or '\\r\\n'"
-        )
+        raise ValueError("newline must be None, '', '\\n', '\\r', or '\\r\\n'")
 
 
 def _validated_role(value: str) -> str:
@@ -507,9 +502,7 @@ def _validated_retry_delays(
     values: Sequence[float],
 ) -> tuple[float, ...]:
     if isinstance(values, (str, bytes, bytearray)):
-        raise TypeError(
-            "replace_retry_delays must be a sequence of numbers"
-        )
+        raise TypeError("replace_retry_delays must be a sequence of numbers")
 
     delays: list[float] = []
 
@@ -520,9 +513,7 @@ def _validated_retry_delays(
         delay = float(value)
 
         if not math.isfinite(delay) or delay < 0:
-            raise ValueError(
-                "replace retry delays must be finite and non-negative"
-            )
+            raise ValueError("replace retry delays must be finite and non-negative")
 
         delays.append(delay)
 

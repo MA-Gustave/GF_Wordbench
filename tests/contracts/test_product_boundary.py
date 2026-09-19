@@ -6,7 +6,7 @@ from dataclasses import fields
 from pathlib import Path
 import re
 import tomllib
-from typing import Final
+from typing import Any, Final
 
 import pytest
 
@@ -83,10 +83,9 @@ _DYNAMIC_IMPORT_CALLS: Final[frozenset[str]] = frozenset(
 
 def _repository_root() -> Path:
     for candidate in Path(__file__).resolve().parents:
-        if (
-            (candidate / "pyproject.toml").is_file()
-            and (candidate / "src" / "gf_wordbench").is_dir()
-        ):
+        if (candidate / "pyproject.toml").is_file() and (
+            candidate / "src" / "gf_wordbench"
+        ).is_dir():
             return candidate
     raise AssertionError("repository root could not be located")
 
@@ -167,9 +166,7 @@ def _dependency_requirements(document: Mapping[str, object]) -> tuple[str, ...]:
     if isinstance(build_system, Mapping):
         build_requires = build_system.get("requires", ())
         if isinstance(build_requires, list):
-            requirements.extend(
-                item for item in build_requires if isinstance(item, str)
-            )
+            requirements.extend(item for item in build_requires if isinstance(item, str))
 
     project = document.get("project")
     if not isinstance(project, Mapping):
@@ -203,7 +200,7 @@ def _all_mapping_keys(value: object) -> frozenset[str]:
     return frozenset(keys)
 
 
-def _field_names(model: type[object]) -> frozenset[str]:
+def _field_names(model: type[Any]) -> frozenset[str]:
     return frozenset(field.name for field in fields(model))
 
 
@@ -211,18 +208,20 @@ def _relative_paths(root: Path, paths: Iterable[Path]) -> tuple[str, ...]:
     return tuple(path.relative_to(root).as_posix() for path in paths)
 
 
-def _active_project_identity(root: Path) -> tuple[str, ...]:
+def _optional_profile_identity(root: Path) -> tuple[str, ...]:
     project_file = root / "project" / "project.toml"
+    if not project_file.is_file():
+        return ()
     with project_file.open("rb") as handle:
         document = tomllib.load(handle)
-    project = document.get("project")
-    if not isinstance(project, Mapping):
-        raise AssertionError("project/project.toml must define [project]")
+    profile = document.get("profile", document.get("project"))
+    if not isinstance(profile, Mapping):
+        raise AssertionError("an optional project.toml profile must define [profile]")
     values: list[str] = []
-    for key in ("id", "name", "language_code"):
-        value = project.get(key)
+    for key in ("id", "name"):
+        value = profile.get(key)
         if not isinstance(value, str) or not value.strip():
-            raise AssertionError(f"project.{key} must be a non-empty string")
+            raise AssertionError(f"profile.{key} must be a non-empty string")
         values.append(value.casefold())
     return tuple(values)
 
@@ -242,8 +241,7 @@ def test_package_metadata_has_no_reverse_portfolio_dependency() -> None:
         document = tomllib.load(handle)
 
     dependency_names = {
-        _requirement_name(requirement)
-        for requirement in _dependency_requirements(document)
+        _requirement_name(requirement) for requirement in _dependency_requirements(document)
     }
     assert dependency_names.isdisjoint(_PORTFOLIO_DISTRIBUTIONS)
 
@@ -277,9 +275,7 @@ def test_runtime_imports_no_repository_project_template_tests_or_portfolio() -> 
         for module in _imported_modules(path):
             top_level = _top_level_module(module)
             if top_level in _RUNTIME_FORBIDDEN_TOP_LEVEL_IMPORTS:
-                violations.append(
-                    f"{path.relative_to(root).as_posix()}: imports {module}"
-                )
+                violations.append(f"{path.relative_to(root).as_posix()}: imports {module}")
 
     assert violations == []
 
@@ -291,9 +287,7 @@ def test_tests_scripts_and_launchers_do_not_require_portfolio() -> None:
     for path in _python_files(root):
         for module in _imported_modules(path):
             if _top_level_module(module) in _PORTFOLIO_MODULES:
-                violations.append(
-                    f"{path.relative_to(root).as_posix()}: imports {module}"
-                )
+                violations.append(f"{path.relative_to(root).as_posix()}: imports {module}")
 
     forbidden_tokens = ("gf-portfolio", "gf_portfolio", "gfportfolio")
     for path in sorted(root.glob("*.bat")):
@@ -309,9 +303,13 @@ def test_active_project_and_template_are_data_only_extension_boundaries() -> Non
     root = _repository_root()
     violations: list[Path] = []
 
-    for relative_root in ("project", "templates/project"):
-        boundary = root / relative_root
-        assert boundary.is_dir()
+    boundaries = [root / "templates" / "validation-profile"]
+    optional_profile = root / "project"
+    if optional_profile.exists():
+        boundaries.append(optional_profile)
+
+    assert boundaries[0].is_dir()
+    for boundary in boundaries:
         for path in boundary.rglob("*"):
             if path.is_file() and path.suffix.casefold() in _PROJECT_CODE_SUFFIXES:
                 violations.append(path)
@@ -324,22 +322,21 @@ def test_active_project_and_template_are_data_only_extension_boundaries() -> Non
 def test_project_configuration_declares_one_project_and_no_portfolio_registry() -> None:
     root = _repository_root()
 
-    for relative_path in (
-        "project/project.toml",
-        "templates/project/project.toml",
-    ):
-        path = root / relative_path
+    paths = [root / "templates" / "validation-profile" / "project.toml"]
+    optional_profile = root / "project" / "project.toml"
+    if optional_profile.is_file():
+        paths.append(optional_profile)
+
+    for path in paths:
         with path.open("rb") as handle:
             document = tomllib.load(handle)
 
         assert document.get("schema_id") == "gf-wordbench.project"
         assert isinstance(document.get("schema_version"), str)
-        project = document.get("project")
-        assert isinstance(project, Mapping)
-        assert {"id", "name", "language_code", "root"}.issubset(project)
-        assert _all_mapping_keys(document).isdisjoint(
-            _FORBIDDEN_PROJECT_CONFIGURATION_KEYS
-        )
+        profile = document.get("profile", document.get("project"))
+        assert isinstance(profile, Mapping)
+        assert {"id", "name"}.issubset(profile)
+        assert _all_mapping_keys(document).isdisjoint(_FORBIDDEN_PROJECT_CONFIGURATION_KEYS)
 
 
 def test_models_preserve_one_active_project_and_one_target_per_run() -> None:
@@ -349,8 +346,10 @@ def test_models_preserve_one_active_project_and_one_target_per_run() -> None:
     state_fields = _field_names(AppState)
 
     assert "identity" in project_fields
-    assert "project" in request_fields
-    assert {"project", "target"}.issubset(run_fields)
+    assert {"language_context", "validation_profile"}.issubset(request_fields)
+    assert {"language_context", "validation_profile", "target"}.issubset(run_fields)
+    assert "project" not in request_fields
+    assert "project" not in run_fields
 
     for model_fields in (
         project_fields,
@@ -363,14 +362,12 @@ def test_models_preserve_one_active_project_and_one_target_per_run() -> None:
 
 def test_framework_source_does_not_embed_active_language_identity() -> None:
     root = _repository_root()
-    active_identity = frozenset(_active_project_identity(root))
+    active_identity = frozenset(_optional_profile_identity(root))
     violations: list[str] = []
 
     for path in _runtime_python_files(root):
         for value in _string_constants(path):
             if value.casefold() in active_identity:
-                violations.append(
-                    f"{path.relative_to(root).as_posix()}: {value!r}"
-                )
+                violations.append(f"{path.relative_to(root).as_posix()}: {value!r}")
 
     assert violations == []

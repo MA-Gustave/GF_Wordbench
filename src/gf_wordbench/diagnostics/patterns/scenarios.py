@@ -26,9 +26,7 @@ _SCENARIO_OPERATIONS: Final[frozenset[str]] = frozenset(
         "scenario_validation",
     }
 )
-_FRAMEWORK_STATE_STREAMS: Final[frozenset[str]] = frozenset(
-    {"framework-state"}
-)
+_FRAMEWORK_STATE_STREAMS: Final[frozenset[str]] = frozenset({"framework-state"})
 
 _MAX_IDENTIFIER_LENGTH: Final[int] = 256
 _MAX_DETAIL_LENGTH: Final[int] = 2_000
@@ -128,9 +126,7 @@ class ScenarioPatternFacts:
             raise TypeError("missing must be bool")
         if self.valid_script is not None and type(self.valid_script) is not bool:
             raise TypeError("valid_script must be bool or None")
-        if self.existing_script is not None and type(
-            self.existing_script
-        ) is not bool:
+        if self.existing_script is not None and type(self.existing_script) is not bool:
             raise TypeError("existing_script must be bool or None")
         for section_id in self.incomplete_sections:
             _validate_identifier(section_id, field="incomplete section")
@@ -176,9 +172,7 @@ def scenario_pattern_facts(
     explicit_section = _first_text(sources, _SECTION_ID_KEYS)
     if incomplete_flag is True and not incomplete_sections:
         incomplete_sections = (
-            explicit_section
-            if explicit_section is not None
-            else "unknown-section",
+            explicit_section if explicit_section is not None else "unknown-section",
         )
 
     marker_error = _first_text(sources, _MARKER_ERROR_KEYS)
@@ -186,10 +180,7 @@ def scenario_pattern_facts(
     return ScenarioPatternFacts(
         scenario_id=scenario_id,
         scenario_path=scenario_path,
-        required=(
-            required is True
-            or _canonical_required_missing_flag(sources)
-        ),
+        required=(required is True or _canonical_required_missing_flag(sources)),
         missing=missing,
         valid_script=valid_script,
         existing_script=existing_script,
@@ -232,9 +223,7 @@ def match_required_scenario_missing(
         confidence="authoritative",
         message="Required scenario is missing.",
         detail=detail,
-        normalized_signature=(
-            f"{REQUIRED_SCENARIO_MISSING_PATTERN_ID}|{identity}"
-        ),
+        normalized_signature=(f"{REQUIRED_SCENARIO_MISSING_PATTERN_ID}|{identity}"),
         references=_bounded_references(references),
     )
 
@@ -277,8 +266,7 @@ def match_required_section_incomplete(
         message="Required scenario section did not complete.",
         detail=detail,
         normalized_signature=(
-            f"{REQUIRED_SECTION_INCOMPLETE_PATTERN_ID}|"
-            f"{scenario_identity}|{section_id}"
+            f"{REQUIRED_SECTION_INCOMPLETE_PATTERN_ID}|{scenario_identity}|{section_id}"
         ),
         references=_bounded_references(references),
     )
@@ -295,9 +283,7 @@ def get_scenario_pattern(
     try:
         return SCENARIO_PATTERN_BY_ID[pattern_id]
     except KeyError as exc:
-        raise KeyError(
-            f"unknown scenario diagnostic pattern {pattern_id!r}"
-        ) from exc
+        raise KeyError(f"unknown scenario diagnostic pattern {pattern_id!r}") from exc
 
 
 def _new_pattern(
@@ -325,10 +311,7 @@ def _new_pattern(
         "supported_gf_versions": frozenset({"all"}),
         "supported_platforms": frozenset({"all"}),
         "fixtures": (),
-        "notes": (
-            "Authoritative Wordbench framework-state pattern; "
-            "no GF text matching."
-        ),
+        "notes": ("Authoritative Wordbench framework-state pattern; no GF text matching."),
     }
     return _construct_supported(
         DiagnosticPattern,
@@ -408,8 +391,7 @@ def _construct_supported(
         return constructor(**dict(candidates))
 
     accepts_kwargs = any(
-        parameter.kind is Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
+        parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters.values()
     )
 
     if accepts_kwargs:
@@ -418,8 +400,7 @@ def _construct_supported(
         kwargs = {
             name: candidates[name]
             for name in parameters
-            if name in candidates
-            and name not in {"self", "cls"}
+            if name in candidates and name not in {"self", "cls"}
         }
 
     missing: list[str] = []
@@ -438,9 +419,7 @@ def _construct_supported(
 
     if missing:
         rendered = ", ".join(missing)
-        raise TypeError(
-            f"{object_name} requires unsupported fields: {rendered}"
-        )
+        raise TypeError(f"{object_name} requires unsupported fields: {rendered}")
 
     return constructor(**kwargs)
 
@@ -479,11 +458,7 @@ def _resolve_incomplete_sections(
     if not required:
         return ()
 
-    return tuple(
-        section_id
-        for section_id in required
-        if section_id not in completed
-    )
+    return tuple(section_id for section_id in required if section_id not in completed)
 
 
 def _canonical_required_missing_flag(
@@ -560,14 +535,10 @@ def _coerce_text_collection(
     field: str,
 ) -> tuple[str, ...]:
     if isinstance(value, str):
-        item = _coerce_text(value, field=field)
-        return (item,)
+        single_item = _coerce_text(value, field=field)
+        return (single_item,)
     if isinstance(value, Mapping):
-        iterable: Iterable[object] = (
-            key
-            for key, included in value.items()
-            if included is True
-        )
+        iterable: Iterable[object] = (key for key, included in value.items() if included is True)
     elif isinstance(value, Iterable):
         iterable = value
     else:
@@ -577,9 +548,7 @@ def _coerce_text_collection(
     seen: set[str] = set()
     for index, item in enumerate(iterable):
         if index >= _MAX_COLLECTION_ITEMS:
-            raise ValueError(
-                f"{field} exceeds {_MAX_COLLECTION_ITEMS} items"
-            )
+            raise ValueError(f"{field} exceeds {_MAX_COLLECTION_ITEMS} items")
         text = _coerce_text(item, field=f"{field} item")
         _validate_identifier(text, field=f"{field} item")
         if text not in seen:
@@ -631,11 +600,7 @@ def _evidence_path(
 
 
 def _bounded_detail(parts: Sequence[str]) -> str:
-    filtered = [
-        part
-        for part in parts
-        if part
-    ]
+    filtered = [part for part in parts if part]
     value = "; ".join(filtered)
     if len(value) <= _MAX_DETAIL_LENGTH:
         return value
@@ -677,9 +642,7 @@ def _validate_identifier(
 ) -> None:
     _validate_text(value, field=field)
     if len(value) > _MAX_IDENTIFIER_LENGTH:
-        raise ValueError(
-            f"{field} exceeds {_MAX_IDENTIFIER_LENGTH} characters"
-        )
+        raise ValueError(f"{field} exceeds {_MAX_IDENTIFIER_LENGTH} characters")
     if any(character.isspace() for character in value):
         raise ValueError(f"{field} must not contain whitespace")
 
@@ -713,22 +676,18 @@ def _validate_optional_text(
         _validate_text(value, field=field)
 
 
-REQUIRED_SCENARIO_MISSING_PATTERN: Final[DiagnosticPattern] = (
-    _new_pattern(
-        pattern_id=REQUIRED_SCENARIO_MISSING_PATTERN_ID,
-        priority=_REQUIRED_SCENARIO_MISSING_PRIORITY,
-        error_kind="CONFIG",
-        matcher=match_required_scenario_missing,
-    )
+REQUIRED_SCENARIO_MISSING_PATTERN: Final[DiagnosticPattern] = _new_pattern(
+    pattern_id=REQUIRED_SCENARIO_MISSING_PATTERN_ID,
+    priority=_REQUIRED_SCENARIO_MISSING_PRIORITY,
+    error_kind="CONFIG",
+    matcher=match_required_scenario_missing,
 )
 
-REQUIRED_SECTION_INCOMPLETE_PATTERN: Final[DiagnosticPattern] = (
-    _new_pattern(
-        pattern_id=REQUIRED_SECTION_INCOMPLETE_PATTERN_ID,
-        priority=_REQUIRED_SECTION_INCOMPLETE_PRIORITY,
-        error_kind="CONTRACT",
-        matcher=match_required_section_incomplete,
-    )
+REQUIRED_SECTION_INCOMPLETE_PATTERN: Final[DiagnosticPattern] = _new_pattern(
+    pattern_id=REQUIRED_SECTION_INCOMPLETE_PATTERN_ID,
+    priority=_REQUIRED_SECTION_INCOMPLETE_PRIORITY,
+    error_kind="CONTRACT",
+    matcher=match_required_section_incomplete,
 )
 
 SCENARIO_PATTERNS: Final[tuple[DiagnosticPattern, ...]] = (
@@ -736,17 +695,11 @@ SCENARIO_PATTERNS: Final[tuple[DiagnosticPattern, ...]] = (
     REQUIRED_SECTION_INCOMPLETE_PATTERN,
 )
 
-SCENARIO_PATTERN_BY_ID: Final[Mapping[str, DiagnosticPattern]] = (
-    MappingProxyType(
-        {
-            REQUIRED_SCENARIO_MISSING_PATTERN_ID: (
-                REQUIRED_SCENARIO_MISSING_PATTERN
-            ),
-            REQUIRED_SECTION_INCOMPLETE_PATTERN_ID: (
-                REQUIRED_SECTION_INCOMPLETE_PATTERN
-            ),
-        }
-    )
+SCENARIO_PATTERN_BY_ID: Final[Mapping[str, DiagnosticPattern]] = MappingProxyType(
+    {
+        REQUIRED_SCENARIO_MISSING_PATTERN_ID: (REQUIRED_SCENARIO_MISSING_PATTERN),
+        REQUIRED_SECTION_INCOMPLETE_PATTERN_ID: (REQUIRED_SECTION_INCOMPLETE_PATTERN),
+    }
 )
 
 __all__ = (

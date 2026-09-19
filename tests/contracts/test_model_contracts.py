@@ -37,9 +37,7 @@ _MUTABLE_PUBLIC_DATACLASSES: Final[frozenset[str]] = frozenset(
 
 _REQUIRED_PUBLIC_SYMBOLS: Final[Mapping[str, frozenset[str]]] = {
     "gf_wordbench.kernel.serialization": frozenset({"ProducerInfo"}),
-    "gf_wordbench.kernel.events": frozenset(
-        {"EventField", "ProgressEvent", "LifecycleEvent"}
-    ),
+    "gf_wordbench.kernel.events": frozenset({"EventField", "ProgressEvent", "LifecycleEvent"}),
     "gf_wordbench.kernel.errors": frozenset({"ErrorInfo"}),
     "gf_wordbench.config.models": frozenset(
         {
@@ -102,7 +100,7 @@ _REQUIRED_PUBLIC_SYMBOLS: Final[Mapping[str, frozenset[str]]] = {
     ),
     "gf_wordbench.projects.languages.models": frozenset(
         {
-            "LanguagePathKind",
+            "SelectedPathKind",
             "LanguageProbeStatus",
             "LanguageProbeRequest",
             "LanguageCandidate",
@@ -142,9 +140,7 @@ _REQUIRED_PUBLIC_SYMBOLS: Final[Mapping[str, frozenset[str]]] = {
     ),
     "gf_wordbench.runs.models.config": frozenset({"RunConfig"}),
     "gf_wordbench.runs.models.paths": frozenset({"RunPaths"}),
-    "gf_wordbench.runs.models.results": frozenset(
-        {"FileResult", "RunTotals", "RunResult"}
-    ),
+    "gf_wordbench.runs.models.results": frozenset({"FileResult", "RunTotals", "RunResult"}),
     "gf_wordbench.validation.compilation.models": frozenset(
         {
             "CompileTarget",
@@ -251,7 +247,7 @@ _FORBIDDEN_OWNER_DEFINITIONS: Final[Mapping[str, frozenset[str]]] = {
             "ProducerInfo",
             "ValidationMode",
             "TargetKind",
-            "LanguagePathKind",
+            "SelectedPathKind",
             "LanguageProbeStatus",
             "LanguageProbeRequest",
             "LanguageCandidate",
@@ -264,7 +260,7 @@ _FORBIDDEN_OWNER_DEFINITIONS: Final[Mapping[str, frozenset[str]]] = {
         {
             "ProducerInfo",
             "ValidationMode",
-            "LanguagePathKind",
+            "SelectedPathKind",
             "LanguageProbeStatus",
             "LanguageProbeRequest",
             "LanguageCandidate",
@@ -276,9 +272,7 @@ _FORBIDDEN_OWNER_DEFINITIONS: Final[Mapping[str, frozenset[str]]] = {
     "gf_wordbench.infrastructure.process.models": frozenset(
         {"CancellationToken", "ProcessCapture"}
     ),
-    "gf_wordbench.projects.filesystem_adapter": frozenset(
-        {"TreeEntry", "TreeEntryKind"}
-    ),
+    "gf_wordbench.projects.filesystem_adapter": frozenset({"TreeEntry", "TreeEntryKind"}),
     "gf_wordbench.projects.models": frozenset(
         {
             "ProjectValidationReport",
@@ -288,7 +282,7 @@ _FORBIDDEN_OWNER_DEFINITIONS: Final[Mapping[str, frozenset[str]]] = {
             "ProjectMigrationRequest",
             "ProjectMigrationPlan",
             "ProjectMigrationResult",
-            "LanguagePathKind",
+            "SelectedPathKind",
             "LanguageProbeStatus",
             "LanguageProbeRequest",
             "LanguageCandidate",
@@ -359,12 +353,13 @@ def _public_names(tree: ast.Module) -> tuple[str, ...] | None:
         target = node.targets[0] if isinstance(node, ast.Assign) else node.target
         if not isinstance(target, ast.Name) or target.id != "__all__":
             continue
+        assert node.value is not None
         value = ast.literal_eval(node.value)
         if not isinstance(value, tuple | list):
             raise AssertionError("__all__ must be a literal tuple or list")
         if not all(isinstance(item, str) for item in value):
             raise AssertionError("__all__ must contain only strings")
-        return tuple(cast(list[str] | tuple[str, ...], value))
+        return tuple(cast("list[str] | tuple[str, ...]", value))
     return None
 
 
@@ -407,8 +402,7 @@ def _dataclass_options(node: ast.ClassDef) -> tuple[bool, bool] | None:
             is_dataclass_decorator = decorator.func.id == "dataclass"
         else:
             is_dataclass_decorator = (
-                isinstance(decorator.func, ast.Attribute)
-                and decorator.func.attr == "dataclass"
+                isinstance(decorator.func, ast.Attribute) and decorator.func.attr == "dataclass"
             )
         if not is_dataclass_decorator:
             continue
@@ -419,9 +413,7 @@ def _dataclass_options(node: ast.ClassDef) -> tuple[bool, bool] | None:
             if not isinstance(keyword.value, ast.Constant) or not isinstance(
                 keyword.value.value, bool
             ):
-                raise AssertionError(
-                    f"{node.name} must declare literal dataclass options"
-                )
+                raise AssertionError(f"{node.name} must declare literal dataclass options")
             values[keyword.arg] = keyword.value.value
         return values.get("frozen", False), values.get("slots", False)
     return None
@@ -515,13 +507,9 @@ def test_every_literal_public_api_resolves_to_a_module_binding() -> None:
         missing = sorted(set(public_names).difference(_bound_names(tree)))
         module_name = _module_name(path)
         if duplicates:
-            failures.append(
-                f"{module_name} duplicates public names: {', '.join(duplicates)}"
-            )
+            failures.append(f"{module_name} duplicates public names: {', '.join(duplicates)}")
         if missing:
-            failures.append(
-                f"{module_name} exports unbound names: {', '.join(missing)}"
-            )
+            failures.append(f"{module_name} exports unbound names: {', '.join(missing)}")
     assert not failures, "\n".join(failures)
 
 
@@ -581,9 +569,7 @@ def test_registered_contract_symbols_have_only_their_documented_owner() -> None:
         defined = _defined_names(_parse(_module_path(module_name)))
         duplicates = sorted(defined.intersection(forbidden_names))
         if duplicates:
-            failures.append(
-                f"{module_name} redefines owned symbols: {', '.join(duplicates)}"
-            )
+            failures.append(f"{module_name} redefines owned symbols: {', '.join(duplicates)}")
     assert not failures, "\n".join(failures)
 
 
@@ -607,13 +593,16 @@ def test_shared_kernel_model_identity_is_preserved_by_consumers() -> None:
 def test_path_resolved_language_models_have_their_documented_owner() -> None:
     module = import_module("gf_wordbench.projects.languages.models")
     expected_names = (
-        "LanguagePathKind",
-        "LanguageProbeStatus",
-        "LanguageProbeRequest",
         "LanguageCandidate",
+        "LanguageCapability",
+        "LanguageModuleCandidate",
         "LanguageProbeDiagnostic",
-        "ResolvedLanguageContext",
+        "LanguageProbeRequest",
         "LanguageProbeResult",
+        "LanguageProbeSeverity",
+        "LanguageProbeStatus",
+        "ResolvedLanguageContext",
+        "SelectedPathKind",
     )
 
     for name in expected_names:
@@ -625,7 +614,7 @@ def test_path_resolved_language_models_have_their_documented_owner() -> None:
 def test_language_probe_enums_have_exact_locked_values() -> None:
     module = import_module("gf_wordbench.projects.languages.models")
 
-    assert _enum_values(module.LanguagePathKind) == ("directory", "file")
+    assert _enum_values(module.SelectedPathKind) == ("directory", "file")
     assert _enum_values(module.LanguageProbeStatus) == (
         "resolved",
         "needs_user_input",
@@ -691,9 +680,7 @@ def test_configuration_resolution_request_uses_language_context_and_optional_pro
 
 def test_application_state_remembers_paths_without_owning_language_truth() -> None:
     module = import_module("gf_wordbench.state.models")
-    environment_fields = frozenset(
-        field.name for field in fields(module.EnvironmentState)
-    )
+    environment_fields = frozenset(field.name for field in fields(module.EnvironmentState))
 
     assert {
         "last_selected_language_path",
@@ -739,7 +726,7 @@ def test_shared_status_dimensions_have_exact_locked_values() -> None:
             "checkpoint",
             "entrypoint",
             "scenario",
-            "language",
+            "project",
             "regression",
         ),
     }
@@ -760,7 +747,7 @@ def test_producer_info_is_an_immutable_slotted_owner_model() -> None:
     assert type(producer).__module__ == "gf_wordbench.kernel.serialization"
 
     with pytest.raises(FrozenInstanceError):
-        setattr(producer, "name", "other")
+        producer.name = "other"  # type: ignore[misc]
 
 
 def test_run_result_mutability_is_limited_to_the_accepted_adr_models() -> None:
@@ -803,9 +790,9 @@ def test_language_runtime_models_are_not_redefined_by_project_profile_models() -
     project_models = import_module("gf_wordbench.projects.models")
     language_names = frozenset(language_models.__all__)
 
-    assert not language_names.intersection(_defined_names(_parse(_module_path(
-        "gf_wordbench.projects.models"
-    ))))
+    assert not language_names.intersection(
+        _defined_names(_parse(_module_path("gf_wordbench.projects.models")))
+    )
     assert "ResolvedLanguageContext" not in project_models.__all__
 
 
@@ -819,12 +806,8 @@ def test_model_owner_modules_do_not_depend_on_portfolio() -> None:
                 imported = node.module
             elif isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name == "gf_portfolio" or alias.name.startswith(
-                        "gf_portfolio."
-                    ):
-                        failures.append(
-                            f"{_module_name(path)} imports {alias.name}"
-                        )
+                    if alias.name == "gf_portfolio" or alias.name.startswith("gf_portfolio."):
+                        failures.append(f"{_module_name(path)} imports {alias.name}")
             if imported == "gf_portfolio" or (
                 imported is not None and imported.startswith("gf_portfolio.")
             ):

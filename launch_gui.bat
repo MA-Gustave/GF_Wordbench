@@ -2,66 +2,61 @@
 setlocal EnableExtensions DisableDelayedExpansion
 
 rem GF Wordbench GUI launcher.
-rem This wrapper only resolves a Python entrypoint, forwards arguments unchanged,
-rem and returns the exact child-process exit code.
+rem Resolve only the documented GUI entrypoint, forward the original argument
+rem vector unchanged, and return the exact child process exit code.
 
 set "GF_WORDBENCH_ROOT=%~dp0"
 set "GF_WORDBENCH_VENV_SCRIPTS=%GF_WORDBENCH_ROOT%.venv\Scripts"
+set "GF_WORDBENCH_LOCAL_GUI=%GF_WORDBENCH_VENV_SCRIPTS%\gf-wordbench-gui.exe"
+set "GF_WORDBENCH_LOCAL_PYTHONW=%GF_WORDBENCH_VENV_SCRIPTS%\pythonw.exe"
+set "GF_WORDBENCH_LOCAL_PYTHON=%GF_WORDBENCH_VENV_SCRIPTS%\python.exe"
+set "GF_WORDBENCH_EXIT_CODE=0"
 
-if exist "%GF_WORDBENCH_VENV_SCRIPTS%\gf-wordbench-gui.exe" goto run_venv_entrypoint
-if exist "%GF_WORDBENCH_VENV_SCRIPTS%\pythonw.exe" goto run_venv_pythonw
-if exist "%GF_WORDBENCH_VENV_SCRIPTS%\python.exe" goto run_venv_python
+pushd "%GF_WORDBENCH_ROOT%" >nul 2>&1
+if errorlevel 1 goto :repository_error
 
-where gf-wordbench-gui.exe >nul 2>nul
-if not errorlevel 1 goto run_path_entrypoint
+if exist "%GF_WORDBENCH_LOCAL_GUI%" goto :run_local_entrypoint
+if exist "%GF_WORDBENCH_LOCAL_PYTHONW%" goto :run_local_pythonw
+if exist "%GF_WORDBENCH_LOCAL_PYTHON%" goto :run_local_python
 
-where pyw.exe >nul 2>nul
-if not errorlevel 1 goto run_pyw
+where.exe gf-wordbench-gui.exe >nul 2>&1
+if not errorlevel 1 goto :run_path_entrypoint
 
-where pythonw.exe >nul 2>nul
-if not errorlevel 1 goto run_pythonw
+goto :environment_error
 
-where py.exe >nul 2>nul
-if not errorlevel 1 goto run_py
+:run_local_entrypoint
+"%GF_WORDBENCH_LOCAL_GUI%" %*
+set "GF_WORDBENCH_EXIT_CODE=%ERRORLEVEL%"
+goto :finish
 
-where python.exe >nul 2>nul
-if not errorlevel 1 goto run_python
+:run_local_pythonw
+"%GF_WORDBENCH_LOCAL_PYTHONW%" -m gf_wordbench.entrypoints.gui.main %*
+set "GF_WORDBENCH_EXIT_CODE=%ERRORLEVEL%"
+goto :finish
 
-echo GF Wordbench GUI could not be started. 1>&2
-echo No repository virtual environment, installed gf-wordbench-gui command, 1>&2
-echo or supported Python interpreter was found. 1>&2
-echo Install the project with: 1>&2
-echo   py -m pip install -e "%GF_WORDBENCH_ROOT%[dev]" 1>&2
-exit /b 3
-
-:run_venv_entrypoint
-"%GF_WORDBENCH_VENV_SCRIPTS%\gf-wordbench-gui.exe" %*
-exit /b %errorlevel%
-
-:run_venv_pythonw
-"%GF_WORDBENCH_VENV_SCRIPTS%\pythonw.exe" -m gf_wordbench.entrypoints.gui.main %*
-exit /b %errorlevel%
-
-:run_venv_python
-"%GF_WORDBENCH_VENV_SCRIPTS%\python.exe" -m gf_wordbench.entrypoints.gui.main %*
-exit /b %errorlevel%
+:run_local_python
+"%GF_WORDBENCH_LOCAL_PYTHON%" -m gf_wordbench.entrypoints.gui.main %*
+set "GF_WORDBENCH_EXIT_CODE=%ERRORLEVEL%"
+goto :finish
 
 :run_path_entrypoint
 gf-wordbench-gui.exe %*
-exit /b %errorlevel%
+set "GF_WORDBENCH_EXIT_CODE=%ERRORLEVEL%"
+goto :finish
 
-:run_pyw
-pyw.exe -3 -m gf_wordbench.entrypoints.gui.main %*
-exit /b %errorlevel%
+:environment_error
+>&2 echo ERROR: GF Wordbench GUI environment is unavailable.
+>&2 echo Expected local executable: "%GF_WORDBENCH_LOCAL_GUI%"
+>&2 echo Expected local interpreter: "%GF_WORDBENCH_LOCAL_PYTHONW%"
+>&2 echo Install the project into ".venv" or make gf-wordbench-gui.exe available on PATH.
+set "GF_WORDBENCH_EXIT_CODE=9009"
+goto :finish
 
-:run_pythonw
-pythonw.exe -m gf_wordbench.entrypoints.gui.main %*
-exit /b %errorlevel%
+:repository_error
+>&2 echo ERROR: GF Wordbench GUI cannot access its repository directory.
+>&2 echo Repository directory: "%GF_WORDBENCH_ROOT%"
+exit /b 3
 
-:run_py
-py.exe -3 -m gf_wordbench.entrypoints.gui.main %*
-exit /b %errorlevel%
-
-:run_python
-python.exe -m gf_wordbench.entrypoints.gui.main %*
-exit /b %errorlevel%
+:finish
+popd
+exit /b %GF_WORDBENCH_EXIT_CODE%

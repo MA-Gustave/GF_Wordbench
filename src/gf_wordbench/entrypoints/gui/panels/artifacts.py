@@ -10,7 +10,7 @@ from types import MappingProxyType
 from typing import Final
 
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QGridLayout,
@@ -182,9 +182,7 @@ class ArtifactsPanelState:
             raise ValueError("artifact item IDs must be unique")
         for action in _CORE_ACTION_ORDER:
             if sum(item.action is action for item in self.items) > 1:
-                raise ValueError(
-                    f"core artifact action {action.value!r} must be unique"
-                )
+                raise ValueError(f"core artifact action {action.value!r} must be unique")
         integrity_message = _require_text(
             self.integrity_message,
             field="integrity_message",
@@ -205,7 +203,7 @@ class ArtifactsPanelState:
         return next((item for item in self.items if item.action is action), None)
 
 
-PathOpener = Callable[[Path], bool]
+PathOpener = Callable[[Path], object]
 
 
 class ArtifactsPanel(QWidget):
@@ -263,8 +261,8 @@ class ArtifactsPanel(QWidget):
         self.availability_changed.emit()
 
     def selected_item(self) -> ArtifactLink | None:
-        current = self._tree.currentItem()
-        if current is None:
+        current: object = self._tree.currentItem()
+        if not isinstance(current, QTreeWidgetItem):
             return None
         item_id = current.data(0, _ITEM_ID_ROLE)
         if not isinstance(item_id, str):
@@ -347,9 +345,7 @@ class ArtifactsPanel(QWidget):
         )
         self._run_label = QLabel("No completed run loaded", self)
         self._run_label.setObjectName("artifactsRunLabel")
-        self._run_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self._run_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         header.addWidget(self._title)
         header.addWidget(self._run_label)
         root.addLayout(header)
@@ -357,9 +353,7 @@ class ArtifactsPanel(QWidget):
         self._integrity_label = QLabel(self)
         self._integrity_label.setObjectName("artifactsIntegrityLabel")
         self._integrity_label.setWordWrap(True)
-        self._integrity_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self._integrity_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         root.addWidget(self._integrity_label)
 
         core_group = QGroupBox("Primary artifacts", self)
@@ -374,9 +368,7 @@ class ArtifactsPanel(QWidget):
             button.setObjectName(f"artifactAction_{action.value}")
             button.setAccessibleName(_ACTION_LABELS[action])
             button.clicked.connect(
-                lambda checked=False, selected_action=action: self.open_action(
-                    selected_action
-                )
+                lambda checked=False, selected_action=action: self.open_action(selected_action)
             )
             row, column = divmod(index, 2)
             core_layout.addWidget(button, row, column)
@@ -392,12 +384,8 @@ class ArtifactsPanel(QWidget):
         self._tree.setRootIsDecorated(False)
         self._tree.setAlternatingRowColors(True)
         self._tree.setUniformRowHeights(True)
-        self._tree.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows
-        )
-        self._tree.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection
-        )
+        self._tree.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._tree.setSortingEnabled(False)
         self._tree.header().setSectionResizeMode(
@@ -431,9 +419,7 @@ class ArtifactsPanel(QWidget):
         self._notice = QLabel(self)
         self._notice.setObjectName("artifactsNotice")
         self._notice.setWordWrap(True)
-        self._notice.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self._notice.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         root.addWidget(self._notice)
 
     def _render(self) -> None:
@@ -463,11 +449,7 @@ class ArtifactsPanel(QWidget):
         self._tree.clear()
         self._tree_items.clear()
 
-        items = tuple(
-            item
-            for item in self._state.items
-            if item.action not in _CORE_ACTION_ORDER
-        )
+        items = tuple(item for item in self._state.items if item.action not in _CORE_ACTION_ORDER)
         ordered = sorted(items, key=_artifact_sort_key)
         visible = ordered[:_MAX_VISIBLE_ITEMS]
 
@@ -510,12 +492,10 @@ class ArtifactsPanel(QWidget):
             row.setIcon(0, self._icon_for(item))
 
         selected = self.selected_item()
-        self._open_selected_button.setEnabled(
-            selected is not None and selected.available
-        )
+        self._open_selected_button.setEnabled(selected is not None and selected.available)
         self._refresh_button.setEnabled(bool(self._state.items))
 
-    def _icon_for(self, item: ArtifactLink):
+    def _icon_for(self, item: ArtifactLink) -> QIcon:
         if not item.available:
             return self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
         if item.target_kind is ArtifactTargetKind.DIRECTORY:
@@ -530,9 +510,7 @@ class ArtifactsPanel(QWidget):
 
     def _on_selection_changed(self) -> None:
         selected = self.selected_item()
-        self._open_selected_button.setEnabled(
-            selected is not None and selected.available
-        )
+        self._open_selected_button.setEnabled(selected is not None and selected.available)
         self.selection_changed.emit(selected)
 
     def _report_unavailable(self, label: str, message: str) -> None:

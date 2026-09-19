@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import threading
 from datetime import UTC, datetime, timedelta, timezone
+import threading
 from typing import Final
 
 import pytest
@@ -409,12 +409,8 @@ def test_constructor_requires_callable_clocks() -> None:
 
 def test_structural_state_reader_accepts_both_canonical_interfaces() -> None:
     assert cancellation_requested(None) is False
-    assert cancellation_requested(
-        _ApplicationCancellationSource(requested=True)
-    ) is True
-    assert cancellation_requested(
-        _ProcessCancellationToken(cancelled=False)
-    ) is False
+    assert cancellation_requested(_ApplicationCancellationSource(requested=True)) is True
+    assert cancellation_requested(_ProcessCancellationToken(cancelled=False)) is False
 
 
 def test_application_state_method_takes_precedence_over_process_alias() -> None:
@@ -433,28 +429,30 @@ def test_structural_state_reader_rejects_missing_or_invalid_methods() -> None:
         cancellation_requested(object())
 
     with pytest.raises(TypeError, match="must return bool"):
-        cancellation_requested(
-            _ApplicationCancellationSource(requested=1)
-        )
+        cancellation_requested(_ApplicationCancellationSource(requested=1))
 
 
 def test_structural_reason_reader_accepts_methods_properties_and_none() -> None:
     assert cancellation_reason(None) is None
-    assert cancellation_reason(
-        _ApplicationCancellationSource(
-            requested=True,
-            reason="application_shutdown",
+    assert (
+        cancellation_reason(
+            _ApplicationCancellationSource(
+                requested=True,
+                reason="application_shutdown",
+            )
         )
-    ) == "application_shutdown"
-    assert cancellation_reason(
-        _ProcessCancellationToken(
-            cancelled=True,
-            reason=CancellationReason.OUTPUT_LIMIT,
-        )
-    ) == "output_limit"
-    assert cancellation_reason(_PropertyReasonSource("controller_policy")) == (
-        "controller_policy"
+        == "application_shutdown"
     )
+    assert (
+        cancellation_reason(
+            _ProcessCancellationToken(
+                cancelled=True,
+                reason=CancellationReason.OUTPUT_LIMIT,
+            )
+        )
+        == "output_limit"
+    )
+    assert cancellation_reason(_PropertyReasonSource("controller_policy")) == ("controller_policy")
 
 
 def test_application_reason_method_takes_precedence_over_process_alias() -> None:
@@ -478,9 +476,7 @@ def test_structural_reason_reader_validates_returned_reason() -> None:
 
 def test_generic_raise_helper_is_a_noop_without_cancellation() -> None:
     raise_if_cancellation_requested(None)
-    raise_if_cancellation_requested(
-        _ApplicationCancellationSource(requested=False, reason="user")
-    )
+    raise_if_cancellation_requested(_ApplicationCancellationSource(requested=False, reason="user"))
 
 
 def test_generic_raise_helper_builds_the_canonical_exception() -> None:
@@ -515,9 +511,7 @@ def test_generic_raise_helper_records_missing_reason_explicitly() -> None:
     with pytest.raises(CancellationRequested) as captured:
         raise_if_cancellation_requested(source)
 
-    assert captured.value.detail == (
-        "Cancellation was accepted without a supplied reason."
-    )
+    assert captured.value.detail == ("Cancellation was accepted without a supplied reason.")
 
 
 @pytest.mark.parametrize(

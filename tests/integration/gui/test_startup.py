@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import ast
-import importlib
-import sys
-import tomllib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
+import importlib
 from pathlib import Path
+import tomllib
 from types import ModuleType
 from typing import Any, Final
 
@@ -18,7 +17,8 @@ GUI_MODULE: Final = "gf_wordbench.entrypoints.gui.main"
 BOOTSTRAP_MODULE: Final = "gf_wordbench.bootstrap"
 GUI_SCRIPT_NAME: Final = "gf-wordbench-gui"
 GUI_SCRIPT_TARGET: Final = f"{GUI_MODULE}:main"
-STARTUP_RUNTIME_FACTORY: Final = "build_startup_gui_runtime"
+STARTUP_RUNTIME_FACTORY: Final = "build_gui_startup_runtime"
+STARTUP_ARGUMENTS: Final = (GUI_SCRIPT_NAME, "--startup-smoke-test")
 QT_SUCCESS_EXIT_CODE: Final = 0
 QT_FAILURE_EXIT_CODE: Final = 23
 
@@ -90,10 +90,16 @@ class _FakeIntroductionWindow:
 @dataclass(slots=True)
 class _FakeStartupRuntime:
     events: list[str]
+    start_error: BaseException | None = None
     window: _FakeIntroductionWindow = field(init=False)
 
     def __post_init__(self) -> None:
         self.window = _FakeIntroductionWindow(self.events)
+
+    def start(self) -> None:
+        self.events.append("start_startup_runtime")
+        if self.start_error is not None:
+            raise self.start_error
 
     def shutdown(self) -> None:
         self.events.append("shutdown_startup_runtime")
@@ -189,35 +195,26 @@ def _patch_startup_runtime_builder(
 
     bootstrap = _load_bootstrap_module()
 
-    def build_startup_gui_runtime(
+    def build_gui_startup_runtime(
         provided_application: object,
+        argv: tuple[str, ...] = (),
     ) -> _FakeStartupRuntime:
         assert provided_application is application
+        assert tuple(argv) == STARTUP_ARGUMENTS
         events.append("build_startup_runtime")
         return factory()
 
     monkeypatch.setattr(
         bootstrap,
         STARTUP_RUNTIME_FACTORY,
-        build_startup_gui_runtime,
+        build_gui_startup_runtime,
         raising=True,
     )
 
 
-def _invoke_main(
-    monkeypatch: pytest.MonkeyPatch,
-    module: ModuleType,
-) -> int:
-    main = getattr(module, "main")
-    arguments = [GUI_SCRIPT_NAME, "--startup-smoke-test"]
-
-    try:
-        value = main(argv=arguments)
-    except TypeError as exc:
-        if "argv" not in str(exc):
-            raise
-        monkeypatch.setattr(sys, "argv", arguments)
-        value = main()
+def _invoke_main(module: ModuleType) -> int:
+    main = module.main
+    value = main(argv=list(STARTUP_ARGUMENTS))
 
     assert isinstance(value, int) and not isinstance(value, bool)
     return value
@@ -245,21 +242,19 @@ def test_distribution_declares_the_canonical_gui_entrypoint() -> None:
 
 
 def test_importing_the_gui_entrypoint_does_not_eagerly_import_qt() -> None:
-    module_path = (
-        _repository_root()
-        / "src"
-        / "gf_wordbench"
-        / "entrypoints"
-        / "gui"
-        / "main.py"
-    )
+    module_path = _repository_root() / "src" / "gf_wordbench" / "entrypoints" / "gui" / "main.py"
 
     imported_modules = tuple(_top_level_imports(module_path))
 
-    assert not any(
-        name == "PySide6" or name.startswith("PySide6.")
-        for name in imported_modules
-    )
+    assert not any(name == "PySide6" or name.startswith("PySide6.") for name in imported_modules)
+
+
+def test_bootstrap_exposes_only_the_canonical_startup_runtime_factory() -> None:
+    bootstrap = _load_bootstrap_module()
+
+    assert callable(getattr(bootstrap, STARTUP_RUNTIME_FACTORY))
+    assert not hasattr(bootstrap, "build_gui_runtime")
+    assert not hasattr(bootstrap, "build_startup_gui_runtime")
 
 
 def test_default_factory_uses_the_startup_runtime_bootstrap_contract(
@@ -271,19 +266,23 @@ def test_default_factory_uses_the_startup_runtime_bootstrap_contract(
     application = _FakeApplication(events)
     runtime = _FakeStartupRuntime(events)
 
-    def build_startup_gui_runtime(provided_application: object) -> object:
+    def build_gui_startup_runtime(
+        provided_application: object,
+        argv: tuple[str, ...] = (),
+    ) -> object:
         assert provided_application is application
+        assert tuple(argv) == STARTUP_ARGUMENTS
         events.append("build_startup_runtime")
         return runtime
 
     monkeypatch.setattr(
         bootstrap,
         STARTUP_RUNTIME_FACTORY,
-        build_startup_gui_runtime,
+        build_gui_startup_runtime,
         raising=True,
     )
 
-    actual = module._default_runtime_factory(application)
+    actual = module._default_runtime_factory(application, STARTUP_ARGUMENTS)
 
     assert actual is runtime
     assert events == ["build_startup_runtime"]
@@ -312,27 +311,19 @@ def test_headless_startup_shows_introduction_runs_and_shuts_down(
         factory=lambda: runtime,
     )
 
-    exit_code = _invoke_main(monkeypatch, module)
+    exit_code = _invoke_main(module)
 
     assert exit_code == module.EXIT_OK
     assert reporter.reports == []
-    assert events.index("create_application") < events.index(
-        "configure_application"
-    )
-    assert events.index("configure_application") < events.index(
-        "build_startup_runtime"
-    )
-    assert events.index("build_startup_runtime") < events.index(
-        "show_introduction"
-    )
+    assert events.index("create_application") < events.index("configure_application")
+    assert events.index("configure_application") < events.index("build_startup_runtime")
+    assert events.index("build_startup_runtime") < events.index("start_startup_runtime")
+    assert events.index("start_startup_runtime") < events.index("show_introduction")
     assert events.index("show_introduction") < events.index("event_loop")
-    assert events.index("event_loop") < events.index(
-        "shutdown_startup_runtime"
-    )
-    assert events.index("shutdown_startup_runtime") < events.index(
-        "restore_hooks"
-    )
+    assert events.index("event_loop") < events.index("shutdown_startup_runtime")
+    assert events.index("shutdown_startup_runtime") < events.index("restore_hooks")
     assert events.count("event_loop") == 1
+    assert events.count("start_startup_runtime") == 1
     assert events.count("show_introduction") == 1
     assert events.count("shutdown_startup_runtime") == 1
 
@@ -361,12 +352,13 @@ def test_existing_qapplication_shows_introduction_without_nested_event_loop(
         factory=lambda: runtime,
     )
 
-    exit_code = _invoke_main(monkeypatch, module)
+    exit_code = _invoke_main(module)
 
     assert exit_code == module.EXIT_OK
     assert reporter.reports == []
-    assert "show_introduction" in events
+    assert events.index("start_startup_runtime") < events.index("show_introduction")
     assert "event_loop" not in events
+    assert events.count("start_startup_runtime") == 1
     assert events.count("shutdown_startup_runtime") == 1
     assert events[-1] == "restore_hooks"
 
@@ -397,11 +389,12 @@ def test_nonzero_qt_exit_is_mapped_to_runtime_error(
         factory=lambda: runtime,
     )
 
-    exit_code = _invoke_main(monkeypatch, module)
+    exit_code = _invoke_main(module)
 
     assert exit_code == module.EXIT_RUNTIME_ERROR
     assert reporter.reports == []
     assert events.count("event_loop") == 1
+    assert events.count("start_startup_runtime") == 1
     assert events.count("shutdown_startup_runtime") == 1
 
 
@@ -431,11 +424,47 @@ def test_startup_failure_is_reported_and_hooks_are_restored(
         factory=failing_runtime_factory,
     )
 
-    exit_code = _invoke_main(monkeypatch, module)
+    exit_code = _invoke_main(module)
 
     assert exit_code == module.EXIT_RUNTIME_ERROR
     assert reporter.reports == [failure]
+    assert "start_startup_runtime" not in events
     assert "event_loop" not in events
     assert "show_introduction" not in events
     assert "shutdown_startup_runtime" not in events
+    assert events[-1] == "restore_hooks"
+
+
+def test_runtime_start_failure_is_reported_and_runtime_is_shut_down(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_gui_module()
+    events: list[str] = []
+    application = _FakeApplication(events)
+    reporter = _Reporter(events)
+    failure = RuntimeError("simulated startup-runtime start failure")
+    runtime = _FakeStartupRuntime(events, start_error=failure)
+
+    _patch_process_seams(
+        monkeypatch,
+        module,
+        application=application,
+        reporter=reporter,
+        events=events,
+    )
+    _patch_startup_runtime_builder(
+        monkeypatch,
+        application=application,
+        events=events,
+        factory=lambda: runtime,
+    )
+
+    exit_code = _invoke_main(module)
+
+    assert exit_code == module.EXIT_RUNTIME_ERROR
+    assert reporter.reports == [failure]
+    assert events.count("start_startup_runtime") == 1
+    assert "show_introduction" not in events
+    assert "event_loop" not in events
+    assert events.count("shutdown_startup_runtime") == 1
     assert events[-1] == "restore_hooks"

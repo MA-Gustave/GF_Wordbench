@@ -17,7 +17,7 @@ from gf_wordbench.projects.models import (
 )
 from gf_wordbench.projects.policies import REQUIRED_PROJECT_ASSETS
 from gf_wordbench.projects.public import check_project, load_project_config
-from gf_wordbench.projects.schema import parse_project_document
+from gf_wordbench.projects.schema import ProjectDocument, parse_project_document
 from gf_wordbench.projects.validator import ProjectValidator, ensure_project_valid
 
 
@@ -43,7 +43,7 @@ class _RecordingValidator:
         return ProjectValidationResult()
 
 
-def _project_document() -> dict[str, object]:
+def _project_document() -> ProjectDocument:
     return {
         "schema_id": "gf-wordbench.project",
         "schema_version": "1.0",
@@ -122,7 +122,7 @@ def test_load_project_config_coordinates_reader_schema_and_validator(
     project_file = tmp_path / "project" / "project.toml"
     reader = _RecordingReader(_project_document())
     recording_validator = _RecordingValidator()
-    validator = cast(ProjectValidator, recording_validator)
+    validator = cast("ProjectValidator", recording_validator)
 
     project = load_project_config(
         project_file,
@@ -143,7 +143,7 @@ def test_load_project_config_coordinates_reader_schema_and_validator(
 def test_load_project_config_rejects_relative_path_before_reading() -> None:
     reader = _RecordingReader(_project_document())
     recording_validator = _RecordingValidator()
-    validator = cast(ProjectValidator, recording_validator)
+    validator = cast("ProjectValidator", recording_validator)
 
     with pytest.raises(
         ProjectConfigurationError,
@@ -203,12 +203,7 @@ def test_missing_optional_scenario_is_warning_not_failure(
     tmp_path: Path,
 ) -> None:
     project = _materialize_project(tmp_path / "project")
-    optional_scenario = (
-        project.project_root
-        / "validation"
-        / "scenarios"
-        / "optional.gfs"
-    )
+    optional_scenario = project.project_root / "validation" / "scenarios" / "optional.gfs"
     optional_scenario.unlink()
 
     result = check_project(
@@ -219,9 +214,7 @@ def test_missing_optional_scenario_is_warning_not_failure(
 
     assert result.ok
     assert result.errors == ()
-    assert tuple(item.code for item in result.warnings) == (
-        "PROJECT_SCENARIO_MISSING",
-    )
+    assert tuple(item.code for item in result.warnings) == ("PROJECT_SCENARIO_MISSING",)
     assert result.warnings[0].subject == optional_scenario
 
 
@@ -229,12 +222,7 @@ def test_missing_required_scenario_is_error(
     tmp_path: Path,
 ) -> None:
     project = _materialize_project(tmp_path / "project")
-    required_scenario = (
-        project.project_root
-        / "validation"
-        / "scenarios"
-        / "smoke.gfs"
-    )
+    required_scenario = project.project_root / "validation" / "scenarios" / "smoke.gfs"
     required_scenario.unlink()
 
     result = check_project(
@@ -244,9 +232,7 @@ def test_missing_required_scenario_is_error(
     )
 
     assert not result.ok
-    assert tuple(item.code for item in result.errors) == (
-        "PROJECT_SCENARIO_MISSING",
-    )
+    assert tuple(item.code for item in result.errors) == ("PROJECT_SCENARIO_MISSING",)
     assert result.errors[0].subject == required_scenario
 
 
@@ -273,8 +259,7 @@ def test_strict_check_reports_unresolved_project_placeholder(
     assert normal.ok
     assert not strict.ok
     assert any(
-        item.code == "PROJECT_PLACEHOLDER_UNRESOLVED"
-        and item.subject == contract
+        item.code == "PROJECT_PLACEHOLDER_UNRESOLVED" and item.subject == contract
         for item in strict.errors
     )
 

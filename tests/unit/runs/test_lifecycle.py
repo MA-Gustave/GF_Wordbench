@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta, timezone
+from typing import Callable, cast
 
 import pytest
 
+from gf_wordbench.kernel.ids import RunId
 from gf_wordbench.runs.lifecycle import (
     ALLOWED_LIFECYCLE_TRANSITIONS,
     RunLifecycle,
@@ -19,7 +21,7 @@ from gf_wordbench.runs.lifecycle import (
     transition_lifecycle,
 )
 
-_RUN_ID = "20260725_120000"
+_RUN_ID = RunId("20260725_120000")
 _ALLOCATED_AT = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
 
 _EXPECTED_TRANSITIONS = {
@@ -146,9 +148,7 @@ def test_transition_graph_is_complete_and_read_only() -> None:
         assert all(can_transition_lifecycle(state, target) for target in expected_targets)
 
     with pytest.raises(TypeError):
-        ALLOWED_LIFECYCLE_TRANSITIONS[
-            RunLifecycleState.ALLOCATED
-        ] = frozenset()  # type: ignore[index]
+        ALLOWED_LIFECYCLE_TRANSITIONS[RunLifecycleState.ALLOCATED] = frozenset()  # type: ignore[index]
 
 
 def test_new_lifecycle_normalizes_timestamp_and_preserves_identity() -> None:
@@ -238,7 +238,7 @@ def test_same_state_is_allowed_but_not_listed_as_an_outgoing_target() -> None:
     for state in RunLifecycleState:
         assert can_transition_lifecycle(state, state)
         assert state not in allowed_lifecycle_targets(state)
-        assert require_lifecycle_transition(state, state) is None
+        require_lifecycle_transition(state, state)
 
 
 def test_incomplete_transition_requires_and_normalizes_a_reason() -> None:
@@ -372,7 +372,7 @@ def test_equal_transition_timestamps_are_allowed_and_remain_monotonic() -> None:
     ("factory", "expected_exception", "message"),
     (
         (
-            lambda: new_run_lifecycle(_RUN_ID, allocated_at="now"),
+            lambda: new_run_lifecycle(_RUN_ID, allocated_at=cast(datetime, "now")),
             TypeError,
             "allocated_at must be a datetime",
         ),
@@ -388,7 +388,7 @@ def test_equal_transition_timestamps_are_allowed_and_remain_monotonic() -> None:
             lambda: transition_lifecycle(
                 new_run_lifecycle(_RUN_ID, allocated_at=_ALLOCATED_AT),
                 RunLifecycleState.INITIALIZED,
-                occurred_at="later",
+                occurred_at=cast(datetime, "later"),
             ),
             TypeError,
             "occurred_at must be a datetime",
@@ -405,12 +405,12 @@ def test_equal_transition_timestamps_are_allowed_and_remain_monotonic() -> None:
     ),
 )
 def test_timestamp_inputs_are_explicit_and_timezone_aware(
-    factory: object,
+    factory: Callable[[], object],
     expected_exception: type[Exception],
     message: str,
 ) -> None:
     with pytest.raises(expected_exception, match=message):
-        factory()  # type: ignore[operator]
+        factory()
 
 
 @pytest.mark.parametrize(
@@ -597,7 +597,7 @@ def test_lifecycle_rejects_noncontiguous_revisions() -> None:
 
 def test_lifecycle_rejects_history_from_another_run() -> None:
     transition = RunLifecycleTransition(
-        run_id="20260725_120001",
+        run_id=RunId("20260725_120001"),
         previous=RunLifecycleState.ALLOCATED,
         current=RunLifecycleState.INITIALIZED,
         occurred_at=_at(1),

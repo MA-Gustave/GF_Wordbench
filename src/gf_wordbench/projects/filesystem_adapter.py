@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import codecs
-import hashlib
-import os
-import shutil
-import stat
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+import hashlib
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import shutil
+import stat
 from typing import TYPE_CHECKING, Final
 
 from gf_wordbench.infrastructure.atomic_io import atomic_write_text
@@ -63,9 +63,7 @@ class ProjectFilesystemAdapter:
             raise ValueError("path must identify an entry below root")
 
         if not _within(resolved_path, resolved_root):
-            raise ValueError(
-                f"path escapes the permitted root: {resolved_path!s}"
-            )
+            raise ValueError(f"path escapes the permitted root: {resolved_path!s}")
 
         return resolved_path
 
@@ -146,44 +144,25 @@ class ProjectFilesystemAdapter:
         expected = _scan_tree(source_root, include_hashes=True)
 
         actual_links = {
-            entry.relative_path
-            for entry in expected
-            if entry.kind is TreeEntryKind.SYMLINK
+            entry.relative_path for entry in expected if entry.kind is TreeEntryKind.SYMLINK
         }
         unsupported = tuple(
-            entry.relative_path
-            for entry in expected
-            if entry.kind is TreeEntryKind.OTHER
+            entry.relative_path for entry in expected if entry.kind is TreeEntryKind.OTHER
         )
 
         if unsupported:
-            paths = ", ".join(
-                path.as_posix()
-                for path in unsupported
-            )
-            raise OSError(
-                f"unsupported filesystem entries: {paths}"
-            )
+            paths = ", ".join(path.as_posix() for path in unsupported)
+            raise OSError(f"unsupported filesystem entries: {paths}")
 
         unapproved_links = actual_links - approved_links
         if unapproved_links:
-            paths = ", ".join(
-                path.as_posix()
-                for path in _sorted_relative_paths(unapproved_links)
-            )
-            raise OSError(
-                f"unapproved links in source tree: {paths}"
-            )
+            paths = ", ".join(path.as_posix() for path in _sorted_relative_paths(unapproved_links))
+            raise OSError(f"unapproved links in source tree: {paths}")
 
         missing_links = approved_links - actual_links
         if missing_links:
-            paths = ", ".join(
-                path.as_posix()
-                for path in _sorted_relative_paths(missing_links)
-            )
-            raise ValueError(
-                f"approved links not found in source tree: {paths}"
-            )
+            paths = ", ".join(path.as_posix() for path in _sorted_relative_paths(missing_links))
+            raise ValueError(f"approved links not found in source tree: {paths}")
 
         try:
             shutil.copytree(
@@ -198,9 +177,7 @@ class ProjectFilesystemAdapter:
                 include_hashes=True,
             )
             if observed != expected:
-                raise OSError(
-                    "copied tree does not match its source"
-                )
+                raise OSError("copied tree does not match its source")
         except BaseException:
             if os.path.lexists(destination_root):
                 _remove_entry(destination_root)
@@ -232,17 +209,13 @@ class ProjectFilesystemAdapter:
             staged_path,
             active_path.parent,
         ):
-            raise OSError(
-                "staged and active paths must be on the same filesystem"
-            )
+            raise OSError("staged and active paths must be on the same filesystem")
 
         if not _same_filesystem(
             active_path.parent,
             rollback_path.parent,
         ):
-            raise OSError(
-                "active and rollback paths must be on the same filesystem"
-            )
+            raise OSError("active and rollback paths must be on the same filesystem")
 
         active_existed = os.path.lexists(active_path)
 
@@ -286,9 +259,7 @@ class ProjectFilesystemAdapter:
             rollback_path,
             active_path.parent,
         ):
-            raise OSError(
-                "rollback and active paths must be on the same filesystem"
-            )
+            raise OSError("rollback and active paths must be on the same filesystem")
 
         if os.path.lexists(active_path):
             _directory(active_path)
@@ -309,9 +280,7 @@ class ProjectFilesystemAdapter:
     ) -> str:
         """Read one regular text file without following a link."""
 
-        return _regular_file(path).read_text(
-            encoding=_encoding(encoding)
-        )
+        return _regular_file(path).read_text(encoding=_encoding(encoding))
 
     def write_text_atomic(
         self,
@@ -328,9 +297,7 @@ class ProjectFilesystemAdapter:
         if not isinstance(content, str):
             raise TypeError("content must be a string")
         if "\x00" in content:
-            raise ValueError(
-                "content must not contain NUL characters"
-            )
+            raise ValueError("content must not contain NUL characters")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a bool")
 
@@ -339,18 +306,11 @@ class ProjectFilesystemAdapter:
 
         if os.path.lexists(destination):
             if not overwrite:
-                raise FileExistsError(
-                    os.fspath(destination)
-                )
+                raise FileExistsError(os.fspath(destination))
             if _is_link(destination):
-                raise OSError(
-                    "atomic-write destination must not be a link: "
-                    f"{destination}"
-                )
+                raise OSError(f"atomic-write destination must not be a link: {destination}")
             if destination.is_dir():
-                raise IsADirectoryError(
-                    os.fspath(destination)
-                )
+                raise IsADirectoryError(os.fspath(destination))
 
         atomic_write_text(
             destination,
@@ -373,11 +333,7 @@ def _scan_tree(
         include_hashes=include_hashes,
         output=output,
     )
-    output.sort(
-        key=lambda entry: _relative_sort_key(
-            entry.relative_path
-        )
-    )
+    output.sort(key=lambda entry: _relative_sort_key(entry.relative_path))
     return tuple(output)
 
 
@@ -396,9 +352,7 @@ def _scan_directory(
 
     for child in children:
         path = Path(child.path)
-        relative_path = Path(
-            path.relative_to(root).as_posix()
-        )
+        relative_path = Path(path.relative_to(root).as_posix())
         metadata = os.lstat(path)
 
         if _is_link(path):
@@ -434,11 +388,7 @@ def _scan_directory(
                     relative_path=relative_path,
                     kind=TreeEntryKind.FILE,
                     size_bytes=metadata.st_size,
-                    sha256=(
-                        _sha256(path)
-                        if include_hashes
-                        else None
-                    ),
+                    sha256=(_sha256(path) if include_hashes else None),
                 )
             )
             continue
@@ -454,19 +404,13 @@ def _scan_directory(
 
 def _absolute_path(path: Path) -> Path:
     if not isinstance(path, Path):
-        raise TypeError(
-            "path must be a pathlib.Path"
-        )
+        raise TypeError("path must be a pathlib.Path")
 
     text = os.fspath(path)
     if "\x00" in text:
-        raise ValueError(
-            "path must not contain NUL characters"
-        )
+        raise ValueError("path must not contain NUL characters")
     if not path.is_absolute():
-        raise ValueError(
-            f"path must be absolute: {path}"
-        )
+        raise ValueError(f"path must be absolute: {path}")
 
     return Path(os.path.normpath(text))
 
@@ -477,16 +421,10 @@ def _directory(path: Path) -> Path:
     try:
         metadata = os.lstat(checked)
     except FileNotFoundError:
-        raise FileNotFoundError(
-            os.fspath(checked)
-        ) from None
+        raise FileNotFoundError(os.fspath(checked)) from None
 
-    if _is_link(checked) or not stat.S_ISDIR(
-        metadata.st_mode
-    ):
-        raise NotADirectoryError(
-            os.fspath(checked)
-        )
+    if _is_link(checked) or not stat.S_ISDIR(metadata.st_mode):
+        raise NotADirectoryError(os.fspath(checked))
 
     return checked
 
@@ -497,25 +435,17 @@ def _regular_file(path: Path) -> Path:
     try:
         metadata = os.lstat(checked)
     except FileNotFoundError:
-        raise FileNotFoundError(
-            os.fspath(checked)
-        ) from None
+        raise FileNotFoundError(os.fspath(checked)) from None
 
-    if _is_link(checked) or not stat.S_ISREG(
-        metadata.st_mode
-    ):
-        raise OSError(
-            f"path is not a regular file: {checked}"
-        )
+    if _is_link(checked) or not stat.S_ISREG(metadata.st_mode):
+        raise OSError(f"path is not a regular file: {checked}")
 
     return checked
 
 
 def _encoding(value: str) -> str:
     if not isinstance(value, str) or not value:
-        raise TypeError(
-            "encoding must be a non-empty string"
-        )
+        raise TypeError("encoding must be a non-empty string")
 
     return codecs.lookup(value).name
 
@@ -525,13 +455,12 @@ def _relative_path_set(
     *,
     field: str,
 ) -> set[Path]:
-    if isinstance(values, (str, bytes)) or not isinstance(
-        values,
+    raw_values: object = values
+    if isinstance(raw_values, (str, bytes)) or not isinstance(
+        raw_values,
         Sequence,
     ):
-        raise TypeError(
-            f"{field} must be a sequence of pathlib.Path values"
-        )
+        raise TypeError(f"{field} must be a sequence of pathlib.Path values")
 
     output: set[Path] = set()
 
@@ -542,10 +471,7 @@ def _relative_path_set(
         )
 
         if relative in output:
-            raise ValueError(
-                f"{field} contains duplicate path "
-                f"{relative.as_posix()!r}"
-            )
+            raise ValueError(f"{field} contains duplicate path {relative.as_posix()!r}")
 
         output.add(relative)
 
@@ -558,9 +484,7 @@ def _relative_path(
     field: str,
 ) -> Path:
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field} must be a pathlib.Path"
-        )
+        raise TypeError(f"{field} must be a pathlib.Path")
 
     text = value.as_posix()
     windows_path = PureWindowsPath(text)
@@ -578,18 +502,14 @@ def _relative_path(
         or ".." in posix_path.parts
         or posix_path.as_posix() != text
     ):
-        raise ValueError(
-            f"{field} must be a canonical contained relative path"
-        )
+        raise ValueError(f"{field} must be a canonical contained relative path")
 
     return Path(text)
 
 
 def _require_absent(path: Path) -> None:
     if os.path.lexists(path):
-        raise FileExistsError(
-            os.fspath(path)
-        )
+        raise FileExistsError(os.fspath(path))
 
 
 def _remove_entry(path: Path) -> None:
@@ -642,22 +562,15 @@ def _is_link(path: Path) -> bool:
         return True
 
     is_junction = getattr(path, "is_junction", None)
-    return bool(
-        callable(is_junction)
-        and is_junction()
-    )
+    return bool(callable(is_junction) and is_junction())
 
 
 def _same_filesystem(
     left: Path,
     right: Path,
 ) -> bool:
-    left_device = os.stat(
-        _nearest_existing(left)
-    ).st_dev
-    right_device = os.stat(
-        _nearest_existing(right)
-    ).st_dev
+    left_device = os.stat(_nearest_existing(left)).st_dev
+    right_device = os.stat(_nearest_existing(right)).st_dev
 
     return left_device == right_device
 
@@ -667,9 +580,7 @@ def _nearest_existing(path: Path) -> Path:
 
     while not os.path.lexists(current):
         if current.parent == current:
-            raise FileNotFoundError(
-                os.fspath(path)
-            )
+            raise FileNotFoundError(os.fspath(path))
         current = current.parent
 
     return current
@@ -688,17 +599,10 @@ def _reject_overlap(
     destination: Path,
 ) -> None:
     if _same_path(source, destination):
-        raise ValueError(
-            "paths must be distinct"
-        )
+        raise ValueError("paths must be distinct")
 
-    if (
-        _within(destination, source)
-        or _within(source, destination)
-    ):
-        raise ValueError(
-            "lifecycle paths must not contain one another"
-        )
+    if _within(destination, source) or _within(source, destination):
+        raise ValueError("lifecycle paths must not contain one another")
 
 
 def _within(
@@ -706,15 +610,11 @@ def _within(
     root: Path,
 ) -> bool:
     try:
-        common = os.path.commonpath(
-            (candidate, root)
-        )
+        common = os.path.commonpath((candidate, root))
     except ValueError:
         return False
 
-    return _path_key(
-        Path(common)
-    ) == _path_key(root)
+    return _path_key(Path(common)) == _path_key(root)
 
 
 def _same_path(
@@ -725,11 +625,7 @@ def _same_path(
 
 
 def _path_key(path: Path) -> str:
-    return os.path.normcase(
-        os.path.normpath(
-            os.fspath(path)
-        )
-    )
+    return os.path.normcase(os.path.normpath(os.fspath(path)))
 
 
 def _name_sort_key(
@@ -763,9 +659,7 @@ def _sorted_relative_paths(
 
 
 if TYPE_CHECKING:
-    _project_filesystem_port: ProjectFilesystem = (
-        ProjectFilesystemAdapter()
-    )
+    _project_filesystem_port: ProjectFilesystem = ProjectFilesystemAdapter()
 
 
 __all__ = ("ProjectFilesystemAdapter",)

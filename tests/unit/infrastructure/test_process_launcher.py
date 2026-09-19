@@ -28,7 +28,7 @@ class _DispatchCall:
 
 
 def _handle() -> ProcessHandle:
-    return cast(ProcessHandle, object())
+    return cast("ProcessHandle", object())
 
 
 def _streams() -> tuple[BytesIO, BytesIO]:
@@ -248,7 +248,7 @@ def test_windows_launch_uses_shell_free_owned_process_group(
         return expected_handle
 
     monkeypatch.setattr(process_launcher, "_WINDOWS_NEW_PROCESS_GROUP", 512)
-    monkeypatch.setattr(process_launcher.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
 
     result = process_launcher._launch_windows(
         command=(r"C:\Program Files\GF\gf.exe", "--version"),
@@ -313,7 +313,7 @@ def test_posix_launch_uses_shell_free_new_session(
         captured_options.append(options)
         return expected_handle
 
-    monkeypatch.setattr(process_launcher.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
 
     result = process_launcher._launch_posix(
         command=("/usr/bin/gf", "--version"),
@@ -358,7 +358,7 @@ def test_operating_system_launch_errors_propagate_unchanged(
         del command, options
         raise expected
 
-    monkeypatch.setattr(process_launcher.subprocess, "Popen", failing_popen)
+    monkeypatch.setattr(subprocess, "Popen", failing_popen)
     if platform == "windows":
         monkeypatch.setattr(process_launcher, "_WINDOWS_NEW_PROCESS_GROUP", 512)
         launch = process_launcher._launch_windows

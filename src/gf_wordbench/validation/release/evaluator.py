@@ -2,40 +2,42 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
+import re
 from time import perf_counter_ns
 from types import MappingProxyType
-from typing import Final, Protocol, runtime_checkable
+from typing import Final, Protocol, TypeVar, cast, runtime_checkable
 
 from gf_wordbench.kernel.statuses import ValidationStatus
 
 from .models import (
-    GateApplicability,
-    ReleaseEvaluationContext,
+    ReleaseGateApplicability,
     ReleaseGateResult,
 )
+
+GateContextT = TypeVar("GateContextT")
+GateContextT_contra = TypeVar("GateContextT_contra", contravariant=True)
 
 _GATE_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"^RG-[0-9]{2}$")
 _MAX_ERROR_TEXT: Final[int] = 500
 
 
 @runtime_checkable
-class ReleaseGate(Protocol):
+class ReleaseGate(Protocol[GateContextT_contra]):
     """Executable contract for one registered release gate."""
 
     gate_id: str
     name: str
-    applicability: GateApplicability
+    applicability: ReleaseGateApplicability
     dependencies: tuple[str, ...]
 
-    def is_applicable(self, context: ReleaseEvaluationContext) -> bool:
+    def is_applicable(self, context: GateContextT_contra) -> bool:
         """Return whether a conditional gate is active for this release."""
 
     def evaluate(
         self,
-        context: ReleaseEvaluationContext,
+        context: GateContextT_contra,
     ) -> ReleaseGateResult:
         """Evaluate the gate from already collected structured evidence."""
 
@@ -47,8 +49,8 @@ class ReleaseGateEvaluator:
 
     def evaluate(
         self,
-        gates: Iterable[ReleaseGate],
-        context: ReleaseEvaluationContext,
+        gates: Iterable[ReleaseGate[GateContextT]],
+        context: GateContextT,
     ) -> tuple[ReleaseGateResult, ...]:
         ordered = _prepare_gates(gates)
         completed: dict[str, ReleaseGateResult] = {}
@@ -65,9 +67,9 @@ class ReleaseGateEvaluator:
 
     def _evaluate_one(
         self,
-        gate: ReleaseGate,
+        gate: ReleaseGate[GateContextT],
         *,
-        context: ReleaseEvaluationContext,
+        context: GateContextT,
         completed: Mapping[str, ReleaseGateResult],
     ) -> ReleaseGateResult:
         started_ns = perf_counter_ns()
@@ -110,8 +112,7 @@ class ReleaseGateEvaluator:
             result = _error_result(
                 gate,
                 summary=(
-                    "Release gate could not be evaluated reliably: "
-                    f"{_safe_exception_text(exc)}"
+                    f"Release gate could not be evaluated reliably: {_safe_exception_text(exc)}"
                 ),
             )
 
@@ -119,8 +120,8 @@ class ReleaseGateEvaluator:
 
 
 def evaluate_release_gates(
-    gates: Iterable[ReleaseGate],
-    context: ReleaseEvaluationContext,
+    gates: Iterable[ReleaseGate[GateContextT]],
+    context: GateContextT,
 ) -> tuple[ReleaseGateResult, ...]:
     """Evaluate registered release gates in their supplied canonical order."""
 
@@ -128,39 +129,37 @@ def evaluate_release_gates(
 
 
 def _prepare_gates(
-    gates: Iterable[ReleaseGate],
-) -> tuple[ReleaseGate, ...]:
+    gates: Iterable[object],
+) -> tuple[ReleaseGate[GateContextT], ...]:
     if isinstance(gates, (str, bytes)):
         raise TypeError("gates must be an iterable of ReleaseGate objects")
 
-    ordered = tuple(gates)
-    if not ordered:
+    raw_gates = tuple(gates)
+    if not raw_gates:
         raise ValueError("at least one release gate is required")
 
+    ordered: list[ReleaseGate[GateContextT]] = []
     positions: dict[str, int] = {}
-    for index, gate in enumerate(ordered):
+    for index, gate in enumerate(raw_gates):
+        if not isinstance(gate, ReleaseGate):
+            raise TypeError(f"gates[{index}] must satisfy ReleaseGate")
+        ordered.append(cast(ReleaseGate[GateContextT], gate))
         _validate_gate_definition(gate)
         if gate.gate_id in positions:
-            raise ValueError(
-                f"duplicate release gate ID: {gate.gate_id!r}"
-            )
+            raise ValueError(f"duplicate release gate ID: {gate.gate_id!r}")
         positions[gate.gate_id] = index
 
     for index, gate in enumerate(ordered):
         seen_dependencies: set[str] = set()
         for dependency in gate.dependencies:
             if dependency in seen_dependencies:
-                raise ValueError(
-                    f"release gate {gate.gate_id!r} repeats dependency "
-                    f"{dependency!r}"
-                )
+                raise ValueError(f"release gate {gate.gate_id!r} repeats dependency {dependency!r}")
             seen_dependencies.add(dependency)
 
             dependency_position = positions.get(dependency)
             if dependency_position is None:
                 raise ValueError(
-                    f"release gate {gate.gate_id!r} depends on unknown gate "
-                    f"{dependency!r}"
+                    f"release gate {gate.gate_id!r} depends on unknown gate {dependency!r}"
                 )
             if dependency_position >= index:
                 raise ValueError(
@@ -168,7 +167,7 @@ def _prepare_gates(
                     "which must appear earlier in canonical gate order"
                 )
 
-    return ordered
+    return tuple(ordered)
 
 
 def _validate_gate_definition(gate: object) -> None:
@@ -177,101 +176,78 @@ def _validate_gate_definition(gate: object) -> None:
 
     _require_text(gate.gate_id, field="gate_id")
     if _GATE_ID_PATTERN.fullmatch(gate.gate_id) is None:
-        raise ValueError(
-            f"invalid release gate ID {gate.gate_id!r}; expected RG-NN"
-        )
+        raise ValueError(f"invalid release gate ID {gate.gate_id!r}; expected RG-NN")
 
     _require_text(gate.name, field=f"{gate.gate_id}.name")
 
-    if not isinstance(gate.applicability, GateApplicability):
-        raise TypeError(
-            f"{gate.gate_id}.applicability must be GateApplicability"
-        )
+    if not isinstance(gate.applicability, ReleaseGateApplicability):
+        raise TypeError(f"{gate.gate_id}.applicability must be ReleaseGateApplicability")
 
     if not isinstance(gate.dependencies, tuple):
-        raise TypeError(
-            f"{gate.gate_id}.dependencies must be a tuple"
-        )
+        raise TypeError(f"{gate.gate_id}.dependencies must be a tuple")
     for dependency in gate.dependencies:
         _require_text(
             dependency,
             field=f"{gate.gate_id}.dependencies item",
         )
         if _GATE_ID_PATTERN.fullmatch(dependency) is None:
-            raise ValueError(
-                f"invalid dependency ID {dependency!r} for {gate.gate_id}"
-            )
+            raise ValueError(f"invalid dependency ID {dependency!r} for {gate.gate_id}")
         if dependency == gate.gate_id:
-            raise ValueError(
-                f"release gate {gate.gate_id!r} cannot depend on itself"
-            )
+            raise ValueError(f"release gate {gate.gate_id!r} cannot depend on itself")
 
 
 def _is_active(
-    gate: ReleaseGate,
-    context: ReleaseEvaluationContext,
+    gate: ReleaseGate[GateContextT],
+    context: GateContextT,
 ) -> bool:
     applicability = gate.applicability
 
-    if applicability is GateApplicability.REQUIRED:
+    if applicability is ReleaseGateApplicability.REQUIRED:
         return True
-    if applicability is GateApplicability.NOT_APPLICABLE:
+    if applicability is ReleaseGateApplicability.NOT_APPLICABLE:
         return False
-    if applicability is GateApplicability.CONDITIONAL:
+    if applicability is ReleaseGateApplicability.CONDITIONAL:
         active = gate.is_applicable(context)
         if type(active) is not bool:
-            raise TypeError(
-                f"{gate.gate_id}.is_applicable() must return bool"
-            )
+            raise TypeError(f"{gate.gate_id}.is_applicable() must return bool")
         return active
 
-    raise ValueError(
-        f"unsupported applicability for release gate {gate.gate_id!r}"
-    )
+    raise ValueError(f"unsupported applicability for release gate {gate.gate_id!r}")
 
 
 def _validate_gate_result(
-    gate: ReleaseGate,
+    gate: ReleaseGate[GateContextT],
     result: object,
 ) -> None:
     if not isinstance(result, ReleaseGateResult):
-        raise TypeError(
-            f"{gate.gate_id}.evaluate() must return ReleaseGateResult"
-        )
+        raise TypeError(f"{gate.gate_id}.evaluate() must return ReleaseGateResult")
     if result.gate_id != gate.gate_id:
         raise ValueError(
-            f"gate result ID {result.gate_id!r} does not match "
-            f"registered gate {gate.gate_id!r}"
+            f"gate result ID {result.gate_id!r} does not match registered gate {gate.gate_id!r}"
         )
     if result.name != gate.name:
-        raise ValueError(
-            f"gate result name for {gate.gate_id!r} does not match registry"
-        )
+        raise ValueError(f"gate result name for {gate.gate_id!r} does not match registry")
     if result.applicability is not gate.applicability:
         raise ValueError(
-            f"gate result applicability for {gate.gate_id!r} does not match "
-            "the registered policy"
+            f"gate result applicability for {gate.gate_id!r} does not match the registered policy"
         )
     if result.blocked_by:
         unknown = tuple(
-            dependency
-            for dependency in result.blocked_by
-            if dependency not in gate.dependencies
+            dependency for dependency in result.blocked_by if dependency not in gate.dependencies
         )
         if unknown:
             raise ValueError(
-                f"gate result {gate.gate_id!r} contains undeclared blockers: "
-                f"{', '.join(unknown)}"
+                f"gate result {gate.gate_id!r} contains undeclared blockers: {', '.join(unknown)}"
             )
 
 
 def _not_applicable_result(
-    gate: ReleaseGate,
+    gate: ReleaseGate[GateContextT],
 ) -> ReleaseGateResult:
     return ReleaseGateResult(
         gate_id=gate.gate_id,
         name=gate.name,
-        applicability=GateApplicability.NOT_APPLICABLE,
+        applicability=ReleaseGateApplicability.NOT_APPLICABLE,
         status=ValidationStatus.SKIPPED,
         summary="Release gate is not applicable to the current release scope.",
         criteria_total=0,
@@ -285,7 +261,7 @@ def _not_applicable_result(
 
 
 def _blocked_result(
-    gate: ReleaseGate,
+    gate: ReleaseGate[GateContextT],
     blocked_by: tuple[str, ...],
 ) -> ReleaseGateResult:
     return ReleaseGateResult(
@@ -308,7 +284,7 @@ def _blocked_result(
 
 
 def _error_result(
-    gate: ReleaseGate,
+    gate: ReleaseGate[GateContextT],
     *,
     summary: str,
 ) -> ReleaseGateResult:

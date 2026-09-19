@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 import hashlib
 import os
-import re
-import unicodedata
-from collections.abc import Iterable, Mapping
 from pathlib import PurePosixPath
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
+import unicodedata
 
 from gf_wordbench.kernel.errors import ContractViolationError
 from gf_wordbench.kernel.paths import serialize_portable_path, validate_portable_segment
@@ -48,16 +48,10 @@ _WINDOWS_RESERVED_BASENAMES: Final[frozenset[str]] = frozenset(
         *(f"LPT{index}" for index in range(1, 10)),
     }
 )
-_SAFE_KEY_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
-)
-_HASH_SUFFIX_RE: Final[re.Pattern[str]] = re.compile(
-    r"--[0-9a-f]{8,64}$"
-)
+_SAFE_KEY_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
+_HASH_SUFFIX_RE: Final[re.Pattern[str]] = re.compile(r"--[0-9a-f]{8,64}$")
 _REPEATED_HYPHEN_RE: Final[re.Pattern[str]] = re.compile(r"-{2,}")
-_NAMESPACE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-)
+_NAMESPACE_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 
 
 def normalize_subject_identity(
@@ -86,9 +80,7 @@ def normalize_subject_identity(
 
     normalized = path.as_posix()
     if normalized in {"", "."}:
-        raise ContractViolationError(
-            "log subject identity must identify a non-root subject"
-        )
+        raise ContractViolationError("log subject identity must identify a non-root subject")
     return normalized
 
 
@@ -98,9 +90,7 @@ def subject_identity_digest(identity: str) -> str:
     if not isinstance(identity, str):
         raise TypeError("identity must be a string")
     if identity == "" or "\x00" in identity:
-        raise ContractViolationError(
-            "identity must be non-empty and contain no NUL characters"
-        )
+        raise ContractViolationError("identity must be non-empty and contain no NUL characters")
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 
@@ -127,11 +117,7 @@ def make_subject_key(
         known_extensions=known_extensions,
     )
     namespace_value = _validate_namespace(namespace)
-    hash_identity = (
-        canonical
-        if namespace_value is None
-        else f"{namespace_value}:{canonical}"
-    )
+    hash_identity = canonical if namespace_value is None else f"{namespace_value}:{canonical}"
 
     readable, changed = _readable_key(canonical)
     if namespace_value is not None:
@@ -268,13 +254,9 @@ def allocate_subject_keys(
         if _collision_groups(candidates):
             current_hash_length += 4
             if current_hash_length > MAX_HASH_LENGTH:
-                raise ContractViolationError(
-                    "subject-key hash space is exhausted"
-                )
+                raise ContractViolationError("subject-key hash space is exhausted")
 
-    return MappingProxyType(
-        {identity: candidates[identity] for identity in canonical_identities}
-    )
+    return MappingProxyType({identity: candidates[identity] for identity in canonical_identities})
 
 
 def validate_subject_key(
@@ -289,33 +271,22 @@ def validate_subject_key(
     if type(max_length) is not int:
         raise TypeError("max_length must be an integer")
     if max_length < 1 or max_length > MAX_GENERATED_BASENAME_LENGTH:
-        raise ValueError(
-            "max_length must be between 1 and "
-            f"{MAX_GENERATED_BASENAME_LENGTH}"
-        )
+        raise ValueError(f"max_length must be between 1 and {MAX_GENERATED_BASENAME_LENGTH}")
     if key == "":
         raise ContractViolationError("subject key must not be empty")
     if len(key) > max_length:
-        raise ContractViolationError(
-            f"subject key exceeds the maximum length of {max_length}"
-        )
+        raise ContractViolationError(f"subject key exceeds the maximum length of {max_length}")
     if not key.isascii():
-        raise ContractViolationError(
-            "subject key must use portable ASCII characters only"
-        )
+        raise ContractViolationError("subject key must use portable ASCII characters only")
     if _SAFE_KEY_RE.fullmatch(key) is None:
         raise ContractViolationError(
             "subject key must begin and end with an ASCII letter or digit "
             "and contain only letters, digits, '.', '_', and '-'"
         )
     if key in {".", ".."}:
-        raise ContractViolationError(
-            "subject key must not be '.' or '..'"
-        )
+        raise ContractViolationError("subject key must not be '.' or '..'")
     if _is_windows_reserved(key):
-        raise ContractViolationError(
-            f"subject key uses a reserved Windows device name: {key!r}"
-        )
+        raise ContractViolationError(f"subject key uses a reserved Windows device name: {key!r}")
 
     validate_portable_segment(key, role="log subject key")
     return key
@@ -363,9 +334,7 @@ def _normalize_extensions(
             or "\\" in value
             or "\x00" in value
         ):
-            raise ValueError(
-                f"invalid known subject extension: {value!r}"
-            )
+            raise ValueError(f"invalid known subject extension: {value!r}")
         folded = value.casefold()
         if folded not in seen:
             seen.add(folded)
@@ -394,9 +363,7 @@ def _validate_namespace(value: str | None) -> str | None:
     if not isinstance(value, str):
         raise TypeError("namespace must be a string or None")
     if _NAMESPACE_RE.fullmatch(value) is None:
-        raise ContractViolationError(
-            "namespace must use lowercase kebab case"
-        )
+        raise ContractViolationError("namespace must use lowercase kebab case")
     return value
 
 
@@ -448,17 +415,13 @@ def _append_hash(
     suffix = f"--{digest[:hash_length]}"
     prefix_limit = max_length - len(suffix)
     if prefix_limit < 1:
-        raise ValueError(
-            "max_length leaves no room for a readable subject-key prefix"
-        )
+        raise ValueError("max_length leaves no room for a readable subject-key prefix")
 
     prefix = readable[:prefix_limit].rstrip("-_.")
     if not prefix:
         prefix = "subject"[:prefix_limit].rstrip("-_.")
     if not prefix:
-        raise ValueError(
-            "max_length is too small for a valid subject key"
-        )
+        raise ValueError("max_length is too small for a valid subject key")
     return f"{prefix}{suffix}"
 
 
@@ -469,11 +432,7 @@ def _collision_groups(
     for identity, key in candidates.items():
         grouped.setdefault(key.casefold(), []).append(identity)
 
-    groups = [
-        tuple(items)
-        for items in grouped.values()
-        if len(items) > 1
-    ]
+    groups = [tuple(items) for items in grouped.values() if len(items) > 1]
     groups.sort(key=lambda items: tuple(item.casefold() for item in items))
     return tuple(groups)
 
@@ -487,10 +446,7 @@ def _validate_hash_length(value: int) -> None:
     if type(value) is not int:
         raise TypeError("hash_length must be an integer")
     if value < MIN_HASH_LENGTH or value > MAX_HASH_LENGTH:
-        raise ValueError(
-            f"hash_length must be between {MIN_HASH_LENGTH} "
-            f"and {MAX_HASH_LENGTH}"
-        )
+        raise ValueError(f"hash_length must be between {MIN_HASH_LENGTH} and {MAX_HASH_LENGTH}")
 
 
 def _validate_max_length(
@@ -502,10 +458,7 @@ def _validate_max_length(
         raise TypeError("max_length must be an integer")
     minimum = hash_length + 3
     if value < minimum or value > MAX_SAFE_KEY_LENGTH:
-        raise ValueError(
-            f"max_length must be between {minimum} "
-            f"and {MAX_SAFE_KEY_LENGTH}"
-        )
+        raise ValueError(f"max_length must be between {minimum} and {MAX_SAFE_KEY_LENGTH}")
 
 
 safe_subject_key = make_subject_key

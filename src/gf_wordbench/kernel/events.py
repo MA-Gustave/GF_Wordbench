@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import math
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum, unique
 from itertools import islice
+import math
+import re
 from typing import Protocol, TypeAlias, TypeVar
 
 __all__ = (
@@ -28,9 +28,7 @@ _MAX_EVENT_TEXT_CHARS = 4_096
 _MAX_EVENT_FIELD_KEY_CHARS = 64
 _MAX_EVENT_FIELDS = 32
 
-_LOWER_SNAKE_CASE = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
+_LOWER_SNAKE_CASE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 
 EventScalar: TypeAlias = str | int | float | bool | None
 
@@ -69,17 +67,13 @@ EventFields: TypeAlias = tuple[EventField, ...]
 
 
 def event_fields(
-    values: Mapping[str, EventScalar]
-    | Iterable[tuple[str, EventScalar]] = (),
+    values: Mapping[str, EventScalar] | Iterable[tuple[str, EventScalar]] = (),
     /,
 ) -> EventFields:
     """Create deterministic, validated event fields."""
 
     items = values.items() if isinstance(values, Mapping) else values
-    return _normalize_fields(
-        EventField(key, value)
-        for key, value in items
-    )
+    return _normalize_fields(EventField(key, value) for key, value in items)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,11 +127,7 @@ class ProgressEvent:
             field_name="total",
         )
 
-        if (
-            self.completed is not None
-            and self.total is not None
-            and self.completed > self.total
-        ):
+        if self.completed is not None and self.total is not None and self.completed > self.total:
             raise ValueError("completed cannot exceed total")
 
         object.__setattr__(
@@ -237,13 +227,15 @@ class EventSink(Protocol[_EventT_contra]):
     ) -> None: ...
 
 
+def _reject_text_fields(value: object) -> None:
+    if isinstance(value, (str, bytes)):
+        raise TypeError("fields must be an iterable of EventField values")
+
+
 def _normalize_fields(
     fields: Iterable[EventField],
 ) -> EventFields:
-    if isinstance(fields, (str, bytes)):
-        raise TypeError(
-            "fields must be an iterable of EventField values"
-        )
+    _reject_text_fields(fields)
 
     # Consume only enough values to enforce the public bound. This prevents an
     # accidentally unbounded iterable from being materialized in full.
@@ -255,23 +247,14 @@ def _normalize_fields(
     )
 
     if len(normalized) > _MAX_EVENT_FIELDS:
-        raise ValueError(
-            f"an event may contain at most {_MAX_EVENT_FIELDS} fields"
-        )
+        raise ValueError(f"an event may contain at most {_MAX_EVENT_FIELDS} fields")
 
-    if not all(
-        isinstance(item, EventField)
-        for item in normalized
-    ):
-        raise TypeError(
-            "fields must contain only EventField values"
-        )
+    if not all(isinstance(item, EventField) for item in normalized):
+        raise TypeError("fields must contain only EventField values")
 
     keys = tuple(item.key for item in normalized)
     if len(keys) != len(set(keys)):
-        raise ValueError(
-            "event field keys must be unique"
-        )
+        raise ValueError("event field keys must be unique")
 
     return tuple(
         sorted(
@@ -288,9 +271,7 @@ def _normalize_timestamp(
         raise TypeError("timestamp must be a datetime")
 
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(
-            "timestamp must be timezone-aware"
-        )
+        raise ValueError("timestamp must be timezone-aware")
 
     return value.astimezone(UTC)
 
@@ -301,9 +282,7 @@ def _validate_event_level(
     field_name: str,
 ) -> None:
     if not isinstance(value, EventLevel):
-        raise TypeError(
-            f"{field_name} must be an EventLevel"
-        )
+        raise TypeError(f"{field_name} must be an EventLevel")
 
 
 def _validate_count(
@@ -315,14 +294,10 @@ def _validate_count(
         return
 
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(
-            f"{field_name} must be an integer or None"
-        )
+        raise TypeError(f"{field_name} must be an integer or None")
 
     if value < 0:
-        raise ValueError(
-            f"{field_name} cannot be negative"
-        )
+        raise ValueError(f"{field_name} cannot be negative")
 
 
 def _validate_optional_text(
@@ -349,24 +324,16 @@ def _validate_text(
     allow_empty: bool,
 ) -> None:
     if not isinstance(value, str):
-        raise TypeError(
-            f"{field_name} must be a string"
-        )
+        raise TypeError(f"{field_name} must be a string")
 
     if not allow_empty and not value.strip():
-        raise ValueError(
-            f"{field_name} cannot be empty"
-        )
+        raise ValueError(f"{field_name} cannot be empty")
 
     if len(value) > max_chars:
-        raise ValueError(
-            f"{field_name} exceeds {max_chars} characters"
-        )
+        raise ValueError(f"{field_name} exceeds {max_chars} characters")
 
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} cannot contain NUL characters"
-        )
+        raise ValueError(f"{field_name} cannot contain NUL characters")
 
 
 def _validate_lower_snake_case(
@@ -383,9 +350,7 @@ def _validate_lower_snake_case(
     )
 
     if _LOWER_SNAKE_CASE.fullmatch(value) is None:
-        raise ValueError(
-            f"{field_name} must use lower_snake_case"
-        )
+        raise ValueError(f"{field_name} must use lower_snake_case")
 
 
 def _validate_scalar(
@@ -407,11 +372,7 @@ def _validate_scalar(
 
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise ValueError(
-                f"{field_name} must be a finite float"
-            )
+            raise ValueError(f"{field_name} must be a finite float")
         return
 
-    raise TypeError(
-        f"{field_name} must be a scalar event value"
-    )
+    raise TypeError(f"{field_name} must be a scalar event value")

@@ -133,12 +133,8 @@ def test_language_probe_parses_path_and_environment_options() -> None:
     )
 
     assert request.command is CliCommand.LANGUAGE_PROBE
-    assert request.require("language_path") == Path(
-        "C:/work/gf-rgl/src/english/LangEng.gf"
-    )
-    assert request.require("validation_profile") == Path(
-        "C:/work/profiles/english/project.toml"
-    )
+    assert request.require("language_path") == Path("C:/work/gf-rgl/src/english/LangEng.gf")
+    assert request.require("validation_profile") == Path("C:/work/profiles/english/project.toml")
     assert _request_value(request, "gf_executable", "gf_exe") == Path(
         "C:/Program Files/GF/bin/gf.exe"
     )
@@ -213,9 +209,7 @@ def test_validate_defaults_to_diagnostic_mode() -> None:
     assert _enum_value(namespace.command) == "validate"
     assert _enum_value(namespace.mode) == "diagnostic"
     assert request.command is CliCommand.VALIDATE
-    assert request.require("language_path") == Path(
-        "C:/work/gf-rgl/src/english"
-    )
+    assert request.require("language_path") == Path("C:/work/gf-rgl/src/english")
     assert _enum_value(request.require("mode")) == "diagnostic"
     assert request.compatibility_warnings == ()
 
@@ -261,12 +255,8 @@ def test_validate_parses_paths_repeatable_ids_and_policy_flags() -> None:
     )
 
     assert request.command is CliCommand.VALIDATE
-    assert request.require("language_path") == Path(
-        "C:/work/gf-rgl/src/english"
-    )
-    assert request.require("validation_profile") == Path(
-        "C:/work/profiles/english/project.toml"
-    )
+    assert request.require("language_path") == Path("C:/work/gf-rgl/src/english")
+    assert request.require("validation_profile") == Path("C:/work/profiles/english/project.toml")
     assert _enum_value(request.require("mode")) == "diagnostic"
     assert request.require("scenarios") == ("parse-basic", "linearize-basic")
     assert request.require("strict") is True
@@ -284,9 +274,7 @@ def test_validate_parses_paths_repeatable_ids_and_policy_flags() -> None:
         "C:/Program Files/GF/bin/gf.exe"
     )
     assert request.require("rgl_root") == Path("C:/work/gf-rgl")
-    assert _request_value(request, "output_root", "out_root") == Path(
-        "C:/work/gf-wordbench-runs"
-    )
+    assert _request_value(request, "output_root", "out_root") == Path("C:/work/gf-wordbench-runs")
     assert request.require("verbose") is True
     assert request.require("quiet") is False
 
@@ -504,9 +492,7 @@ def test_checkpoint_and_quick_modes_keep_canonical_target_kinds() -> None:
         ]
     )
 
-    assert focused_file.require("language_path") == Path(
-        "C:/work/gf-rgl/src/english/LangEng.gf"
-    )
+    assert focused_file.require("language_path") == Path("C:/work/gf-rgl/src/english/LangEng.gf")
     assert focused_file.get("target") is None
     assert explicit_target.require("target") == Path("LangEng.gf")
     assert checkpoint.require("checkpoints") == ("morphology",)
@@ -592,9 +578,7 @@ def test_legacy_project_root_maps_to_language_path_with_warning() -> None:
         ]
     )
 
-    assert request.require("language_path") == Path(
-        "C:/work/gf-rgl/src/english"
-    )
+    assert request.require("language_path") == Path("C:/work/gf-rgl/src/english")
     assert "project-root" in " ".join(_warning_texts(request)).casefold()
     assert request.get("project_root") is None
 
@@ -707,17 +691,11 @@ def test_validation_profile_check_options_are_typed() -> None:
         ]
     )
 
-    assert request.require("validation_profile") == Path(
-        "C:/work/profiles/english/project.toml"
-    )
-    assert request.require("language_path") == Path(
-        "C:/work/gf-rgl/src/english"
-    )
+    assert request.require("validation_profile") == Path("C:/work/profiles/english/project.toml")
+    assert request.require("language_path") == Path("C:/work/gf-rgl/src/english")
     assert request.require("strict") is True
     assert request.require("probe_gf") is True
-    assert _request_value(request, "gf_executable", "gf_exe") == Path(
-        "C:/tools/gf.exe"
-    )
+    assert _request_value(request, "gf_executable", "gf_exe") == Path("C:/tools/gf.exe")
     assert request.require("rgl_root") == Path("C:/work/gf-rgl")
     assert request.require("quiet") is True
 

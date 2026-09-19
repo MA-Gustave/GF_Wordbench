@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "gf-wordbench"
 dynamic = ["version"]
-description = "Development, validation, diagnostics, regression-testing, and release-readiness workbench for one active Grammatical Framework language project."
+description = "Development, validation, diagnostics, regression-testing, and release-readiness workbench for selected Grammatical Framework language sources."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11,<3.15"
 license = "LicenseRef-Proprietary"
@@ -76,7 +76,6 @@ packages = ["src/gf_wordbench"]
 include = [
   "/.github",
   "/docs",
-  "/project",
   "/scripts",
   "/src",
   "/templates",
@@ -116,6 +115,7 @@ addopts = [
 xfail_strict = true
 markers = [
   "unit: isolated unit-level behavior",
+  "component: behavior spanning one assembled application component",
   "integration: behavior spanning multiple components or boundaries",
   "gf: requires a real GF executable",
   "gui: requires GUI dependencies or display support",
@@ -135,11 +135,13 @@ line-length = 100
 src = ["src", "tests", "scripts"]
 extend-exclude = [
   ".venv",
+  ".wordbench-diagnostics",
+  ".pytest-work",
   "build",
   "coverage",
   "dist",
   "htmlcov",
-  "project",
+  "pip",
   "run_*",
   "templates",
 ]
@@ -189,7 +191,7 @@ show_error_context = true
 warn_unreachable = true
 warn_unused_configs = true
 explicit_package_bases = true
-exclude = "(^|/)(project|templates|docs|run_[^/]+)(/|$)"
+exclude = "(^|/)(templates|docs|run_[^/]+)(/|$)"
 
 [tool.coverage.run]
 branch = true

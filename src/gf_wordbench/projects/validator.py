@@ -90,13 +90,8 @@ def _filesystem_error(
         project,
         code="PROJECT_FILESYSTEM_ERROR",
         field=field,
-        message=(
-            "Filesystem validation could not be completed "
-            f"({type(error).__name__})."
-        ),
-        suggestion=(
-            "Correct permissions or filesystem state, then repeat the check."
-        ),
+        message=(f"Filesystem validation could not be completed ({type(error).__name__})."),
+        suggestion=("Correct permissions or filesystem state, then repeat the check."),
         subject=path,
     )
 
@@ -114,9 +109,7 @@ def _outside_diagnostic(
         code="PROJECT_SOURCE_ROOT_OUTSIDE",
         field=field,
         message=f"Configured {kind} resolves outside the {root_name}.",
-        suggestion=(
-            f"Use a project-relative path contained beneath the {root_name}."
-        ),
+        suggestion=(f"Use a project-relative path contained beneath the {root_name}."),
         subject=path,
     )
 
@@ -144,9 +137,7 @@ def _check_project_paths(
         ]
 
     try:
-        config_exists = filesystem.exists(config_file) and filesystem.is_file(
-            config_file
-        )
+        config_exists = filesystem.exists(config_file) and filesystem.is_file(config_file)
     except (OSError, GFWordbenchError) as error:
         diagnostics.append(
             _filesystem_error(
@@ -163,12 +154,8 @@ def _check_project_paths(
                     project,
                     code="PROJECT_CONFIG_MISSING",
                     field="project_file",
-                    message=(
-                        "Canonical project.toml does not exist as a regular file."
-                    ),
-                    suggestion=(
-                        "Restore project/project.toml at the configured location."
-                    ),
+                    message=("Canonical project.toml does not exist as a regular file."),
+                    suggestion=("Restore project/project.toml at the configured location."),
                     subject=config_file,
                 )
             )
@@ -183,9 +170,7 @@ def _check_project_paths(
                     "Schema 1.0 requires the project root to equal the directory "
                     "containing project.toml."
                 ),
-                suggestion=(
-                    "Keep project.root = '.' and resolve it from project.toml."
-                ),
+                suggestion=("Keep project.root = '.' and resolve it from project.toml."),
                 subject=project_root,
             )
         )
@@ -219,9 +204,7 @@ def _check_project_paths(
         return diagnostics
 
     try:
-        source_exists = filesystem.exists(source_root) and filesystem.is_directory(
-            source_root
-        )
+        source_exists = filesystem.exists(source_root) and filesystem.is_directory(source_root)
     except (OSError, GFWordbenchError) as error:
         diagnostics.append(
             _filesystem_error(
@@ -238,12 +221,8 @@ def _check_project_paths(
                     project,
                     code="PROJECT_SOURCE_ROOT_MISSING",
                     field="sources.directory",
-                    message=(
-                        "Configured source root does not exist as a directory."
-                    ),
-                    suggestion=(
-                        "Create the source directory or correct project.toml."
-                    ),
+                    message=("Configured source root does not exist as a directory."),
+                    suggestion=("Create the source directory or correct project.toml."),
                     subject=source_root,
                 )
             )
@@ -276,9 +255,7 @@ def _check_modules(
 
     for kind, field, targets in groups:
         missing_code = (
-            "PROJECT_ENTRYPOINT_MISSING"
-            if kind == "entrypoint"
-            else "PROJECT_CHECKPOINT_MISSING"
+            "PROJECT_ENTRYPOINT_MISSING" if kind == "entrypoint" else "PROJECT_CHECKPOINT_MISSING"
         )
 
         for index, target in enumerate(targets):
@@ -334,9 +311,7 @@ def _check_modules(
                         code=missing_code,
                         field=item_field,
                         message=f"Configured {kind} file does not exist.",
-                        suggestion=(
-                            "Create the declared module or correct project.toml."
-                        ),
+                        suggestion=("Create the declared module or correct project.toml."),
                         subject=path,
                     )
                 )
@@ -390,9 +365,7 @@ def _check_scenarios(
                             f"Registered {'required' if required else 'optional'} "
                             "scenario is missing."
                         ),
-                        suggestion=(
-                            "Create the canonical .gfs asset or correct the registry."
-                        ),
+                        suggestion=("Create the canonical .gfs asset or correct the registry."),
                         severity=(
                             ProjectDiagnosticSeverity.ERROR
                             if required
@@ -426,8 +399,7 @@ def _check_required_assets(
                         code="PROJECT_DOCUMENT_MISSING",
                         field=relative_path.as_posix(),
                         message=(
-                            "Required active-project authority or validation guide "
-                            "is missing."
+                            "Required active-project authority or validation guide is missing."
                         ),
                         suggestion=(
                             "Restore the canonical project asset and synchronize it "
@@ -465,8 +437,7 @@ def _check_required_assets(
                         f"'{placeholder}'."
                     ),
                     suggestion=(
-                        "Replace the placeholder with reviewed active-project "
-                        "information."
+                        "Replace the placeholder with reviewed active-project information."
                     ),
                     subject=path,
                 )
@@ -511,9 +482,7 @@ def validate_project(
             project,
             project_paths,
             filesystem,
-            inspect_placeholders=(
-                strict or scope is ProjectCheckScope.RELEASE
-            ),
+            inspect_placeholders=(strict or scope is ProjectCheckScope.RELEASE),
         )
     )
 
@@ -557,13 +526,10 @@ def ensure_project_valid(
 
     errors = result.errors
     detail = "; ".join(
-        f"{item.code} {item.field}: {item.message}"
-        for item in errors[:_MAX_ERROR_DETAIL_ITEMS]
+        f"{item.code} {item.field}: {item.message}" for item in errors[:_MAX_ERROR_DETAIL_ITEMS]
     )
     if len(errors) > _MAX_ERROR_DETAIL_ITEMS:
-        detail += (
-            f"; and {len(errors) - _MAX_ERROR_DETAIL_ITEMS} additional error(s)"
-        )
+        detail += f"; and {len(errors) - _MAX_ERROR_DETAIL_ITEMS} additional error(s)"
 
     raise ProjectConfigurationError(
         "Active project validation failed",

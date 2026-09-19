@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -350,10 +351,7 @@ def test_dry_run_performs_preflight_and_no_mutating_operation(
         (ResetPhase.PLAN, PhaseStatus.COMPLETED),
         (ResetPhase.PREFLIGHT, PhaseStatus.COMPLETED),
     )
-    assert all(
-        status is PhaseStatus.SKIPPED
-        for _, status in _phase_values(result)[2:]
-    )
+    assert all(status is PhaseStatus.SKIPPED for _, status in _phase_values(result)[2:])
     assert result.project_replacement_completed is False
     assert result.run_cleanup_completed is None
     assert result.state_reset_completed is None
@@ -362,9 +360,7 @@ def test_dry_run_performs_preflight_and_no_mutating_operation(
 def test_dry_run_preflight_failure_is_nonmutating_and_path_safe(
     tmp_path: Path,
 ) -> None:
-    operations = _ResetOperations(
-        failures={"preflight": OSError("template missing")}
-    )
+    operations = _ResetOperations(failures={"preflight": OSError("template missing")})
 
     result = reset_project(
         _archive_request(tmp_path, dry_run=True),
@@ -411,10 +407,7 @@ def test_new_project_archive_reset_executes_canonical_phase_order(
         ResetPhase.CLEAN_GENERATED_STATE,
         ResetPhase.COMPLETE,
     )
-    assert all(
-        status is PhaseStatus.COMPLETED
-        for _, status in _phase_values(result)
-    )
+    assert all(status is PhaseStatus.COMPLETED for _, status in _phase_values(result))
     assert result.archive_completed is True
     assert result.project_staged is True
     assert result.project_replacement_completed is True
@@ -422,6 +415,7 @@ def test_new_project_archive_reset_executes_canonical_phase_order(
     assert result.rollback_completed is None
     assert result.run_cleanup_completed is True
     assert result.state_reset_completed is True
+    assert result.plan is not None
     assert result.remaining_actions == result.plan.remaining_initialization_actions
 
 
@@ -438,9 +432,7 @@ def test_project_only_discard_reset_retains_runs_and_state(
     assert "cleanup_runs" not in operations.calls
     assert "reset_application_state" not in operations.calls
     clean_phase = next(
-        record
-        for record in result.phases
-        if record.phase is ResetPhase.CLEAN_GENERATED_STATE
+        record for record in result.phases if record.phase is ResetPhase.CLEAN_GENERATED_STATE
     )
     assert clean_phase.status is PhaseStatus.SKIPPED
     assert result.archive_completed is None
@@ -519,9 +511,7 @@ def test_stage_validation_failure_discards_stage_and_keeps_project_unswapped(
 def test_swap_failure_attempts_rollback_even_before_swap_is_recorded(
     tmp_path: Path,
 ) -> None:
-    operations = _ResetOperations(
-        failures={"swap_project": OSError("rename failed")}
-    )
+    operations = _ResetOperations(failures={"swap_project": OSError("rename failed")})
 
     result = reset_project(_archive_request(tmp_path), operations=operations)
 
@@ -538,9 +528,7 @@ def test_active_validation_failure_restores_rollback_project(
     tmp_path: Path,
 ) -> None:
     operations = _ResetOperations(
-        failures={
-            "validate_active_project": RuntimeError("active project invalid")
-        }
+        failures={"validate_active_project": RuntimeError("active project invalid")}
     )
 
     result = reset_project(_archive_request(tmp_path), operations=operations)
@@ -553,9 +541,7 @@ def test_active_validation_failure_restores_rollback_project(
     assert result.active_project_validation_completed is False
     assert result.rollback_completed is True
     assert operations.calls.index("rollback") > operations.calls.index("swap_project")
-    rollback_phase = next(
-        record for record in result.phases if record.phase is ResetPhase.ROLLBACK
-    )
+    rollback_phase = next(record for record in result.phases if record.phase is ResetPhase.ROLLBACK)
     assert rollback_phase.status is PhaseStatus.COMPLETED
 
 
@@ -582,9 +568,7 @@ def test_rollback_failure_produces_critical_recovery_result(
 def test_cleanup_failure_is_partial_and_attempts_both_cleanup_services(
     tmp_path: Path,
 ) -> None:
-    operations = _ResetOperations(
-        failures={"cleanup_runs": OSError("run cleanup failed")}
-    )
+    operations = _ResetOperations(failures={"cleanup_runs": OSError("run cleanup failed")})
 
     result = reset_project(_archive_request(tmp_path), operations=operations)
 
@@ -598,19 +582,14 @@ def test_cleanup_failure_is_partial_and_attempts_both_cleanup_services(
     assert result.state_reset_completed is True
     assert "reset_application_state" in operations.calls
     assert "complete" not in operations.calls
-    assert any(
-        "run-lifecycle service" in action
-        for action in result.remaining_actions
-    )
+    assert any("run-lifecycle service" in action for action in result.remaining_actions)
 
 
 def test_state_cleanup_failure_does_not_undo_successful_run_cleanup(
     tmp_path: Path,
 ) -> None:
     operations = _ResetOperations(
-        failures={
-            "reset_application_state": OSError("state reset failed")
-        }
+        failures={"reset_application_state": OSError("state reset failed")}
     )
 
     result = reset_project(_archive_request(tmp_path), operations=operations)
@@ -618,18 +597,13 @@ def test_state_cleanup_failure_does_not_undo_successful_run_cleanup(
     assert result.outcome is ResetOutcome.PARTIAL
     assert result.run_cleanup_completed is True
     assert result.state_reset_completed is False
-    assert any(
-        "application-state cleanup" in action
-        for action in result.remaining_actions
-    )
+    assert any("application-state cleanup" in action for action in result.remaining_actions)
 
 
 def test_completion_failure_keeps_validated_project_and_reports_partial(
     tmp_path: Path,
 ) -> None:
-    operations = _ResetOperations(
-        failures={"complete": OSError("temporary cleanup failed")}
-    )
+    operations = _ResetOperations(failures={"complete": OSError("temporary cleanup failed")})
 
     result = reset_project(_archive_request(tmp_path), operations=operations)
 
@@ -642,17 +616,14 @@ def test_completion_failure_keeps_validated_project_and_reports_partial(
     assert result.run_cleanup_completed is True
     assert result.state_reset_completed is True
     assert any(
-        "Preserve the validated active project" in action
-        for action in result.remaining_actions
+        "Preserve the validated active project" in action for action in result.remaining_actions
     )
 
 
 def test_lifecycle_lock_failure_is_classified_as_concurrency(
     tmp_path: Path,
 ) -> None:
-    operations = _ResetOperations(
-        failures={"lifecycle_lock_enter": RuntimeError("lock held")}
-    )
+    operations = _ResetOperations(failures={"lifecycle_lock_enter": RuntimeError("lock held")})
 
     result = reset_project(_archive_request(tmp_path), operations=operations)
 
@@ -670,7 +641,7 @@ def test_invalid_planner_result_fails_before_lifecycle_lock(
     operations = _ResetOperations()
     resetter = ProjectResetter(
         operations=operations,
-        planner=lambda request: object(),  # type: ignore[arg-type,return-value]
+        planner=cast("Callable[[ResetRequest], ResetPlan]", lambda request: object()),
     )
 
     result = resetter.reset(_archive_request(tmp_path))

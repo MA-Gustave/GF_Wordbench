@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum, unique
+import os
 from pathlib import Path
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -42,9 +42,7 @@ RoleMap: TypeAlias = Mapping[str | Path, str]
 _TOOL_STDOUT_ROLE: Final[str] = "tool_stdout"
 _TOOL_STDERR_ROLE: Final[str] = "tool_stderr"
 _AI_ANNOTATION_ROLE: Final[str] = "ai_annotation"
-_ROLE_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$"
-)
+_ROLE_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$")
 _EMPTY_STRING_MAP: Final[StringMap] = MappingProxyType({})
 
 
@@ -87,14 +85,12 @@ class ToolEvidenceIssue:
     path: Path | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.code, EvidenceIssueCode):
-            object.__setattr__(self, "code", EvidenceIssueCode(self.code))
-        if not isinstance(self.severity, EvidenceIssueSeverity):
-            object.__setattr__(
-                self,
-                "severity",
-                EvidenceIssueSeverity(self.severity),
-            )
+        object.__setattr__(self, "code", _evidence_issue_code(self.code))
+        object.__setattr__(
+            self,
+            "severity",
+            _evidence_issue_severity(self.severity),
+        )
         object.__setattr__(
             self,
             "message",
@@ -137,12 +133,7 @@ class ToolEvidenceArtifact:
             "role",
             _role(self.role, "role"),
         )
-        if not isinstance(self.origin, EvidenceOrigin):
-            object.__setattr__(
-                self,
-                "origin",
-                EvidenceOrigin(self.origin),
-            )
+        object.__setattr__(self, "origin", _evidence_origin(self.origin))
         for name in (
             "required",
             "exists",
@@ -156,13 +147,9 @@ class ToolEvidenceArtifact:
             _non_negative_int(self.size_bytes, "size_bytes")
         if not self.exists:
             if self.kind_matches:
-                raise ValueError(
-                    "missing evidence cannot report a matching kind"
-                )
+                raise ValueError("missing evidence cannot report a matching kind")
             if self.size_bytes is not None:
-                raise ValueError(
-                    "missing evidence cannot report a size"
-                )
+                raise ValueError("missing evidence cannot report a size")
         if self.origin is EvidenceOrigin.PROCESS_STREAM and not self.raw:
             raise ValueError("process-stream evidence must be raw")
         if self.raw and not self.immutable:
@@ -182,10 +169,7 @@ class ToolEvidencePolicy:
         required = _roles(self.required_roles, "required_roles")
         if not required.issubset(declared):
             missing = sorted(required.difference(declared))
-            raise ValueError(
-                "required_roles must be declared: "
-                + ", ".join(missing)
-            )
+            raise ValueError("required_roles must be declared: " + ", ".join(missing))
         roots = _unique_paths(
             self.allowed_output_roots,
             "allowed_output_roots",
@@ -283,16 +267,13 @@ class ToolEvidenceBundle:
         )
         command = _command(self.command)
         if command[0] != str(self.resolved_executable):
-            raise ValueError(
-                "command must begin with resolved_executable"
-            )
+            raise ValueError("command must begin with resolved_executable")
         object.__setattr__(self, "command", command)
-        if not isinstance(self.execution_state, ExecutionState):
-            object.__setattr__(
-                self,
-                "execution_state",
-                ExecutionState(self.execution_state),
-            )
+        object.__setattr__(
+            self,
+            "execution_state",
+            _execution_state(self.execution_state),
+        )
         if self.exit_code is not None:
             _plain_int(self.exit_code, "exit_code")
         object.__setattr__(
@@ -306,9 +287,7 @@ class ToolEvidenceBundle:
             _utc(self.finished_at, "finished_at"),
         )
         if self.finished_at < self.started_at:
-            raise ValueError(
-                "finished_at must not precede started_at"
-            )
+            raise ValueError("finished_at must not precede started_at")
         _non_negative_int(self.duration_ms, "duration_ms")
         for name in (
             "termination_attempted",
@@ -320,13 +299,8 @@ class ToolEvidenceBundle:
         ):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be a bool")
-        if (
-            self.termination_succeeded
-            and not self.termination_attempted
-        ):
-            raise ValueError(
-                "termination_succeeded requires termination_attempted"
-            )
+        if self.termination_succeeded and not self.termination_attempted:
+            raise ValueError("termination_succeeded requires termination_attempted")
         object.__setattr__(
             self,
             "environment_policy",
@@ -344,13 +318,8 @@ class ToolEvidenceBundle:
             ),
         )
         artifacts = tuple(self.artifacts)
-        if not all(
-            isinstance(item, ToolEvidenceArtifact)
-            for item in artifacts
-        ):
-            raise TypeError(
-                "artifacts must contain ToolEvidenceArtifact values"
-            )
+        if not all(isinstance(item, ToolEvidenceArtifact) for item in artifacts):
+            raise TypeError("artifacts must contain ToolEvidenceArtifact values")
         object.__setattr__(self, "artifacts", artifacts)
         object.__setattr__(
             self,
@@ -363,17 +332,10 @@ class ToolEvidenceBundle:
             _roles(self.required_roles, "required_roles"),
         )
         if not self.required_roles.issubset(self.declared_roles):
-            raise ValueError(
-                "required_roles must be a subset of declared_roles"
-            )
+            raise ValueError("required_roles must be a subset of declared_roles")
         issues = tuple(self.issues)
-        if not all(
-            isinstance(item, ToolEvidenceIssue)
-            for item in issues
-        ):
-            raise TypeError(
-                "issues must contain ToolEvidenceIssue values"
-            )
+        if not all(isinstance(item, ToolEvidenceIssue) for item in issues):
+            raise TypeError("issues must contain ToolEvidenceIssue values")
         object.__setattr__(
             self,
             "issues",
@@ -395,9 +357,7 @@ class ToolEvidenceBundle:
     @property
     def output_artifacts(self) -> tuple[ToolEvidenceArtifact, ...]:
         return tuple(
-            item
-            for item in self.artifacts
-            if item.origin is EvidenceOrigin.PROCESS_ARTIFACT
+            item for item in self.artifacts if item.origin is EvidenceOrigin.PROCESS_ARTIFACT
         )
 
     @property
@@ -406,19 +366,11 @@ class ToolEvidenceBundle:
 
     @property
     def valid(self) -> bool:
-        return not any(
-            issue.severity is EvidenceIssueSeverity.ERROR
-            for issue in self.issues
-        )
+        return not any(issue.severity is EvidenceIssueSeverity.ERROR for issue in self.issues)
 
     @property
     def ready_for_interpretation(self) -> bool:
-        return (
-            self.valid
-            and self.capture_complete
-            and self.stdout.exists
-            and self.stderr.exists
-        )
+        return self.valid and self.capture_complete and self.stdout.exists and self.stderr.exists
 
 
 def build_tool_evidence(
@@ -486,9 +438,7 @@ def build_tool_evidence(
         output_limit_exceeded=process_result.output_limit_exceeded,
         capture_complete=process_result.capture_complete,
         environment_policy=process_result.environment_policy,
-        recorded_environment_overrides=(
-            process_result.recorded_env_overrides
-        ),
+        recorded_environment_overrides=(process_result.recorded_env_overrides),
         artifacts=tuple(artifacts),
         declared_roles=policy.declared_roles,
         required_roles=policy.required_roles,
@@ -515,9 +465,7 @@ def build_tool_evidence(
         output_limit_exceeded=provisional.output_limit_exceeded,
         capture_complete=provisional.capture_complete,
         environment_policy=provisional.environment_policy,
-        recorded_environment_overrides=(
-            provisional.recorded_environment_overrides
-        ),
+        recorded_environment_overrides=(provisional.recorded_environment_overrides),
         artifacts=provisional.artifacts,
         declared_roles=provisional.declared_roles,
         required_roles=provisional.required_roles,
@@ -546,9 +494,7 @@ def validate_tool_evidence(
             ToolEvidenceIssue(
                 code=EvidenceIssueCode.CAPTURE_INCOMPLETE,
                 severity=EvidenceIssueSeverity.ERROR,
-                message=(
-                    "Raw process evidence capture did not complete."
-                ),
+                message=("Raw process evidence capture did not complete."),
             )
         )
 
@@ -557,24 +503,16 @@ def validate_tool_evidence(
             ToolEvidenceIssue(
                 code=EvidenceIssueCode.OUTPUT_LIMIT_EXCEEDED,
                 severity=EvidenceIssueSeverity.WARNING,
-                message=(
-                    "Retained process output reached the registered "
-                    "output limit."
-                ),
+                message=("Retained process output reached the registered output limit."),
             )
         )
 
-    if (
-        bundle.execution_state is ExecutionState.COMPLETED
-        and bundle.exit_code is None
-    ):
+    if bundle.execution_state is ExecutionState.COMPLETED and bundle.exit_code is None:
         issues.append(
             ToolEvidenceIssue(
                 code=EvidenceIssueCode.PROCESS_FACTS_INCOHERENT,
                 severity=EvidenceIssueSeverity.ERROR,
-                message=(
-                    "Completed process evidence requires an exit code."
-                ),
+                message=("Completed process evidence requires an exit code."),
             )
         )
 
@@ -583,25 +521,17 @@ def validate_tool_evidence(
             ToolEvidenceIssue(
                 code=EvidenceIssueCode.AI_EVIDENCE_MARKED_NORMATIVE,
                 severity=EvidenceIssueSeverity.ERROR,
-                message=(
-                    "AI-assisted diagnostic evidence cannot be normative."
-                ),
+                message=("AI-assisted diagnostic evidence cannot be normative."),
             )
         )
 
-    if (
-        bundle.ai_assisted
-        and _AI_ANNOTATION_ROLE not in bundle.declared_roles
-    ):
+    if bundle.ai_assisted and _AI_ANNOTATION_ROLE not in bundle.declared_roles:
         issues.append(
             ToolEvidenceIssue(
                 code=EvidenceIssueCode.AI_ANNOTATION_ROLE_MISSING,
                 severity=EvidenceIssueSeverity.ERROR,
                 role=_AI_ANNOTATION_ROLE,
-                message=(
-                    "AI-assisted tool policy must declare an "
-                    "ai_annotation evidence role."
-                ),
+                message=("AI-assisted tool policy must declare an ai_annotation evidence role."),
             )
         )
 
@@ -612,10 +542,7 @@ def validate_tool_evidence(
                     code=EvidenceIssueCode.STREAM_ROLE_MISSING,
                     severity=EvidenceIssueSeverity.ERROR,
                     role=stream_role,
-                    message=(
-                        f"Diagnostic-tool policy must declare "
-                        f"{stream_role}."
-                    ),
+                    message=(f"Diagnostic-tool policy must declare {stream_role}."),
                 )
             )
 
@@ -626,10 +553,7 @@ def validate_tool_evidence(
                 code=EvidenceIssueCode.UNDECLARED_ROLE,
                 severity=EvidenceIssueSeverity.ERROR,
                 role=role,
-                message=(
-                    f"Observed evidence role {role!r} is not declared "
-                    "by the tool contract."
-                ),
+                message=(f"Observed evidence role {role!r} is not declared by the tool contract."),
             )
         )
 
@@ -639,9 +563,7 @@ def validate_tool_evidence(
                 code=EvidenceIssueCode.REQUIRED_ROLE_MISSING,
                 severity=EvidenceIssueSeverity.ERROR,
                 role=role,
-                message=(
-                    f"Required evidence role {role!r} is absent."
-                ),
+                message=(f"Required evidence role {role!r} is absent."),
             )
         )
 
@@ -658,10 +580,7 @@ def validate_tool_evidence(
                     severity=EvidenceIssueSeverity.ERROR,
                     role=artifact.role,
                     path=artifact.path,
-                    message=(
-                        "The same evidence path is registered more "
-                        "than once."
-                    ),
+                    message=("The same evidence path is registered more than once."),
                 )
             )
         else:
@@ -675,9 +594,7 @@ def validate_tool_evidence(
                     severity=EvidenceIssueSeverity.ERROR,
                     role=artifact.role,
                     path=artifact.path,
-                    message=(
-                        "The same role and path pair is duplicated."
-                    ),
+                    message=("The same role and path pair is duplicated."),
                 )
             )
         role_path_index.add(role_path_key)
@@ -690,8 +607,7 @@ def validate_tool_evidence(
                     role=artifact.role,
                     path=artifact.path,
                     message=(
-                        "Evidence path is outside every registered "
-                        "diagnostic-tool output root."
+                        "Evidence path is outside every registered diagnostic-tool output root."
                     ),
                 )
             )
@@ -733,22 +649,11 @@ def ensure_tool_evidence_valid(
         bundle,
         allowed_output_roots=allowed_output_roots,
     )
-    errors = tuple(
-        issue
-        for issue in issues
-        if issue.severity is EvidenceIssueSeverity.ERROR
-    )
+    errors = tuple(issue for issue in issues if issue.severity is EvidenceIssueSeverity.ERROR)
     if errors:
         first = errors[0]
-        evidence = tuple(
-            str(issue.path)
-            for issue in errors
-            if issue.path is not None
-        )
-        detail = "; ".join(
-            f"{issue.code.value}: {issue.message}"
-            for issue in errors[:8]
-        )
+        evidence = tuple(str(issue.path) for issue in errors if issue.path is not None)
+        detail = "; ".join(f"{issue.code.value}: {issue.message}" for issue in errors[:8])
         if len(errors) > 8:
             detail += f"; and {len(errors) - 8} additional error(s)"
         raise ContractViolationError(
@@ -771,9 +676,7 @@ def evidence_by_role(
         grouped.setdefault(artifact.role, []).append(artifact)
     return MappingProxyType(
         {
-            role: tuple(
-                sorted(items, key=lambda item: _path_key(item.path))
-            )
+            role: tuple(sorted(items, key=lambda item: _path_key(item.path)))
             for role, items in sorted(grouped.items())
         }
     )
@@ -800,21 +703,13 @@ def evidence_paths(
 def raw_evidence(
     bundle: ToolEvidenceBundle,
 ) -> tuple[ToolEvidenceArtifact, ...]:
-    return tuple(
-        artifact
-        for artifact in bundle.artifacts
-        if artifact.raw
-    )
+    return tuple(artifact for artifact in bundle.artifacts if artifact.raw)
 
 
 def missing_required_roles(
     bundle: ToolEvidenceBundle,
 ) -> tuple[str, ...]:
-    present = frozenset(
-        artifact.role
-        for artifact in bundle.artifacts
-        if artifact.exists
-    )
+    present = frozenset(artifact.role for artifact in bundle.artifacts if artifact.exists)
     return tuple(sorted(bundle.required_roles.difference(present)))
 
 
@@ -824,9 +719,7 @@ def _artifact_from_observation(
     role: str,
 ) -> ToolEvidenceArtifact:
     if not isinstance(observation, ArtifactObservation):
-        raise TypeError(
-            "observation must be an ArtifactObservation"
-        )
+        raise TypeError("observation must be an ArtifactObservation")
     return ToolEvidenceArtifact(
         path=observation.path,
         role=role,
@@ -846,9 +739,7 @@ def _normalized_role_map(
     if values is None:
         return MappingProxyType({})
     if not isinstance(values, Mapping):
-        raise TypeError(
-            "role_by_artifact_path must be a mapping"
-        )
+        raise TypeError("role_by_artifact_path must be a mapping")
     normalized: dict[str, str] = {}
     for raw_path, raw_role in values.items():
         path = _normalized_path(
@@ -862,9 +753,7 @@ def _normalized_role_map(
         key = _path_key(path)
         previous = normalized.get(key)
         if previous is not None and previous != role:
-            raise ValueError(
-                f"conflicting roles for artifact path {path}"
-            )
+            raise ValueError(f"conflicting roles for artifact path {path}")
         normalized[key] = role
     return MappingProxyType(normalized)
 
@@ -873,11 +762,7 @@ def _single_role(
     artifacts: Sequence[ToolEvidenceArtifact],
     role: str,
 ) -> ToolEvidenceArtifact:
-    matches = tuple(
-        artifact
-        for artifact in artifacts
-        if artifact.role == role
-    )
+    matches = tuple(artifact for artifact in artifacts if artifact.role == role)
     if len(matches) != 1:
         raise ContractViolationError(
             f"Expected exactly one {role} evidence artifact",
@@ -885,9 +770,7 @@ def _single_role(
             stage="diagnostics",
             operation="read-tool-evidence",
             subject=role,
-            evidence_paths=tuple(
-                str(item.path) for item in matches
-            ),
+            evidence_paths=tuple(str(item.path) for item in matches),
         )
     return matches[0]
 
@@ -897,13 +780,8 @@ def _roles(
     field_name: str,
 ) -> frozenset[str]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            f"{field_name} must be an iterable of roles"
-        )
-    return frozenset(
-        _role(value, field_name)
-        for value in values
-    )
+        raise TypeError(f"{field_name} must be an iterable of roles")
+    return frozenset(_role(value, field_name) for value in values)
 
 
 def _role(value: object, field_name: str) -> str:
@@ -922,13 +800,9 @@ def _required_text(value: object, field_name: str) -> str:
     if not value or not value.strip():
         raise ValueError(f"{field_name} must not be empty")
     if value != value.strip():
-        raise ValueError(
-            f"{field_name} must not contain surrounding whitespace"
-        )
+        raise ValueError(f"{field_name} must not contain surrounding whitespace")
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain a NUL character"
-        )
+        raise ValueError(f"{field_name} must not contain a NUL character")
     return value
 
 
@@ -953,22 +827,63 @@ def _string_map(
         raise TypeError(f"{field_name} must be a mapping")
     copied: dict[str, str] = {}
     for key, value in values.items():
-        copied[
-            _required_text(key, f"{field_name} key")
-        ] = _required_text(
+        copied[_required_text(key, f"{field_name} key")] = _required_text(
             value,
             f"{field_name}[{key!r}]",
         )
     return MappingProxyType(copied)
 
 
-def _normalized_path(value: Path, field_name: str) -> Path:
-    if not isinstance(value, Path):
-        value = Path(value)
+def _evidence_issue_code(value: object) -> EvidenceIssueCode:
+    if isinstance(value, EvidenceIssueCode):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("code must be an EvidenceIssueCode or string")
+    try:
+        return EvidenceIssueCode(value)
+    except ValueError as exc:
+        raise ValueError("code must be a canonical EvidenceIssueCode") from exc
+
+
+def _evidence_issue_severity(value: object) -> EvidenceIssueSeverity:
+    if isinstance(value, EvidenceIssueSeverity):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("severity must be an EvidenceIssueSeverity or string")
+    try:
+        return EvidenceIssueSeverity(value)
+    except ValueError as exc:
+        raise ValueError("severity must be a canonical EvidenceIssueSeverity") from exc
+
+
+def _evidence_origin(value: object) -> EvidenceOrigin:
+    if isinstance(value, EvidenceOrigin):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("origin must be an EvidenceOrigin or string")
+    try:
+        return EvidenceOrigin(value)
+    except ValueError as exc:
+        raise ValueError("origin must be a canonical EvidenceOrigin") from exc
+
+
+def _execution_state(value: object) -> ExecutionState:
+    if isinstance(value, ExecutionState):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("execution_state must be an ExecutionState or string")
+    try:
+        return ExecutionState(value)
+    except ValueError as exc:
+        raise ValueError("execution_state must be a canonical ExecutionState") from exc
+
+
+def _normalized_path(value: object, field_name: str) -> Path:
+    if not isinstance(value, (str, os.PathLike)):
+        raise TypeError(f"{field_name} must be path-like")
+    value = Path(value)
     if "\x00" in os.fspath(value):
-        raise ValueError(
-            f"{field_name} must not contain a NUL character"
-        )
+        raise ValueError(f"{field_name} must not contain a NUL character")
     normalized = Path(os.path.normpath(os.fspath(value)))
     if not normalized.is_absolute():
         raise ValueError(f"{field_name} must be absolute")
@@ -980,22 +895,16 @@ def _unique_paths(
     field_name: str,
 ) -> tuple[Path, ...]:
     if isinstance(values, (str, bytes, Path)):
-        raise TypeError(
-            f"{field_name} must be an iterable of paths"
-        )
+        raise TypeError(f"{field_name} must be an iterable of paths")
     normalized: dict[str, Path] = {}
     for value in values:
         path = _normalized_path(Path(value), field_name)
         normalized.setdefault(_path_key(path), path)
-    return tuple(
-        normalized[key] for key in sorted(normalized)
-    )
+    return tuple(normalized[key] for key in sorted(normalized))
 
 
 def _path_key(path: Path) -> str:
-    return os.path.normcase(
-        os.path.normpath(os.fspath(path))
-    )
+    return os.path.normcase(os.path.normpath(os.fspath(path)))
 
 
 def _inside_any(
@@ -1003,10 +912,7 @@ def _inside_any(
     roots: Sequence[Path],
 ) -> bool:
     candidate = _normalized_path(path, "path")
-    return any(
-        candidate == root or candidate.is_relative_to(root)
-        for root in roots
-    )
+    return any(candidate == root or candidate.is_relative_to(root) for root in roots)
 
 
 def _utc(value: datetime, field_name: str) -> datetime:
@@ -1026,9 +932,7 @@ def _plain_int(value: int, field_name: str) -> int:
 def _non_negative_int(value: int, field_name: str) -> int:
     _plain_int(value, field_name)
     if value < 0:
-        raise ValueError(
-            f"{field_name} must be non-negative"
-        )
+        raise ValueError(f"{field_name} must be non-negative")
     return value
 
 

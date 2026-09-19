@@ -2,24 +2,44 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import re
 from types import MappingProxyType
 from typing import Final
 
 GATE_POLICY_VERSION: Final[str] = "1.1.0"
 
-_FRAMEWORK_GATE_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^RG-(?:0[0-9]|1[0-4])$"
-)
+_FRAMEWORK_GATE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^RG-(?:0[0-9]|1[0-4])$")
 _PROJECT_GATE_ID_RE: Final[re.Pattern[str]] = re.compile(
     r"^RC-[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[0-9]{3}$"
 )
-_CONDITION_KEY_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
+_CONDITION_KEY_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+
+
+def _validate_text(value: str, *, field_name: str) -> None:
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be a string")
+    if not value or not value.strip():
+        raise ValueError(f"{field_name} must not be empty")
+    if "\x00" in value:
+        raise ValueError(f"{field_name} must not contain NUL characters")
+
+
+def _validate_gate_id(value: str) -> None:
+    _validate_text(value, field_name="gate_id")
+    if (
+        _FRAMEWORK_GATE_ID_RE.fullmatch(value) is None
+        and _PROJECT_GATE_ID_RE.fullmatch(value) is None
+    ):
+        raise ValueError("gate_id must match RG-00 through RG-14 or RC-<DOMAIN>-<NNN>")
+
+
+def _validate_condition_key(value: str) -> None:
+    _validate_text(value, field_name="activation_condition")
+    if _CONDITION_KEY_RE.fullmatch(value) is None:
+        raise ValueError("activation_condition must use lowercase snake_case")
 
 
 @unique
@@ -56,9 +76,7 @@ class ReleaseGateDefinition:
             self.applicability,
             ReleaseGateApplicability,
         ):
-            raise TypeError(
-                "applicability must be a ReleaseGateApplicability"
-            )
+            raise TypeError("applicability must be a ReleaseGateApplicability")
         if not isinstance(self.phase, ReleaseGatePhase):
             raise TypeError("phase must be a ReleaseGatePhase")
         if not isinstance(self.hard_gate, bool):
@@ -67,26 +85,14 @@ class ReleaseGateDefinition:
         condition = self.activation_condition
         if self.applicability is ReleaseGateApplicability.CONDITIONAL:
             if condition is None:
-                raise ValueError(
-                    "conditional gates require activation_condition"
-                )
+                raise ValueError("conditional gates require activation_condition")
             _validate_condition_key(condition)
         elif condition is not None:
-            raise ValueError(
-                "activation_condition is valid only for conditional gates"
-            )
+            raise ValueError("activation_condition is valid only for conditional gates")
 
-        if (
-            self.phase is ReleaseGatePhase.DECISION
-            and self.gate_id != "RG-14"
-        ):
-            raise ValueError(
-                "only RG-14 may use the decision phase"
-            )
-        if (
-            self.gate_id == "RG-14"
-            and self.phase is not ReleaseGatePhase.DECISION
-        ):
+        if self.phase is ReleaseGatePhase.DECISION and self.gate_id != "RG-14":
+            raise ValueError("only RG-14 may use the decision phase")
+        if self.gate_id == "RG-14" and self.phase is not ReleaseGatePhase.DECISION:
             raise ValueError("RG-14 must use the decision phase")
 
     @property
@@ -110,20 +116,14 @@ class ReleaseGateDefinition:
 
         condition = self.activation_condition
         if condition is None:
-            raise AssertionError(
-                "conditional gate has no activation condition"
-            )
+            raise AssertionError("conditional gate has no activation condition")
         value = conditions.get(condition, False)
         if not isinstance(value, bool):
-            raise TypeError(
-                f"condition {condition!r} must resolve to a bool"
-            )
+            raise TypeError(f"condition {condition!r} must resolve to a bool")
         return value
 
 
-CANONICAL_RELEASE_GATES: Final[
-    tuple[ReleaseGateDefinition, ...]
-] = (
+CANONICAL_RELEASE_GATES: Final[tuple[ReleaseGateDefinition, ...]] = (
     ReleaseGateDefinition(
         gate_id="RG-00",
         name="Release request",
@@ -140,8 +140,7 @@ CANONICAL_RELEASE_GATES: Final[
         applicability=ReleaseGateApplicability.REQUIRED,
         owner="Project loader and configuration validator",
         purpose=(
-            "Prove that one coherent active language project is "
-            "defined by valid configuration."
+            "Prove that one coherent active language project is defined by valid configuration."
         ),
     ),
     ReleaseGateDefinition(
@@ -291,9 +290,7 @@ CANONICAL_RELEASE_GATE_IDS: Final[tuple[str, ...]] = tuple(
     gate.gate_id for gate in CANONICAL_RELEASE_GATES
 )
 
-CANONICAL_RELEASE_GATE_BY_ID: Final[
-    Mapping[str, ReleaseGateDefinition]
-] = MappingProxyType(
+CANONICAL_RELEASE_GATE_BY_ID: Final[Mapping[str, ReleaseGateDefinition]] = MappingProxyType(
     {gate.gate_id: gate for gate in CANONICAL_RELEASE_GATES}
 )
 
@@ -306,18 +303,13 @@ def iter_release_gates(
         raise TypeError("include_decision_gate must be a bool")
 
     for gate in CANONICAL_RELEASE_GATES:
-        if (
-            not include_decision_gate
-            and gate.phase is ReleaseGatePhase.DECISION
-        ):
+        if not include_decision_gate and gate.phase is ReleaseGatePhase.DECISION:
             continue
         yield gate
 
 
 def evaluation_gate_definitions() -> tuple[ReleaseGateDefinition, ...]:
-    return tuple(
-        iter_release_gates(include_decision_gate=False)
-    )
+    return tuple(iter_release_gates(include_decision_gate=False))
 
 
 def decision_gate_definition() -> ReleaseGateDefinition:
@@ -349,9 +341,7 @@ def active_release_gates(
         _validate_conditions(conditions)
     return tuple(
         gate
-        for gate in iter_release_gates(
-            include_decision_gate=include_decision_gate
-        )
+        for gate in iter_release_gates(include_decision_gate=include_decision_gate)
         if gate.is_active(conditions)
     )
 
@@ -365,22 +355,34 @@ def inactive_conditional_gates(
         gate
         for gate in evaluation_gate_definitions()
         if (
-            gate.applicability
-            is ReleaseGateApplicability.CONDITIONAL
+            gate.applicability is ReleaseGateApplicability.CONDITIONAL
             and not gate.is_active(conditions)
         )
     )
 
 
+def _materialize_release_gates(
+    gates: object,
+    *,
+    field_name: str,
+) -> tuple[ReleaseGateDefinition, ...]:
+    if isinstance(gates, (str, bytes)) or not isinstance(gates, Iterable):
+        raise TypeError(f"{field_name} must be an iterable of gate definitions")
+    normalized: list[ReleaseGateDefinition] = []
+    for position, gate in enumerate(gates):
+        if not isinstance(gate, ReleaseGateDefinition):
+            raise TypeError(f"{field_name}[{position}] must be a ReleaseGateDefinition")
+        normalized.append(gate)
+    return tuple(normalized)
+
+
 def build_release_gate_registry(
     project_gates: Iterable[ReleaseGateDefinition] = (),
 ) -> tuple[ReleaseGateDefinition, ...]:
-    if isinstance(project_gates, (str, bytes)):
-        raise TypeError(
-            "project_gates must be an iterable of gate definitions"
-        )
-
-    extensions = tuple(project_gates)
+    extensions = _materialize_release_gates(
+        project_gates,
+        field_name="project_gates",
+    )
     validate_release_gate_registry(
         (*CANONICAL_RELEASE_GATES, *extensions),
         require_canonical_prefix=True,
@@ -391,11 +393,9 @@ def build_release_gate_registry(
 def index_release_gate_registry(
     gates: Iterable[ReleaseGateDefinition],
 ) -> Mapping[str, ReleaseGateDefinition]:
-    normalized = tuple(gates)
+    normalized = _materialize_release_gates(gates, field_name="gates")
     validate_release_gate_registry(normalized)
-    return MappingProxyType(
-        {gate.gate_id: gate for gate in normalized}
-    )
+    return MappingProxyType({gate.gate_id: gate for gate in normalized})
 
 
 def validate_release_gate_registry(
@@ -403,62 +403,30 @@ def validate_release_gate_registry(
     *,
     require_canonical_prefix: bool = False,
 ) -> None:
-    if isinstance(gates, (str, bytes)):
-        raise TypeError("gates must be an iterable of gate definitions")
     if not isinstance(require_canonical_prefix, bool):
         raise TypeError("require_canonical_prefix must be a bool")
 
-    normalized = tuple(gates)
+    normalized = _materialize_release_gates(gates, field_name="gates")
     seen: set[str] = set()
 
-    for position, gate in enumerate(normalized):
-        if not isinstance(gate, ReleaseGateDefinition):
-            raise TypeError(
-                f"gates[{position}] must be a ReleaseGateDefinition"
-            )
+    for gate in normalized:
         if gate.gate_id in seen:
-            raise ValueError(
-                f"duplicate release gate ID {gate.gate_id!r}"
-            )
+            raise ValueError(f"duplicate release gate ID {gate.gate_id!r}")
         seen.add(gate.gate_id)
 
     if require_canonical_prefix:
         prefix = normalized[: len(CANONICAL_RELEASE_GATES)]
         if prefix != CANONICAL_RELEASE_GATES:
             raise ValueError(
-                "canonical release gates must remain the registry prefix "
-                "in canonical order"
+                "canonical release gates must remain the registry prefix in canonical order"
             )
         for gate in normalized[len(CANONICAL_RELEASE_GATES) :]:
             if not gate.is_project_gate:
                 raise ValueError(
-                    "release-gate extensions must use project gate IDs "
-                    "matching RC-<DOMAIN>-<NNN>"
+                    "release-gate extensions must use project gate IDs matching RC-<DOMAIN>-<NNN>"
                 )
             if gate.phase is ReleaseGatePhase.DECISION:
-                raise ValueError(
-                    "project gates cannot define a decision phase"
-                )
-
-
-def _validate_gate_id(value: str) -> None:
-    _validate_text(value, field_name="gate_id")
-    if (
-        _FRAMEWORK_GATE_ID_RE.fullmatch(value) is None
-        and _PROJECT_GATE_ID_RE.fullmatch(value) is None
-    ):
-        raise ValueError(
-            "gate_id must match RG-00 through RG-14 or "
-            "RC-<DOMAIN>-<NNN>"
-        )
-
-
-def _validate_condition_key(value: str) -> None:
-    _validate_text(value, field_name="activation_condition")
-    if _CONDITION_KEY_RE.fullmatch(value) is None:
-        raise ValueError(
-            "activation_condition must use lowercase snake_case"
-        )
+                raise ValueError("project gates cannot define a decision phase")
 
 
 def _validate_conditions(
@@ -469,28 +437,15 @@ def _validate_conditions(
     for key, value in conditions.items():
         _validate_condition_key(key)
         if not isinstance(value, bool):
-            raise TypeError(
-                f"condition {key!r} must map to a bool"
-            )
-
-
-def _validate_text(value: str, *, field_name: str) -> None:
-    if not isinstance(value, str):
-        raise TypeError(f"{field_name} must be a string")
-    if not value or not value.strip():
-        raise ValueError(f"{field_name} must not be empty")
-    if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+            raise TypeError(f"condition {key!r} must map to a bool")
 
 
 validate_release_gate_registry(CANONICAL_RELEASE_GATES)
 
 __all__ = (
+    "CANONICAL_RELEASE_GATES",
     "CANONICAL_RELEASE_GATE_BY_ID",
     "CANONICAL_RELEASE_GATE_IDS",
-    "CANONICAL_RELEASE_GATES",
     "GATE_POLICY_VERSION",
     "ReleaseGateApplicability",
     "ReleaseGateDefinition",

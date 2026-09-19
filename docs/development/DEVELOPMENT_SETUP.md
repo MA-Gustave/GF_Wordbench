@@ -7,10 +7,25 @@
 **Owner:** GF Wordbench maintainers  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Guide version:** `1.1.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This guide defines the supported local development setup for GF Wordbench.
@@ -46,7 +61,7 @@ docs/usage/QUICK_START.md
 The development environment must preserve these rules:
 
 ```text
-one active language project per workspace
+one selected language context per workspace
 framework code remains language-neutral
 GF remains the execution engine
 tests do not depend on one developer's undocumented machine state
@@ -64,8 +79,8 @@ Framework development preserves the product boundary:
 
 ```text
 one Wordbench workspace
-→ one active GF language project
-→ one project identity per run
+→ one resolved GF language context per run
+→ one resolved language identity per run
 ```
 
 Cross-workspace and multilingual aggregation belongs to the independent `gf-portfolio` product.
@@ -508,24 +523,24 @@ Test-Path "<RGL_ROOT>"
 Get-ChildItem "<RGL_ROOT>" | Select-Object -First 10
 ```
 
-The active project supplies ordered GF path parts.
+The selected language context supplies ordered GF path parts.
 
 The local environment supplies the machine-specific RGL root.
 
-Do not hardcode the local absolute RGL root in portable `project/project.toml`.
+Do not hardcode the local absolute RGL root in portable `<validation-profile-root>/project.toml`.
 
 ---
 
-## 16. Prepare the active project
+## 16. Prepare the selected language context
 
-A framework checkout contains one active project or a project template ready for initialization.
+A framework checkout contains one selected language context or a validation-profile template ready for initialization.
 
 Verify:
 
 ```text
-project/project.toml
-project/docs/
-project/validation/
+<validation-profile-root>/project.toml
+<validation-profile-root>/docs/
+<validation-profile-root>/validation/
 ```
 
 Run the project checker:
@@ -540,7 +555,7 @@ gf-wordbench project check `
 
 Project checking occurs before real integration tests.
 
-Framework unit tests must not require the active language project unless the test is explicitly a project-integration test.
+Framework unit tests must not require the selected language context unless the test is explicitly a project-integration test.
 
 ---
 
@@ -784,7 +799,7 @@ timeout containment where safe
 
 ### 21.5 Active-project validation tests
 
-Validate the active language project.
+Validate the selected language context.
 
 These are not substitutes for language-neutral framework tests.
 
@@ -841,7 +856,7 @@ They must not depend on:
 ```text
 a developer's global GF_LIB_PATH
 the current terminal directory
-the active project unless marked project
+the selected language context unless marked project
 old generated .gfo files
 an existing personal run directory
 ```
@@ -1649,7 +1664,7 @@ A public cross-file change is not complete when only the provider compiles.
 
 ---
 
-## 52. Working on the active project
+## 52. Working on the selected language context
 
 Framework development and language-project development are separate concerns.
 
@@ -2108,7 +2123,7 @@ Inspect for:
 
 ```text
 hardcoded repository paths
-direct writes to project/validation/gold
+direct writes to <validation-profile-root>/validation/gold
 state service using repository root
 run output defaulting into source tree
 fixtures reused as mutable destinations
@@ -2163,7 +2178,7 @@ A development environment is ready when:
 [ ] compileall passes
 [ ] GF executable is known for integration work
 [ ] RGL root is known for integration work
-[ ] project check can resolve the active project
+[ ] project check can resolve the selected language context
 [ ] generated output is outside source roots
 ```
 

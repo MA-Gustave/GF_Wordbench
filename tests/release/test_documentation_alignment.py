@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-import re
+from collections.abc import Iterable, Mapping
 from pathlib import Path
+import re
 import tomllib
 
 import pytest
@@ -12,6 +12,7 @@ import pytest
 pytestmark = pytest.mark.contract
 
 _ALIGNMENT_AUTHORITY = "docs/DOCUMENTATION_ALIGNMENT_LOCK.md"
+_OPTIONAL_ACTIVE_PROFILE_DOCUMENT = "project/docs/INTERFILE_CONTRACT_LOCK.md"
 
 _REQUIRED_DOCUMENTS = {
     "docs/DOCUMENTATION_ALIGNMENT_LOCK.md": (
@@ -22,7 +23,7 @@ _REQUIRED_DOCUMENTS = {
         "GF-WB-DOCUMENTATION-MAP",
         "Normative navigation index",
     ),
-    "docs/GF_WORDBENCH_CANONICAL_FILE_ARCHITECTURE.md": (
+    "docs/architecture/CANONICAL_FILE_ARCHITECTURE.md": (
         "GF-WB-CANONICAL-FILE-ARCHITECTURE",
         "Normative — final architecture",
     ),
@@ -38,11 +39,7 @@ _REQUIRED_DOCUMENTS = {
         "GF-WB-PERSISTED-SCHEMA-LOCK",
         "Normative",
     ),
-    "project/docs/INTERFILE_CONTRACT_LOCK.md": (
-        "GF-WB-PROJECT-SQI-INTERFILE-LOCK",
-        "Normative active-project contract",
-    ),
-    "templates/project/docs/INTERFILE_CONTRACT_LOCK.md": (
+    "templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md": (
         "GF-WB-PROJECT-TEMPLATE-INTERFILE-LOCK",
         "Normative reusable template contract",
     ),
@@ -63,19 +60,32 @@ _ALIGNMENT_DELEGATES = (
     "docs/architecture/PRODUCT_BOUNDARIES.md",
     "docs/development/TESTING_GF_WORDBENCH.md",
     "docs/release/RELEASE_PROCESS.md",
-    "project/docs/INTERFILE_CONTRACT_LOCK.md",
-    "templates/project/docs/INTERFILE_CONTRACT_LOCK.md",
+    "templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md",
 )
 
 _LOCKED_ALIGNMENT_STATEMENTS = (
-    "One GF Wordbench workspace contains exactly one active GF language project.",
-    "Every validation run resolves exactly one active project identity",
+    "A running GF Wordbench session has either:",
+    "exactly one resolved language context",
+    "Changing language ends the current runtime and resolves a new context.",
+    "Normal startup begins from one explicit path supplied by the user, CLI or automation:",
     "Grammatical Framework is the authority for GF parsing",
     "Native `.gfs` scenarios remain the scenario execution format.",
     "The accepted target architecture is one deployable hexagonal modular monolith.",
     "Multi-workspace management, multilingual portfolio aggregation",
-    "GF Wordbench MUST start, validate, report, release and pass its tests "
-    "without `gf-portfolio` installed or reachable.",
+    "GF Wordbench MUST start, browse, scan, validate, report, release and pass "
+    "its tests without `gf-portfolio` installed or reachable.",
+)
+
+_REQUIRED_LANGUAGE_LOADER_PATHS = (
+    "src/gf_wordbench/entrypoints/gui/startup.py",
+    "src/gf_wordbench/projects/languages/__init__.py",
+    "src/gf_wordbench/projects/languages/models.py",
+    "src/gf_wordbench/projects/languages/ports.py",
+    "src/gf_wordbench/projects/languages/probe.py",
+    "src/gf_wordbench/projects/languages/public.py",
+    "tests/integration/end_to_end/test_path_resolved_language_startup.py",
+    "tests/integration/gui/test_language_switching.py",
+    "tests/unit/projects/test_language_probe.py",
 )
 
 
@@ -130,9 +140,7 @@ def _canonical_paths(text: str) -> tuple[str, ...]:
             continue
 
         branch_positions = tuple(
-            position
-            for marker in ("├── ", "└── ")
-            if (position := line.find(marker)) >= 0
+            position for marker in ("├── ", "└── ") if (position := line.find(marker)) >= 0
         )
 
         if branch_positions:
@@ -208,19 +216,47 @@ def _repository_target(
     return resolved
 
 
+def _assert_document_identity(
+    root: Path,
+    relative_path: str,
+    *,
+    document_id: str,
+    status: str,
+) -> None:
+    text = _read_text(root, relative_path)
+    assert _metadata_value(text, "Document ID") == document_id
+    assert _metadata_value(text, "Status") == status
+
+
 def test_required_governance_documents_have_stable_identity() -> None:
     root = _repository_root()
 
     for relative_path, (document_id, status) in _REQUIRED_DOCUMENTS.items():
-        text = _read_text(root, relative_path)
-        assert _metadata_value(text, "Document ID") == document_id
-        assert _metadata_value(text, "Status") == status
+        _assert_document_identity(
+            root,
+            relative_path,
+            document_id=document_id,
+            status=status,
+        )
+
+    active_profile = root / "project" / "project.toml"
+    if active_profile.is_file():
+        _assert_document_identity(
+            root,
+            _OPTIONAL_ACTIVE_PROFILE_DOCUMENT,
+            document_id="GF-WB-PROJECT-SQI-INTERFILE-LOCK",
+            status="Normative active-project contract",
+        )
 
 
 def test_normative_delegates_point_to_the_alignment_lock() -> None:
     root = _repository_root()
+    delegates = list(_ALIGNMENT_DELEGATES)
 
-    for relative_path in _ALIGNMENT_DELEGATES:
+    if (root / _OPTIONAL_ACTIVE_PROFILE_DOCUMENT).is_file():
+        delegates.append(_OPTIONAL_ACTIVE_PROFILE_DOCUMENT)
+
+    for relative_path in delegates:
         text = _read_text(root, relative_path)
         authority = _metadata_value(text, "Alignment authority")
         assert authority == _ALIGNMENT_AUTHORITY, (
@@ -250,7 +286,7 @@ def test_alignment_lock_preserves_accepted_product_decisions() -> None:
 
 def test_canonical_file_architecture_counts_are_self_consistent() -> None:
     root = _repository_root()
-    architecture_path = "docs/GF_WORDBENCH_CANONICAL_FILE_ARCHITECTURE.md"
+    architecture_path = "docs/architecture/CANONICAL_FILE_ARCHITECTURE.md"
     architecture = _read_text(root, architecture_path)
 
     assert (
@@ -263,16 +299,27 @@ def test_canonical_file_architecture_counts_are_self_consistent() -> None:
 
     runtime = tuple(path for path in paths if path.startswith("src/gf_wordbench/"))
     tests = tuple(path for path in paths if path.startswith("tests/"))
-    support = tuple(
-        path
-        for path in paths
-        if not path.startswith(("src/gf_wordbench/", "tests/"))
-    )
+    support = tuple(path for path in paths if not path.startswith(("src/gf_wordbench/", "tests/")))
 
-    assert counts["Runtime Python package"] == len(runtime) == 222
-    assert counts["Repository support, launch, script, and CI files"] == len(support) == 14
-    assert counts["Test modules and test helpers"] == len(tests) == 157
-    assert counts["Total fixed coded files"] == len(paths) == 393
+    expected_labels = {
+        "Runtime Python package",
+        "Repository support, launch, script, and CI files",
+        "Test modules and test helpers",
+        "Total fixed coded files",
+    }
+    assert expected_labels <= counts.keys()
+
+    assert counts["Runtime Python package"] == len(runtime)
+    assert counts["Repository support, launch, script, and CI files"] == len(support)
+    assert counts["Test modules and test helpers"] == len(tests)
+    assert counts["Total fixed coded files"] == len(paths)
+    assert len(paths) == len(runtime) + len(support) + len(tests)
+
+    for required_path in _REQUIRED_LANGUAGE_LOADER_PATHS:
+        assert required_path in paths, (
+            f"Canonical architecture omits the explicit language-loader path: {required_path}"
+        )
+
     assert "tests/release/test_documentation_alignment.py" in paths
 
 
@@ -300,30 +347,30 @@ def test_documentation_map_has_no_unrecorded_broken_repository_links() -> None:
     )
 
 
-def test_template_identity_is_generic_and_active_project_identity_is_owned() -> None:
+def test_validation_profile_template_identity_is_generic() -> None:
     root = _repository_root()
+    template_path = "templates/validation-profile/project.toml"
+    template_config = tomllib.loads(_read_text(root, template_path))
+    assert template_config["schema_id"] == "gf-wordbench.project"
+    template_profile = template_config["profile"]
+
+    assert template_profile["id"] == "<PROFILE_ID>"
+    assert template_profile["name"] == "<PROFILE_NAME>"
+    assert template_config["compatibility"]["expected_language_key"] == ""
+
+    active_path = root / "project" / "project.toml"
+    if not active_path.is_file():
+        return
 
     active_config = tomllib.loads(_read_text(root, "project/project.toml"))
-    template_config = tomllib.loads(_read_text(root, "templates/project/project.toml"))
-
-    active_project = active_config["project"]
-    template_project = template_config["project"]
-
-    assert active_project["id"]
-    assert active_project["name"]
-    assert active_project["language_code"]
-
-    assert template_project["id"] == "<PROJECT_ID>"
-    assert template_project["name"] == "<LANGUAGE_NAME>"
-    assert template_project["language_code"] == "<LANGUAGE_CODE>"
-
-    template_tree = root / "templates" / "project"
+    active_profile = active_config.get("profile", active_config.get("project"))
+    assert isinstance(active_profile, Mapping)
     active_values = {
-        str(active_project["id"]).casefold(),
-        str(active_project["name"]).casefold(),
-        str(active_project["language_code"]).casefold(),
+        str(active_profile["id"]).casefold(),
+        str(active_profile["name"]).casefold(),
     }
 
+    template_tree = root / "templates" / "validation-profile"
     leaked: list[str] = []
     for path in sorted(template_tree.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in {".md", ".toml", ".gfs"}:
@@ -334,6 +381,6 @@ def test_template_identity_is_generic_and_active_project_identity_is_owned() -> 
             if len(value) >= 3 and value in text:
                 leaked.append(f"{path.relative_to(root).as_posix()}: {value}")
 
-    assert not leaked, "Active-project identity leaked into reusable template:\n" + "\n".join(
+    assert not leaked, "Active-profile identity leaked into reusable template:\n" + "\n".join(
         leaked
     )

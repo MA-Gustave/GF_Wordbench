@@ -181,8 +181,7 @@ class LanguageProbeResultLike(Protocol):
     """Minimum application-result surface consumed by this CLI adapter."""
 
     @property
-    def diagnostics(self) -> Sequence[object]:
-        ...
+    def diagnostics(self) -> Sequence[object]: ...
 
 
 @runtime_checkable
@@ -192,8 +191,7 @@ class LanguageProbeApplication(Protocol):
     def probe_language(
         self,
         request: LanguageProbeCommandRequest,
-    ) -> LanguageProbeResultLike:
-        ...
+    ) -> LanguageProbeResultLike: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,7 +386,6 @@ class LanguageProbeCommandResult(Mapping[str, object]):
         )
 
 
-
 def language_probe_request_from_cli_request(
     request: CliRequest,
 ) -> LanguageProbeCommandRequest:
@@ -458,9 +455,7 @@ def language_probe_request_from_namespace(
             field="namespace._command",
         ).lower()
         if command_name != _LANGUAGE_PROBE_CANONICAL_COMMAND:
-            raise CliUsageError(
-                "namespace must identify language.probe"
-            )
+            raise CliUsageError("namespace must identify language.probe")
 
     selected = _namespace_first(
         namespace,
@@ -470,9 +465,7 @@ def language_probe_request_from_namespace(
         "path",
     )
     if selected is None:
-        raise CliUsageError(
-            "language probe requires a language directory or .gf file"
-        )
+        raise CliUsageError("language probe requires a language directory or .gf file")
 
     return LanguageProbeCommandRequest(
         selected_path=_coerce_path(
@@ -545,9 +538,7 @@ def execute_language_probe_command(
 
     active_services = services or _build_language_command_services()
     if not isinstance(active_services, LanguageCommandServices):
-        raise TypeError(
-            "services must be LanguageCommandServices or None"
-        )
+        raise TypeError("services must be LanguageCommandServices or None")
 
     if isinstance(request, argparse.Namespace):
         typed_request = language_probe_request_from_namespace(request)
@@ -560,10 +551,7 @@ def execute_language_probe_command(
             active_services.application,
         )
 
-    raise TypeError(
-        "request must be CliRequest or argparse.Namespace"
-    )
-
+    raise TypeError("request must be CliRequest or argparse.Namespace")
 
 
 def run_language_probe(
@@ -588,7 +576,9 @@ def _build_language_command_services() -> LanguageCommandServices:
     from gf_wordbench.bootstrap import build_language_probe_application
 
     return LanguageCommandServices(
-        application=build_language_probe_application(),
+        application=_require_language_probe_application(
+            build_language_probe_application()
+        ),
     )
 
 
@@ -596,7 +586,6 @@ def _build_language_probe_application() -> LanguageProbeApplication:
     """Compatibility helper returning the freshly composed application."""
 
     return _build_language_command_services().application
-
 
 
 def _require_language_probe_application(
@@ -668,7 +657,6 @@ def _project_issue(value: object, *, index: int) -> LanguageProbeIssue:
     )
 
 
-
 def _overall_status_for_outcome(outcome: LanguageProbeOutcome) -> OverallStatus:
     if outcome is LanguageProbeOutcome.RESOLVED:
         return OverallStatus.OK
@@ -713,9 +701,7 @@ def _optional_path_kind(
     try:
         return SelectedPathKind(text)
     except ValueError as exc:
-        raise ValueError(
-            f"unknown selected path kind: {text!r}"
-        ) from exc
+        raise ValueError(f"unknown selected path kind: {text!r}") from exc
 
 
 def _coerce_outcome(value: object) -> LanguageProbeOutcome:
@@ -726,9 +712,7 @@ def _coerce_outcome(value: object) -> LanguageProbeOutcome:
     try:
         return LanguageProbeOutcome(text)
     except ValueError as exc:
-        raise ValueError(
-            f"unknown language probe outcome: {text!r}"
-        ) from exc
+        raise ValueError(f"unknown language probe outcome: {text!r}") from exc
 
 
 def _optional_result_text(
@@ -770,9 +754,7 @@ def _result_paths(
             )
         )
     if len(set(paths)) != len(paths):
-        raise ValueError(
-            f"result.{name} must not contain duplicate paths"
-        )
+        raise ValueError(f"result.{name} must not contain duplicate paths")
     return tuple(paths)
 
 
@@ -817,12 +799,9 @@ def _result_texts_from_value(
 ) -> tuple[str, ...]:
     if value is None:
         return ()
+    values: tuple[object, ...]
     if isinstance(value, Mapping):
-        values = tuple(
-            str(key)
-            for key, enabled in value.items()
-            if enabled
-        )
+        values = tuple(str(key) for key, enabled in value.items() if enabled)
     else:
         values = _coerce_sequence(value, field=field)
     return _normalize_unique_texts(values, field=field)
@@ -850,7 +829,6 @@ def _result_value(
                     return value
 
     return default
-
 
 
 def _require_cli_command(request: CliRequest, expected: str) -> None:
@@ -941,8 +919,7 @@ def _coerce_path(value: object, *, field: str) -> Path:
 def _coerce_path_sequence(value: object, *, field: str) -> tuple[Path, ...]:
     values = _coerce_sequence(value, field=field)
     paths = tuple(
-        _coerce_path(item, field=f"{field}[{index}]")
-        for index, item in enumerate(values)
+        _coerce_path(item, field=f"{field}[{index}]") for index, item in enumerate(values)
     )
     if len(set(paths)) != len(paths):
         raise ValueError(f"{field} must not contain duplicate paths")

@@ -31,17 +31,13 @@ _TIMEOUT_SECONDS = 30.0
 def _resolve_test_gf_executable() -> Path:
     configured = os.environ.get(_TEST_GF_ENV, "").strip()
     if not configured:
-        pytest.skip(
-            f"real GF integration requires {_TEST_GF_ENV} to name the GF executable"
-        )
+        pytest.skip(f"real GF integration requires {_TEST_GF_ENV} to name the GF executable")
 
     candidate = Path(configured).expanduser()
     if not candidate.is_absolute():
         discovered = shutil.which(configured)
         if discovered is None:
-            pytest.skip(
-                f"{_TEST_GF_ENV}={configured!r} does not resolve to an executable"
-            )
+            pytest.skip(f"{_TEST_GF_ENV}={configured!r} does not resolve to an executable")
         candidate = Path(discovered)
 
     try:

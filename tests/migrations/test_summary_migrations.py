@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
 from types import MappingProxyType
@@ -247,7 +248,9 @@ def test_nested_summary_maps_all_mode_to_diagnostic(
     assert migration.result.source_schema == "unversioned.run-summary"
     assert migration.result.status is MigrationStatus.MIGRATED_WITH_WARNINGS
     assert migration.document is not None
-    assert migration.document["metadata"]["mode"] == "diagnostic"  # type: ignore[index]
+    metadata = migration.document.get("metadata")
+    assert isinstance(metadata, Mapping)
+    assert metadata.get("mode") == "diagnostic"
     assert validate_summary_v1(migration.document) == ()
 
 
@@ -272,10 +275,7 @@ def test_pre_scenario_summary_records_historical_limitation(
     assert migration.document is not None
     assert migration.document["scenario_results"] == []
     assert "Historical run contains no scenario evidence." in migration.result.losses
-    assert any(
-        "predates scenario results" in warning
-        for warning in migration.result.warnings
-    )
+    assert any("predates scenario results" in warning for warning in migration.result.warnings)
 
 
 def test_strict_migration_blocks_lossy_pre_scenario_summary(

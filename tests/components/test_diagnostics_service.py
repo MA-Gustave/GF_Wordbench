@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
-import subprocess
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any
+import subprocess
+from collections.abc import Mapping, Sequence
+from typing import Any, cast
 
 import pytest
 
 from gf_wordbench.diagnostics import public as diagnostics_public
 from gf_wordbench.diagnostics.classification.service import (
+    ClassificationBatch,
     ClassificationService,
+    DiagnosticResult,
     enforce_classification_coherence,
 )
-from gf_wordbench.diagnostics.models import DiagnosticEvidence
+from gf_wordbench.diagnostics.models import (
+    DiagnosticEvidence,
+    DiagnosticParseResult,
+    DiagnosticRecord,
+)
 from gf_wordbench.diagnostics.parsing.service import (
     PARSER_VERSION,
     DiagnosticParsingService,
@@ -71,9 +78,7 @@ def _evidence(
         "stdout_truncated": stdout_truncated,
         "stderr_truncated": stderr_truncated,
         "decoding_lossy": decoding_lossy,
-        "capture_complete": not (
-            stdout_truncated or stderr_truncated or decoding_lossy
-        ),
+        "capture_complete": not (stdout_truncated or stderr_truncated or decoding_lossy),
         "strict": strict,
     }
     return DiagnosticEvidence(
@@ -81,39 +86,35 @@ def _evidence(
     )
 
 
-def _status(result: object) -> ValidationStatus:
-    value = getattr(result, "status")
+def _status(result: DiagnosticParseResult) -> ValidationStatus:
+    value = result.status
     if isinstance(value, ValidationStatus):
         return value
     return ValidationStatus(str(getattr(value, "value", value)))
 
 
-def _operation(result: object) -> str:
+def _operation(result: DiagnosticParseResult) -> str:
     value = getattr(result, "operation", None)
     if value is None:
-        value = getattr(result, "operation_kind")
+        value = result.operation_kind
     return str(getattr(value, "value", value))
 
 
-def _records(result: object) -> tuple[object, ...]:
-    return tuple(getattr(result, "records"))
+def _records(result: DiagnosticParseResult) -> tuple[DiagnosticRecord, ...]:
+    return tuple(result.records)
 
 
-def _primary(result: object) -> object | None:
+def _primary(result: DiagnosticParseResult) -> DiagnosticRecord | None:
     primary = getattr(result, "primary", None)
     if primary is not None:
         return primary
     primary_id = getattr(result, "primary_record_id", None)
     if primary_id is None:
         return None
-    return next(
-        record
-        for record in _records(result)
-        if getattr(record, "record_id") == primary_id
-    )
+    return next(record for record in _records(result) if record.record_id == primary_id)
 
 
-def _warning_texts(result: object) -> tuple[str, ...]:
+def _warning_texts(result: DiagnosticParseResult) -> tuple[str, ...]:
     rendered: list[str] = []
     for warning in tuple(getattr(result, "warnings", ())):
         value = getattr(warning, "message", warning)
@@ -121,15 +122,34 @@ def _warning_texts(result: object) -> tuple[str, ...]:
     return tuple(rendered)
 
 
-def _pattern_id(record: object) -> str:
-    return str(getattr(getattr(record, "pattern_id"), "value", getattr(record, "pattern_id")))
+def _pattern_id(record: DiagnosticRecord) -> str:
+    return str(getattr(record.pattern_id, "value", record.pattern_id))
 
 
-def _error_kind(record: object) -> ErrorKind:
-    value = getattr(record, "error_kind")
+def _error_kind(record: DiagnosticRecord) -> ErrorKind:
+    value = record.error_kind
     if isinstance(value, ErrorKind):
         return value
     return ErrorKind(str(getattr(value, "value", value)))
+
+
+def _classify_results(
+    service: ClassificationService,
+    results: Sequence[_DiagnosticResult],
+    *,
+    references_by_subject: Mapping[str, Sequence[str]] | None = None,
+    noise_subjects: Sequence[str] = (),
+) -> ClassificationBatch[_DiagnosticResult]:
+    return cast(
+        ClassificationBatch[_DiagnosticResult],
+        service.classify(
+            cast(Sequence[DiagnosticResult], results),
+            references_by_subject=references_by_subject or {},
+            noise_subjects=noise_subjects,
+        ),
+    )
+
+
 
 
 def _fail_if_called(*args: object, **kwargs: object) -> None:
@@ -139,9 +159,7 @@ def _fail_if_called(*args: object, **kwargs: object) -> None:
 
 def test_public_facade_reexports_the_canonical_service_functions() -> None:
     assert diagnostics_public.parse_diagnostics is parse_diagnostics
-    assert diagnostics_public.classify_file_results.__module__.endswith(
-        ".classification.service"
-    )
+    assert diagnostics_public.classify_file_results.__module__.endswith(".classification.service")
     assert diagnostics_public.classify_scenario_results.__module__.endswith(
         ".classification.service"
     )
@@ -176,11 +194,11 @@ def test_launch_failure_without_streams_is_a_complete_skipped_parse(
     )
 
     assert _status(result) is ValidationStatus.SKIPPED
-    assert getattr(result, "parser_version") == PARSER_VERSION
+    assert result.parser_version == PARSER_VERSION
     assert _operation(result) == "compile"
     assert _records(result) == ()
     assert _primary(result) is None
-    assert getattr(result, "parse_complete") is True
+    assert result.parse_complete is True
     assert any("did not launch" in text for text in _warning_texts(result))
 
 
@@ -200,7 +218,7 @@ def test_missing_raw_streams_after_execution_is_a_parser_error(
     assert _status(result) is ValidationStatus.ERROR
     assert _records(result) == ()
     assert _primary(result) is None
-    assert getattr(result, "parse_complete") is False
+    assert result.parse_complete is False
     assert any("unavailable" in text for text in _warning_texts(result))
 
 
@@ -220,9 +238,9 @@ def test_recognized_gf_syntax_failure_is_successfully_parsed(
     assert primary is not None
     assert _pattern_id(primary) == "DP-GFSYN-001"
     assert _error_kind(primary) is ErrorKind.SYNTAX
-    assert "Unexpected token" in str(getattr(primary, "message"))
-    assert getattr(result, "parse_complete") is True
-    assert getattr(result, "fatal_detected") is False
+    assert "Unexpected token" in str(primary.message)
+    assert result.parse_complete is True
+    assert result.fatal_detected is False
 
 
 def test_multiline_type_diagnostic_retains_expected_and_inferred_context(
@@ -231,11 +249,7 @@ def test_multiline_type_diagnostic_retains_expected_and_inferred_context(
     evidence = _evidence(
         tmp_path,
         exit_code=1,
-        stderr_text=(
-            "Happened in linearize Example\n"
-            "expected: NP\n"
-            "inferred: VP\n"
-        ),
+        stderr_text=("Happened in linearize Example\nexpected: NP\ninferred: VP\n"),
     )
 
     result = parse_diagnostics(evidence)
@@ -246,8 +260,7 @@ def test_multiline_type_diagnostic_retains_expected_and_inferred_context(
     assert _pattern_id(primary) == "DP-GFTYPE-001"
     assert _error_kind(primary) is ErrorKind.TYPE
     combined = "\n".join(
-        str(getattr(primary, name, ""))
-        for name in ("message", "detail", "raw_excerpt")
+        str(getattr(primary, name, "")) for name in ("message", "detail", "raw_excerpt")
     )
     assert "expected" in combined.lower()
     assert "inferred" in combined.lower()
@@ -270,7 +283,7 @@ def test_nonzero_unknown_output_uses_the_documented_fallback(
     assert _status(result) is ValidationStatus.OK
     assert primary is not None
     assert _pattern_id(primary) in {"DP-FALLBACK-001", "DP-FALLBACK-002"}
-    assert getattr(result, "unknown_failure_output") is True
+    assert result.unknown_failure_output is True
 
 
 def test_strict_truncated_evidence_is_not_reported_as_complete(
@@ -287,8 +300,8 @@ def test_strict_truncated_evidence_is_not_reported_as_complete(
     )
 
     assert _status(result) is ValidationStatus.ERROR
-    assert getattr(result, "parse_complete") is False
-    assert getattr(result, "stderr_truncated") is True
+    assert result.parse_complete is False
+    assert result.stderr_truncated is True
     assert any("truncated" in text for text in _warning_texts(result))
 
 
@@ -298,18 +311,15 @@ def test_parser_output_is_deterministic_for_identical_evidence(
     evidence = _evidence(
         tmp_path,
         exit_code=1,
-        stderr_text=(
-            "Syntax error: Unexpected token\n"
-            "Syntax error: Unexpected token\n"
-        ),
+        stderr_text=("Syntax error: Unexpected token\nSyntax error: Unexpected token\n"),
     )
 
     first = parse_diagnostics(evidence)
     second = parse_diagnostics(evidence)
 
     assert first == second
-    assert tuple(getattr(item, "record_id") for item in _records(first)) == tuple(
-        getattr(item, "record_id") for item in _records(second)
+    assert tuple(item.record_id for item in _records(first)) == tuple(
+        item.record_id for item in _records(second)
     )
 
 
@@ -324,7 +334,7 @@ def test_parser_contains_pattern_provider_failures(
     result = service.parse(_evidence(tmp_path, exit_code=1))
 
     assert _status(result) is ValidationStatus.ERROR
-    assert getattr(result, "parse_complete") is False
+    assert result.parse_complete is False
     assert _records(result) == ()
     assert any("RuntimeError" in text for text in _warning_texts(result))
     assert all("provider detail" not in text for text in _warning_texts(result))
@@ -383,7 +393,8 @@ def test_classifier_assigns_ok_direct_downstream_ambiguous_and_skipped() -> None
         primary_message="",
     )
 
-    batch = ClassificationService(strict=True).classify(
+    batch = _classify_results(
+        ClassificationService(strict=True),
         (consumer, unknown, provider, successful, skipped),
         references_by_subject={
             consumer.subject_id: (provider.subject_id,),
@@ -422,13 +433,15 @@ def test_classifier_orders_multiple_root_blockers_deterministically() -> None:
     )
 
     service = ClassificationService(strict=True)
-    forward = service.classify(
+    forward = _classify_results(
+        service,
         (consumer, zeta, alpha),
         references_by_subject={
             consumer.subject_id: (zeta.subject_id, alpha.subject_id),
         },
     )
-    reverse = service.classify(
+    reverse = _classify_results(
+        service,
         (alpha, consumer, zeta),
         references_by_subject={
             consumer.subject_id: (alpha.subject_id, zeta.subject_id),
@@ -455,7 +468,7 @@ def test_classifier_preserves_status_and_raw_error_kind() -> None:
         primary_message="Syntax error",
     )
 
-    classified = ClassificationService(strict=True).classify((result,)).results[0]
+    classified = _classify_results(ClassificationService(strict=True), (result,)).results[0]
 
     assert classified.status is result.status
     assert classified.error_kind is result.error_kind
@@ -471,10 +484,14 @@ def test_classifier_supports_explicit_scan_noise_without_relabeling_failures() -
         primary_message="",
     )
 
-    classified = ClassificationService(strict=True).classify(
-        (noise,),
-        noise_subjects=(noise.subject_id,),
-    ).results[0]
+    classified = (
+        _classify_results(
+            ClassificationService(strict=True),
+            (noise,),
+            noise_subjects=(noise.subject_id,),
+        )
+        .results[0]
+    )
 
     assert classified.status is ValidationStatus.SKIPPED
     assert classified.error_kind is ErrorKind.OK
@@ -494,7 +511,7 @@ def test_classifier_does_not_launch_external_tools(
         primary_message="type error",
     )
 
-    classified = ClassificationService(strict=True).classify((result,)).results[0]
+    classified = _classify_results(ClassificationService(strict=True), (result,)).results[0]
 
     assert classified.diagnostic_class is DiagnosticClass.DIRECT
 
@@ -532,4 +549,4 @@ def test_classification_coherence_rejects_invalid_relationship_fields(
     result: _DiagnosticResult,
 ) -> None:
     with pytest.raises(ContractViolationError):
-        enforce_classification_coherence(result)
+        enforce_classification_coherence(cast(DiagnosticResult, result))

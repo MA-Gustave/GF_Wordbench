@@ -1,31 +1,37 @@
 # GF Wordbench — Configuration Reference
 
-| Champ | Valeur |
-|---|---|
-| Document role | Configuration precedence authority |
-| Decision status | Accepted |
-| Implementation status | Not implemented |
-| Verification status | Documentation review required |
-| Owner | GF Wordbench maintainers |
-| Last reviewed | 2026-07-23 |
+**Document role:** Configuration precedence summary
+**Status:** Normative
+**Last reviewed:** 2026-08-05
 
-## Ordre de résolution
+## Resolution order
 
 ```text
-framework defaults
-→ project/project.toml
-→ local environment configuration
-→ explicit CLI or GUI overrides
-→ immutable resolved request
+framework-safe defaults
+→ explicit selected language path
+→ LanguageProbeService
+→ immutable ResolvedLanguageContext
+→ optional explicitly selected ValidationProfile
+→ machine-local environment configuration
+→ permitted explicit CLI or GUI run values
+→ immutable ResolvedRunConfig
 ```
 
-## Propriétaires
+## Owners
 
-| Donnée | Propriétaire |
+| Value | Owner |
 |---|---|
-| Identité et politique du projet | `project/project.toml` |
-| Chemins locaux GF/RGL/output | environnement ou état local |
-| Valeurs par défaut globales | framework |
-| Choix d’un run | requête explicite |
+| active language and source facts | `ResolvedLanguageContext` |
+| advanced validation and release policy | optional `ValidationProfile` |
+| GF executable, output root, local overrides | environment resolution |
+| run mode and focused target | explicit run request |
+| generated artifact paths | `RunPaths` |
+| remembered path and preferences | application state |
 
-La configuration est résolue une seule fois avant exécution. Les stages reçoivent un objet résolu et ne relisent pas indépendamment l’environnement.
+## Profile rule
+
+`project/project.toml` may be loaded explicitly as a compatibility validation profile. It is not required at repository root and does not own the selected source path, language identity, RGL root, or effective GF path.
+
+## Execution rule
+
+Configuration is resolved once. Stages consume the immutable resolved request and do not reread GUI state, application state, profile files, or environment variables independently.

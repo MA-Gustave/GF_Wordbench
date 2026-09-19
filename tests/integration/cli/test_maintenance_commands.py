@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import MISSING, fields
+from dataclasses import fields
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import pytest
 
@@ -40,10 +40,8 @@ def _uninitialized(model_type: type[T]) -> T:
 
 
 def _command_with_payload(command_type: type[T], payload: object) -> T:
-    command_fields = fields(command_type)
-    assert len(command_fields) == 1, (
-        f"{command_type.__name__} must own exactly one payload field"
-    )
+    command_fields = fields(cast(Any, command_type))
+    assert len(command_fields) == 1, f"{command_type.__name__} must own exactly one payload field"
 
     command = _uninitialized(command_type)
     object.__setattr__(command, command_fields[0].name, payload)
@@ -56,40 +54,30 @@ def _construct_state_reset_command(
     state_path: Path | None = None,
     replace_with_defaults: bool = False,
 ) -> ResetApplicationStateCommand:
-    supported_values: dict[str, object] = {
-        "workspace_root": workspace_root,
-        "state_path": state_path,
-        "replace_with_defaults": replace_with_defaults,
-        "create_alternate_parent": False,
-        "quarantine_invalid": False,
-    }
-    arguments: dict[str, object] = {}
-
-    for field in fields(ResetApplicationStateCommand):
-        if field.name in supported_values:
-            arguments[field.name] = supported_values[field.name]
-            continue
-        if field.default is not MISSING or field.default_factory is not MISSING:
-            continue
-        pytest.fail(
-            "ResetApplicationStateCommand added an unsupported required field: "
-            f"{field.name}"
-        )
-
-    return ResetApplicationStateCommand(**arguments)
+    return ResetApplicationStateCommand(
+        workspace_root=workspace_root,
+        state_path=state_path,
+        replace_with_defaults=replace_with_defaults,
+    )
 
 
 def _service_bundle(
     service: Callable[[object], object],
 ) -> MaintenanceCommandServices:
-    return MaintenanceCommandServices(
-        **{field.name: service for field in fields(MaintenanceCommandServices)}
+    return cast(
+        MaintenanceCommandServices,
+        cast(Any, MaintenanceCommandServices)(
+            initialize_project=service,
+            plan_project_reset=service,
+            apply_project_reset=service,
+            plan_project_migration=service,
+            apply_project_migration=service,
+            reset_application_state=service,
+        ),
     )
 
 
-def _dispatch_cases() -> tuple[
-    tuple[type[object], type[object], type[object]], ...
-]:
+def _dispatch_cases() -> tuple[tuple[type[object], type[object], type[object]], ...]:
     return (
         (
             InitializeProjectCommand,
@@ -161,7 +149,7 @@ def test_execute_maintenance_command_routes_to_one_injected_service(
         return expected
 
     result = execute_maintenance_command(
-        command,
+        cast(Any, command),
         services=_service_bundle(service),
     )
 
@@ -181,7 +169,7 @@ def test_execute_maintenance_command_rejects_wrong_service_result_type(
 
     with pytest.raises(TypeError, match="result|return|expected"):
         execute_maintenance_command(
-            command,
+            cast(Any, command),
             services=_service_bundle(lambda _payload: object()),
         )
 

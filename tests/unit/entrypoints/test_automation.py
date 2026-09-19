@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import inspect
 import io
 import json
-from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from gf_wordbench.entrypoints import automation
 from gf_wordbench.kernel.statuses import OverallStatus, ValidationMode
-
 
 _RUN_ID = "20260725_123456"
 _PROJECT_ID = "demo-project"
@@ -40,8 +39,7 @@ def _construct(
 
     if missing:
         raise AssertionError(
-            f"Missing fixture values for {factory.__name__}: "
-            + ", ".join(missing)
+            f"Missing fixture values for {factory.__name__}: " + ", ".join(missing)
         )
     return factory(**arguments)
 
@@ -52,21 +50,23 @@ def _issue(
     code: str = "AUTOMATION_TEST",
     message: str = "Automation verification failed.",
     path: Path | None = None,
-) -> object:
-    return _construct(
+) -> automation.AutomationIssue:
+    return cast(
         automation.AutomationIssue,
-        {
-            "severity": (
-                severity
-                if severity is not None
-                else automation.AutomationIssueSeverity.ERROR
-            ),
-            "code": code,
-            "message": message,
-            "path": path,
-        },
+        _construct(
+            automation.AutomationIssue,
+            {
+                "severity": (
+                    severity
+                    if severity is not None
+                    else automation.AutomationIssueSeverity.ERROR
+                ),
+                "code": code,
+                "message": message,
+                "path": path,
+            },
+        ),
     )
-
 
 def _summary_document(
     run_dir: Path,
@@ -193,72 +193,78 @@ def _verification_request(
     expected_project_id: str | None = _PROJECT_ID,
     expected_mode: ValidationMode | None = ValidationMode.DIAGNOSTIC,
     require_manifest: bool = False,
-) -> object:
+) -> automation.AutomationVerificationRequest:
     root = run_dir.resolve()
-    return _construct(
+    return cast(
         automation.AutomationVerificationRequest,
-        {
-            "run_dir": root,
-            "summary_path": summary_path or root / "summary.json",
-            "manifest_path": manifest_path,
-            "expected_project_id": expected_project_id,
-            "expected_mode": expected_mode,
-            "require_manifest": require_manifest,
-            "strict_manifest": True,
-            "strict": True,
-            "allow_legacy_summary": False,
-            "allow_legacy": False,
-        },
+        _construct(
+            automation.AutomationVerificationRequest,
+            {
+                "run_dir": root,
+                "summary_path": summary_path or root / "summary.json",
+                "manifest_path": manifest_path,
+                "expected_project_id": expected_project_id,
+                "expected_mode": expected_mode,
+                "require_manifest": require_manifest,
+                "strict_manifest": True,
+                "strict": True,
+                "allow_legacy_summary": False,
+                "allow_legacy": False,
+            },
+        ),
     )
-
 
 def _verification_result(
     run_dir: Path,
     *,
     status: OverallStatus = OverallStatus.ERROR,
-    issues: tuple[object, ...] = (),
-) -> object:
+    issues: tuple[automation.AutomationIssue, ...] = (),
+) -> automation.AutomationVerificationResult:
     root = run_dir.resolve()
-    return _construct(
+    return cast(
         automation.AutomationVerificationResult,
-        {
-            "run_dir": root,
-            "summary_path": root / "summary.json",
-            "manifest_path": None,
-            "run_id": _RUN_ID,
-            "project_id": _PROJECT_ID,
-            "mode": ValidationMode.DIAGNOSTIC,
-            "overall_status": status,
-            "manifest_verified": None,
-            "summary_valid": not issues,
-            "summary_document": {},
-            "summary": {},
-            "issues": issues,
-        },
+        _construct(
+            automation.AutomationVerificationResult,
+            {
+                "run_dir": root,
+                "summary_path": root / "summary.json",
+                "manifest_path": None,
+                "run_id": _RUN_ID,
+                "project_id": _PROJECT_ID,
+                "mode": ValidationMode.DIAGNOSTIC,
+                "overall_status": status,
+                "manifest_verified": None,
+                "summary_valid": not issues,
+                "summary_document": {},
+                "summary": {},
+                "issues": issues,
+            },
+        ),
     )
-
 
 def _execution_result(
-    verification: object,
-) -> object:
-    return _construct(
+    verification: automation.AutomationVerificationResult,
+) -> automation.AutomationExecutionResult:
+    return cast(
         automation.AutomationExecutionResult,
-        {
-            "run_result": None,
-            "verification": verification,
-            "verification_result": verification,
-            "error": None,
-            "failure": None,
-            "issue": None,
-        },
+        _construct(
+            automation.AutomationExecutionResult,
+            {
+                "run_result": None,
+                "verification": verification,
+                "verification_result": verification,
+                "error": None,
+                "failure": None,
+                "issue": None,
+            },
+        ),
     )
 
-
 def test_issue_severity_values_are_stable() -> None:
-    assert {
-        severity.value
-        for severity in automation.AutomationIssueSeverity
-    } == {"warning", "error"}
+    assert {severity.value for severity in automation.AutomationIssueSeverity} == {
+        "warning",
+        "error",
+    }
 
 
 def test_issue_normalizes_path_and_rejects_empty_contract_fields(
@@ -373,8 +379,7 @@ def test_duplicate_json_keys_and_nonfinite_numbers_are_rejected(
     run_dir.mkdir()
     summary_path = run_dir / "summary.json"
     summary_path.write_text(
-        '{"schema_id":"gf-wordbench.run-summary",'
-        '"schema_id":"duplicate","value":NaN}\n',
+        '{"schema_id":"gf-wordbench.run-summary","schema_id":"duplicate","value":NaN}\n',
         encoding="utf-8",
     )
 
@@ -391,12 +396,10 @@ def test_duplicate_json_keys_and_nonfinite_numbers_are_rejected(
     assert result.has_errors is True
     assert result.overall_status is OverallStatus.ERROR
     assert any(
-        issue.severity is automation.AutomationIssueSeverity.ERROR
-        for issue in result.issues
+        issue.severity is automation.AutomationIssueSeverity.ERROR for issue in result.issues
     )
     assert any(
-        "json" in issue.message.casefold()
-        or "duplicate" in issue.message.casefold()
+        "json" in issue.message.casefold() or "duplicate" in issue.message.casefold()
         for issue in result.issues
     )
 
@@ -432,14 +435,7 @@ def test_expected_identity_mismatch_is_an_error(
 
     assert result.succeeded is False
     assert result.has_errors is True
-    assert any(
-        needle in (
-            issue.code
-            + " "
-            + issue.message
-        ).casefold()
-        for issue in result.issues
-    )
+    assert any(needle in (issue.code + " " + issue.message).casefold() for issue in result.issues)
 
 
 def test_required_manifest_cannot_be_silently_omitted(
@@ -468,12 +464,7 @@ def test_required_manifest_cannot_be_silently_omitted(
     assert result.has_errors is True
     assert result.manifest_verified is False
     assert any(
-        "manifest" in (
-            issue.code
-            + " "
-            + issue.message
-        ).casefold()
-        for issue in result.issues
+        "manifest" in (issue.code + " " + issue.message).casefold() for issue in result.issues
     )
 
 

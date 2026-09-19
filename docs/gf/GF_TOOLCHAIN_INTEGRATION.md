@@ -2,15 +2,30 @@
 
 **Document ID:** `GF-WB-GF-TOOLCHAIN`  
 **Status:** Normative architecture and integration specification  
-**Applies to:** GF Wordbench framework and one active GF language project  
+**Applies to:** GF Wordbench framework and one selected GF language context  
 **Owner:** GF Wordbench maintainers  
 **Canonical path:** `docs/gf/GF_TOOLCHAIN_INTEGRATION.md`  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Document version:** `1.1.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines how GF Wordbench integrates the Grammatical Framework toolchain.
@@ -59,7 +74,7 @@ docs/INTERFILE_CONTRACT_LOCK.md
 Language-specific GF module relationships are locked in:
 
 ```text
-project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Executable diagnostic-tool registration is governed by:
@@ -149,9 +164,9 @@ GF Wordbench is authoritative for:
 - run status;
 - human and machine reports.
 
-### 3.3 Active project authority
+### 3.3 Resolved context and validation-profile authority
 
-The active project is authoritative for:
+The selected language context is authoritative for:
 
 - project identity;
 - language identity;
@@ -169,7 +184,7 @@ The active project is authoritative for:
 The authoritative portable project configuration is:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 ### 3.4 Maintainer authority
@@ -186,7 +201,7 @@ Maintainers are authoritative for:
 
 ### 3.5 Workspace and Portfolio boundary
 
-One GF Wordbench workspace contains exactly one active GF language project.
+One GF Wordbench workspace contains exactly one selected GF language context.
 Every GF operation belongs to one resolved project and one run.
 
 GF Wordbench does not:
@@ -249,7 +264,7 @@ configuration
 Resolves:
 
 - executable;
-- project root;
+- selected source root;
 - RGL root;
 - GF path;
 - mode;
@@ -383,7 +398,7 @@ Canonical resolution order:
 5. optional `PATH` lookup;
 6. configuration failure.
 
-The active project should not normally store a developer-specific absolute executable path.
+The selected language context should not normally store a developer-specific absolute executable path.
 
 ### 7.3 Resolution invariants
 
@@ -436,7 +451,7 @@ Recommended defaults:
 
 ```text
 timeout: 10 seconds
-working directory: resolved project root
+working directory: resolved selected source root
 stdin: none
 stdout: captured
 stderr: captured
@@ -550,9 +565,9 @@ Gold files must not be updated merely to hide an unexplained version difference.
 
 GF uses paths in several distinct roles.
 
-### 10.1 Project root
+### 10.1 Selected source root
 
-The project root is the base for:
+The selected source root is the base for:
 
 - `project.toml`;
 - project-relative source paths;
@@ -576,7 +591,7 @@ The GF search path supplies directories used during module resolution.
 The canonical path is resolved from:
 
 1. framework-required directories;
-2. active project source directories;
+2. selected language context source directories;
 3. project-declared path additions;
 4. required RGL directories;
 5. explicit approved overrides.
@@ -605,7 +620,7 @@ run_<id>/artifacts/pgf/
 - native process arguments use host-compatible paths;
 - paths containing spaces remain single arguments;
 - no shell quoting is relied upon when `shell=False`;
-- source paths must remain inside the active project unless explicitly approved;
+- source paths must remain inside the selected language context unless explicitly approved;
 - output paths must remain inside owned output roots.
 
 ---
@@ -991,7 +1006,7 @@ The resolved command must always be recorded.
 
 - one selected `.gf` source file;
 - resolved GF executable;
-- project root;
+- selected source root;
 - resolved GF search path;
 - RGL configuration;
 - run-owned artifact directories;
@@ -1160,19 +1175,19 @@ The process API should pass the script through stdin directly without requiring 
 ### 19.3 Scenario location
 
 ```text
-project/validation/scenarios/<scenario-id>.gfs
+<validation-profile-root>/validation/scenarios/<scenario-id>.gfs
 ```
 
 ### 19.4 Input location
 
 ```text
-project/validation/inputs/
+<validation-profile-root>/validation/inputs/
 ```
 
 ### 19.5 Gold location
 
 ```text
-project/validation/gold/<scenario-id>.gold
+<validation-profile-root>/validation/gold/<scenario-id>.gold
 ```
 
 ### 19.6 Runtime output
@@ -1648,12 +1663,12 @@ The classifier may use:
 - compile ordering;
 - GF dependency introspection.
 
-### 27.3 Project dependency map
+### 27.3 Language dependency map
 
-The active project maintains:
+The selected language context maintains:
 
 ```text
-project/docs/MODULE_DEPENDENCY_MAP.md
+<validation-profile-root>/docs/MODULE_DEPENDENCY_MAP.md
 ```
 
 When the dependency map and actual GF behavior differ, the map must be reviewed.
@@ -1673,7 +1688,7 @@ Versioned rules may normalize:
 - CRLF to LF;
 - ANSI control sequences;
 - run-specific absolute paths to stable tokens;
-- project root to `<PROJECT_ROOT>`;
+- selected source root to `<PROJECT_ROOT>`;
 - RGL root to `<RGL_ROOT>`;
 - run directory to `<RUN_DIR>`;
 - executable path to `<GF_EXECUTABLE>`;
@@ -2031,7 +2046,7 @@ Registry rules:
 - mutating tools require explicit user intent and cannot run during ordinary read-only validation;
 - AI-assisted tools are optional, visible, bounded, and non-normative;
 - AI output may annotate preserved evidence but cannot replace GF evidence or release criteria;
-- tool absence cannot invalidate core GF evidence unless the active project explicitly declares the tool as a required release dependency;
+- tool absence cannot invalidate core GF evidence unless the selected language context explicitly declares the tool as a required release dependency;
 - optional tools operate only for the active Wordbench project and are not Portfolio orchestration mechanisms.
 
 Examples include:
@@ -2400,9 +2415,9 @@ docs/scenarios/SCENARIO_FORMAT.md
 docs/scenarios/SCENARIO_MARKERS_AND_ASSERTIONS.md
 docs/validation/SCENARIO_VALIDATION.md
 docs/validation/RELEASE_GATES.md
-project/project.toml
-project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+<validation-profile-root>/project.toml
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 ---

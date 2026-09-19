@@ -91,11 +91,7 @@ class ProjectPaths:
     ) -> PurePosixPath:
         """Return a canonical project-relative representation of a path."""
 
-        mode = (
-            ContainmentMode.INSIDE_OR_EQUAL
-            if allow_root
-            else ContainmentMode.STRICTLY_INSIDE
-        )
+        mode = ContainmentMode.INSIDE_OR_EQUAL if allow_root else ContainmentMode.STRICTLY_INSIDE
         return relative_portable_path(
             self.root,
             candidate,
@@ -119,9 +115,7 @@ def resolve_project_paths(config: ProjectConfig) -> ProjectPaths:
     paths = ProjectPaths.from_root(config.project_root)
 
     if config.project_file != paths.config_file:
-        raise ContractViolationError(
-            "config.project_file must equal project_root/project.toml"
-        )
+        raise ContractViolationError("config.project_file must equal project_root/project.toml")
 
     expected_source_root = resolve_source_root(
         paths.root,
@@ -129,8 +123,7 @@ def resolve_project_paths(config: ProjectConfig) -> ProjectPaths:
     )
     if config.source_root != expected_source_root:
         raise ContractViolationError(
-            "config.source_root must equal "
-            "project_root / config.sources.directory"
+            "config.source_root must equal project_root / config.sources.directory"
         )
 
     return paths
@@ -155,8 +148,7 @@ def normalize_project_root_declaration(
     )
     if declaration != PROJECT_ROOT_DECLARATION and not allow_noncanonical:
         raise ContractViolationError(
-            "project.root must be '.' for the canonical "
-            "project schema 1.0 layout"
+            "project.root must be '.' for the canonical project schema 1.0 layout"
         )
     return declaration
 
@@ -182,16 +174,8 @@ def resolve_project_relative_path(
         allow_root=allow_root,
         accept_backslash=False,
     )
-    candidate = (
-        root
-        if portable == PROJECT_ROOT_DECLARATION
-        else root.joinpath(*portable.parts)
-    )
-    mode = (
-        ContainmentMode.INSIDE_OR_EQUAL
-        if allow_root
-        else ContainmentMode.STRICTLY_INSIDE
-    )
+    candidate = root if portable == PROJECT_ROOT_DECLARATION else root.joinpath(*portable.parts)
+    mode = ContainmentMode.INSIDE_OR_EQUAL if allow_root else ContainmentMode.STRICTLY_INSIDE
     return require_lexical_containment(
         root,
         candidate,
@@ -251,9 +235,7 @@ def resolve_module_path(
         accept_backslash=False,
     )
     if portable.suffix.casefold() != ".gf":
-        raise ContractViolationError(
-            f"module path must end in '.gf': {portable.as_posix()!r}"
-        )
+        raise ContractViolationError(f"module path must end in '.gf': {portable.as_posix()!r}")
     return resolve_source_relative_path(
         source_root,
         portable,
@@ -275,9 +257,7 @@ def resolve_scenario_path(
         role="scenario ID",
     )
     if identifier.casefold().endswith(".gfs"):
-        raise ContractViolationError(
-            "scenario ID must not include the '.gfs' suffix"
-        )
+        raise ContractViolationError("scenario ID must not include the '.gfs' suffix")
     return project_paths.scenarios_dir / f"{identifier}.gfs"
 
 

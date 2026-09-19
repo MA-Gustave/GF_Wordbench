@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import re
-import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
+import re
 from typing import Final
+import unicodedata
 
+from gf_wordbench.diagnostics.models import TopError
 from gf_wordbench.kernel.statuses import (
     DiagnosticClass,
     ErrorKind,
     ValidationStatus,
 )
-from gf_wordbench.diagnostics.models import TopError
 
 _SUBJECT_KINDS: Final[frozenset[str]] = frozenset({"file", "scenario", "run"})
 _SPACE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
@@ -45,9 +45,7 @@ class TopErrorCandidate:
         )
         if subject_kind not in _SUBJECT_KINDS:
             expected = ", ".join(sorted(_SUBJECT_KINDS))
-            raise ValueError(
-                f"unsupported subject_kind {subject_kind!r}; expected {expected}"
-            )
+            raise ValueError(f"unsupported subject_kind {subject_kind!r}; expected {expected}")
 
         subject_id = _require_text(
             self.subject_id,
@@ -110,23 +108,20 @@ class TopErrorAggregationPolicy:
             if type(getattr(self, field_name)) is not bool:
                 raise TypeError(f"{field_name} must be a boolean")
 
-        if isinstance(self.include_subject_kinds, (str, bytes)):
+        raw_kinds: object = self.include_subject_kinds
+        if isinstance(raw_kinds, (str, bytes)) or not isinstance(raw_kinds, Iterable):
             raise TypeError("include_subject_kinds must be a tuple of strings")
-        kinds = tuple(self.include_subject_kinds)
+        kinds = tuple(raw_kinds)
         if len(kinds) != len(set(kinds)):
             raise ValueError("include_subject_kinds must not contain duplicates")
         for kind in kinds:
             if kind not in _SUBJECT_KINDS:
                 expected = ", ".join(sorted(_SUBJECT_KINDS))
-                raise ValueError(
-                    f"unsupported included subject kind {kind!r}; expected {expected}"
-                )
+                raise ValueError(f"unsupported included subject kind {kind!r}; expected {expected}")
         object.__setattr__(self, "include_subject_kinds", kinds)
 
 
-DEFAULT_TOP_ERROR_POLICY: Final[TopErrorAggregationPolicy] = (
-    TopErrorAggregationPolicy()
-)
+DEFAULT_TOP_ERROR_POLICY: Final[TopErrorAggregationPolicy] = TopErrorAggregationPolicy()
 
 
 @dataclass(slots=True)
@@ -150,13 +145,13 @@ def normalize_top_error_message(message: str) -> str:
 
 
 def bucket_top_errors(
-    candidates: Iterable[TopErrorCandidate],
+    candidates: object,
     *,
     policy: TopErrorAggregationPolicy = DEFAULT_TOP_ERROR_POLICY,
 ) -> tuple[TopError, ...]:
     """Aggregate classified failures into canonical deterministic records."""
 
-    if isinstance(candidates, (str, bytes)):
+    if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Iterable):
         raise TypeError("candidates must be an iterable of TopErrorCandidate")
     if not isinstance(policy, TopErrorAggregationPolicy):
         raise TypeError("policy must be TopErrorAggregationPolicy")
@@ -226,10 +221,10 @@ def bucket_top_errors(
     return sort_top_errors(records)
 
 
-def sort_top_errors(records: Iterable[TopError]) -> tuple[TopError, ...]:
+def sort_top_errors(records: object) -> tuple[TopError, ...]:
     """Validate and return top errors in canonical deterministic order."""
 
-    if isinstance(records, (str, bytes)):
+    if isinstance(records, (str, bytes)) or not isinstance(records, Iterable):
         raise TypeError("records must be an iterable of TopError")
     prepared = tuple(records)
     for record in prepared:
@@ -261,9 +256,7 @@ def validate_top_error_order(records: Iterable[TopError]) -> tuple[TopError, ...
     for record in prepared:
         key = (record.error_kind, record.message.casefold())
         if key in seen:
-            raise ValueError(
-                "top errors contain duplicate canonical aggregation keys"
-            )
+            raise ValueError("top errors contain duplicate canonical aggregation keys")
         seen.add(key)
     return prepared
 
@@ -316,9 +309,7 @@ def _validate_top_error(record: object) -> None:
         raise ValueError("TopError.subject_kinds must be sorted")
     for subject_kind in subject_kinds:
         if subject_kind not in _SUBJECT_KINDS:
-            raise ValueError(
-                f"TopError contains unsupported subject kind {subject_kind!r}"
-            )
+            raise ValueError(f"TopError contains unsupported subject kind {subject_kind!r}")
 
 
 def _optional_text(

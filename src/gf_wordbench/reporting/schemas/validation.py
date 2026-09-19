@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-import math
-import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum, unique
+import math
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Final, Never, TypeAlias, TypeVar, cast
+import re
+from typing import Final, Never, Protocol, Self, TypeAlias, TypeVar, cast
 
 from gf_wordbench.kernel.errors import SchemaValidationError, UnsupportedVersionError
 from gf_wordbench.kernel.serialization import JsonValue
 
-_SCHEMA_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
-)
+_SCHEMA_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _SHA256_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
 _RFC3339_UTC_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})T"
@@ -39,7 +38,13 @@ _MAX_NESTING_DEPTH: Final[int] = 128
 JsonObject: TypeAlias = Mapping[str, object]
 PathLike: TypeAlias = str | Path
 _T = TypeVar("_T")
-_K = TypeVar("_K")
+
+
+class _OrderKey(Protocol):
+    def __lt__(self, other: Self, /) -> bool: ...
+
+
+_K = TypeVar("_K", bound=_OrderKey)
 
 
 @unique
@@ -88,8 +93,11 @@ class ValidationContext:
     schema_id: str | None = None
 
     def __post_init__(self) -> None:
-        if self.source is not None and not isinstance(self.source, Path):
-            object.__setattr__(self, "source", Path(self.source))
+        raw_source: object = self.source
+        if raw_source is not None and not isinstance(raw_source, Path):
+            if not isinstance(raw_source, (str, os.PathLike)):
+                raise TypeError("source must be path-like or None")
+            object.__setattr__(self, "source", Path(raw_source))
         if self.schema_id is not None:
             require_text_value(self.schema_id, path="schema_id")
 
@@ -206,9 +214,7 @@ def validate_fields(
     optional_set = _field_set(optional, name="optional")
     overlap = required_set.intersection(optional_set)
     if overlap:
-        raise ValueError(
-            "required and optional fields overlap: " + ", ".join(sorted(overlap))
-        )
+        raise ValueError("required and optional fields overlap: " + ", ".join(sorted(overlap)))
     actual = set(value)
     missing = required_set.difference(actual)
     if missing:
@@ -242,7 +248,7 @@ def require_object(
             _fail(context, path, "contains a non-string key")
         if not key or "\x00" in key:
             _fail(context, path, "contains an invalid field name")
-    return cast(Mapping[str, object], value)
+    return cast("Mapping[str, object]", value)
 
 
 def require_array_value(
@@ -255,7 +261,7 @@ def require_array_value(
         _fail(context, path, "must be an array")
     if len(value) > _MAX_CONTAINER_ITEMS:
         _fail(context, path, "contains too many items")
-    return cast(Sequence[object], value)
+    return cast("Sequence[object]", value)
 
 
 def require_field(
@@ -376,7 +382,7 @@ def require_bool_value(
 ) -> bool:
     if type(value) is not bool:
         _fail(context, path, "must be a boolean")
-    return cast(bool, value)
+    return value
 
 
 def require_bool(
@@ -423,7 +429,7 @@ def require_integer_value(
 ) -> int:
     if type(value) is not int:
         _fail(context, path, "must be an integer")
-    checked = cast(int, value)
+    checked = value
     if minimum is not None and checked < minimum:
         _fail(context, path, f"must be at least {minimum}")
     if maximum is not None and checked > maximum:
@@ -483,7 +489,7 @@ def require_number_value(
 ) -> int | float:
     if type(value) not in (int, float):
         _fail(context, path, "must be a number")
-    checked = cast(int | float, value)
+    checked = cast("int | float", value)
     if isinstance(checked, float) and not math.isfinite(checked):
         _fail(context, path, "must be finite")
     if minimum is not None and checked < minimum:
@@ -569,7 +575,7 @@ def validate_rfc3339_utc(
         parsed = datetime.fromisoformat(checked.removesuffix("Z") + "+00:00")
     except ValueError:
         _fail(context, path, "contains an invalid calendar timestamp")
-    if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
+    if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
         _fail(context, path, "must identify UTC")
     return checked
 
@@ -658,7 +664,13 @@ def validate_order(
     if not callable(key):
         raise TypeError("key must be callable")
     for index in range(1, len(values)):
-        if key(values[index]) < key(values[index - 1]):
+        current = key(values[index])
+        previous = key(values[index - 1])
+        try:
+            out_of_order = current < previous
+        except TypeError:
+            _fail(context, json_index(path, index), "has non-comparable order keys")
+        if out_of_order:
             _fail(
                 context,
                 json_index(path, index),
@@ -728,11 +740,11 @@ def _validate_json_value(
                 _fail(context, path, "contains NUL")
             if len(value) > _MAX_SCHEMA_TEXT:
                 _fail(context, path, "exceeds maximum string length")
-        return cast(JsonValue, value)
+        return cast("JsonValue", value)
     if type(value) is float:
-        if not math.isfinite(cast(float, value)):
+        if not math.isfinite(value):
             _fail(context, path, "contains a non-finite number")
-        return cast(float, value)
+        return value
     if isinstance(value, Mapping):
         container_id = _enter(value, active, path, context)
         try:

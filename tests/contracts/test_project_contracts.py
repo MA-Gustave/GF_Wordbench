@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping
+from dataclasses import is_dataclass
 import importlib
 import importlib.util
 import inspect
-from collections.abc import Mapping
-from dataclasses import is_dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Final
@@ -13,6 +13,74 @@ from typing import Final
 import pytest
 
 PROJECT_PACKAGE: Final = "gf_wordbench.projects"
+
+LANGUAGE_MODEL_EXPORTS: Final = frozenset(
+    {
+        "SelectedPathKind",
+        "LanguageCapability",
+        "LanguageProbeStatus",
+        "LanguageProbeSeverity",
+        "LanguageProbeRequest",
+        "LanguageProbeDiagnostic",
+        "LanguageModuleCandidate",
+        "LanguageCandidate",
+        "ResolvedLanguageContext",
+        "LanguageProbeResult",
+    }
+)
+
+LANGUAGE_PORT_EXPORTS: Final = frozenset(
+    {
+        "LanguageSourceSelectionPort",
+        "LanguageGFPathResolutionPort",
+        "LanguageStructuralPreflightPort",
+        "LanguageVerificationPort",
+        "LanguageProbeClockPort",
+    }
+)
+
+LANGUAGE_PROBE_EXPORTS: Final = frozenset(
+    {
+        "LanguageProbeService",
+        "probe_language_path",
+    }
+)
+
+LANGUAGE_PUBLIC_EXPORTS: Final = frozenset(
+    {
+        "SelectedPathKind",
+        "LanguageCapability",
+        "LanguageProbeRequest",
+        "LanguageProbeDiagnostic",
+        "LanguageCandidate",
+        "ResolvedLanguageContext",
+        "LanguageProbeResult",
+        "LanguageProbeService",
+        "probe_language_path",
+    }
+)
+
+PROJECT_PUBLIC_EXPORTS: Final = LANGUAGE_PUBLIC_EXPORTS | frozenset(
+    {
+        "CapabilityAvailability",
+        "LanguageCapabilityStatus",
+        "LanguageModuleCandidate",
+        "LanguageModuleRole",
+        "LanguageProbeSeverity",
+        "LanguageProbeStatus",
+        "LanguageResolutionProvenance",
+        "LanguageResolutionSource",
+        "ProjectConfig",
+        "check_project",
+        "initialize_project",
+        "load_project_config",
+        "migrate_project",
+        "plan_project_migration",
+        "plan_project_reset",
+        "reset_project",
+        "resolve_project_paths",
+    }
+)
 
 OWNER_EXPORTS: Final[Mapping[str, frozenset[str]]] = {
     "models": frozenset(
@@ -181,22 +249,31 @@ OWNER_EXPORTS: Final[Mapping[str, frozenset[str]]] = {
             "plan_project_migration",
         }
     ),
-    "public": frozenset(
-        {
-            "ProjectConfig",
-            "check_project",
-            "initialize_project",
-            "load_project_config",
-            "migrate_project",
-            "plan_project_migration",
-            "plan_project_reset",
-            "reset_project",
-            "resolve_project_paths",
-        }
-    ),
+    "languages.models": LANGUAGE_MODEL_EXPORTS,
+    "languages.ports": LANGUAGE_PORT_EXPORTS,
+    "languages.probe": LANGUAGE_PROBE_EXPORTS,
+    "languages.public": LANGUAGE_PUBLIC_EXPORTS,
+    "public": PROJECT_PUBLIC_EXPORTS,
 }
 
 PUBLIC_OWNER: Final[Mapping[str, str]] = {
+    "CapabilityAvailability": "languages.models",
+    "LanguageCapabilityStatus": "languages.models",
+    "LanguageModuleCandidate": "languages.models",
+    "LanguageModuleRole": "languages.models",
+    "LanguageProbeSeverity": "languages.models",
+    "LanguageProbeStatus": "languages.models",
+    "LanguageResolutionProvenance": "languages.models",
+    "LanguageResolutionSource": "languages.models",
+    "SelectedPathKind": "languages.models",
+    "LanguageCapability": "languages.models",
+    "LanguageProbeRequest": "languages.models",
+    "LanguageProbeDiagnostic": "languages.models",
+    "LanguageCandidate": "languages.models",
+    "ResolvedLanguageContext": "languages.models",
+    "LanguageProbeResult": "languages.models",
+    "LanguageProbeService": "languages.probe",
+    "probe_language_path": "languages.probe",
     "ProjectConfig": "models",
     "check_project": "validator",
     "initialize_project": "initializer",
@@ -208,6 +285,10 @@ PUBLIC_OWNER: Final[Mapping[str, str]] = {
     "resolve_project_paths": "paths",
 }
 
+LANGUAGE_PUBLIC_OWNER: Final[Mapping[str, str]] = {
+    name: owner for name, owner in PUBLIC_OWNER.items() if name in LANGUAGE_PUBLIC_EXPORTS
+}
+
 MODEL_TYPES: Final = (
     "ProjectIdentity",
     "SourceConfig",
@@ -217,6 +298,15 @@ MODEL_TYPES: Final = (
     "ProjectConfig",
     "ProjectDiagnostic",
     "ProjectValidationResult",
+)
+
+LANGUAGE_MODEL_TYPES: Final = (
+    "LanguageProbeRequest",
+    "LanguageProbeDiagnostic",
+    "LanguageModuleCandidate",
+    "LanguageCandidate",
+    "ResolvedLanguageContext",
+    "LanguageProbeResult",
 )
 
 FORBIDDEN_SHARED_MODEL_NAMES: Final = frozenset(
@@ -244,9 +334,7 @@ FORBIDDEN_PATH_NAMES: Final = frozenset(
     {"is_within", "module_path", "resolve_project_config", "scenario_path"}
 )
 
-FORBIDDEN_PORT_NAMES: Final = frozenset(
-    {"ProjectFileSystem", "ProjectWorkspace"}
-)
+FORBIDDEN_PORT_NAMES: Final = frozenset({"ProjectFileSystem", "ProjectWorkspace"})
 
 DOMAIN_MODULES: Final = (
     "models",
@@ -323,6 +411,7 @@ def _imports_from(tree: ast.Module, module: str) -> frozenset[str]:
 
 
 def _parameter_names(value: object) -> tuple[str, ...]:
+    assert callable(value)
     return tuple(inspect.signature(value).parameters)
 
 
@@ -344,7 +433,7 @@ def test_project_domain_models_are_immutable_and_slotted() -> None:
     for name in MODEL_TYPES:
         value = getattr(models, name)
         assert is_dataclass(value), name
-        assert value.__dataclass_params__.frozen, name
+        assert getattr(value, "__dataclass_params__").frozen, name
         assert "__slots__" in value.__dict__, name
 
 
@@ -357,6 +446,85 @@ def test_projects_models_owns_only_shared_project_models() -> None:
     assert models.PROJECT_CONFIG_FILENAME == "project.toml"
     assert str(models.PROJECT_SCHEMA_ID) == "gf-wordbench.project"
     assert models.PROJECT_SCHEMA_VERSION == "1.0"
+
+
+@pytest.mark.contract
+def test_language_models_own_the_registered_immutable_contracts() -> None:
+    models = _import("languages.models")
+    definitions = _top_level_definitions(_tree("languages.models"))
+    assert LANGUAGE_MODEL_EXPORTS.issubset(definitions)
+    assert "LanguageDiagnosticSeverity" not in definitions
+    for name in LANGUAGE_MODEL_TYPES:
+        value = getattr(models, name)
+        assert is_dataclass(value), name
+        assert getattr(value, "__dataclass_params__").frozen, name
+        assert "__slots__" in value.__dict__, name
+
+
+@pytest.mark.contract
+def test_language_ports_are_mechanism_neutral_protocols() -> None:
+    ports = _import("languages.ports")
+    tree = _tree("languages.ports")
+    for name in LANGUAGE_PORT_EXPORTS:
+        assert getattr(ports, name)._is_protocol, name
+    imports = _imported_modules(tree)
+    prohibited = (
+        "gf_wordbench.entrypoints",
+        "gf_wordbench.infrastructure",
+        "gf_wordbench.reporting",
+        "gf_wordbench.runs",
+        "gf_wordbench.state",
+        "gf_wordbench.validation",
+    )
+    assert not any(
+        name == prefix or name.startswith(f"{prefix}.") for name in imports for prefix in prohibited
+    )
+
+
+@pytest.mark.contract
+def test_language_probe_uses_models_and_ports_without_redefining_contracts() -> None:
+    tree = _tree("languages.probe")
+    definitions = _top_level_definitions(tree)
+    assert definitions.isdisjoint(LANGUAGE_MODEL_EXPORTS)
+    model_imports = _imports_from(
+        tree,
+        "gf_wordbench.projects.languages.models",
+    )
+    assert {
+        "LanguageProbeRequest",
+        "LanguageProbeResult",
+        "ResolvedLanguageContext",
+    }.issubset(model_imports)
+    port_imports = _imports_from(
+        tree,
+        "gf_wordbench.projects.languages.ports",
+    )
+    assert {
+        "LanguageSourceSelectionPort",
+        "LanguageGFPathResolutionPort",
+        "LanguageStructuralPreflightPort",
+        "LanguageVerificationPort",
+    }.issubset(port_imports)
+    probe = _import("languages.probe")
+    assert _parameter_names(probe.probe_language_path) == (
+        "request",
+        "source_selector",
+        "gf_path_resolver",
+        "structural_preflight",
+        "verifier",
+    )
+    imports = _imported_modules(tree)
+    prohibited = (
+        "gf_wordbench.entrypoints",
+        "gf_wordbench.infrastructure",
+        "gf_wordbench.reporting",
+        "gf_wordbench.runs",
+        "gf_wordbench.state",
+        "gf_wordbench.validation",
+    )
+    assert not any(
+        name == prefix or name.startswith(f"{prefix}.") for name in imports for prefix in prohibited
+    )
 
 
 @pytest.mark.contract
@@ -433,9 +601,7 @@ def test_project_loader_uses_registered_project_owners_only() -> None:
         "gf_wordbench.entrypoints",
     )
     assert not any(
-        name == prefix or name.startswith(f"{prefix}.")
-        for name in imports
-        for prefix in prohibited
+        name == prefix or name.startswith(f"{prefix}.") for name in imports for prefix in prohibited
     )
     loader = _import("loader")
     assert _parameter_names(loader.load_project_config) == (
@@ -502,6 +668,19 @@ def test_migrator_consumes_the_registered_migration_workspace_port() -> None:
 
 
 @pytest.mark.contract
+def test_language_public_facade_reexports_owner_objects_without_wrapping() -> None:
+    facade = _import("languages.public")
+    tree = _tree("languages.public")
+    assert not any(
+        isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        for node in tree.body
+    )
+    for name, owner_name in LANGUAGE_PUBLIC_OWNER.items():
+        owner = _import(owner_name)
+        assert getattr(facade, name) is getattr(owner, name)
+
+
+@pytest.mark.contract
 def test_project_public_facade_reexports_owner_objects_without_wrapping() -> None:
     facade = _import("public")
     tree = _tree("public")
@@ -517,7 +696,23 @@ def test_project_public_facade_reexports_owner_objects_without_wrapping() -> Non
 @pytest.mark.contract
 def test_projects_package_initializer_is_inert() -> None:
     module = importlib.import_module(PROJECT_PACKAGE)
-    tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+    module_file = module.__file__
+    assert module_file is not None
+    tree = ast.parse(Path(module_file).read_text(encoding="utf-8"))
+    assert tuple(getattr(module, "__all__", ())) == ()
+    assert not any(
+        isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        for node in tree.body
+    )
+    assert not any(isinstance(node, ast.Call) for node in ast.walk(tree))
+
+
+@pytest.mark.contract
+def test_projects_languages_package_initializer_is_inert() -> None:
+    module = importlib.import_module(f"{PROJECT_PACKAGE}.languages")
+    module_file = module.__file__
+    assert module_file is not None
+    tree = ast.parse(Path(module_file).read_text(encoding="utf-8"))
     assert tuple(getattr(module, "__all__", ())) == ()
     assert not any(
         isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))

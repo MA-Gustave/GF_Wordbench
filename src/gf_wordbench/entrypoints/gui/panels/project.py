@@ -8,27 +8,30 @@ ADR-0015.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from enum import StrEnum, unique
 from pathlib import Path
-from typing import Final, Iterable
+from typing import Final
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
     QStyle,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 __all__ = (
-    "LanguageContextStatus",
     "LanguageContextPanel",
+    "LanguageContextStatus",
     "ProjectConfigurationStatus",
     "ProjectPanel",
 )
@@ -122,14 +125,32 @@ class LanguageContextPanel(QGroupBox):
         self._status_message = QLabel(self)
         self._status_message.setTextFormat(Qt.TextFormat.PlainText)
         self._status_message.setWordWrap(True)
-        self._status_message.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self._status_message.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._status_message.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
         )
         self._status_message.setAccessibleName("Language context details")
+
+        self._summary_line = QLabel(self)
+        self._summary_line.setObjectName("languageContextCompactSummary")
+        self._summary_line.setTextFormat(Qt.TextFormat.PlainText)
+        self._summary_line.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._summary_line.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        self._summary_line.setAccessibleName("Compact language context summary")
+        self._summary_line.setText("No resolved language context")
+
+        self._details_toggle = QToolButton(self)
+        self._details_toggle.setObjectName("languageContextDetailsToggle")
+        self._details_toggle.setText("Show language details")
+        self._details_toggle.setCheckable(True)
+        self._details_toggle.setChecked(False)
+        self._details_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._details_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self._details_toggle.toggled.connect(self._set_details_visible)
 
         self._language_key = _ValueLabel(self)
         self._module_suffix = _ValueLabel(self)
@@ -153,12 +174,8 @@ class LanguageContextPanel(QGroupBox):
         self._recheck_button.clicked.connect(self.recheck_language_requested.emit)
 
         self._open_profile_button = QPushButton("Open Validation Profile", self)
-        self._open_profile_button.setAccessibleName(
-            "Open optional validation profile"
-        )
-        self._open_profile_button.clicked.connect(
-            self._emit_open_validation_profile_requested
-        )
+        self._open_profile_button.setAccessibleName("Open optional validation profile")
+        self._open_profile_button.clicked.connect(self._emit_open_validation_profile_requested)
 
         status_layout = QHBoxLayout()
         status_layout.setContentsMargins(0, 0, 0, 0)
@@ -172,10 +189,17 @@ class LanguageContextPanel(QGroupBox):
         status_text_layout.addWidget(self._status_message)
         status_layout.addLayout(status_text_layout, 1)
 
+        self._details_frame = QFrame(self)
+        self._details_frame.setObjectName("languageContextDetailsFrame")
+        details_layout = QVBoxLayout(self._details_frame)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+        details_layout.setSpacing(4)
+
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        form.setVerticalSpacing(3)
         form.addRow("Language key", self._language_key)
         form.addRow("Module suffix", self._module_suffix)
         form.addRow("Selected path", self._selected_path_value)
@@ -188,6 +212,7 @@ class LanguageContextPanel(QGroupBox):
         form.addRow("Eligible GF sources", self._source_count)
         form.addRow("Capabilities", self._capabilities)
         form.addRow("Validation profile", self._profile_status)
+        details_layout.addLayout(form)
 
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
@@ -195,14 +220,17 @@ class LanguageContextPanel(QGroupBox):
         actions.addWidget(self._recheck_button)
         actions.addWidget(self._open_profile_button)
         actions.addStretch(1)
+        details_layout.addLayout(actions)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
         layout.addLayout(status_layout)
-        layout.addSpacing(6)
-        layout.addLayout(form)
-        layout.addSpacing(4)
-        layout.addLayout(actions)
+        layout.addWidget(self._summary_line)
+        layout.addWidget(self._details_toggle, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(self._details_frame)
 
+        self._set_details_visible(False)
         self.set_status(LanguageContextStatus.UNSELECTED)
 
     @property
@@ -251,9 +279,7 @@ class LanguageContextPanel(QGroupBox):
         )
         path_kind = _selected_path_kind(selected_path_kind)
         source_root = _absolute_path(rgl_source_root, field="rgl_source_root")
-        repository_root = (
-            None if rgl_root is None else _absolute_path(rgl_root, field="rgl_root")
-        )
+        repository_root = None if rgl_root is None else _absolute_path(rgl_root, field="rgl_root")
         target = (
             None
             if focused_target is None
@@ -272,12 +298,12 @@ class LanguageContextPanel(QGroupBox):
                 field="rgl_source_root",
                 root_field="rgl_root",
             )
-        _require_descendant_or_equal(
-            language_dir,
-            source_root,
-            field="language_directory",
-            root_field="rgl_source_root",
-        )
+        # The active language may live in an external GF project while the
+        # resolved RGL source root supplies shared dependencies.  The language
+        # directory therefore does not have to be a descendant of
+        # ``rgl_source_root``.  Source containment is already guaranteed by the
+        # immutable ResolvedLanguageContext; this presentation layer only
+        # validates relationships that remain true for both layouts.
         _require_descendant_or_equal(
             selected,
             language_dir,
@@ -287,9 +313,7 @@ class LanguageContextPanel(QGroupBox):
         if path_kind == "file" and selected.suffix.lower() != ".gf":
             raise ValueError("selected_path file must use the .gf extension")
         if path_kind == "directory" and selected != language_dir:
-            raise ValueError(
-                "directory selected_path must equal language_directory"
-            )
+            raise ValueError("directory selected_path must equal language_directory")
         if target is not None:
             _require_descendant_or_equal(
                 target,
@@ -314,13 +338,9 @@ class LanguageContextPanel(QGroupBox):
         self._selected_path = selected
         self._language_directory = language_dir
         self._validation_profile = profile
-        self._language_key.set_value(
-            _required_text(language_key, field="language_key")
-        )
+        self._language_key.set_value(_required_text(language_key, field="language_key"))
         self._module_suffix.set_value(
-            None
-            if module_suffix is None
-            else _required_text(module_suffix, field="module_suffix")
+            None if module_suffix is None else _required_text(module_suffix, field="module_suffix")
         )
         self._selected_path_value.set_value(selected)
         self._selected_path_kind.set_value(path_kind)
@@ -329,11 +349,17 @@ class LanguageContextPanel(QGroupBox):
         self._rgl_root.set_value(repository_root)
         self._focused_target.set_value(target)
         self._entrypoints.set_value(rendered_entrypoints)
-        self._source_count.set_value(
-            _non_negative_count(source_count, field="source_count")
-        )
+        self._source_count.set_value(_non_negative_count(source_count, field="source_count"))
         self._capabilities.set_value(rendered_capabilities)
         self._profile_status.set_value(profile if profile is not None else "Not loaded")
+        resolved_rgl_root = repository_root or source_root.parent
+        rgl_label = resolved_rgl_root.name or str(resolved_rgl_root)
+        target_label = target.name if target is not None else "no focused target"
+        self._summary_line.setText(
+            f"{self._language_key.text()} · {source_count} GF sources · "
+            f"RGL: {rgl_label} · {target_label}"
+        )
+        self._summary_line.setToolTip(str(language_dir))
         self.set_status(
             LanguageContextStatus.READY,
             message=resolution_message,
@@ -399,15 +425,9 @@ class LanguageContextPanel(QGroupBox):
     def set_validation_profile(self, profile: Path | None) -> None:
         """Update only the optional validation-profile presentation."""
 
-        resolved = (
-            None
-            if profile is None
-            else _absolute_path(profile, field="validation_profile")
-        )
+        resolved = None if profile is None else _absolute_path(profile, field="validation_profile")
         self._validation_profile = resolved
-        self._profile_status.set_value(
-            resolved if resolved is not None else "Not loaded"
-        )
+        self._profile_status.set_value(resolved if resolved is not None else "Not loaded")
         self._refresh_actions()
 
     def set_status(
@@ -429,9 +449,7 @@ class LanguageContextPanel(QGroupBox):
         self._status_title.setText(_STATUS_TITLES[status])
         self._status_message.setText(rendered_message)
         self._status_icon.setPixmap(
-            self.style()
-            .standardIcon(_STATUS_ICONS[status])
-            .pixmap(self._status_icon.size())
+            self.style().standardIcon(_STATUS_ICONS[status]).pixmap(self._status_icon.size())
         )
         self._status_icon.setToolTip(_STATUS_TITLES[status])
 
@@ -456,6 +474,15 @@ class LanguageContextPanel(QGroupBox):
         self._run_active = active
         self._refresh_actions()
 
+    def _set_details_visible(self, visible: bool) -> None:
+        self._details_frame.setVisible(visible)
+        self._details_toggle.setArrowType(
+            Qt.ArrowType.DownArrow if visible else Qt.ArrowType.RightArrow
+        )
+        self._details_toggle.setText(
+            "Hide language details" if visible else "Show language details"
+        )
+
     def _prepare_unresolved_language(
         self,
         *,
@@ -463,9 +490,7 @@ class LanguageContextPanel(QGroupBox):
     ) -> None:
         self._clear_language_values()
         selected = (
-            None
-            if selected_path is None
-            else _absolute_path(selected_path, field="selected_path")
+            None if selected_path is None else _absolute_path(selected_path, field="selected_path")
         )
         self._selected_path = selected
         self._language_directory = None
@@ -473,6 +498,8 @@ class LanguageContextPanel(QGroupBox):
         self._selected_path_value.set_value(selected)
 
     def _clear_language_values(self) -> None:
+        self._summary_line.setText("No resolved language context")
+        self._summary_line.setToolTip("")
         for label in (
             self._language_key,
             self._module_suffix,
@@ -507,9 +534,7 @@ class LanguageContextPanel(QGroupBox):
             self._select_button.setToolTip(reason)
             self._recheck_button.setToolTip(reason)
         else:
-            self._select_button.setToolTip(
-                "Choose a GF language directory or a focused .gf file."
-            )
+            self._select_button.setToolTip("Choose a GF language directory or a focused .gf file.")
             self._recheck_button.setToolTip(
                 "Revalidate the selected path through the shared language probe."
                 if has_selected_path
@@ -523,11 +548,7 @@ class LanguageContextPanel(QGroupBox):
         )
 
     def _emit_open_validation_profile_requested(self) -> None:
-        if (
-            self._validation_profile is not None
-            and not self._busy
-            and not self._run_active
-        ):
+        if self._validation_profile is not None and not self._busy and not self._run_active:
             self.open_validation_profile_requested.emit(self._validation_profile)
 
 
@@ -574,7 +595,6 @@ def _absolute_path(value: object, *, field: str) -> Path:
     return value
 
 
-
 def _selected_path_kind(value: object) -> str:
     if not isinstance(value, str):
         raise TypeError("selected_path_kind must be a string")
@@ -582,6 +602,7 @@ def _selected_path_kind(value: object) -> str:
     if normalized not in {"file", "directory"}:
         raise ValueError("selected_path_kind must be 'file' or 'directory'")
     return normalized
+
 
 def _require_descendant_or_equal(
     value: Path,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ from gf_wordbench.kernel.statuses import (
 
 if TYPE_CHECKING:
     from gf_wordbench.diagnostics.models import TopError
-    from gf_wordbench.reporting.manifest.models import ArtifactRecord
+    from gf_wordbench.reporting.manifest.models import ArtifactManifestEntry
     from gf_wordbench.validation.compilation.models import (
         CompileSummary,
         SourceFingerprint,
@@ -112,12 +113,9 @@ def _unique_text_list(
     if isinstance(values, (str, bytes)):
         raise TypeError(f"{field_name} must be a sequence of strings")
 
-    try:
-        copied = list(values)  # type: ignore[arg-type]
-    except TypeError as exc:
-        raise TypeError(
-            f"{field_name} must be an iterable of strings"
-        ) from exc
+    if not isinstance(values, Iterable):
+        raise TypeError(f"{field_name} must be an iterable of strings")
+    copied = list(values)
 
     seen: set[str] = set()
     result: list[str] = []
@@ -128,9 +126,7 @@ def _unique_text_list(
             allow_empty=False,
         )
         if item in seen:
-            raise ValueError(
-                f"{field_name} must not contain duplicate value {item!r}"
-            )
+            raise ValueError(f"{field_name} must not contain duplicate value {item!r}")
         seen.add(item)
         result.append(item)
     return result
@@ -148,15 +144,19 @@ def _error_kind_text(value: object) -> str:
     raise TypeError("top error error_kind must be ErrorKind or string")
 
 
+def _coerce_change_kind(value: object) -> ChangeKind:
+    if isinstance(value, ChangeKind):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("diff change kind must be ChangeKind or string")
+    try:
+        return ChangeKind(value)
+    except ValueError as exc:
+        raise ValueError(f"invalid diff change kind: {value!r}") from exc
+
+
 def _diff_sort_key(entry: DiffEntry) -> tuple[int, str, str, str, str]:
-    change_kind = entry.change_kind
-    if not isinstance(change_kind, ChangeKind):
-        try:
-            change_kind = ChangeKind(change_kind)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"invalid diff change kind: {entry.change_kind!r}"
-            ) from exc
+    change_kind = _coerce_change_kind(entry.change_kind)
 
     subject_kind = _require_text(
         entry.subject_kind,
@@ -164,9 +164,7 @@ def _diff_sort_key(entry: DiffEntry) -> tuple[int, str, str, str, str]:
         allow_empty=False,
     )
     if subject_kind not in {"file", "scenario", "run"}:
-        raise ValueError(
-            f"unsupported diff subject kind: {subject_kind!r}"
-        )
+        raise ValueError(f"unsupported diff subject kind: {subject_kind!r}")
 
     subject_id = _require_text(
         entry.subject_id,
@@ -225,7 +223,7 @@ class FileResult:
     fingerprint: SourceFingerprint
     compile_summary: CompileSummary
     scan_log_path: Path | None
-    artifacts: list[ArtifactRecord] = field(default_factory=list)
+    artifacts: list[ArtifactManifestEntry] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.file_path = Path(self.file_path)
@@ -238,54 +236,31 @@ class FileResult:
         if not isinstance(self.status, ValidationStatus):
             raise TypeError("status must be a ValidationStatus")
         if not isinstance(self.diagnostic_class, DiagnosticClass):
-            raise TypeError(
-                "diagnostic_class must be a DiagnosticClass"
-            )
+            raise TypeError("diagnostic_class must be a DiagnosticClass")
         if not isinstance(self.is_direct, bool):
             raise TypeError("is_direct must be a bool")
-        if self.is_direct != (
-            self.diagnostic_class is DiagnosticClass.DIRECT
-        ):
-            raise ValueError(
-                "is_direct must agree with diagnostic_class"
-            )
+        if self.is_direct != (self.diagnostic_class is DiagnosticClass.DIRECT):
+            raise ValueError("is_direct must agree with diagnostic_class")
 
         self.blocked_by = _unique_text_list(
             self.blocked_by,
             field_name="blocked_by",
         )
-        if (
-            self.diagnostic_class is DiagnosticClass.DOWNSTREAM
-            and not self.blocked_by
-        ):
-            raise ValueError(
-                "downstream file results require at least one blocker"
-            )
+        if self.diagnostic_class is DiagnosticClass.DOWNSTREAM and not self.blocked_by:
+            raise ValueError("downstream file results require at least one blocker")
 
-        if self.status is ValidationStatus.OK and (
-            self.diagnostic_class is not DiagnosticClass.OK
-        ):
-            raise ValueError(
-                "OK file results require diagnostic_class=ok"
-            )
-        if self.diagnostic_class is DiagnosticClass.OK and (
-            self.status is not ValidationStatus.OK
-        ):
-            raise ValueError(
-                "diagnostic_class=ok requires status=OK"
-            )
+        if self.status is ValidationStatus.OK and (self.diagnostic_class is not DiagnosticClass.OK):
+            raise ValueError("OK file results require diagnostic_class=ok")
+        if self.diagnostic_class is DiagnosticClass.OK and (self.status is not ValidationStatus.OK):
+            raise ValueError("diagnostic_class=ok requires status=OK")
         if self.status is ValidationStatus.SKIPPED and (
             self.diagnostic_class is not DiagnosticClass.SKIPPED
         ):
-            raise ValueError(
-                "SKIPPED file results require diagnostic_class=skipped"
-            )
+            raise ValueError("SKIPPED file results require diagnostic_class=skipped")
         if self.diagnostic_class is DiagnosticClass.SKIPPED and (
             self.status is not ValidationStatus.SKIPPED
         ):
-            raise ValueError(
-                "diagnostic_class=skipped requires status=SKIPPED"
-            )
+            raise ValueError("diagnostic_class=skipped requires status=SKIPPED")
 
         if self.scan_log_path is not None:
             self.scan_log_path = Path(self.scan_log_path)
@@ -297,9 +272,7 @@ class FileResult:
 
         value = self.compile_summary.error_kind
         if not isinstance(value, ErrorKind):
-            raise TypeError(
-                "compile_summary.error_kind must be an ErrorKind"
-            )
+            raise TypeError("compile_summary.error_kind must be an ErrorKind")
         return value
 
     @property
@@ -344,38 +317,20 @@ class RunTotals:
             )
 
         if not isinstance(self.overall_status, OverallStatus):
-            raise TypeError(
-                "overall_status must be an OverallStatus"
-            )
+            raise TypeError("overall_status must be an OverallStatus")
 
-        if self.files_seen != (
-            self.files_included + self.files_excluded
-        ):
-            raise ValueError(
-                "files_seen must equal files_included + files_excluded"
-            )
+        if self.files_seen != (self.files_included + self.files_excluded):
+            raise ValueError("files_seen must equal files_included + files_excluded")
         if self.files_included != (
-            self.files_ok
-            + self.files_fail
-            + self.files_error
-            + self.files_skipped
+            self.files_ok + self.files_fail + self.files_error + self.files_skipped
         ):
-            raise ValueError(
-                "files_included must equal the sum of file status counts"
-            )
+            raise ValueError("files_included must equal the sum of file status counts")
         if self.scenarios_seen != (
-            self.scenarios_ok
-            + self.scenarios_fail
-            + self.scenarios_error
-            + self.scenarios_skipped
+            self.scenarios_ok + self.scenarios_fail + self.scenarios_error + self.scenarios_skipped
         ):
-            raise ValueError(
-                "scenarios_seen must equal the sum of scenario status counts"
-            )
+            raise ValueError("scenarios_seen must equal the sum of scenario status counts")
         if self.required_scenario_fail > self.scenarios_fail:
-            raise ValueError(
-                "required_scenario_fail cannot exceed scenarios_fail"
-            )
+            raise ValueError("required_scenario_fail cannot exceed scenarios_fail")
 
 
 @dataclass(slots=True)
@@ -410,9 +365,7 @@ class RunResult:
             field_name="finished_at",
         )
         if self.finished_at < self.started_at:
-            raise ValueError(
-                "finished_at must not precede started_at"
-            )
+            raise ValueError("finished_at must not precede started_at")
 
         self.duration_ms = _require_non_negative_int(
             self.duration_ms,
@@ -425,9 +378,7 @@ class RunResult:
         )
 
         if not isinstance(self.overall_status, OverallStatus):
-            raise TypeError(
-                "overall_status must be an OverallStatus"
-            )
+            raise TypeError("overall_status must be an OverallStatus")
         if not isinstance(self.totals, RunTotals):
             raise TypeError("totals must be a RunTotals")
 
@@ -442,17 +393,13 @@ class RunResult:
         """Validate terminal aggregate invariants without mutating results."""
 
         if self.overall_status is not self.totals.overall_status:
-            raise ValueError(
-                "overall_status must agree with totals.overall_status"
-            )
+            raise ValueError("overall_status must agree with totals.overall_status")
 
         file_keys = [_path_key(result.file_path) for result in self.file_results]
         if len(file_keys) != len(set(file_keys)):
             raise ValueError("file_results contain duplicate file paths")
         if file_keys != sorted(file_keys):
-            raise ValueError(
-                "file_results must be ordered by normalized file_path"
-            )
+            raise ValueError("file_results must be ordered by normalized file_path")
 
         scenario_ids = [
             _require_text(
@@ -463,39 +410,25 @@ class RunResult:
             for result in self.scenario_results
         ]
         if len(scenario_ids) != len(set(scenario_ids)):
-            raise ValueError(
-                "scenario_results contain duplicate scenario IDs"
-            )
+            raise ValueError("scenario_results contain duplicate scenario IDs")
 
         diff_keys = [_diff_sort_key(entry) for entry in self.diff_entries]
         if diff_keys != sorted(diff_keys):
-            raise ValueError(
-                "diff_entries must follow canonical deterministic order"
-            )
+            raise ValueError("diff_entries must follow canonical deterministic order")
 
-        top_error_keys = [
-            _top_error_sort_key(entry) for entry in self.top_errors
-        ]
+        top_error_keys = [_top_error_sort_key(entry) for entry in self.top_errors]
         if top_error_keys != sorted(top_error_keys):
-            raise ValueError(
-                "top_errors must follow canonical deterministic order"
-            )
+            raise ValueError("top_errors must follow canonical deterministic order")
 
         self._validate_totals_against_results()
 
     def _validate_totals_against_results(self) -> None:
         if self.totals.files_included != len(self.file_results):
-            raise ValueError(
-                "files_included must equal len(file_results)"
-            )
+            raise ValueError("files_included must equal len(file_results)")
         if self.totals.scenarios_seen != len(self.scenario_results):
-            raise ValueError(
-                "scenarios_seen must equal len(scenario_results)"
-            )
+            raise ValueError("scenarios_seen must equal len(scenario_results)")
 
-        file_statuses = Counter(
-            result.status for result in self.file_results
-        )
+        file_statuses = Counter(result.status for result in self.file_results)
         expected_file_counts = {
             ValidationStatus.OK: self.totals.files_ok,
             ValidationStatus.FAIL: self.totals.files_fail,
@@ -504,13 +437,9 @@ class RunResult:
         }
         for status, expected in expected_file_counts.items():
             if file_statuses[status] != expected:
-                raise ValueError(
-                    f"{status.value} file total does not match file_results"
-                )
+                raise ValueError(f"{status.value} file total does not match file_results")
 
-        scenario_statuses = Counter(
-            result.status for result in self.scenario_results
-        )
+        scenario_statuses = Counter(result.status for result in self.scenario_results)
         expected_scenario_counts = {
             ValidationStatus.OK: self.totals.scenarios_ok,
             ValidationStatus.FAIL: self.totals.scenarios_fail,
@@ -519,21 +448,12 @@ class RunResult:
         }
         for status, expected in expected_scenario_counts.items():
             if scenario_statuses[status] != expected:
-                raise ValueError(
-                    f"{status.value} scenario total does not match "
-                    "scenario_results"
-                )
+                raise ValueError(f"{status.value} scenario total does not match scenario_results")
 
         required_scenario_fail = sum(
             1
             for result in self.scenario_results
-            if result.required
-            and result.status is ValidationStatus.FAIL
+            if result.required and result.status is ValidationStatus.FAIL
         )
-        if (
-            required_scenario_fail
-            != self.totals.required_scenario_fail
-        ):
-            raise ValueError(
-                "required_scenario_fail does not match scenario_results"
-            )
+        if required_scenario_fail != self.totals.required_scenario_fail:
+            raise ValueError("required_scenario_fail does not match scenario_results")

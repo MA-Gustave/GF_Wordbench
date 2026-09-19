@@ -11,6 +11,7 @@ from typing import Generic, TypeVar
 from gf_wordbench.kernel.statuses import ValidationMode
 
 _ItemT = TypeVar("_ItemT")
+_CallableT = TypeVar("_CallableT", bound=Callable[..., object])
 _PathGetter = Callable[[_ItemT], Path]
 
 
@@ -25,9 +26,7 @@ class DiagnosticLimitResult(Generic[_ItemT]):
 
         selected_ids = {id(item) for item in selected}
         if any(id(item) in selected_ids for item in overflow):
-            raise ValueError(
-                "selected and overflow must not contain the same object"
-            )
+            raise ValueError("selected and overflow must not contain the same object")
 
         object.__setattr__(self, "selected", selected)
         object.__setattr__(self, "overflow", overflow)
@@ -43,9 +42,7 @@ def project_relative_posix_path(
     *,
     source_root: Path,
 ) -> PurePosixPath:
-    normalized_path = _absolute_path(path, field_name="path").resolve(
-        strict=False
-    )
+    normalized_path = _absolute_path(path, field_name="path").resolve(strict=False)
     normalized_root = _absolute_path(
         source_root,
         field_name="source_root",
@@ -54,9 +51,7 @@ def project_relative_posix_path(
     try:
         relative = normalized_path.relative_to(normalized_root)
     except ValueError as exc:
-        raise ValueError(
-            f"path is outside source_root: {normalized_path}"
-        ) from exc
+        raise ValueError(f"path is outside source_root: {normalized_path}") from exc
 
     return PurePosixPath(*relative.parts)
 
@@ -85,9 +80,7 @@ def deduplicate_preserving_order(
     result: list[_ItemT] = []
 
     for item in normalized:
-        key = resolved_identity_key(
-            _item_path(item, path_getter=getter)
-        )
+        key = resolved_identity_key(_item_path(item, path_getter=getter))
         if key in seen:
             continue
         seen.add(key)
@@ -104,8 +97,7 @@ def ordered_union(
 ) -> tuple[_ItemT, ...]:
     getter = _callable(path_getter, field_name="path_getter")
     return deduplicate_preserving_order(
-        (*_item_tuple(first, field_name="first"),
-         *_item_tuple(second, field_name="second")),
+        (*_item_tuple(first, field_name="first"), *_item_tuple(second, field_name="second")),
         path_getter=getter,
     )
 
@@ -120,9 +112,7 @@ def order_quick(
         path_getter=path_getter,
     )
     if len(ordered) != 1:
-        raise ValueError(
-            "quick mode requires exactly one selected target"
-        )
+        raise ValueError("quick mode requires exactly one selected target")
     return ordered
 
 
@@ -232,9 +222,7 @@ def order_for_mode(
 
     if mode is ValidationMode.CHECKPOINT:
         if limit != 0:
-            raise ValueError(
-                "max_files must be 0 in checkpoint mode"
-            )
+            raise ValueError("max_files must be 0 in checkpoint mode")
         ordered = order_checkpoints(
             checkpoints,
             path_getter=getter,
@@ -246,9 +234,7 @@ def order_for_mode(
 
     if mode is ValidationMode.RELEASE:
         if limit != 0:
-            raise ValueError(
-                "max_files must be 0 in release mode"
-            )
+            raise ValueError("max_files must be 0 in release mode")
         ordered = order_release(
             checkpoints,
             entrypoints,
@@ -261,9 +247,7 @@ def order_for_mode(
 
     if mode is ValidationMode.DIAGNOSTIC:
         if source_root is None:
-            raise ValueError(
-                "source_root is required in diagnostic mode"
-            )
+            raise ValueError("source_root is required in diagnostic mode")
         ordered = order_diagnostic(
             diagnostic,
             source_root=source_root,
@@ -308,9 +292,7 @@ def _item_path(
 ) -> Path:
     path = path_getter(item)
     if not isinstance(path, Path):
-        raise TypeError(
-            "path_getter must return pathlib.Path values"
-        )
+        raise TypeError("path_getter must return pathlib.Path values")
     return path
 
 
@@ -320,17 +302,15 @@ def _item_tuple(
     field_name: str,
 ) -> tuple[_ItemT, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            f"{field_name} must be an iterable of items"
-        )
+        raise TypeError(f"{field_name} must be an iterable of items")
     return tuple(values)
 
 
 def _callable(
-    value: object,
+    value: _CallableT,
     *,
     field_name: str,
-) -> Callable[..., object]:
+) -> _CallableT:
     if not callable(value):
         raise TypeError(f"{field_name} must be callable")
     return value
@@ -342,17 +322,11 @@ def _absolute_path(
     field_name: str,
 ) -> Path:
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field_name} must be a pathlib.Path"
-        )
+        raise TypeError(f"{field_name} must be a pathlib.Path")
     if "\x00" in str(value):
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if not value.is_absolute():
-        raise ValueError(
-            f"{field_name} must be absolute"
-        )
+        raise ValueError(f"{field_name} must be absolute")
     return value
 
 
@@ -362,13 +336,9 @@ def _non_negative_integer(
     field_name: str,
 ) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(
-            f"{field_name} must be an integer"
-        )
+        raise TypeError(f"{field_name} must be an integer")
     if value < 0:
-        raise ValueError(
-            f"{field_name} must be non-negative"
-        )
+        raise ValueError(f"{field_name} must be non-negative")
     return value
 
 

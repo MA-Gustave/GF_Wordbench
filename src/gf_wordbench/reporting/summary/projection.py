@@ -138,13 +138,9 @@ def build_summary_document(
             for result in scenario_results
         ],
         "diff_entries": [
-            project_diff_entry(entry)
-            for entry in _ordered_diff_entries(diff_entries)
+            project_diff_entry(entry) for entry in _ordered_diff_entries(diff_entries)
         ],
-        "top_errors": [
-            project_top_error(item)
-            for item in _ordered_top_errors(top_errors)
-        ],
+        "top_errors": [project_top_error(item) for item in _ordered_top_errors(top_errors)],
     }
     validate_projection_invariants(document)
     return document
@@ -167,16 +163,8 @@ def project_metadata(
     run_config: object | None = None,
     run_paths: object | None = None,
 ) -> dict[str, JsonValue]:
-    config = (
-        _required_attr(run_result, "run_config")
-        if run_config is None
-        else run_config
-    )
-    paths = (
-        _required_attr(run_result, "run_paths")
-        if run_paths is None
-        else run_paths
-    )
+    config = _required_attr(run_result, "run_config") if run_config is None else run_config
+    paths = _required_attr(run_result, "run_paths") if run_paths is None else run_paths
     project = _required_attr(config, "project")
     identity = _required_attr(project, "identity")
     sources = _required_attr(project, "sources")
@@ -195,17 +183,19 @@ def project_metadata(
         )
     )
 
+    started_at = _timestamp(
+        _required_attr(run_result, "started_at"),
+        "metadata.started_at",
+    )
+    finished_at = _timestamp(
+        _required_attr(run_result, "finished_at"),
+        "metadata.finished_at",
+    )
     metadata: dict[str, JsonValue] = {
         "run_id": _identifier(_required_attr(paths, "run_id"), "metadata.run_id"),
         "run_dir": _environment_path(run_dir, "metadata.run_dir"),
-        "started_at": _timestamp(
-            _required_attr(run_result, "started_at"),
-            "metadata.started_at",
-        ),
-        "finished_at": _timestamp(
-            _required_attr(run_result, "finished_at"),
-            "metadata.finished_at",
-        ),
+        "started_at": started_at,
+        "finished_at": finished_at,
         "duration_ms": _non_negative_int(
             _required_attr(run_result, "duration_ms"),
             "metadata.duration_ms",
@@ -283,10 +273,8 @@ def project_metadata(
         ),
     }
 
-    if metadata["finished_at"] < metadata["started_at"]:
-        raise SummaryProjectionError(
-            "metadata.finished_at must not precede metadata.started_at"
-        )
+    if finished_at < started_at:
+        raise SummaryProjectionError("metadata.finished_at must not precede metadata.started_at")
     return metadata
 
 
@@ -295,7 +283,7 @@ def project_totals(
     *,
     overall_status: object | None = None,
 ) -> dict[str, JsonValue]:
-    projected: dict[str, JsonValue] = {
+    counts: dict[str, int] = {
         field: _non_negative_int(
             _required_attr(totals, field),
             f"totals.{field}",
@@ -315,32 +303,26 @@ def project_totals(
             raise SummaryProjectionError(
                 "run_result.overall_status must equal totals.overall_status"
             )
-    projected["overall_status"] = totals_status
 
-    if projected["files_seen"] != (
-        projected["files_included"] + projected["files_excluded"]
+    if counts["files_seen"] != counts["files_included"] + counts["files_excluded"]:
+        raise SummaryProjectionError("totals.files_seen must equal files_included + files_excluded")
+    if counts["files_included"] != (
+        counts["files_ok"]
+        + counts["files_fail"]
+        + counts["files_error"]
+        + counts["files_skipped"]
     ):
-        raise SummaryProjectionError(
-            "totals.files_seen must equal files_included + files_excluded"
-        )
-    if projected["files_included"] != (
-        projected["files_ok"]
-        + projected["files_fail"]
-        + projected["files_error"]
-        + projected["files_skipped"]
+        raise SummaryProjectionError("totals.files_included must equal file status counts")
+    if counts["scenarios_seen"] != (
+        counts["scenarios_ok"]
+        + counts["scenarios_fail"]
+        + counts["scenarios_error"]
+        + counts["scenarios_skipped"]
     ):
-        raise SummaryProjectionError(
-            "totals.files_included must equal file status counts"
-        )
-    if projected["scenarios_seen"] != (
-        projected["scenarios_ok"]
-        + projected["scenarios_fail"]
-        + projected["scenarios_error"]
-        + projected["scenarios_skipped"]
-    ):
-        raise SummaryProjectionError(
-            "totals.scenarios_seen must equal scenario status counts"
-        )
+        raise SummaryProjectionError("totals.scenarios_seen must equal scenario status counts")
+
+    projected: dict[str, JsonValue] = dict(counts)
+    projected["overall_status"] = totals_status
     return projected
 
 
@@ -379,9 +361,7 @@ def project_file_result(
         "file_result.is_direct",
     )
     if is_direct_value != (diagnostic_class == "direct"):
-        raise SummaryProjectionError(
-            "file_result.is_direct must agree with diagnostic_class"
-        )
+        raise SummaryProjectionError("file_result.is_direct must agree with diagnostic_class")
 
     blocked_by = sorted(
         {
@@ -411,13 +391,9 @@ def project_file_result(
         ),
         "diagnostic_class": diagnostic_class,
         "is_direct": is_direct_value,
-        "blocked_by": blocked_by,
-        "scan_counts": project_scan_counts(
-            _required_attr(file_result, "scan_counts")
-        ),
-        "fingerprint": project_fingerprint(
-            _required_attr(file_result, "fingerprint")
-        ),
+        "blocked_by": [item for item in blocked_by],
+        "scan_counts": project_scan_counts(_required_attr(file_result, "scan_counts")),
+        "fingerprint": project_fingerprint(_required_attr(file_result, "fingerprint")),
         "compile_summary": project_compile_summary(
             _required_attr(file_result, "compile_summary"),
             run_root=run_root,
@@ -450,15 +426,9 @@ def project_fingerprint(fingerprint: object) -> dict[str, JsonValue]:
         "fingerprint.hash",
     ).lower()
     if algorithm != "sha256":
-        raise SummaryProjectionError(
-            "canonical fingerprints must use sha256"
-        )
-    if len(digest) != 64 or any(
-        character not in "0123456789abcdef" for character in digest
-    ):
-        raise SummaryProjectionError(
-            "fingerprint.hash must be a full lowercase SHA-256 digest"
-        )
+        raise SummaryProjectionError("canonical fingerprints must use sha256")
+    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+        raise SummaryProjectionError("fingerprint.hash must be a full lowercase SHA-256 digest")
     return {
         "size_bytes": _non_negative_int(
             _required_attr(fingerprint, "size_bytes"),
@@ -656,12 +626,12 @@ def project_diff_entry(entry: object) -> dict[str, JsonValue]:
             _first_attr(entry, ("subject_id", "file_path")),
             "diff_entry.subject_id",
         ).replace("\\", "/"),
-        "previous_status": _enum_text(
-            _required_attr(entry, "previous_status"),
+        "previous_status": _optional_enum_text(
+            _optional_attr(entry, "previous_status"),
             "diff_entry.previous_status",
         ),
-        "current_status": _enum_text(
-            _required_attr(entry, "current_status"),
+        "current_status": _optional_enum_text(
+            _optional_attr(entry, "current_status"),
             "diff_entry.current_status",
         ),
         "change_kind": _enum_text(
@@ -708,8 +678,7 @@ def validate_projection_invariants(document: Mapping[str, JsonValue]) -> None:
     missing = [field for field in required if field not in document]
     if missing:
         raise SummaryProjectionError(
-            "summary document is missing required fields: "
-            + ", ".join(missing)
+            "summary document is missing required fields: " + ", ".join(missing)
         )
     if document["schema_id"] != SUMMARY_SCHEMA_ID:
         raise SummaryProjectionError("invalid summary schema_id")
@@ -718,9 +687,7 @@ def validate_projection_invariants(document: Mapping[str, JsonValue]) -> None:
 
     for field in ("metadata", "totals", "artifacts"):
         if not isinstance(document[field], Mapping):
-            raise SummaryProjectionError(
-                f"summary field {field!r} must be an object"
-            )
+            raise SummaryProjectionError(f"summary field {field!r} must be an object")
     for field in (
         "file_results",
         "scenario_results",
@@ -728,37 +695,39 @@ def validate_projection_invariants(document: Mapping[str, JsonValue]) -> None:
         "top_errors",
     ):
         if not isinstance(document[field], list):
-            raise SummaryProjectionError(
-                f"summary field {field!r} must be an array"
-            )
+            raise SummaryProjectionError(f"summary field {field!r} must be an array")
 
-    file_paths = [
-        item["file_path"]
-        for item in document["file_results"]
-        if isinstance(item, Mapping)
-    ]
+    file_results = document["file_results"]
+    if not isinstance(file_results, list):
+        raise SummaryProjectionError("summary field 'file_results' must be an array")
+    file_paths: list[str] = []
+    for index, item in enumerate(file_results):
+        if not isinstance(item, Mapping):
+            raise SummaryProjectionError(f"file_results[{index}] must be an object")
+        file_paths.append(
+            _non_empty_text(item.get("file_path"), f"file_results[{index}].file_path")
+        )
     if file_paths != sorted(
         file_paths,
-        key=lambda value: (str(value).casefold(), str(value)),
+        key=lambda value: (value.casefold(), value),
     ):
-        raise SummaryProjectionError(
-            "file_results must be ordered by normalized file_path"
-        )
+        raise SummaryProjectionError("file_results must be ordered by normalized file_path")
 
-    top_error_keys = [
-        (
-            -int(item["count"]),
-            str(item["error_kind"]),
-            str(item["message"]).casefold(),
-            str(item["message"]),
+    top_errors = document["top_errors"]
+    if not isinstance(top_errors, list):
+        raise SummaryProjectionError("summary field 'top_errors' must be an array")
+    top_error_keys: list[tuple[int, str, str]] = []
+    for index, item in enumerate(top_errors):
+        if not isinstance(item, Mapping):
+            raise SummaryProjectionError(f"top_errors[{index}] must be an object")
+        count = _positive_int(item.get("count"), f"top_errors[{index}].count")
+        _non_empty_text(
+            item.get("error_kind"), f"top_errors[{index}].error_kind"
         )
-        for item in document["top_errors"]
-        if isinstance(item, Mapping)
-    ]
+        message = _non_empty_text(item.get("message"), f"top_errors[{index}].message")
+        top_error_keys.append((-count, message.casefold(), message))
     if top_error_keys != sorted(top_error_keys):
-        raise SummaryProjectionError(
-            "top_errors must use canonical deterministic ordering"
-        )
+        raise SummaryProjectionError("top_errors must use canonical deterministic ordering")
 
 
 def _ordered_file_results(
@@ -829,10 +798,6 @@ def _ordered_top_errors(
                     _required_attr(item, "count"),
                     "top_error.count",
                 ),
-                _enum_text(
-                    _required_attr(item, "error_kind"),
-                    "top_error.error_kind",
-                ),
                 _non_empty_text(
                     _required_attr(item, "message"),
                     "top_error.message",
@@ -859,9 +824,7 @@ def _artifact_reference(
         )
     path_value = _optional_attr(artifact, "path")
     if path_value is None:
-        raise SummaryProjectionError(
-            "scenario artifact references must expose a path"
-        )
+        raise SummaryProjectionError("scenario artifact references must expose a path")
     return _run_relative_path(
         path_value,
         run_root=run_root,
@@ -873,9 +836,7 @@ def _mode(value: object) -> str:
     canonical = _enum_text(value, "metadata.mode").strip().lower()
     canonical = _MODE_ALIASES.get(canonical, canonical)
     if canonical not in _CANONICAL_MODES:
-        raise SummaryProjectionError(
-            f"unsupported canonical validation mode: {canonical!r}"
-        )
+        raise SummaryProjectionError(f"unsupported canonical validation mode: {canonical!r}")
     return canonical
 
 
@@ -889,6 +850,12 @@ def _enum_text(value: object, field_name: str) -> str:
     if isinstance(value, Enum):
         value = value.value
     return _non_empty_text(value, field_name)
+
+
+def _optional_enum_text(value: object | None, field_name: str) -> str | None:
+    if value is None:
+        return None
+    return _enum_text(value, field_name)
 
 
 def _identifier(value: object, field_name: str) -> str:
@@ -905,9 +872,7 @@ def _environment_path(value: object, field_name: str) -> str:
 def _project_path_value(value: object, field_name: str) -> str:
     path = _coerce_path(value, field_name)
     if path.is_absolute():
-        raise SummaryProjectionError(
-            f"{field_name} must be project-relative"
-        )
+        raise SummaryProjectionError(f"{field_name} must be project-relative")
     normalized = path_to_portable_string(path)
     _validate_relative_path(normalized, field_name)
     return normalized
@@ -924,9 +889,7 @@ def _project_relative_path(
         try:
             path = path.relative_to(project_root)
         except ValueError as exc:
-            raise SummaryProjectionError(
-                f"{field_name} escapes the project root"
-            ) from exc
+            raise SummaryProjectionError(f"{field_name} escapes the project root") from exc
     normalized = path_to_portable_string(path)
     _validate_relative_path(normalized, field_name)
     return normalized
@@ -943,9 +906,7 @@ def _run_relative_path(
         try:
             path = path.relative_to(run_root)
         except ValueError as exc:
-            raise SummaryProjectionError(
-                f"{field_name} escapes the run directory"
-            ) from exc
+            raise SummaryProjectionError(f"{field_name} escapes the run directory") from exc
     normalized = path_to_portable_string(path)
     _validate_relative_path(normalized, field_name)
     return normalized
@@ -983,18 +944,12 @@ def _optional_project_path(
 
 def _validate_relative_path(value: str, field_name: str) -> None:
     if not value or value.startswith("/"):
-        raise SummaryProjectionError(
-            f"{field_name} must be a non-empty relative path"
-        )
+        raise SummaryProjectionError(f"{field_name} must be a non-empty relative path")
     parts = value.split("/")
     if any(part in {"", ".", ".."} for part in parts):
-        raise SummaryProjectionError(
-            f"{field_name} contains an unresolved path segment"
-        )
+        raise SummaryProjectionError(f"{field_name} contains an unresolved path segment")
     if len(value) >= 2 and value[1] == ":" and value[0].isalpha():
-        raise SummaryProjectionError(
-            f"{field_name} must not contain a drive prefix"
-        )
+        raise SummaryProjectionError(f"{field_name} must not contain a drive prefix")
 
 
 def _coerce_path(value: object, field_name: str) -> Path:
@@ -1004,18 +959,12 @@ def _coerce_path(value: object, field_name: str) -> Path:
         path = Path(value)
     elif isinstance(value, str):
         if not value:
-            raise SummaryProjectionError(
-                f"{field_name} must not be empty"
-            )
-        path = Path(value)
+            raise SummaryProjectionError(f"{field_name} must not be empty")
+        path = Path(value.replace("\\", "/"))
     else:
-        raise TypeError(
-            f"{field_name} must be a path or string"
-        )
+        raise TypeError(f"{field_name} must be a path or string")
     if "\x00" in str(path):
-        raise SummaryProjectionError(
-            f"{field_name} must not contain NUL"
-        )
+        raise SummaryProjectionError(f"{field_name} must not contain NUL")
     return path
 
 
@@ -1028,9 +977,7 @@ def _path_attr(value: object, name: str) -> Path:
 
 def _required_attr(value: object, name: str) -> object:
     if value is None or not hasattr(value, name):
-        raise SummaryProjectionError(
-            f"required projection field is missing: {name}"
-        )
+        raise SummaryProjectionError(f"required projection field is missing: {name}")
     return getattr(value, name)
 
 
@@ -1048,12 +995,9 @@ def _first_attr(
 ) -> object | None:
     for name in names:
         if hasattr(value, name):
-            return getattr(value, name)
+            return object.__getattribute__(value, name)
     if required:
-        raise SummaryProjectionError(
-            "required projection field is missing: "
-            + " or ".join(names)
-        )
+        raise SummaryProjectionError("required projection field is missing: " + " or ".join(names))
     return None
 
 
@@ -1061,13 +1005,11 @@ def _sequence_attr(value: object, name: str) -> tuple[object, ...]:
     raw = _required_attr(value, name)
     if isinstance(raw, (str, bytes, Mapping)):
         raise TypeError(f"{name} must be a sequence")
-    if not isinstance(raw, Sequence):
-        raw = tuple(raw)
+    if not isinstance(raw, Iterable):
+        raise TypeError(f"{name} must be a sequence")
     prepared = tuple(raw)
     if len(prepared) > _MAX_ITEMS:
-        raise SummaryProjectionError(
-            f"{name} exceeds the supported item limit"
-        )
+        raise SummaryProjectionError(f"{name} exceeds the supported item limit")
     return prepared
 
 
@@ -1079,9 +1021,7 @@ def _iterable_attr(value: object, name: str) -> tuple[object, ...]:
         raise TypeError(f"{name} must be iterable")
     prepared = tuple(raw)
     if len(prepared) > _MAX_ITEMS:
-        raise SummaryProjectionError(
-            f"{name} exceeds the supported item limit"
-        )
+        raise SummaryProjectionError(f"{name} exceeds the supported item limit")
     return prepared
 
 
@@ -1104,18 +1044,14 @@ def _non_negative_int(value: object, field_name: str) -> int:
     if type(value) is not int:
         raise TypeError(f"{field_name} must be int")
     if value < 0:
-        raise SummaryProjectionError(
-            f"{field_name} must be non-negative"
-        )
+        raise SummaryProjectionError(f"{field_name} must be non-negative")
     return value
 
 
 def _positive_int(value: object, field_name: str) -> int:
     result = _non_negative_int(value, field_name)
     if result == 0:
-        raise SummaryProjectionError(
-            f"{field_name} must be positive"
-        )
+        raise SummaryProjectionError(f"{field_name} must be positive")
     return result
 
 
@@ -1143,13 +1079,9 @@ def _text(
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be str")
     if "\x00" in value:
-        raise SummaryProjectionError(
-            f"{field_name} must not contain NUL"
-        )
+        raise SummaryProjectionError(f"{field_name} must not contain NUL")
     if not allow_empty and not value.strip():
-        raise SummaryProjectionError(
-            f"{field_name} must not be empty"
-        )
+        raise SummaryProjectionError(f"{field_name} must not be empty")
     return value
 
 

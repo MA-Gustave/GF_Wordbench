@@ -244,10 +244,14 @@ def test_additive_minor_policy_normalizes_declared_versions() -> None:
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
-        ({"historical_versions": frozenset({SchemaVersion.parse("1.2")})},
-         "current_version cannot be historical"),
-        ({"migration_sources": frozenset({SchemaVersion.parse("1.2")})},
-         "current_version cannot be historical"),
+        (
+            {"historical_versions": frozenset({SchemaVersion.parse("1.2")})},
+            "current_version cannot be historical",
+        ),
+        (
+            {"migration_sources": frozenset({SchemaVersion.parse("1.2")})},
+            "current_version cannot be historical",
+        ),
         (
             {
                 "readable_versions": frozenset({SchemaVersion.parse("1.1")}),
@@ -357,14 +361,15 @@ def test_explicit_support_classes_take_precedence(
 
     assert result.status is status
     assert result.reason is reason
-    assert result.readable is (status in {
-        CompatibilityStatus.COMPATIBLE,
-        CompatibilityStatus.HISTORICAL_READ,
-    })
-    assert result.historical is (status is CompatibilityStatus.HISTORICAL_READ)
-    assert result.requires_migration is (
-        status is CompatibilityStatus.MIGRATION_REQUIRED
+    assert result.readable is (
+        status
+        in {
+            CompatibilityStatus.COMPATIBLE,
+            CompatibilityStatus.HISTORICAL_READ,
+        }
     )
+    assert result.historical is (status is CompatibilityStatus.HISTORICAL_READ)
+    assert result.requires_migration is (status is CompatibilityStatus.MIGRATION_REQUIRED)
     assert result.canonical_write_allowed is False
 
 
@@ -469,9 +474,7 @@ def test_additive_minor_policy_accepts_newer_same_major_versions() -> None:
 
 
 def test_is_schema_compatible_includes_historical_read_support() -> None:
-    policy = _policy(
-        historical_versions=frozenset({SchemaVersion.parse("0.9")})
-    )
+    policy = _policy(historical_versions=frozenset({SchemaVersion.parse("0.9")}))
 
     assert is_schema_compatible(_document("1.2"), policy) is True
     assert is_schema_compatible(_document("0.9"), policy) is True
@@ -527,16 +530,11 @@ def test_require_schema_compatibility_accepts_exact_compatible_and_historical() 
         require_schema_compatibility(_document("1.1"), policy).status
         is CompatibilityStatus.COMPATIBLE
     )
-    assert (
-        require_schema_compatibility(_document("0.9"), policy).historical
-        is True
-    )
+    assert require_schema_compatibility(_document("0.9"), policy).historical is True
 
 
 def test_require_schema_compatibility_can_reject_historical_input() -> None:
-    policy = _policy(
-        historical_versions=frozenset({SchemaVersion.parse("0.9")})
-    )
+    policy = _policy(historical_versions=frozenset({SchemaVersion.parse("0.9")}))
 
     with pytest.raises(UnsupportedVersionError) as caught:
         require_schema_compatibility(
@@ -588,9 +586,7 @@ def test_require_schema_compatibility_reports_version_failure() -> None:
 
 
 def test_migration_required_is_not_readable_without_explicit_migration() -> None:
-    policy = _policy(
-        migration_sources=frozenset({SchemaVersion.parse("0.9")})
-    )
+    policy = _policy(migration_sources=frozenset({SchemaVersion.parse("0.9")}))
 
     result = check_schema_compatibility(_document("0.9"), policy)
 
@@ -601,9 +597,7 @@ def test_migration_required_is_not_readable_without_explicit_migration() -> None
 
 
 def test_require_current_schema_allows_only_exact_current_identity() -> None:
-    policy = _policy(
-        readable_versions=frozenset({SchemaVersion.parse("1.1")})
-    )
+    policy = _policy(readable_versions=frozenset({SchemaVersion.parse("1.1")}))
 
     assert require_current_schema(_document("1.2"), policy).exact is True
 

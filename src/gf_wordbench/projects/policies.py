@@ -7,10 +7,10 @@ project mutation.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Sequence
 from fnmatch import translate as translate_glob
 from pathlib import Path, PureWindowsPath
+import re
 from typing import Final, TypeAlias
 
 from gf_wordbench.kernel.errors import ProjectConfigurationError
@@ -211,9 +211,7 @@ def validate_project_semantics(
             "PROJECT_RELEASE_POLICY_INVALID",
             "validation.release_requires_pgf",
             "Set release_requires_pgf to an explicit boolean.",
-            lambda: validate_release_requires_pgf(
-                project.validation.release_requires_pgf
-            ),
+            lambda: validate_release_requires_pgf(project.validation.release_requires_pgf),
         ),
         (
             "PROJECT_PATH_RELATION_INVALID",
@@ -263,9 +261,7 @@ def enforce_project_invariants(
         return project
 
     shown = errors[:_MAX_INVARIANT_ERROR_DETAILS]
-    detail = "; ".join(
-        f"{item.code} {item.field}: {item.message}" for item in shown
-    )
+    detail = "; ".join(f"{item.code} {item.field}: {item.message}" for item in shown)
 
     remaining = len(errors) - len(shown)
     if remaining:
@@ -320,9 +316,7 @@ def validate_language_code(value: str) -> str:
     _reject_placeholder(value, field="project.language_code")
 
     if not _LANGUAGE_CODE_PATTERN.fullmatch(value):
-        raise ValueError(
-            "project.language_code must use ASCII letters, digits, '.', '_' or '-'"
-        )
+        raise ValueError("project.language_code must use ASCII letters, digits, '.', '_' or '-'")
 
     return value
 
@@ -346,9 +340,7 @@ def validate_source_glob(value: str) -> str:
     _reject_environment_reference(value, field="sources.glob")
 
     if "/" in value or "\\" in value:
-        raise ValueError(
-            "sources.glob must be a filename pattern, not a path pattern"
-        )
+        raise ValueError("sources.glob must be a filename pattern, not a path pattern")
 
     if value in {".", ".."}:
         raise ValueError("sources.glob must select source candidates")
@@ -356,9 +348,7 @@ def validate_source_glob(value: str) -> str:
     try:
         re.compile(translate_glob(value))
     except re.error as error:
-        raise ValueError(
-            "sources.glob is not a valid selection pattern"
-        ) from error
+        raise ValueError("sources.glob is not a valid selection pattern") from error
 
     return value
 
@@ -381,9 +371,7 @@ def validate_optional_regex(
     try:
         return re.compile(value)
     except re.error as error:
-        raise ValueError(
-            f"{field} is not a valid regular expression: {error}"
-        ) from error
+        raise ValueError(f"{field} is not a valid regular expression: {error}") from error
 
 
 def validate_portable_project_path(
@@ -491,21 +479,15 @@ def validate_minimum_version(value: str) -> str:
         return value
 
     if value != value.strip():
-        raise ValueError(
-            "gf.minimum_version must not contain outer whitespace"
-        )
+        raise ValueError("gf.minimum_version must not contain outer whitespace")
 
     _reject_placeholder(value, field="gf.minimum_version")
 
     if any(character.isspace() for character in value):
-        raise ValueError(
-            "gf.minimum_version must not contain command-output prose"
-        )
+        raise ValueError("gf.minimum_version must not contain command-output prose")
 
     if "/" in value or "\\" in value:
-        raise ValueError(
-            "gf.minimum_version must not identify an executable path"
-        )
+        raise ValueError("gf.minimum_version must not identify an executable path")
 
     return value
 
@@ -538,8 +520,7 @@ def validate_module_targets(
 
     if require_entrypoint and not validated_entrypoints:
         raise ValueError(
-            "modules.entrypoints must contain at least one target for an "
-            "initialized project"
+            "modules.entrypoints must contain at least one target for an initialized project"
         )
 
     return validated_entrypoints, validated_checkpoints
@@ -584,8 +565,7 @@ def validate_scenario_policy(
 
     if overlap:
         raise ValueError(
-            "required and optional scenario lists must not overlap: "
-            + ", ".join(sorted(overlap))
+            "required and optional scenario lists must not overlap: " + ", ".join(sorted(overlap))
         )
 
     return validated_required, validated_optional
@@ -595,9 +575,7 @@ def validate_release_requires_pgf(value: bool) -> bool:
     """Require the explicit boolean release policy."""
 
     if type(value) is not bool:
-        raise TypeError(
-            "validation.release_requires_pgf must be a boolean"
-        )
+        raise TypeError("validation.release_requires_pgf must be a boolean")
 
     return value
 
@@ -613,9 +591,7 @@ def _append_recommendation_diagnostics(
                 code="PROJECT_ID_FORMAT_NOT_RECOMMENDED",
                 severity=ProjectDiagnosticSeverity.WARNING,
                 field="project.id",
-                message=(
-                    "project.id does not use the recommended lowercase format."
-                ),
+                message=("project.id does not use the recommended lowercase format."),
                 suggestion="Use lowercase IDs for new projects.",
             )
         )
@@ -643,8 +619,7 @@ def _append_recommendation_diagnostics(
                         severity=ProjectDiagnosticSeverity.WARNING,
                         field=f"{field}[{index}]",
                         message=(
-                            f"Scenario ID {value!r} does not use the "
-                            "recommended lowercase format."
+                            f"Scenario ID {value!r} does not use the recommended lowercase format."
                         ),
                         suggestion="Use lowercase IDs for new scenarios.",
                     )
@@ -675,32 +650,24 @@ def _validate_gf_path_parts(values: Sequence[str]) -> tuple[str, ...]:
     validated = deduplicate_declared_path_parts(values)
 
     if len(validated) != len(values):
-        raise ValueError(
-            "gf.path_parts must not contain duplicate normalized paths"
-        )
+        raise ValueError("gf.path_parts must not contain duplicate normalized paths")
 
     return validated
 
 
 def _validate_runtime_path_relations(project: ProjectConfig) -> None:
     if project.project_file != project.project_root / "project.toml":
-        raise ValueError(
-            "project_file must equal project_root / 'project.toml'"
-        )
+        raise ValueError("project_file must equal project_root / 'project.toml'")
 
     expected_source_root = project.project_root / project.sources.directory
 
     if project.source_root != expected_source_root:
-        raise ValueError(
-            "source_root must equal project_root / sources.directory"
-        )
+        raise ValueError("source_root must equal project_root / sources.directory")
 
     try:
         project.source_root.relative_to(project.project_root)
     except ValueError as error:
-        raise ValueError(
-            "source_root must remain inside project_root"
-        ) from error
+        raise ValueError("source_root must remain inside project_root") from error
 
 
 def _validate_unique_module_paths(
@@ -726,9 +693,7 @@ def _validate_unique_module_paths(
         )
 
         if key in seen:
-            raise ValueError(
-                f"{field} contains duplicate normalized path: {value}"
-            )
+            raise ValueError(f"{field} contains duplicate normalized path: {value}")
 
         seen.add(key)
         result.append(validated)
@@ -753,9 +718,7 @@ def _validate_unique_scenario_ids(
         )
 
         if validated in seen:
-            raise ValueError(
-                f"{field} contains duplicate scenario ID: {validated}"
-            )
+            raise ValueError(f"{field} contains duplicate scenario ID: {validated}")
 
         seen.add(validated)
         result.append(validated)
@@ -787,9 +750,7 @@ def _require_string_sequence(
         values,
         Sequence,
     ):
-        raise TypeError(
-            f"{field} must be an ordered sequence of strings"
-        )
+        raise TypeError(f"{field} must be an ordered sequence of strings")
 
     for index, value in enumerate(values):
         if not isinstance(value, str):
@@ -797,27 +758,18 @@ def _require_string_sequence(
 
 
 def _reject_control_characters(value: str, *, field: str) -> None:
-    if any(
-        ord(character) < 32 or ord(character) == 127
-        for character in value
-    ):
-        raise ValueError(
-            f"{field} must not contain control characters"
-        )
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError(f"{field} must not contain control characters")
 
 
 def _reject_placeholder(value: str, *, field: str) -> None:
     if find_unresolved_placeholder(value) is not None:
-        raise ValueError(
-            f"{field} contains an unresolved template placeholder"
-        )
+        raise ValueError(f"{field} contains an unresolved template placeholder")
 
 
 def _reject_environment_reference(value: str, *, field: str) -> None:
     if _ENVIRONMENT_REFERENCE_PATTERN.search(value):
-        raise ValueError(
-            f"{field} must not contain an environment-variable reference"
-        )
+        raise ValueError(f"{field} must not contain an environment-variable reference")
 
 
 def _validate_portable_component(
@@ -825,22 +777,13 @@ def _validate_portable_component(
     *,
     field: str,
 ) -> None:
-    if any(
-        character in _WINDOWS_FORBIDDEN_PATH_CHARACTERS
-        for character in component
-    ):
-        raise ValueError(
-            f"{field} contains a non-portable path character"
-        )
+    if any(character in _WINDOWS_FORBIDDEN_PATH_CHARACTERS for character in component):
+        raise ValueError(f"{field} contains a non-portable path character")
 
     if component.endswith((".", " ")):
-        raise ValueError(
-            f"{field} contains an ambiguous trailing dot or space"
-        )
+        raise ValueError(f"{field} contains an ambiguous trailing dot or space")
 
     reserved_key = component.split(".", 1)[0].upper()
 
     if reserved_key in _WINDOWS_RESERVED_NAMES:
-        raise ValueError(
-            f"{field} contains reserved Windows name: {component}"
-        )
+        raise ValueError(f"{field} contains reserved Windows name: {component}")

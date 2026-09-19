@@ -138,9 +138,7 @@ class StageContract:
         owned_outputs = _text_tuple(self.owned_outputs, field="owned_outputs")
 
         if not set(blocking_predecessors).issubset(required_predecessors):
-            raise ValueError(
-                "blocking_predecessors must be a subset of required_predecessors"
-            )
+            raise ValueError("blocking_predecessors must be a subset of required_predecessors")
         if self.process_backed and StageEffect.EXECUTE_GF not in effects:
             raise ValueError("process-backed stages must declare EXECUTE_GF")
         if self.process_backed and not self.cancellation_aware:
@@ -148,9 +146,7 @@ class StageContract:
         if self.process_backed and not self.preserves_raw_evidence:
             raise ValueError("process-backed stages must preserve raw evidence")
         if self.preserves_raw_evidence and StageEffect.WRITE_RAW_EVIDENCE not in effects:
-            raise ValueError(
-                "stages preserving raw evidence must declare WRITE_RAW_EVIDENCE"
-            )
+            raise ValueError("stages preserving raw evidence must declare WRITE_RAW_EVIDENCE")
 
         object.__setattr__(self, "required_predecessors", required_predecessors)
         object.__setattr__(self, "blocking_predecessors", blocking_predecessors)
@@ -178,15 +174,13 @@ class StageContract:
 
 
 class StageContractRegistry:
-    __slots__ = ("_contracts", "_by_id", "_positions")
+    __slots__ = ("_by_id", "_contracts", "_positions")
 
     def __init__(self, contracts: Iterable[StageContract]) -> None:
         prepared = tuple(contracts)
         _validate_contract_set(prepared)
         self._contracts = prepared
-        self._by_id = MappingProxyType(
-            {contract.stage_id: contract for contract in prepared}
-        )
+        self._by_id = MappingProxyType({contract.stage_id: contract for contract in prepared})
         self._positions = MappingProxyType(
             {contract.stage_id: index for index, contract in enumerate(prepared)}
         )
@@ -250,9 +244,7 @@ class StageContractRegistry:
     ) -> tuple[StageContract, ...]:
         canonical_mode = _coerce_mode(mode)
         return tuple(
-            contract
-            for contract in self._contracts
-            if contract.is_required(canonical_mode)
+            contract for contract in self._contracts if contract.is_required(canonical_mode)
         )
 
     def ordered(
@@ -307,8 +299,7 @@ class StageContractRegistry:
                 if missing:
                     names = ", ".join(item.value for item in missing)
                     raise ValueError(
-                        f"stage {stage_id.value!r} is missing required "
-                        f"predecessors: {names}"
+                        f"stage {stage_id.value!r} is missing required predecessors: {names}"
                     )
             misplaced = tuple(
                 predecessor
@@ -320,9 +311,7 @@ class StageContractRegistry:
             )
             if misplaced:
                 names = ", ".join(item.value for item in misplaced)
-                raise ValueError(
-                    f"stage {stage_id.value!r} appears before: {names}"
-                )
+                raise ValueError(f"stage {stage_id.value!r} appears before: {names}")
             seen.add(stage_id)
         return sequence
 
@@ -344,9 +333,7 @@ class StageContractRegistry:
         )
         if prohibited:
             names = ", ".join(item.value for item in prohibited)
-            raise ValueError(
-                f"mode {canonical_mode.value!r} does not permit stages: {names}"
-            )
+            raise ValueError(f"mode {canonical_mode.value!r} does not permit stages: {names}")
 
         if require_all_required:
             missing = tuple(
@@ -357,8 +344,7 @@ class StageContractRegistry:
             if missing:
                 names = ", ".join(item.value for item in missing)
                 raise ValueError(
-                    f"mode {canonical_mode.value!r} is missing required "
-                    f"stages: {names}"
+                    f"mode {canonical_mode.value!r} is missing required stages: {names}"
                 )
         return sequence
 
@@ -367,7 +353,6 @@ class StageContractRegistry:
         stage_id: StageIdLike,
     ) -> tuple[StageId, ...]:
         return self.get(stage_id).blocking_predecessors
-
 
 
 def _validate_contract_set(contracts: tuple[StageContract, ...]) -> None:
@@ -984,9 +969,7 @@ def canonical_stage_ids() -> tuple[StageId, ...]:
 def required_stage_ids(
     mode: ValidationMode | str,
 ) -> tuple[StageId, ...]:
-    return tuple(
-        contract.stage_id for contract in STAGE_REGISTRY.required_for_mode(mode)
-    )
+    return tuple(contract.stage_id for contract in STAGE_REGISTRY.required_for_mode(mode))
 
 
 def applicable_stage_ids(
@@ -1040,8 +1023,6 @@ def validate_mode_stage_selection(
         stage_ids,
         require_all_required=require_all_required,
     )
-
-
 
 
 __all__ = (

@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+import sys
 from types import MappingProxyType, SimpleNamespace
+from typing import Literal, cast
 
 import pytest
 
 from gf_wordbench.infrastructure.environment import PreparedEnvironment
 from gf_wordbench.infrastructure.process import runner as process_runner
+from gf_wordbench.infrastructure.process.launcher import ProcessHandle
 from gf_wordbench.infrastructure.process.models import (
     ArtifactExpectation,
     ArtifactKind,
@@ -449,9 +451,7 @@ def test_run_process_launch_failure_is_structured_and_capture_is_finalized(
     assert result.pid is None
     assert result.exit_code is None
     assert result.launch_error_kind is ProcessErrorKind.LAUNCH
-    assert result.launch_error_message == (
-        "executable or launch dependency was not found"
-    )
+    assert result.launch_error_message == ("executable or launch dependency was not found")
     assert result.termination_attempted is False
     assert result.termination_succeeded is False
     assert capture.flush_count == 1
@@ -479,10 +479,14 @@ def test_run_process_event_sink_failure_does_not_change_result(
     _install_completed_execution(monkeypatch, exit_code=0)
     _install_clock(monkeypatch, 8.0, 8.02)
 
-    def failing_sink(_: ProcessEvent) -> None:
-        raise OSError("event transport unavailable")
+    class FailingEventSink:
+        def emit(self, _: ProcessEvent, /) -> None:
+            raise OSError("event transport unavailable")
 
-    result = process_runner.run_process(request, event_sink=failing_sink)
+    result = process_runner.run_process(
+        request,
+        event_sink=FailingEventSink(),
+    )
 
     assert result.execution_state is ExecutionState.COMPLETED
     assert result.exit_code == 0
@@ -499,6 +503,7 @@ def test_open_standard_input_text_encodes_exact_bytes() -> None:
         ProcessInput.from_text("café 日本語\n", encoding="utf-8")
     ) as stream:
         assert stream is not None
+        assert not isinstance(stream, int)
         assert stream.read() == "café 日本語\n".encode()
 
 
@@ -507,10 +512,9 @@ def test_open_standard_input_file_preserves_raw_bytes(tmp_path: Path) -> None:
     payload = b"alpha\x00\xffomega\r\n"
     source.write_bytes(payload)
 
-    with process_runner._open_standard_input(
-        ProcessInput.from_file(source)
-    ) as stream:
+    with process_runner._open_standard_input(ProcessInput.from_file(source)) as stream:
         assert stream is not None
+        assert not isinstance(stream, int)
         assert stream.read() == payload
 
 
@@ -600,7 +604,7 @@ def test_internal_runner_failure_contains_launched_process_before_reraising(
 def test_termination_causes_remain_distinct(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    cause: str,
+    cause: Literal["timed_out", "cancelled", "output_limit"],
     expected_state: ExecutionState,
     expected_reason: CancellationReason | None,
     output_limited: bool,
@@ -628,7 +632,7 @@ def test_termination_causes_remain_distinct(
 
     facts = process_runner._terminate_for_cause(
         request,
-        process,
+        cast("ProcessHandle", process),
         containment,
         cause,
         cancellation_token=_CancellationToken(True, "user"),
@@ -722,9 +726,7 @@ def test_classify_launch_error_sanitizes_and_bounds_messages() -> None:
     _, denied = process_runner._classify_launch_error(PermissionError("private path"))
     assert denied == "permission was denied while launching the executable"
 
-    _, generic = process_runner._classify_launch_error(
-        OSError("unsafe\x00" + "x" * 2_000)
-    )
+    _, generic = process_runner._classify_launch_error(OSError("unsafe\x00" + "x" * 2_000))
     assert "\x00" not in generic
     assert "\N{REPLACEMENT CHARACTER}" in generic
     assert len(generic) == process_runner._MAX_ERROR_MESSAGE_CHARS

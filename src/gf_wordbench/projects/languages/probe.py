@@ -1,9 +1,12 @@
 """Path-resolved language probing for GF Wordbench.
 
 The probe starts from one explicit user-selected GF directory or ``.gf`` file.
-It derives a bounded source context, delegates source enumeration to the
-existing :mod:`gf_wordbench.validation.selection` service, classifies standard
-RGL module roles, and publishes one immutable language context.
+It resolves one bounded source context and publishes one immutable language
+context for a monolingual Wordbench runtime.
+
+This module owns orchestration only.  Domain contracts live in ``models.py``.
+Concrete source-selection adapters may be injected by bootstrap code; the
+built-in selector is a bounded read-only fallback for standalone probing.
 
 The probe does not invoke GF, parse GF source syntax, build subprocess commands,
 write application state, load an implicit ``project.toml``, or generate reports.
@@ -13,37 +16,45 @@ preflight responsibilities.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from inspect import Parameter, Signature
 import os
-import re
-from collections.abc import Sequence
-from dataclasses import dataclass, field
-from enum import StrEnum, unique
 from pathlib import Path
+import re
 from typing import Final, Protocol, TypeAlias, runtime_checkable
 
-from gf_wordbench.kernel.errors import GFWordbenchError
-from gf_wordbench.validation.selection.service import (
-    SelectionService,
-    extract_module_name,
+from gf_wordbench.projects.languages.models import (
+    CapabilityAvailability,
+    LanguageCandidate,
+    LanguageCapability,
+    LanguageCapabilityStatus,
+    LanguageModuleCandidate,
+    LanguageModuleRole,
+    LanguageProbeChoice,
+    LanguageProbeDiagnostic,
+    LanguageProbeRequest,
+    LanguageProbeResult,
+    LanguageProbeSeverity,
+    LanguageProbeStatus,
+    LanguageResolutionProvenance,
+    LanguageResolutionSource,
+    ResolvedLanguageContext,
+    SelectedPathKind,
+)
+from gf_wordbench.projects.languages.ports import (
+    LanguageGFPathResolutionPort,
+    LanguageSourceSelectionPort,
+    LanguageStructuralPreflightPort,
+    LanguageVerificationPort,
 )
 
 __all__ = (
-    "BaseLanguageCapabilities",
-    "LanguagePathKind",
-    "LanguageProbeChoice",
-    "LanguageProbeDiagnostic",
-    "LanguageProbeFilesystem",
-    "LanguageSourceSelector",
-    "LanguageProbeRequest",
-    "LanguageProbeResult",
     "LanguageProbeService",
-    "LanguageProbeSeverity",
-    "LanguageProbeStatus",
-    "ResolvedLanguageContext",
     "probe_language_path",
 )
-
 PathInput: TypeAlias = str | os.PathLike[str]
+ModuleNameExtractor: TypeAlias = Callable[[Path], str]
 
 _STANDARD_SOURCE_ROOT_NAME: Final[str] = "src"
 _STANDARD_SOURCE_MARKERS: Final[tuple[str, ...]] = (
@@ -52,374 +63,35 @@ _STANDARD_SOURCE_MARKERS: Final[tuple[str, ...]] = (
     "common",
     "prelude",
 )
-_ENTRYPOINT_ROLES: Final[tuple[str, ...]] = (
-    "Lang",
-    "Grammar",
-    "All",
+_GF_FILE_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z][A-Za-z0-9_]*\.gf$")
+_STANDARD_MODULE_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?P<role>"
+    r"Lang|Grammar|All|Syntax|Lexicon|Paradigms|Morpho|Cat|Noun|Verb|Structural"
+    r")(?P<suffix>[A-Z][A-Za-z0-9_]*)$"
 )
-_STANDARD_MODULE_ROLES: Final[tuple[str, ...]] = (
-    "Construction",
-    "Structural",
-    "Paradigms",
-    "Adjective",
-    "Sentence",
-    "Grammar",
-    "Lexicon",
-    "Syntax",
-    "Morpho",
-    "Extend",
-    "Noun",
-    "Verb",
-    "Lang",
-    "All",
-    "Res",
-    "Cat",
-)
-_MODULE_ROLE_RE: Final[re.Pattern[str]] = re.compile(
-    rf"^(?P<role>{'|'.join(_STANDARD_MODULE_ROLES)})"
-    r"(?P<suffix>[A-Z][A-Za-z0-9_]*)$"
-)
-_GF_FILE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Za-z][A-Za-z0-9_]*\.gf$"
-)
-
-
-@unique
-class LanguagePathKind(StrEnum):
-    """Accepted kinds of explicit language selection."""
-
-    DIRECTORY = "directory"
-    GF_FILE = "gf_file"
-
-
-@unique
-class LanguageProbeStatus(StrEnum):
-    """Terminal status of one language-probe request."""
-
-    RESOLVED = "resolved"
-    NEEDS_USER_INPUT = "needs_user_input"
-    INVALID_SELECTION = "invalid_selection"
-    UNSUPPORTED_LAYOUT = "unsupported_layout"
-    INTERNAL_ERROR = "internal_error"
-
-
-@unique
-class LanguageProbeSeverity(StrEnum):
-    """Severity of one probe diagnostic."""
-
-    ERROR = "error"
-    WARNING = "warning"
-    INFO = "info"
-
-
-@dataclass(frozen=True, slots=True)
-class LanguageProbeDiagnostic:
-    """One structured language-resolution finding."""
-
-    code: str
-    severity: LanguageProbeSeverity
-    stage: str
-    subject: str
-    message: str
-    remediation: str
-    detail: str = ""
-    candidates: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        for name in (
-            "code",
-            "stage",
-            "subject",
-            "message",
-            "remediation",
-        ):
-            value = getattr(self, name)
-            if not isinstance(value, str):
-                raise TypeError(f"{name} must be a string")
-            if not value.strip():
-                raise ValueError(f"{name} must not be empty")
-            if "\x00" in value:
-                raise ValueError(f"{name} must not contain NUL")
-        if not isinstance(self.severity, LanguageProbeSeverity):
-            raise TypeError("severity must be a LanguageProbeSeverity")
-        if not isinstance(self.detail, str):
-            raise TypeError("detail must be a string")
-        if "\x00" in self.detail:
-            raise ValueError("detail must not contain NUL")
-        if not isinstance(self.candidates, tuple):
-            raise TypeError("candidates must be a tuple")
-        for index, candidate in enumerate(self.candidates):
-            if not isinstance(candidate, str) or not candidate:
-                raise ValueError(
-                    f"candidates[{index}] must be a non-empty string"
-                )
-
-
-@dataclass(frozen=True, slots=True)
-class LanguageProbeChoice:
-    """One explicit user choice required to resolve an ambiguity."""
-
-    value: str
-    label: str
-    entrypoints: tuple[Path, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.value, str) or not self.value:
-            raise ValueError("value must be a non-empty string")
-        if not isinstance(self.label, str) or not self.label:
-            raise ValueError("label must be a non-empty string")
-        _require_absolute_path_tuple(self.entrypoints, field="entrypoints")
-
-
-@dataclass(frozen=True, slots=True)
-class BaseLanguageCapabilities:
-    """Capabilities established without requiring GF execution."""
-
-    source_ready: bool
-    scan_ready: bool
-
-    def __post_init__(self) -> None:
-        if type(self.source_ready) is not bool:
-            raise TypeError("source_ready must be a bool")
-        if type(self.scan_ready) is not bool:
-            raise TypeError("scan_ready must be a bool")
-        if self.scan_ready and not self.source_ready:
-            raise ValueError("scan_ready requires source_ready")
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedLanguageContext:
-    """Immutable source and language authority for one active runtime."""
-
-    language_key: str
-    display_name: str
-    selected_path: Path
-    selected_path_kind: LanguagePathKind
-    language_directory: Path
-    rgl_source_root: Path
-    rgl_root: Path
-    selected_file: Path | None
-    focused_target: Path | None
-    module_suffix: str | None
-    module_suffix_candidates: tuple[str, ...]
-    available_entrypoints: tuple[Path, ...]
-    source_inventory: tuple[Path, ...]
-    gf_path_requirements: tuple[Path, ...]
-    capabilities: BaseLanguageCapabilities
-    structural_diagnostics: tuple[LanguageProbeDiagnostic, ...]
-    resolution_provenance: tuple[str, ...]
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.language_key, str) or not self.language_key:
-            raise ValueError("language_key must be a non-empty string")
-        if self.language_key.startswith("/") or "\\" in self.language_key:
-            raise ValueError("language_key must be a portable relative value")
-        if not isinstance(self.display_name, str) or not self.display_name:
-            raise ValueError("display_name must be a non-empty string")
-        if not isinstance(self.selected_path_kind, LanguagePathKind):
-            raise TypeError("selected_path_kind must be a LanguagePathKind")
-
-        selected_path = _require_absolute_path(
-            self.selected_path,
-            field="selected_path",
-        )
-        language_directory = _require_absolute_path(
-            self.language_directory,
-            field="language_directory",
-        )
-        rgl_source_root = _require_absolute_path(
-            self.rgl_source_root,
-            field="rgl_source_root",
-        )
-        rgl_root = _require_absolute_path(self.rgl_root, field="rgl_root")
-
-        if not language_directory.is_relative_to(rgl_source_root):
-            raise ValueError(
-                "language_directory must be contained in rgl_source_root"
-            )
-        if language_directory == rgl_source_root:
-            raise ValueError(
-                "language_directory must identify a subtree of rgl_source_root"
-            )
-        if rgl_source_root.parent != rgl_root:
-            raise ValueError("rgl_root must be the parent of rgl_source_root")
-
-        selected_file = _require_optional_absolute_path(
-            self.selected_file,
-            field="selected_file",
-        )
-        focused_target = _require_optional_absolute_path(
-            self.focused_target,
-            field="focused_target",
-        )
-        if selected_file is not None and selected_file.parent != language_directory:
-            raise ValueError(
-                "selected_file must belong directly to language_directory"
-            )
-        if focused_target is not None and focused_target != selected_file:
-            raise ValueError("focused_target must equal selected_file")
-
-        if self.module_suffix is not None:
-            if not isinstance(self.module_suffix, str):
-                raise TypeError("module_suffix must be a string or None")
-            if not re.fullmatch(r"[A-Z][A-Za-z0-9_]*", self.module_suffix):
-                raise ValueError("module_suffix has an invalid format")
-
-        suffix_candidates = _require_unique_text_tuple(
-            self.module_suffix_candidates,
-            field="module_suffix_candidates",
-        )
-        if (
-            self.module_suffix is not None
-            and self.module_suffix not in suffix_candidates
-        ):
-            raise ValueError(
-                "module_suffix must be present in module_suffix_candidates"
-            )
-
-        entrypoints = _require_absolute_path_tuple(
-            self.available_entrypoints,
-            field="available_entrypoints",
-        )
-        inventory = _require_absolute_path_tuple(
-            self.source_inventory,
-            field="source_inventory",
-        )
-        gf_path = _require_absolute_path_tuple(
-            self.gf_path_requirements,
-            field="gf_path_requirements",
-        )
-        if not inventory:
-            raise ValueError("source_inventory must not be empty")
-        if language_directory not in gf_path:
-            raise ValueError(
-                "gf_path_requirements must contain language_directory"
-            )
-        if selected_file is not None and selected_file not in inventory:
-            raise ValueError("selected_file must be present in source_inventory")
-        if any(path not in inventory for path in entrypoints):
-            raise ValueError(
-                "available_entrypoints must be present in source_inventory"
-            )
-        if not isinstance(self.capabilities, BaseLanguageCapabilities):
-            raise TypeError(
-                "capabilities must be a BaseLanguageCapabilities"
-            )
-        if not isinstance(self.structural_diagnostics, tuple):
-            raise TypeError("structural_diagnostics must be a tuple")
-        for diagnostic in self.structural_diagnostics:
-            if not isinstance(diagnostic, LanguageProbeDiagnostic):
-                raise TypeError(
-                    "structural_diagnostics must contain diagnostics"
-                )
-        provenance = _require_unique_text_tuple(
-            self.resolution_provenance,
-            field="resolution_provenance",
-        )
-
-        object.__setattr__(self, "selected_path", selected_path)
-        object.__setattr__(self, "language_directory", language_directory)
-        object.__setattr__(self, "rgl_source_root", rgl_source_root)
-        object.__setattr__(self, "rgl_root", rgl_root)
-        object.__setattr__(self, "selected_file", selected_file)
-        object.__setattr__(self, "focused_target", focused_target)
-        object.__setattr__(self, "module_suffix_candidates", suffix_candidates)
-        object.__setattr__(self, "available_entrypoints", entrypoints)
-        object.__setattr__(self, "source_inventory", inventory)
-        object.__setattr__(self, "gf_path_requirements", gf_path)
-        object.__setattr__(self, "resolution_provenance", provenance)
-
-
-@dataclass(frozen=True, slots=True)
-class LanguageProbeRequest:
-    """Complete immutable input for one bounded language probe."""
-
-    selected_path: PathInput
-    explicit_rgl_root: PathInput | None = None
-    max_ancestor_depth: int = 12
-    max_source_files: int = 0
-    require_unambiguous_suffix: bool = False
-
-    def __post_init__(self) -> None:
-        selected_path = _coerce_path(self.selected_path, field="selected_path")
-        explicit_root = (
-            None
-            if self.explicit_rgl_root is None
-            else _coerce_path(
-                self.explicit_rgl_root,
-                field="explicit_rgl_root",
-            )
-        )
-        if isinstance(self.max_ancestor_depth, bool) or not isinstance(
-            self.max_ancestor_depth,
-            int,
-        ):
-            raise TypeError("max_ancestor_depth must be an integer")
-        if self.max_ancestor_depth < 1:
-            raise ValueError("max_ancestor_depth must be at least 1")
-        if isinstance(self.max_source_files, bool) or not isinstance(
-            self.max_source_files,
-            int,
-        ):
-            raise TypeError("max_source_files must be an integer")
-        if self.max_source_files < 0:
-            raise ValueError("max_source_files must not be negative")
-        if type(self.require_unambiguous_suffix) is not bool:
-            raise TypeError("require_unambiguous_suffix must be a bool")
-        object.__setattr__(self, "selected_path", selected_path)
-        object.__setattr__(self, "explicit_rgl_root", explicit_root)
-
-
-@dataclass(frozen=True, slots=True)
-class LanguageProbeResult:
-    """Terminal result of one language-probe request."""
-
-    status: LanguageProbeStatus
-    context: ResolvedLanguageContext | None = None
-    diagnostics: tuple[LanguageProbeDiagnostic, ...] = ()
-    choices: tuple[LanguageProbeChoice, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.status, LanguageProbeStatus):
-            raise TypeError("status must be a LanguageProbeStatus")
-        if self.context is not None and not isinstance(
-            self.context,
-            ResolvedLanguageContext,
-        ):
-            raise TypeError(
-                "context must be a ResolvedLanguageContext or None"
-            )
-        if self.status is LanguageProbeStatus.RESOLVED:
-            if self.context is None:
-                raise ValueError("resolved result requires a context")
-        elif self.context is not None:
-            raise ValueError("non-resolved result must not expose a context")
-        if not isinstance(self.diagnostics, tuple):
-            raise TypeError("diagnostics must be a tuple")
-        for diagnostic in self.diagnostics:
-            if not isinstance(diagnostic, LanguageProbeDiagnostic):
-                raise TypeError("diagnostics must contain diagnostics")
-        if not isinstance(self.choices, tuple):
-            raise TypeError("choices must be a tuple")
-        for choice in self.choices:
-            if not isinstance(choice, LanguageProbeChoice):
-                raise TypeError("choices must contain LanguageProbeChoice")
-        if (
-            self.status is LanguageProbeStatus.NEEDS_USER_INPUT
-            and not self.choices
-        ):
-            raise ValueError("needs_user_input result requires choices")
-
-    @property
-    def resolved(self) -> bool:
-        """Whether the result contains a usable language context."""
-
-        return self.status is LanguageProbeStatus.RESOLVED
+_ROLE_BY_PREFIX: Final[dict[str, LanguageModuleRole]] = {
+    "Lang": LanguageModuleRole.LANG,
+    "Grammar": LanguageModuleRole.GRAMMAR,
+    "All": LanguageModuleRole.ALL,
+    "Syntax": LanguageModuleRole.SYNTAX,
+    "Lexicon": LanguageModuleRole.LEXICON,
+    "Paradigms": LanguageModuleRole.PARADIGMS,
+    "Morpho": LanguageModuleRole.MORPHO,
+    "Cat": LanguageModuleRole.CAT,
+    "Noun": LanguageModuleRole.NOUN,
+    "Verb": LanguageModuleRole.VERB,
+    "Structural": LanguageModuleRole.STRUCTURAL,
+}
+_ENTRYPOINT_ORDER: Final[dict[LanguageModuleRole, int]] = {
+    LanguageModuleRole.LANG: 0,
+    LanguageModuleRole.GRAMMAR: 1,
+    LanguageModuleRole.ALL: 2,
+}
 
 
 @runtime_checkable
 class LanguageSourceSelector(Protocol):
-    """Public source-inventory contract consumed by the language probe."""
+    """Return deterministic eligible GF sources beneath one language directory."""
 
     def select_source_tree(
         self,
@@ -428,27 +100,23 @@ class LanguageSourceSelector(Protocol):
         containment_root: Path,
         max_files: int = 0,
     ) -> tuple[Sequence[Path], Sequence[object]]:
-        """Return deterministic selected sources and exclusion evidence."""
+        """Return selected sources and optional exclusion evidence."""
+        ...
 
 
 @runtime_checkable
 class LanguageProbeFilesystem(Protocol):
-    """Filesystem operations required before source selection."""
+    """Filesystem operations required by the bounded startup probe."""
 
-    def resolve(self, path: Path, *, strict: bool) -> Path:
-        ...
+    def resolve(self, path: Path, *, strict: bool) -> Path: ...
 
-    def exists(self, path: Path) -> bool:
-        ...
+    def exists(self, path: Path) -> bool: ...
 
-    def is_file(self, path: Path) -> bool:
-        ...
+    def is_file(self, path: Path) -> bool: ...
 
-    def is_directory(self, path: Path) -> bool:
-        ...
+    def is_directory(self, path: Path) -> bool: ...
 
-    def is_readable(self, path: Path) -> bool:
-        ...
+    def is_readable(self, path: Path) -> bool: ...
 
 
 class _LocalLanguageProbeFilesystem:
@@ -470,45 +138,109 @@ class _LocalLanguageProbeFilesystem:
         return os.access(path, os.R_OK)
 
 
-_LOCAL_FILESYSTEM: Final[LanguageProbeFilesystem] = (
-    _LocalLanguageProbeFilesystem()
-)
+class _LocalLanguageSourceSelector:
+    """Bounded read-only fallback used outside composed application startup.
+
+    Production bootstrap code may inject the repository's canonical source
+    selection adapter.  This fallback deliberately implements only the narrow
+    language-loader requirement: readable ``.gf`` files contained beneath the
+    explicitly selected language directory.
+    """
+
+    __slots__ = ()
+
+    def select_source_tree(
+        self,
+        source_root: Path,
+        *,
+        containment_root: Path,
+        max_files: int = 0,
+    ) -> tuple[Sequence[Path], Sequence[object]]:
+        source_root = source_root.resolve(strict=True)
+        containment_root = containment_root.resolve(strict=True)
+        if not source_root.is_dir():
+            raise ValueError("source_root must be a directory")
+        if not source_root.is_relative_to(containment_root):
+            raise ValueError("source_root must remain inside containment_root")
+        if type(max_files) is not int:
+            raise TypeError("max_files must be an integer")
+        if max_files < 0:
+            raise ValueError("max_files must not be negative")
+
+        selected: list[Path] = []
+        pending = [source_root]
+        while pending:
+            directory = pending.pop()
+            children = sorted(directory.iterdir(), key=lambda item: item.name.casefold())
+            for child in children:
+                if child.is_symlink():
+                    continue
+                if child.is_dir():
+                    pending.append(child)
+                    continue
+                if not child.name.casefold().endswith(".gf"):
+                    continue
+                candidate = child.resolve(strict=True)
+                if not candidate.is_relative_to(source_root):
+                    continue
+                if not candidate.is_file() or not os.access(candidate, os.R_OK):
+                    continue
+                selected.append(candidate)
+
+        selected.sort(key=lambda path: path.relative_to(source_root).as_posix().casefold())
+        if max_files:
+            selected = selected[:max_files]
+        return tuple(selected), ()
+
+
+_LOCAL_FILESYSTEM: Final[LanguageProbeFilesystem] = _LocalLanguageProbeFilesystem()
+_LOCAL_SOURCE_SELECTOR: Final[LanguageSourceSelector] = _LocalLanguageSourceSelector()
 
 
 @dataclass(frozen=True, slots=True)
 class _RootResolution:
-    rgl_source_root: Path
-    rgl_root: Path
-    provenance: str
+    source_root: Path
+    repository_root: Path
+    provenance: LanguageResolutionSource
 
 
 @dataclass(frozen=True, slots=True)
 class _ModuleClassification:
-    module_suffix: str | None
-    suffix_candidates: tuple[str, ...]
-    entrypoints: tuple[Path, ...]
-    choices: tuple[LanguageProbeChoice, ...]
+    candidates: tuple[LanguageModuleCandidate, ...]
+    suffixes: tuple[str, ...]
+    selected_suffix: str | None
+    entrypoints: tuple[LanguageModuleCandidate, ...]
     diagnostics: tuple[LanguageProbeDiagnostic, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class LanguageProbeService:
-    """Coordinate bounded path discovery through existing public services."""
+    """Resolve one explicit path before constructing one monolingual runtime."""
 
-    selection_service: LanguageSourceSelector = field(
-        default_factory=SelectionService
-    )
-    filesystem: LanguageProbeFilesystem = _LOCAL_FILESYSTEM
+    source_selector: LanguageSourceSelector = field(default=_LOCAL_SOURCE_SELECTOR)
+    filesystem: LanguageProbeFilesystem = field(default=_LOCAL_FILESYSTEM)
+    module_name_extractor: ModuleNameExtractor = field(default=lambda path: path.stem)
+    max_ancestor_depth: int = 12
+    max_source_files: int = 0
+    require_unambiguous_suffix: bool = False
 
     def __post_init__(self) -> None:
-        if not isinstance(self.selection_service, LanguageSourceSelector):
-            raise TypeError(
-                "selection_service must satisfy LanguageSourceSelector"
-            )
+        if not isinstance(self.source_selector, LanguageSourceSelector):
+            raise TypeError("source_selector must satisfy LanguageSourceSelector")
         if not isinstance(self.filesystem, LanguageProbeFilesystem):
-            raise TypeError(
-                "filesystem must satisfy LanguageProbeFilesystem"
-            )
+            raise TypeError("filesystem must satisfy LanguageProbeFilesystem")
+        if not callable(self.module_name_extractor):
+            raise TypeError("module_name_extractor must be callable")
+        _require_positive_int(
+            self.max_ancestor_depth,
+            field="max_ancestor_depth",
+        )
+        _require_non_negative_int(
+            self.max_source_files,
+            field="max_source_files",
+        )
+        if type(self.require_unambiguous_suffix) is not bool:
+            raise TypeError("require_unambiguous_suffix must be a bool")
 
     def probe(self, request: LanguageProbeRequest) -> LanguageProbeResult:
         """Resolve one selected path into one immutable language context."""
@@ -516,243 +248,251 @@ class LanguageProbeService:
         if not isinstance(request, LanguageProbeRequest):
             raise TypeError("request must be a LanguageProbeRequest")
 
-        selection = self._resolve_selected_path(request.selected_path)
-        if isinstance(selection, LanguageProbeResult):
-            return selection
-        selected_path, path_kind, language_directory, selected_file = selection
+        try:
+            return self._probe(request)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            return LanguageProbeResult(
+                status=LanguageProbeStatus.INTERNAL_ERROR,
+                diagnostics=(
+                    _diagnostic(
+                        code="GF-WB-INTERNAL-251",
+                        severity=LanguageProbeSeverity.ERROR,
+                        subject=str(request.selected_path),
+                        message="The language probe could not complete.",
+                        detail=f"{type(exc).__name__}: {exc}",
+                        remediation=(
+                            "Review the selected path and the configured language-probe adapters."
+                        ),
+                        path=request.selected_path,
+                    ),
+                ),
+            )
+
+    def _probe(self, request: LanguageProbeRequest) -> LanguageProbeResult:
+        selected = self._resolve_selected_path(request.selected_path)
+        if isinstance(selected, LanguageProbeResult):
+            return selected
+        (
+            selected_path,
+            selected_kind,
+            language_directory,
+            focused_target,
+        ) = selected
 
         roots = self._resolve_roots(
             language_directory=language_directory,
             explicit_rgl_root=request.explicit_rgl_root,
-            max_ancestor_depth=request.max_ancestor_depth,
         )
         if isinstance(roots, LanguageProbeResult):
             return roots
 
-        try:
-            inventory = self._select_language_sources(
-                language_directory=language_directory,
-                rgl_source_root=roots.rgl_source_root,
-                max_source_files=request.max_source_files,
-            )
-        except GFWordbenchError as exc:
-            return LanguageProbeResult(
-                status=LanguageProbeStatus.INVALID_SELECTION,
-                diagnostics=(
-                    _diagnostic_from_wordbench_error(
-                        exc,
-                        subject=str(language_directory),
-                    ),
-                ),
-            )
-        except (OSError, TypeError, ValueError) as exc:
-            return LanguageProbeResult(
-                status=LanguageProbeStatus.INTERNAL_ERROR,
-                diagnostics=(
-                    LanguageProbeDiagnostic(
-                        code="GF-WB-INTERNAL-251",
-                        severity=LanguageProbeSeverity.ERROR,
-                        stage="language_probe",
-                        subject=str(language_directory),
-                        message="Source inventory could not be constructed.",
-                        detail=f"{type(exc).__name__}: {exc}",
-                        remediation=(
-                            "Review the selected path and the public source-"
-                            "selection contract."
-                        ),
-                    ),
-                ),
-            )
-
-        if not inventory:
-            return LanguageProbeResult(
-                status=LanguageProbeStatus.INVALID_SELECTION,
-                diagnostics=(
-                    LanguageProbeDiagnostic(
-                        code="GF-WB-CONFIG-251",
-                        severity=LanguageProbeSeverity.ERROR,
-                        stage="language_probe",
-                        subject=str(language_directory),
-                        message=(
-                            "The selected language directory contains no "
-                            "eligible GF source files."
-                        ),
-                        remediation=(
-                            "Select a directory containing readable .gf files "
-                            "or select one .gf file directly."
-                        ),
-                    ),
-                ),
-            )
-
-        if selected_file is not None and selected_file not in inventory:
-            return LanguageProbeResult(
-                status=LanguageProbeStatus.INVALID_SELECTION,
-                diagnostics=(
-                    LanguageProbeDiagnostic(
-                        code="GF-WB-CONFIG-252",
-                        severity=LanguageProbeSeverity.ERROR,
-                        stage="language_probe",
-                        subject=str(selected_file),
-                        message=(
-                            "The explicitly selected GF file was excluded by "
-                            "the canonical source-selection service."
-                        ),
-                        remediation=(
-                            "Review file readability, containment and source-"
-                            "selection filters."
-                        ),
-                    ),
-                ),
-            )
-
-        language_key = _portable_language_key(
+        inventory_result = self.source_selector.select_source_tree(
             language_directory,
-            rgl_source_root=roots.rgl_source_root,
+            # The selected language directory is the source-ownership boundary.
+            # For an external GF project the RGL dependency root is deliberately
+            # disjoint and must never become a containment authority.
+            containment_root=language_directory,
+            max_files=self.max_source_files,
         )
+        inventory = _normalize_inventory(
+            inventory_result[0],
+            language_directory=language_directory,
+        )
+        if not inventory:
+            return _failure_result(
+                status=LanguageProbeStatus.INVALID_SELECTION,
+                code="GF-WB-CONFIG-251",
+                subject=str(language_directory),
+                message=("The selected language directory contains no eligible GF source files."),
+                remediation=(
+                    "Select a directory containing readable .gf files or "
+                    "select one .gf file directly."
+                ),
+                path=language_directory,
+            )
+        if focused_target is not None and focused_target not in inventory:
+            return _failure_result(
+                status=LanguageProbeStatus.INVALID_SELECTION,
+                code="GF-WB-CONFIG-252",
+                subject=str(focused_target),
+                message=(
+                    "The explicitly selected GF file was excluded from the "
+                    "language source inventory."
+                ),
+                remediation=("Select an eligible readable .gf file inside the language directory."),
+                path=focused_target,
+            )
+
         classification = _classify_modules(
             inventory,
-            focused_target=selected_file,
+            module_name_extractor=self.module_name_extractor,
+            focused_target=focused_target,
+            requested_suffix=request.module_suffix_choice,
+            requested_entrypoint=request.entrypoint_choice,
+            require_unambiguous=self.require_unambiguous_suffix,
+        )
+        language_key = _language_key(
+            language_directory,
+            source_root=roots.source_root,
+        )
+        gf_path_requirements = _gf_path_requirements(
+            language_directory,
+            source_root=roots.source_root,
+            filesystem=self.filesystem,
+        )
+        candidate = LanguageCandidate(
+            selected_path=selected_path,
+            selected_path_kind=selected_kind,
+            language_directory=language_directory,
+            rgl_source_root=roots.source_root,
+            rgl_root=roots.repository_root,
+            focused_target=focused_target,
+            candidate_language_key=language_key,
+            module_suffixes=classification.suffixes,
+            module_candidates=classification.candidates,
+            source_inventory=inventory,
+            gf_path_requirements=gf_path_requirements,
+            diagnostics=classification.diagnostics,
         )
 
         if (
-            request.require_unambiguous_suffix
-            and len(classification.suffix_candidates) > 1
-            and classification.module_suffix is None
+            classification.selected_suffix is None
+            and len(classification.suffixes) > 1
+            and self.require_unambiguous_suffix
         ):
             return LanguageProbeResult(
                 status=LanguageProbeStatus.NEEDS_USER_INPUT,
+                candidate=candidate,
                 diagnostics=classification.diagnostics,
-                choices=classification.choices,
+                choices=_module_suffix_choices(
+                    classification.suffixes,
+                    candidates=classification.candidates,
+                ),
             )
 
-        diagnostics = list(classification.diagnostics)
-        if not classification.entrypoints:
-            diagnostics.append(
-                LanguageProbeDiagnostic(
-                    code="GF-WB-CONFIG-253",
-                    severity=LanguageProbeSeverity.INFO,
-                    stage="language_probe",
-                    subject=str(language_directory),
-                    message=(
-                        "No standard Lang, Grammar or All entrypoint was "
-                        "identified."
-                    ),
-                    remediation=(
-                        "Continue with explicit file targets or load an "
-                        "optional validation profile when entrypoints are "
-                        "required."
-                    ),
-                )
+        if request.verify_with_gf:
+            diagnostic = _diagnostic(
+                code="GF-WB-CAPABILITY-251",
+                severity=LanguageProbeSeverity.ERROR,
+                subject=str(selected_path),
+                message=("GF verification is unavailable during language startup."),
+                remediation=(
+                    "Resolve the language first, then run capability preflight "
+                    "through the approved GF execution boundary."
+                ),
+                path=selected_path,
+            )
+            return LanguageProbeResult(
+                status=LanguageProbeStatus.CAPABILITY_UNAVAILABLE,
+                candidate=candidate,
+                diagnostics=(*classification.diagnostics, diagnostic),
             )
 
         context = ResolvedLanguageContext(
             language_key=language_key,
-            display_name=language_directory.name,
             selected_path=selected_path,
-            selected_path_kind=path_kind,
+            selected_path_kind=selected_kind,
             language_directory=language_directory,
-            rgl_source_root=roots.rgl_source_root,
-            rgl_root=roots.rgl_root,
-            selected_file=selected_file,
-            focused_target=selected_file,
-            module_suffix=classification.module_suffix,
-            module_suffix_candidates=classification.suffix_candidates,
+            rgl_source_root=roots.source_root,
+            rgl_root=roots.repository_root,
+            focused_target=focused_target,
+            module_suffix=classification.selected_suffix,
             available_entrypoints=classification.entrypoints,
             source_inventory=inventory,
-            gf_path_requirements=(language_directory,),
-            capabilities=BaseLanguageCapabilities(
-                source_ready=True,
-                scan_ready=True,
-            ),
-            structural_diagnostics=tuple(diagnostics),
-            resolution_provenance=(
-                "explicit_selected_path",
-                "bounded_ancestor_resolution",
-                roots.provenance,
-                "selection_service",
-                "standard_module_role_classification",
+            gf_path_requirements=gf_path_requirements,
+            structural_diagnostics=classification.diagnostics,
+            capability_statuses=_base_capability_statuses(),
+            resolution_provenance=_resolution_provenance(
+                selected_path=selected_path,
+                language_directory=language_directory,
+                roots=roots,
+                language_key=language_key,
+                selected_suffix=classification.selected_suffix,
             ),
         )
         return LanguageProbeResult(
             status=LanguageProbeStatus.RESOLVED,
+            candidate=candidate,
             context=context,
-            diagnostics=tuple(diagnostics),
+            diagnostics=classification.diagnostics,
         )
 
     def _resolve_selected_path(
         self,
         selected_path: Path,
-    ) -> tuple[Path, LanguagePathKind, Path, Path | None] | LanguageProbeResult:
+    ) -> tuple[Path, SelectedPathKind, Path, Path | None] | LanguageProbeResult:
         try:
             resolved = self.filesystem.resolve(selected_path, strict=True)
         except (FileNotFoundError, OSError, RuntimeError) as exc:
-            return LanguageProbeResult(
+            return _failure_result(
                 status=LanguageProbeStatus.INVALID_SELECTION,
-                diagnostics=(
-                    LanguageProbeDiagnostic(
-                        code="GF-WB-PATH-250",
-                        severity=LanguageProbeSeverity.ERROR,
-                        stage="language_probe",
-                        subject=str(selected_path),
-                        message="The selected language path is not usable.",
-                        detail=f"{type(exc).__name__}: {exc}",
-                        remediation=(
-                            "Select an existing readable language directory "
-                            "or .gf file."
-                        ),
-                    ),
-                ),
+                code="GF-WB-PATH-250",
+                subject=str(selected_path),
+                message="The selected language path is not usable.",
+                detail=f"{type(exc).__name__}: {exc}",
+                remediation=("Select an existing readable language directory or .gf file."),
+                path=selected_path,
             )
 
         if not self.filesystem.exists(resolved):
-            return _invalid_path_result(
-                resolved,
+            return _failure_result(
+                status=LanguageProbeStatus.INVALID_SELECTION,
                 code="GF-WB-PATH-251",
+                subject=str(resolved),
                 message="The selected language path does not exist.",
+                remediation=("Select an existing readable language directory or .gf file."),
+                path=resolved,
             )
         if not self.filesystem.is_readable(resolved):
-            return _invalid_path_result(
-                resolved,
+            return _failure_result(
+                status=LanguageProbeStatus.INVALID_SELECTION,
                 code="GF-WB-IO-250",
+                subject=str(resolved),
                 message="The selected language path is not readable.",
+                remediation=("Grant read access or select another language path."),
+                path=resolved,
             )
         if self.filesystem.is_file(resolved):
             if resolved.suffix.casefold() != ".gf":
-                return _invalid_path_result(
-                    resolved,
+                return _failure_result(
+                    status=LanguageProbeStatus.INVALID_SELECTION,
                     code="GF-WB-CONFIG-254",
+                    subject=str(resolved),
                     message="The selected file is not a .gf source file.",
+                    remediation="Select a GF source file ending in .gf.",
+                    path=resolved,
                 )
             if _GF_FILE_RE.fullmatch(resolved.name) is None:
-                return _invalid_path_result(
-                    resolved,
+                return _failure_result(
+                    status=LanguageProbeStatus.INVALID_SELECTION,
                     code="GF-WB-CONFIG-255",
-                    message=(
-                        "The selected .gf filename is not a valid module-file "
-                        "candidate."
+                    subject=str(resolved),
+                    message=("The selected .gf filename is not a valid module-file candidate."),
+                    remediation=(
+                        "Select a .gf file whose filename is a valid GF module identifier."
                     ),
+                    path=resolved,
                 )
             return (
                 resolved,
-                LanguagePathKind.GF_FILE,
+                SelectedPathKind.FILE,
                 resolved.parent,
                 resolved,
             )
         if self.filesystem.is_directory(resolved):
             return (
                 resolved,
-                LanguagePathKind.DIRECTORY,
+                SelectedPathKind.DIRECTORY,
                 resolved,
                 None,
             )
-        return _invalid_path_result(
-            resolved,
+        return _failure_result(
+            status=LanguageProbeStatus.INVALID_SELECTION,
             code="GF-WB-CONFIG-256",
-            message=(
-                "The selected path is neither a regular .gf file nor a "
-                "directory."
-            ),
+            subject=str(resolved),
+            message=("The selected path is neither a regular .gf file nor a directory."),
+            remediation=("Select a readable language directory or regular .gf file."),
+            path=resolved,
         )
 
     def _resolve_roots(
@@ -760,7 +500,6 @@ class LanguageProbeService:
         *,
         language_directory: Path,
         explicit_rgl_root: Path | None,
-        max_ancestor_depth: int,
     ) -> _RootResolution | LanguageProbeResult:
         if explicit_rgl_root is not None:
             explicit = self._resolve_explicit_root(
@@ -769,28 +508,23 @@ class LanguageProbeService:
             )
             if explicit is not None:
                 return explicit
-            return LanguageProbeResult(
+            return _failure_result(
                 status=LanguageProbeStatus.UNSUPPORTED_LAYOUT,
-                diagnostics=(
-                    LanguageProbeDiagnostic(
-                        code="GF-WB-PATH-252",
-                        severity=LanguageProbeSeverity.ERROR,
-                        stage="language_probe",
-                        subject=str(explicit_rgl_root),
-                        message=(
-                            "The explicit RGL root does not contain the "
-                            "selected language directory."
-                        ),
-                        remediation=(
-                            "Select the matching gf-rgl repository root or its "
-                            "src directory."
-                        ),
-                    ),
+                code="GF-WB-PATH-252",
+                subject=str(explicit_rgl_root),
+                message=("The explicit RGL root is not a supported readable RGL checkout."),
+                remediation=(
+                    "Select the matching gf-rgl repository root or its src directory. "
+                    "The language sources may live in a separate external project."
                 ),
+                path=explicit_rgl_root,
             )
 
-        for depth, ancestor in enumerate(language_directory.parents, start=1):
-            if depth > max_ancestor_depth:
+        for depth, ancestor in enumerate(
+            language_directory.parents,
+            start=1,
+        ):
+            if depth > self.max_ancestor_depth:
                 break
             if ancestor.name.casefold() != _STANDARD_SOURCE_ROOT_NAME:
                 continue
@@ -801,46 +535,19 @@ class LanguageProbeService:
             if not self._is_standard_source_root(ancestor):
                 continue
             return _RootResolution(
-                rgl_source_root=ancestor,
-                rgl_root=ancestor.parent,
-                provenance=self._source_root_provenance(ancestor),
+                source_root=ancestor,
+                repository_root=ancestor.parent,
+                provenance=LanguageResolutionSource.LANGUAGE_PROBE,
             )
 
-        return LanguageProbeResult(
+        return _failure_result(
             status=LanguageProbeStatus.UNSUPPORTED_LAYOUT,
-            diagnostics=(
-                LanguageProbeDiagnostic(
-                    code="GF-WB-PATH-253",
-                    severity=LanguageProbeSeverity.ERROR,
-                    stage="language_probe",
-                    subject=str(language_directory),
-                    message=(
-                        "A supported RGL source root could not be derived from "
-                        "the selected path."
-                    ),
-                    remediation=(
-                        "Select a language below <gf-rgl>/src or provide an "
-                        "explicit RGL root."
-                    ),
-                ),
-            ),
+            code="GF-WB-PATH-253",
+            subject=str(language_directory),
+            message=("A supported RGL source root could not be derived from the selected path."),
+            remediation=("Select a language below <gf-rgl>/src or provide an explicit RGL root."),
+            path=language_directory,
         )
-
-    def _is_standard_source_root(self, source_root: Path) -> bool:
-        """Whether an implicitly discovered ``src`` matches RGL structure."""
-
-        if self.filesystem.is_file(source_root / "languages.csv"):
-            return True
-        marker_count = sum(
-            self.filesystem.is_directory(source_root / marker)
-            for marker in _STANDARD_SOURCE_MARKERS
-        )
-        return marker_count >= 2
-
-    def _source_root_provenance(self, source_root: Path) -> str:
-        if self.filesystem.is_file(source_root / "languages.csv"):
-            return "standard_src_root_with_languages_csv"
-        return "standard_src_root_with_shared_directories"
 
     def _resolve_explicit_root(
         self,
@@ -857,16 +564,12 @@ class LanguageProbeService:
         if not self.filesystem.is_readable(root):
             return None
 
-        source_candidates: list[tuple[Path, Path, str]] = []
+        candidates: list[tuple[Path, Path]] = []
         if root.name.casefold() == _STANDARD_SOURCE_ROOT_NAME:
-            source_candidates.append(
-                (root, root.parent, "explicit_rgl_source_root")
-            )
-        source_candidates.append(
-            (root / _STANDARD_SOURCE_ROOT_NAME, root, "explicit_rgl_root")
-        )
+            candidates.append((root, root.parent))
+        candidates.append((root / _STANDARD_SOURCE_ROOT_NAME, root))
 
-        for source_root, rgl_root, provenance in source_candidates:
+        for source_root, repository_root in candidates:
             try:
                 resolved_source = self.filesystem.resolve(
                     source_root,
@@ -876,362 +579,690 @@ class LanguageProbeService:
                 continue
             if not self.filesystem.is_directory(resolved_source):
                 continue
+            if not self.filesystem.is_readable(resolved_source):
+                continue
             if language_directory == resolved_source:
                 continue
-            if not language_directory.is_relative_to(resolved_source):
+            if not self._is_standard_source_root(resolved_source):
                 continue
             return _RootResolution(
-                rgl_source_root=resolved_source,
-                rgl_root=rgl_root,
-                provenance=provenance,
+                source_root=resolved_source,
+                repository_root=repository_root.resolve(strict=False),
+                provenance=LanguageResolutionSource.EXPLICIT_RGL_ROOT,
             )
         return None
 
-    def _select_language_sources(
-        self,
-        *,
-        language_directory: Path,
-        rgl_source_root: Path,
-        max_source_files: int,
-    ) -> tuple[Path, ...]:
-        selected, _excluded = self.selection_service.select_source_tree(
-            language_directory,
-            containment_root=rgl_source_root,
-            max_files=max_source_files,
+    def _is_standard_source_root(self, source_root: Path) -> bool:
+        if self.filesystem.is_file(source_root / "languages.csv"):
+            return True
+        markers = sum(
+            self.filesystem.is_directory(source_root / name) for name in _STANDARD_SOURCE_MARKERS
         )
-        return tuple(selected)
+        return markers >= 2
 
 
 def probe_language_path(
-    selected_path: PathInput,
-    *,
-    explicit_rgl_root: PathInput | None = None,
-    max_ancestor_depth: int = 12,
-    max_source_files: int = 0,
-    require_unambiguous_suffix: bool = False,
-    selection_service: LanguageSourceSelector | None = None,
-    filesystem: LanguageProbeFilesystem | None = None,
+    request: LanguageProbeRequest | PathInput,
+    source_selector: LanguageSourceSelectionPort | LanguageSourceSelector | None = None,
+    gf_path_resolver: LanguageGFPathResolutionPort | object | None = None,
+    structural_preflight: LanguageStructuralPreflightPort | object | None = None,
+    verifier: LanguageVerificationPort | object | None = None,
+    **legacy: object,
 ) -> LanguageProbeResult:
-    """Convenience entrypoint for one path-resolved language probe."""
+    """Resolve one explicit selection through injected startup ports.
 
-    service = LanguageProbeService(
-        selection_service=(
-            SelectionService()
-            if selection_service is None
-            else selection_service
-        ),
-        filesystem=filesystem or _LOCAL_FILESYSTEM,
-    )
-    return service.probe(
-        LanguageProbeRequest(
-            selected_path=selected_path,
-            explicit_rgl_root=explicit_rgl_root,
-            max_ancestor_depth=max_ancestor_depth,
-            max_source_files=max_source_files,
-            require_unambiguous_suffix=require_unambiguous_suffix,
+    The five canonical parameters are stable. Legacy keyword-only tuning values
+    are accepted temporarily so existing direct probe callers remain source
+    compatible while composition roots migrate to ``LanguageProbeRequest``.
+    """
+
+    if isinstance(request, LanguageProbeRequest):
+        probe_request = request
+    else:
+        selected = _coerce_path(request, field="selected_path")
+        explicit_root_value = legacy.pop("explicit_rgl_root", None)
+        entrypoint_value = legacy.pop("entrypoint_choice", None)
+        module_suffix_value = legacy.pop("module_suffix_choice", None)
+        verify_with_gf_value = legacy.pop("verify_with_gf", False)
+        if module_suffix_value is not None and not isinstance(module_suffix_value, str):
+            raise TypeError("module_suffix_choice must be a string or None")
+        if type(verify_with_gf_value) is not bool:
+            raise TypeError("verify_with_gf must be a bool")
+        probe_request = LanguageProbeRequest(
+            selected_path=selected,
+            explicit_rgl_root=_optional_path_input(
+                explicit_root_value,
+                field="explicit_rgl_root",
+            ),
+            module_suffix_choice=module_suffix_value,
+            entrypoint_choice=_optional_path_input(
+                entrypoint_value,
+                field="entrypoint_choice",
+            ),
+            verify_with_gf=verify_with_gf_value,
         )
-    )
 
+    selection_service = legacy.pop("selection_service", None)
+    if source_selector is not None and selection_service is not None:
+        raise ValueError("source_selector and selection_service cannot both be supplied")
+    selected_source_port = source_selector or selection_service or _LOCAL_SOURCE_SELECTOR
+    selector = _adapt_source_selector(selected_source_port)
+
+    filesystem_value = legacy.pop("filesystem", None)
+    filesystem = _LOCAL_FILESYSTEM if filesystem_value is None else filesystem_value
+    if not isinstance(filesystem, LanguageProbeFilesystem):
+        raise TypeError("filesystem must satisfy LanguageProbeFilesystem")
+
+    extractor_value = legacy.pop("module_name_extractor", None)
+    module_name_extractor: ModuleNameExtractor
+    if extractor_value is None:
+        module_name_extractor = _module_name
+    elif callable(extractor_value):
+        module_name_extractor = extractor_value
+    else:
+        raise TypeError("module_name_extractor must be callable")
+
+    max_ancestor_depth = _legacy_int_option(
+        legacy.pop("max_ancestor_depth", probe_request.max_ancestor_depth),
+        field="max_ancestor_depth",
+    )
+    max_source_files = _legacy_int_option(
+        legacy.pop("max_source_files", probe_request.max_source_files),
+        field="max_source_files",
+    )
+    require_unambiguous_suffix = _legacy_bool_option(
+        legacy.pop(
+            "require_unambiguous_suffix",
+            probe_request.require_unambiguous_suffix,
+        ),
+        field="require_unambiguous_suffix",
+    )
+    if legacy:
+        unexpected = ", ".join(sorted(legacy))
+        raise TypeError(f"unexpected probe options: {unexpected}")
+
+    # Verification is delegated after structural resolution when a verifier is
+    # present; the built-in service retains its fail-closed legacy behavior.
+    service_request = probe_request
+    if verifier is not None and probe_request.verify_with_gf:
+        service_request = replace(probe_request, verify_with_gf=False)
+
+    result = LanguageProbeService(
+        source_selector=selector,
+        filesystem=filesystem,
+        module_name_extractor=module_name_extractor,
+        max_ancestor_depth=max_ancestor_depth,
+        max_source_files=max_source_files,
+        require_unambiguous_suffix=require_unambiguous_suffix,
+    ).probe(service_request)
+
+    if not result.is_resolved or result.context is None:
+        return result
+
+    context = result.context
+    if gf_path_resolver is not None:
+        observation = _invoke_flexible_port(
+            gf_path_resolver,
+            ("resolve_language_gf_path", "resolve_gf_path", "resolve"),
+            language_directory=context.language_directory,
+            rgl_source_root=context.rgl_source_root,
+        )
+        entries = _observation_paths(observation)
+        if entries:
+            context = replace(context, gf_path_requirements=entries)
+
+    if structural_preflight is not None:
+        _invoke_flexible_port(
+            structural_preflight,
+            ("preflight", "validate", "check"),
+            context=context,
+            language_directory=context.language_directory,
+            rgl_source_root=context.rgl_source_root,
+        )
+
+    if verifier is not None and probe_request.verify_with_gf:
+        _invoke_flexible_port(
+            verifier,
+            ("verify", "check"),
+            context=context,
+            target=context.focused_target,
+        )
+
+    if context is result.context:
+        return result
+    return replace(result, context=context)
+
+
+# Publish the canonical introspection contract while retaining bounded legacy
+# keyword compatibility in the implementation.
+setattr(
+    probe_language_path,
+    "__signature__",
+    Signature(
+        parameters=(
+        Parameter("request", Parameter.POSITIONAL_OR_KEYWORD),
+        Parameter("source_selector", Parameter.POSITIONAL_OR_KEYWORD, default=None),
+        Parameter("gf_path_resolver", Parameter.POSITIONAL_OR_KEYWORD, default=None),
+        Parameter("structural_preflight", Parameter.POSITIONAL_OR_KEYWORD, default=None),
+            Parameter("verifier", Parameter.POSITIONAL_OR_KEYWORD, default=None),
+        )
+    ),
+)
+
+
+def _adapt_source_selector(value: object) -> LanguageSourceSelector:
+    if isinstance(value, LanguageSourceSelector):
+        return value
+
+    class _Adapter:
+        __slots__ = ("_value",)
+
+        def __init__(self, wrapped: object) -> None:
+            self._value = wrapped
+
+        def select_source_tree(
+            self,
+            source_root: Path,
+            *,
+            containment_root: Path,
+            max_files: int = 0,
+        ) -> tuple[Sequence[Path], Sequence[object]]:
+            observation = _invoke_flexible_port(
+                self._value,
+                ("select_language_sources", "select_sources", "enumerate_sources", "select"),
+                language_directory=source_root,
+                containment_root=containment_root,
+                max_files=max_files,
+            )
+            paths = _observation_paths(observation)
+            if max_files:
+                paths = paths[:max_files]
+            diagnostics = tuple(getattr(observation, "diagnostics", ()))
+            return paths, diagnostics
+
+    return _Adapter(value)
+
+
+def _invoke_flexible_port(
+    port: object,
+    methods: tuple[str, ...],
+    **kwargs: object,
+) -> object:
+    callback = port if callable(port) else None
+    if callback is None:
+        for name in methods:
+            candidate = getattr(port, name, None)
+            if callable(candidate):
+                callback = candidate
+                break
+    if callback is None:
+        raise TypeError("injected language port must be callable")
+    try:
+        return callback(**kwargs)
+    except TypeError as keyword_error:
+        path_values = tuple(value for value in kwargs.values() if isinstance(value, Path))
+        try:
+            return callback(*path_values)
+        except TypeError:
+            raise keyword_error
+
+
+def _observation_paths(observation: object) -> tuple[Path, ...]:
+    for name in (
+        "included_files",
+        "entries",
+        "paths",
+        "path_parts",
+        "effective_paths",
+        "files",
+    ):
+        value = getattr(observation, name, None)
+        if value is None:
+            continue
+        try:
+            return tuple(Path(item).resolve(strict=False) for item in value)
+        except TypeError:
+            continue
+    if isinstance(observation, (tuple, list)):
+        return tuple(Path(item).resolve(strict=False) for item in observation)
+    if isinstance(observation, Iterable) and not isinstance(
+        observation,
+        (str, bytes, bytearray, Mapping),
+    ):
+        try:
+            return tuple(_path_from_object(item).resolve(strict=False) for item in observation)
+        except TypeError:
+            return ()
+    return ()
 
 
 def _classify_modules(
-    inventory: Sequence[Path],
+    inventory: tuple[Path, ...],
     *,
+    module_name_extractor: ModuleNameExtractor,
     focused_target: Path | None,
+    requested_suffix: str | None,
+    requested_entrypoint: Path | None,
+    require_unambiguous: bool,
 ) -> _ModuleClassification:
-    role_records: dict[str, list[tuple[str, Path]]] = {}
-    entrypoint_records: dict[str, list[tuple[str, Path]]] = {}
-
+    candidates: list[LanguageModuleCandidate] = []
     for path in inventory:
-        module_name = extract_module_name(path)
-        match = _MODULE_ROLE_RE.fullmatch(module_name)
+        module_name = module_name_extractor(path)
+        if not isinstance(module_name, str) or not module_name:
+            raise ValueError("module_name_extractor must return a non-empty string")
+        match = _STANDARD_MODULE_RE.fullmatch(module_name)
         if match is None:
             continue
-        role = match.group("role")
-        suffix = match.group("suffix")
-        role_records.setdefault(suffix, []).append((role, path))
-        if role in _ENTRYPOINT_ROLES:
-            entrypoint_records.setdefault(suffix, []).append((role, path))
+        role = _ROLE_BY_PREFIX[match.group("role")]
+        candidates.append(
+            LanguageModuleCandidate(
+                file_path=path,
+                role=role,
+                module_suffix=match.group("suffix"),
+            )
+        )
 
-    focused_suffix = _focused_suffix(focused_target)
-    entrypoint_suffixes = tuple(sorted(entrypoint_records))
-    role_suffixes = tuple(sorted(role_records))
+    ordered_candidates = tuple(
+        sorted(
+            candidates,
+            key=lambda candidate: (
+                candidate.module_suffix.casefold(),
+                _ENTRYPOINT_ORDER.get(candidate.role, 100),
+                candidate.file_path.name.casefold(),
+            ),
+        )
+    )
+    suffixes = tuple(dict.fromkeys(candidate.module_suffix for candidate in ordered_candidates))
 
-    module_suffix: str | None = None
-    candidates: tuple[str, ...]
+    selected_suffix = _selected_suffix(
+        suffixes,
+        candidates=ordered_candidates,
+        focused_target=focused_target,
+        requested_suffix=requested_suffix,
+        requested_entrypoint=requested_entrypoint,
+    )
     diagnostics: list[LanguageProbeDiagnostic] = []
 
-    if len(entrypoint_suffixes) == 1:
-        module_suffix = entrypoint_suffixes[0]
-        candidates = entrypoint_suffixes
-    elif len(entrypoint_suffixes) > 1:
-        candidates = entrypoint_suffixes
-        if focused_suffix in entrypoint_records:
-            module_suffix = focused_suffix
-            diagnostics.append(
-                LanguageProbeDiagnostic(
-                    code="GF-WB-CONFIG-257",
-                    severity=LanguageProbeSeverity.INFO,
-                    stage="language_probe",
-                    subject=str(focused_target),
-                    message=(
-                        "The focused file disambiguated multiple standard "
-                        "module suffixes."
-                    ),
-                    remediation=(
-                        "Review the detected entrypoints before release "
-                        "validation."
-                    ),
-                    candidates=candidates,
-                )
-            )
-        else:
-            diagnostics.append(
-                _suffix_ambiguity_diagnostic(candidates)
-            )
-    elif len(role_suffixes) == 1:
-        module_suffix = role_suffixes[0]
-        candidates = role_suffixes
-    elif len(role_suffixes) > 1:
-        candidates = role_suffixes
-        if focused_suffix in role_records:
-            module_suffix = focused_suffix
-            diagnostics.append(
-                LanguageProbeDiagnostic(
-                    code="GF-WB-CONFIG-258",
-                    severity=LanguageProbeSeverity.INFO,
-                    stage="language_probe",
-                    subject=str(focused_target),
-                    message=(
-                        "The focused file selected one suffix from multiple "
-                        "standard module-role candidates."
-                    ),
-                    remediation=(
-                        "Use an explicit validation profile when a different "
-                        "module family is required."
-                    ),
-                    candidates=candidates,
-                )
-            )
-        else:
-            diagnostics.append(_suffix_ambiguity_diagnostic(candidates))
-    else:
-        candidates = ()
+    if not ordered_candidates:
         diagnostics.append(
-            LanguageProbeDiagnostic(
+            _diagnostic(
                 code="GF-WB-CONFIG-259",
                 severity=LanguageProbeSeverity.INFO,
-                stage="language_probe",
-                subject="module_suffix",
-                message=(
-                    "No standard RGL module suffix could be derived from "
-                    "filenames."
-                ),
-                remediation=(
-                    "Continue with explicit file targets or supply an "
-                    "optional validation profile."
+                subject="module_roles",
+                message=("No standard RGL module-role filenames were detected."),
+                detail=(
+                    "The language remains source-ready; standard module roles "
+                    "are assistance metadata, not startup requirements."
                 ),
             )
         )
 
-    entrypoints = _ordered_entrypoints(
-        entrypoint_records,
-        selected_suffix=module_suffix,
+    entrypoints = tuple(
+        candidate
+        for candidate in ordered_candidates
+        if candidate.entrypoint_priority is not None
+        and (selected_suffix is None or candidate.module_suffix == selected_suffix)
     )
-    choices = tuple(
-        LanguageProbeChoice(
-            value=suffix,
-            label=suffix,
-            entrypoints=_ordered_role_paths(entrypoint_records.get(suffix, [])),
+    if not entrypoints:
+        diagnostics.append(
+            _diagnostic(
+                code="GF-WB-CONFIG-253",
+                severity=LanguageProbeSeverity.INFO,
+                subject="entrypoints",
+                message="No standard Lang, Grammar, or All entrypoint was found.",
+                detail=(
+                    "The language remains source-ready and may use an explicit "
+                    "non-standard validation target later."
+                ),
+            )
         )
-        for suffix in candidates
-    )
+
+    if len(suffixes) > 1:
+        if selected_suffix is None:
+            diagnostics.append(
+                _diagnostic(
+                    code="GF-WB-CONFIG-260",
+                    severity=(
+                        LanguageProbeSeverity.ERROR
+                        if require_unambiguous
+                        else LanguageProbeSeverity.WARNING
+                    ),
+                    subject="module_suffix",
+                    message=("Several standard language suffixes were detected."),
+                    remediation=(
+                        "Choose one suffix explicitly before starting the runtime."
+                        if require_unambiguous
+                        else ""
+                    ),
+                    choices=suffixes,
+                )
+            )
+        else:
+            diagnostics.append(
+                _diagnostic(
+                    code="GF-WB-CONFIG-257",
+                    severity=LanguageProbeSeverity.INFO,
+                    subject="module_suffix",
+                    message=("The explicit selection resolved a multi-suffix language directory."),
+                    detail=f"Selected suffix: {selected_suffix}",
+                    choices=suffixes,
+                )
+            )
+
     return _ModuleClassification(
-        module_suffix=module_suffix,
-        suffix_candidates=candidates,
+        candidates=ordered_candidates,
+        suffixes=suffixes,
+        selected_suffix=selected_suffix,
         entrypoints=entrypoints,
-        choices=choices,
         diagnostics=tuple(diagnostics),
     )
 
 
-def _focused_suffix(path: Path | None) -> str | None:
-    if path is None:
-        return None
-    match = _MODULE_ROLE_RE.fullmatch(extract_module_name(path))
-    return None if match is None else match.group("suffix")
-
-
-def _ordered_entrypoints(
-    records: dict[str, list[tuple[str, Path]]],
+def _module_suffix_choices(
+    suffixes: tuple[str, ...],
     *,
-    selected_suffix: str | None,
-) -> tuple[Path, ...]:
-    if selected_suffix is not None:
-        return _ordered_role_paths(records.get(selected_suffix, []))
-    all_records = [item for values in records.values() for item in values]
-    return _ordered_role_paths(all_records)
+    candidates: tuple[LanguageModuleCandidate, ...],
+) -> tuple[LanguageProbeChoice, ...]:
+    """Build deterministic explicit choices for one ambiguous suffix set."""
 
-
-def _ordered_role_paths(
-    records: Sequence[tuple[str, Path]],
-) -> tuple[Path, ...]:
-    role_order = {role: index for index, role in enumerate(_ENTRYPOINT_ROLES)}
-    ordered = sorted(
-        records,
-        key=lambda item: (
-            role_order.get(item[0], len(role_order)),
-            item[1].name.casefold(),
-            str(item[1]),
-        ),
-    )
-    return tuple(path for _role, path in ordered)
-
-
-def _suffix_ambiguity_diagnostic(
-    candidates: tuple[str, ...],
-) -> LanguageProbeDiagnostic:
-    return LanguageProbeDiagnostic(
-        code="GF-WB-CONFIG-260",
-        severity=LanguageProbeSeverity.WARNING,
-        stage="language_probe",
-        subject="module_suffix",
-        message="Several standard RGL module suffixes were detected.",
-        remediation=(
-            "Select one suffix when the requested operation requires an "
-            "unambiguous module family."
-        ),
-        candidates=candidates,
+    return tuple(
+        LanguageProbeChoice(
+            value=suffix,
+            label=suffix,
+            entrypoints=tuple(
+                candidate.file_path
+                for candidate in candidates
+                if candidate.module_suffix == suffix and candidate.entrypoint_priority is not None
+            ),
+        )
+        for suffix in suffixes
     )
 
 
+def _selected_suffix(
+    suffixes: tuple[str, ...],
+    *,
+    candidates: tuple[LanguageModuleCandidate, ...],
+    focused_target: Path | None,
+    requested_suffix: str | None,
+    requested_entrypoint: Path | None,
+) -> str | None:
+    explicit_suffixes: list[str] = []
 
-def _portable_language_key(
+    if requested_suffix is not None:
+        if requested_suffix not in suffixes:
+            raise ValueError("module_suffix_choice must identify a detected suffix")
+        explicit_suffixes.append(requested_suffix)
+
+    for path in (requested_entrypoint, focused_target):
+        if path is None:
+            continue
+        matching = next(
+            (candidate.module_suffix for candidate in candidates if candidate.file_path == path),
+            None,
+        )
+        if matching is not None:
+            explicit_suffixes.append(matching)
+
+    if explicit_suffixes:
+        if len(set(explicit_suffixes)) != 1:
+            raise ValueError("explicit module suffix and entrypoint choices disagree")
+        return explicit_suffixes[0]
+    if len(suffixes) == 1:
+        return suffixes[0]
+    return None
+
+
+def _normalize_inventory(
+    values: Sequence[Path],
+    *,
+    language_directory: Path,
+) -> tuple[Path, ...]:
+    normalized: dict[str, Path] = {}
+    for index, value in enumerate(values):
+        if not isinstance(value, Path):
+            raise TypeError(f"source inventory item {index} must be a pathlib.Path")
+        path = value.expanduser().resolve(strict=True)
+        if path.suffix.casefold() != ".gf":
+            continue
+        if not path.is_relative_to(language_directory):
+            raise ValueError("source inventory must remain inside language_directory")
+        normalized[path.as_posix().casefold()] = path
+
+    return tuple(
+        sorted(
+            normalized.values(),
+            key=lambda path: path.relative_to(language_directory).as_posix().casefold(),
+        )
+    )
+
+
+def _gf_path_requirements(
     language_directory: Path,
     *,
-    rgl_source_root: Path,
-) -> str:
-    relative = language_directory.relative_to(rgl_source_root)
-    key = relative.as_posix()
-    if key in {"", "."}:
-        raise ValueError("language key must identify a source-root subtree")
-    return key
+    source_root: Path,
+    filesystem: LanguageProbeFilesystem,
+) -> tuple[Path, ...]:
+    result = [language_directory]
+
+    # External projects commonly keep API/wrapper modules next to the language
+    # directory (for example ``lib/src/albanian`` plus ``lib/src/SyntaxSqi.gf``).
+    # Add that project source directory only for a disjoint external tree; doing
+    # so for a standard RGL checkout would expose every sibling language and
+    # violate the no-all-language-path rule.
+    if not language_directory.is_relative_to(source_root):
+        project_source_root = language_directory.parent
+        if filesystem.is_directory(project_source_root):
+            result.append(project_source_root)
+
+    result.extend(
+        source_root / marker
+        for marker in _STANDARD_SOURCE_MARKERS
+        if filesystem.is_directory(source_root / marker)
+    )
+    return tuple(dict.fromkeys(result))
 
 
-def _diagnostic_from_wordbench_error(
-    exc: GFWordbenchError,
-    *,
-    subject: str,
-) -> LanguageProbeDiagnostic:
-    code = exc.code or "GF-WB-CONFIG-261"
-    detail = getattr(exc, "detail", "") or str(exc)
-    return LanguageProbeDiagnostic(
-        code=code,
-        severity=LanguageProbeSeverity.ERROR,
-        stage="language_probe",
-        subject=subject,
-        message=exc.message,
-        detail=detail,
-        remediation=(
-            "Correct the selected source path or its canonical selection "
-            "configuration."
+def _base_capability_statuses() -> tuple[LanguageCapabilityStatus, ...]:
+    return (
+        LanguageCapabilityStatus(
+            capability=LanguageCapability.SOURCE_READY,
+            availability=CapabilityAvailability.AVAILABLE,
+        ),
+        LanguageCapabilityStatus(
+            capability=LanguageCapability.SCAN_READY,
+            availability=CapabilityAvailability.AVAILABLE,
+        ),
+        LanguageCapabilityStatus(
+            capability=LanguageCapability.COMPILE_READY,
+            availability=CapabilityAvailability.UNKNOWN,
+            reason="GF verification has not run.",
+        ),
+        LanguageCapabilityStatus(
+            capability=LanguageCapability.SCENARIO_READY,
+            availability=CapabilityAvailability.UNKNOWN,
+            reason="Scenario preflight has not run.",
+        ),
+        LanguageCapabilityStatus(
+            capability=LanguageCapability.RELEASE_READY,
+            availability=CapabilityAvailability.UNKNOWN,
+            reason="Release validation has not run.",
         ),
     )
 
 
-def _invalid_path_result(
-    path: Path,
+def _resolution_provenance(
+    *,
+    selected_path: Path,
+    language_directory: Path,
+    roots: _RootResolution,
+    language_key: str,
+    selected_suffix: str | None,
+) -> tuple[LanguageResolutionProvenance, ...]:
+    values = [
+        LanguageResolutionProvenance(
+            field="selected_path",
+            value=str(selected_path),
+            source=LanguageResolutionSource.EXPLICIT_SELECTED_PATH,
+        ),
+        LanguageResolutionProvenance(
+            field="language_directory",
+            value=str(language_directory),
+            source=LanguageResolutionSource.LANGUAGE_PROBE,
+        ),
+        LanguageResolutionProvenance(
+            field="rgl_source_root",
+            value=str(roots.source_root),
+            source=roots.provenance,
+        ),
+        LanguageResolutionProvenance(
+            field="rgl_root",
+            value=str(roots.repository_root),
+            source=roots.provenance,
+        ),
+        LanguageResolutionProvenance(
+            field="language_key",
+            value=language_key,
+            source=LanguageResolutionSource.LANGUAGE_PROBE,
+        ),
+    ]
+    if selected_suffix is not None:
+        values.append(
+            LanguageResolutionProvenance(
+                field="module_suffix",
+                value=selected_suffix,
+                source=LanguageResolutionSource.MODULE_CLASSIFICATION,
+            )
+        )
+    return tuple(values)
+
+
+def _language_key(
+    language_directory: Path,
+    *,
+    source_root: Path,
+) -> str:
+    try:
+        relative = language_directory.relative_to(source_root)
+    except ValueError:
+        # External GF project: the explicit RGL root supplies dependencies but
+        # does not own the language source tree.  Keep the portable identity
+        # local to the selected language directory rather than fabricating a
+        # relationship to the RGL checkout.
+        value = language_directory.name
+    else:
+        value = relative.as_posix()
+    if not value or value == ".":
+        raise ValueError("language_directory must identify a non-empty language key")
+    return value
+
+
+def _module_name(path: Path) -> str:
+    return path.stem
+
+
+def _diagnostic(
     *,
     code: str,
+    severity: LanguageProbeSeverity,
+    subject: str,
     message: str,
+    remediation: str = "",
+    detail: str = "",
+    path: Path | None = None,
+    choices: tuple[str, ...] = (),
+) -> LanguageProbeDiagnostic:
+    return LanguageProbeDiagnostic(
+        code=code,
+        severity=severity,
+        stage="language_probe",
+        subject=subject,
+        message=message,
+        detail=detail,
+        remediation=remediation,
+        relevant_path=path,
+        candidates=choices,
+    )
+
+
+def _failure_result(
+    *,
+    status: LanguageProbeStatus,
+    code: str,
+    subject: str,
+    message: str,
+    remediation: str,
+    path: Path | None = None,
+    detail: str = "",
 ) -> LanguageProbeResult:
     return LanguageProbeResult(
-        status=LanguageProbeStatus.INVALID_SELECTION,
+        status=status,
         diagnostics=(
-            LanguageProbeDiagnostic(
+            _diagnostic(
                 code=code,
                 severity=LanguageProbeSeverity.ERROR,
-                stage="language_probe",
-                subject=str(path),
+                subject=subject,
                 message=message,
-                remediation=(
-                    "Select an existing readable GF language directory or "
-                    ".gf file."
-                ),
+                remediation=remediation,
+                detail=detail,
+                path=path,
             ),
         ),
     )
 
 
-def _coerce_path(value: PathInput, *, field: str) -> Path:
-    if isinstance(value, str):
-        text = value
-    elif isinstance(value, os.PathLike):
-        text = os.fspath(value)
-    else:
-        raise TypeError(f"{field} must be a string or os.PathLike")
-    if not isinstance(text, str):
-        raise TypeError(f"{field} must resolve to text")
-    if not text:
-        raise ValueError(f"{field} must not be empty")
-    if "\x00" in text:
-        raise ValueError(f"{field} must not contain NUL")
-    return Path(text)
-
-
-def _require_absolute_path(value: Path, *, field: str) -> Path:
-    if not isinstance(value, Path):
-        raise TypeError(f"{field} must be a pathlib.Path")
-    if not value.is_absolute():
-        raise ValueError(f"{field} must be absolute")
-    normalized = Path(os.path.normpath(os.fspath(value)))
-    if normalized != value:
-        raise ValueError(f"{field} must be lexically normalized")
-    return value
-
-
-def _require_optional_absolute_path(
-    value: Path | None,
-    *,
-    field: str,
-) -> Path | None:
+def _optional_path_input(value: object, *, field: str) -> Path | None:
     if value is None:
         return None
-    return _require_absolute_path(value, field=field)
+    if not isinstance(value, (str, os.PathLike)):
+        raise TypeError(f"{field} must be path-like or None")
+    return _coerce_path(value, field=field)
 
 
-def _require_absolute_path_tuple(
-    value: tuple[Path, ...],
-    *,
-    field: str,
-) -> tuple[Path, ...]:
-    if not isinstance(value, tuple):
-        raise TypeError(f"{field} must be a tuple")
-    seen: set[str] = set()
-    for index, path in enumerate(value):
-        normalized = _require_absolute_path(
-            path,
-            field=f"{field}[{index}]",
-        )
-        key = os.path.normcase(os.fspath(normalized))
-        if key in seen:
-            raise ValueError(f"{field} must not contain duplicate paths")
-        seen.add(key)
+def _path_from_object(value: object) -> Path:
+    if not isinstance(value, (str, os.PathLike)):
+        raise TypeError("path value must be path-like")
+    return Path(value)
+
+
+def _legacy_int_option(value: object, *, field: str) -> int:
+    if type(value) is not int:
+        raise TypeError(f"{field} must be an integer")
     return value
 
 
-def _require_unique_text_tuple(
-    value: tuple[str, ...],
-    *,
-    field: str,
-) -> tuple[str, ...]:
-    if not isinstance(value, tuple):
-        raise TypeError(f"{field} must be a tuple")
-    seen: set[str] = set()
-    for index, item in enumerate(value):
-        if not isinstance(item, str) or not item:
-            raise ValueError(f"{field}[{index}] must be a non-empty string")
-        if item in seen:
-            raise ValueError(f"{field} must not contain duplicates")
-        seen.add(item)
+def _legacy_bool_option(value: object, *, field: str) -> bool:
+    if type(value) is not bool:
+        raise TypeError(f"{field} must be a bool")
+    return value
+
+
+def _coerce_path(value: PathInput, *, field: str) -> Path:
+    if isinstance(value, Path):
+        path = value
+    elif isinstance(value, (str, os.PathLike)):
+        try:
+            path = Path(value)
+        except TypeError as exc:
+            raise TypeError(f"{field} must be path-like") from exc
+    else:
+        raise TypeError(f"{field} must be path-like")
+    if not str(path):
+        raise ValueError(f"{field} must not be empty")
+    return path.expanduser().resolve(strict=False)
+
+
+def _require_positive_int(value: object, *, field: str) -> int:
+    if type(value) is not int:
+        raise TypeError(f"{field} must be an integer")
+    if value < 1:
+        raise ValueError(f"{field} must be at least 1")
+    return value
+
+
+def _require_non_negative_int(value: object, *, field: str) -> int:
+    if type(value) is not int:
+        raise TypeError(f"{field} must be an integer")
+    if value < 0:
+        raise ValueError(f"{field} must not be negative")
     return value

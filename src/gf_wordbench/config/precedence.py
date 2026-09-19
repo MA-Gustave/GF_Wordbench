@@ -8,21 +8,23 @@ construction belong to their dedicated application and composition services.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
+from functools import lru_cache
+from importlib import import_module
+import os
 from pathlib import Path
-from types import MappingProxyType
-from typing import Final
+from types import MappingProxyType, ModuleType
+from typing import Final, Protocol, cast
 
 from gf_wordbench.kernel.statuses import ValidationMode
 
 __all__ = (
+    "PRECEDENCE_POLICIES",
     "ConfigurationDomain",
     "ConfigurationSource",
     "OverrideClass",
-    "PRECEDENCE_POLICIES",
     "PrecedencePolicy",
     "PrecedenceResolution",
     "PrecedenceValues",
@@ -97,9 +99,7 @@ class PrecedencePolicy:
 
         sources = tuple(source for tier in self.tiers for source in tier)
         if len(sources) != len(set(sources)):
-            raise ValueError(
-                "a source may appear only once in a precedence policy"
-            )
+            raise ValueError("a source may appear only once in a precedence policy")
 
     def rank(self, source: ConfigurationSource) -> int:
         """Return the zero-based authority rank of ``source``."""
@@ -108,9 +108,7 @@ class PrecedencePolicy:
             if source in tier:
                 return rank
 
-        raise ValueError(
-            f"{source.value!r} is not authorized for {self.domain.value!r}"
-        )
+        raise ValueError(f"{source.value!r} is not authorized for {self.domain.value!r}")
 
     def allows(self, source: ConfigurationSource) -> bool:
         """Return whether ``source`` may contribute to this domain."""
@@ -154,9 +152,7 @@ _RUN_OPTION_TIERS: Final[tuple[tuple[ConfigurationSource, ...], ...]] = (
 )
 
 
-_PRECEDENCE_POLICIES: Final[
-    dict[ConfigurationDomain, PrecedencePolicy]
-] = {
+_PRECEDENCE_POLICIES: Final[dict[ConfigurationDomain, PrecedencePolicy]] = {
     ConfigurationDomain.SELECTED_LANGUAGE_PATH: PrecedencePolicy(
         domain=ConfigurationDomain.SELECTED_LANGUAGE_PATH,
         tiers=(
@@ -251,21 +247,17 @@ _PRECEDENCE_POLICIES: Final[
     # Compatibility-only domains. They must not become normal startup authority.
     ConfigurationDomain.PROJECT_ROOT: PrecedencePolicy(
         domain=ConfigurationDomain.PROJECT_ROOT,
-        tiers=(
-            (ConfigurationSource.LEGACY_MIGRATION,),
-        ),
+        tiers=((ConfigurationSource.LEGACY_MIGRATION,),),
     ),
     ConfigurationDomain.PROJECT_FIELD: PrecedencePolicy(
         domain=ConfigurationDomain.PROJECT_FIELD,
-        tiers=(
-            (ConfigurationSource.PROJECT_TOML,),
-        ),
+        tiers=((ConfigurationSource.PROJECT_TOML,),),
     ),
 }
 
-PRECEDENCE_POLICIES: Final[
-    Mapping[ConfigurationDomain, PrecedencePolicy]
-] = MappingProxyType(_PRECEDENCE_POLICIES)
+PRECEDENCE_POLICIES: Final[Mapping[ConfigurationDomain, PrecedencePolicy]] = MappingProxyType(
+    _PRECEDENCE_POLICIES
+)
 
 
 def policy_for(domain: ConfigurationDomain) -> PrecedencePolicy:
@@ -273,16 +265,155 @@ def policy_for(domain: ConfigurationDomain) -> PrecedencePolicy:
 
     return PRECEDENCE_POLICIES[domain]
 
-# Delayed import keeps ``ConfigurationSource`` exclusively owned here while
-# avoiding the runtime cycle created by eager imports from ``config.models``.
-from .models import (  # noqa: E402
-    ConfigurationIssue,
-    ConfigurationProvenance,
-    ConfigurationResolutionRequest,
-    EvidenceLevel,
-    IssueSeverity,
-    ValidationTarget,
-)
+
+class _IssueSeverityMembers(Protocol):
+    ERROR: object
+    WARNING: object
+    INFO: object
+
+
+class _ConfigurationIssueView(Protocol):
+    severity: object
+    source: ConfigurationSource
+    field_path: str
+    message: str
+
+
+class _ConfigurationProvenanceView(Protocol):
+    field_path: str
+    source: ConfigurationSource
+
+
+class _ConfigurationIssueFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        severity: object,
+        source: ConfigurationSource,
+        field_path: str,
+        provided_value: object,
+        message: str,
+        remediation: str,
+    ) -> _ConfigurationIssueView: ...
+
+
+class _ConfigurationProvenanceFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        field_path: str,
+        source: ConfigurationSource,
+        provided_value: object,
+        resolved_value: object,
+    ) -> _ConfigurationProvenanceView: ...
+
+
+class _SelectionDefaultsView(Protocol):
+    mode: ValidationMode
+    timeout_sec: int
+    max_files: int
+    keep_ok_details: bool
+    diff_previous: bool
+    skip_version_probe: bool
+    no_compile: bool
+    emit_cpu_stats: bool
+
+
+class _OutputDefaultsView(Protocol):
+    evidence_level: str
+
+
+class _DefaultsView(Protocol):
+    selection_defaults: _SelectionDefaultsView
+    output_defaults: _OutputDefaultsView
+
+
+class _EnvironmentView(Protocol):
+    gf_executable: str | None
+    rgl_root: str | None
+    output_root: str | None
+    state_path: str | None
+    project_root: str | None
+
+
+class _ResolutionRequestView(Protocol):
+    defaults: _DefaultsView
+    environment: _EnvironmentView
+    project: object | None
+    source_values: Mapping[
+        ConfigurationSource,
+        Mapping[str, object],
+    ]
+
+    @property
+    def validation_profile(self) -> object | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _ModelContracts:
+    request_type: type[object]
+    validation_target_type: type[object]
+    issue_factory: _ConfigurationIssueFactory
+    provenance_factory: _ConfigurationProvenanceFactory
+    severity: _IssueSeverityMembers
+
+
+@lru_cache(maxsize=1)
+def _model_contracts() -> _ModelContracts:
+    """Load model-owned contracts after ``config.models`` finished importing.
+
+    ``config.models`` owns the request, issue, provenance and target models.
+    Precedence owns only the source enum, policies and pure selection logic.
+    Delaying this lookup until resolution removes the import-time and static
+    module cycle without duplicating any public model.
+    """
+
+    module = import_module("gf_wordbench.config.models")
+    return _contracts_from_module(module)
+
+
+def _contracts_from_module(module: ModuleType) -> _ModelContracts:
+    request_type = _require_model_type(
+        module,
+        "ConfigurationResolutionRequest",
+    )
+    validation_target_type = _require_model_type(
+        module,
+        "ValidationTarget",
+    )
+    issue_factory = cast(
+        "_ConfigurationIssueFactory",
+        _require_model_type(module, "ConfigurationIssue"),
+    )
+    provenance_factory = cast(
+        "_ConfigurationProvenanceFactory",
+        _require_model_type(module, "ConfigurationProvenance"),
+    )
+    severity = cast(
+        "_IssueSeverityMembers",
+        _require_model_type(module, "IssueSeverity"),
+    )
+    for member in ("ERROR", "WARNING", "INFO"):
+        if not hasattr(severity, member):
+            raise RuntimeError(f"config.models.IssueSeverity is missing {member}")
+
+    return _ModelContracts(
+        request_type=request_type,
+        validation_target_type=validation_target_type,
+        issue_factory=issue_factory,
+        provenance_factory=provenance_factory,
+        severity=severity,
+    )
+
+
+def _require_model_type(
+    module: ModuleType,
+    name: str,
+) -> type[object]:
+    value = getattr(module, name, None)
+    if not isinstance(value, type):
+        raise RuntimeError(f"config.models.{name} must be a runtime type")
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,7 +432,7 @@ class PrecedenceValues:
     output_root: str | os.PathLike[str] | None
     state_path: str | os.PathLike[str] | None
     mode: ValidationMode
-    target: ValidationTarget | None
+    target: object | None
     timeout_sec: int
     max_files: int
     keep_ok_details: bool
@@ -309,7 +440,7 @@ class PrecedenceValues:
     skip_version_probe: bool
     no_compile: bool
     emit_cpu_stats: bool
-    evidence_level: EvidenceLevel
+    evidence_level: str
     selected_checkpoints: tuple[Path, ...]
     selected_entrypoints: tuple[Path, ...]
     selected_scenarios: tuple[str, ...]
@@ -346,8 +477,8 @@ class PrecedenceResolution:
     """Selected values plus structured issues and winning-source provenance."""
 
     values: PrecedenceValues | None
-    issues: tuple[ConfigurationIssue, ...] = ()
-    provenance: tuple[ConfigurationProvenance, ...] = ()
+    issues: tuple[_ConfigurationIssueView, ...] = ()
+    provenance: tuple[_ConfigurationProvenanceView, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,6 +519,14 @@ def _instance(
     return validate
 
 
+def _validation_target(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, _model_contracts().validation_target_type):
+        return None
+    return "must be a ValidationTarget or None"
+
+
 def _integer(minimum: int) -> Callable[[object], str | None]:
     def validate(value: object) -> str | None:
         if type(value) is not int:
@@ -403,9 +542,7 @@ def _boolean(value: object) -> str | None:
     return None if type(value) is bool else "must be a boolean"
 
 
-_EVIDENCE_LEVELS: Final = frozenset(
-    {"bounded", "standard", "complete", "expanded"}
-)
+_EVIDENCE_LEVELS: Final = frozenset({"bounded", "standard", "complete", "expanded"})
 
 
 def _evidence_level(value: object) -> str | None:
@@ -426,23 +563,20 @@ def _require_unique_tuple(
     if not isinstance(values, tuple):
         raise TypeError(f"{name} must be a tuple")
     if any(not isinstance(value, item_type) for value in values):
-        raise TypeError(
-            f"{name} must contain {item_type.__name__} values"
-        )
-    if non_empty and any(
-        not value or value != value.strip() or "\x00" in value
-        for value in values
-    ):
-        raise ValueError(
-            f"{name} must contain non-empty, trimmed, NUL-free strings"
-        )
+        raise TypeError(f"{name} must contain {item_type.__name__} values")
+    if non_empty:
+        for value in values:
+            if not isinstance(value, str):
+                raise TypeError(f"{name} must contain string values")
+            if not value or value != value.strip() or "\x00" in value:
+                raise ValueError(
+                    f"{name} must contain non-empty, trimmed, NUL-free strings"
+                )
     if len(values) != len(set(values)):
         raise ValueError(f"{name} must not contain duplicates")
 
 
-_FIELD_SPECIFICATIONS: Final[
-    Mapping[str, _FieldSpecification]
-] = MappingProxyType(
+_FIELD_SPECIFICATIONS: Final[Mapping[str, _FieldSpecification]] = MappingProxyType(
     {
         "selected_language_path": _FieldSpecification(
             ConfigurationDomain.SELECTED_LANGUAGE_PATH,
@@ -485,11 +619,7 @@ _FIELD_SPECIFICATIONS: Final[
         ),
         "target": _FieldSpecification(
             ConfigurationDomain.TARGET,
-            _instance(
-                ValidationTarget,
-                "a ValidationTarget",
-                optional=True,
-            ),
+            _validation_target,
             required=False,
         ),
         "timeout_sec": _FieldSpecification(
@@ -531,7 +661,7 @@ _MISSING: Final = object()
 
 
 def resolve_precedence(
-    request: ConfigurationResolutionRequest,
+    request: object,
 ) -> PrecedenceResolution:
     """Resolve supplied immutable values without filesystem access.
 
@@ -540,14 +670,14 @@ def resolve_precedence(
     is complete.
     """
 
-    if not isinstance(request, ConfigurationResolutionRequest):
-        raise TypeError(
-            "request must be a ConfigurationResolutionRequest"
-        )
+    contracts = _model_contracts()
+    if not isinstance(request, contracts.request_type):
+        raise TypeError("request must be a ConfigurationResolutionRequest")
+    typed_request = cast("_ResolutionRequestView", request)
 
-    candidates, issues = _collect_candidates(request)
+    candidates, issues = _collect_candidates(typed_request)
     resolved: dict[str, object] = {}
-    provenance: list[ConfigurationProvenance] = []
+    provenance: list[_ConfigurationProvenanceView] = []
 
     for name, specification in _FIELD_SPECIFICATIONS.items():
         value, source, field_issues = _resolve_field(
@@ -576,7 +706,7 @@ def resolve_precedence(
         selected_scenarios,
         release_requires_pgf,
         profile_source,
-    ) = _profile_policy(request)
+    ) = _profile_policy(typed_request)
 
     if profile_source is not None:
         profile_values = {
@@ -596,13 +726,8 @@ def resolve_precedence(
         )
 
     ordered_issues = _ordered_issues(issues)
-    ordered_provenance = tuple(
-        sorted(provenance, key=lambda item: item.field_path)
-    )
-    if any(
-        issue.severity is IssueSeverity.ERROR
-        for issue in ordered_issues
-    ):
+    ordered_provenance = tuple(sorted(provenance, key=lambda item: item.field_path))
+    if any(issue.severity is contracts.severity.ERROR for issue in ordered_issues):
         return PrecedenceResolution(
             values=None,
             issues=ordered_issues,
@@ -611,7 +736,35 @@ def resolve_precedence(
 
     return PrecedenceResolution(
         values=PrecedenceValues(
-            **resolved,
+            selected_language_path=cast(
+                "str | os.PathLike[str] | None", resolved.get("selected_language_path")
+            ),
+            validation_profile=cast(
+                "str | os.PathLike[str] | None", resolved.get("validation_profile")
+            ),
+            project_root=cast(
+                "str | os.PathLike[str] | None", resolved.get("project_root")
+            ),
+            gf_executable=cast(
+                "str | os.PathLike[str] | None", resolved.get("gf_executable")
+            ),
+            rgl_root=cast("str | os.PathLike[str] | None", resolved.get("rgl_root")),
+            output_root=cast(
+                "str | os.PathLike[str] | None", resolved.get("output_root")
+            ),
+            state_path=cast(
+                "str | os.PathLike[str] | None", resolved.get("state_path")
+            ),
+            mode=cast("ValidationMode", resolved["mode"]),
+            target=resolved.get("target"),
+            timeout_sec=cast("int", resolved["timeout_sec"]),
+            max_files=cast("int", resolved["max_files"]),
+            keep_ok_details=cast("bool", resolved["keep_ok_details"]),
+            diff_previous=cast("bool", resolved["diff_previous"]),
+            skip_version_probe=cast("bool", resolved["skip_version_probe"]),
+            no_compile=cast("bool", resolved["no_compile"]),
+            emit_cpu_stats=cast("bool", resolved["emit_cpu_stats"]),
+            evidence_level=cast("str", resolved["evidence_level"]),
             selected_checkpoints=selected_checkpoints,
             selected_entrypoints=selected_entrypoints,
             selected_scenarios=selected_scenarios,
@@ -623,7 +776,7 @@ def resolve_precedence(
 
 
 def _profile_policy(
-    request: ConfigurationResolutionRequest,
+    request: _ResolutionRequestView,
 ) -> tuple[
     tuple[Path, ...],
     tuple[Path, ...],
@@ -664,14 +817,15 @@ def _profile_policy(
         source,
     )
 
+
 def _collect_candidates(
-    request: ConfigurationResolutionRequest,
+    request: _ResolutionRequestView,
 ) -> tuple[
     dict[ConfigurationSource, dict[str, object]],
-    list[ConfigurationIssue],
+    list[_ConfigurationIssueView],
 ]:
     candidates: dict[ConfigurationSource, dict[str, object]] = {}
-    issues: list[ConfigurationIssue] = []
+    issues: list[_ConfigurationIssueView] = []
 
     source_values = getattr(
         request,
@@ -680,13 +834,9 @@ def _collect_candidates(
     )
     for source, values in source_values.items():
         if not isinstance(source, ConfigurationSource):
-            raise TypeError(
-                "candidates_by_source keys must be ConfigurationSource values"
-            )
+            raise TypeError("candidates_by_source keys must be ConfigurationSource values")
         if not isinstance(values, Mapping):
-            raise TypeError(
-                "candidates_by_source entries must be mappings"
-            )
+            raise TypeError("candidates_by_source entries must be mappings")
         _merge_candidates(
             candidates,
             source,
@@ -749,7 +899,7 @@ def _merge_candidates(
     candidates: dict[ConfigurationSource, dict[str, object]],
     source: ConfigurationSource,
     values: Mapping[str, object],
-    issues: list[ConfigurationIssue],
+    issues: list[_ConfigurationIssueView],
     *,
     owner: str,
 ) -> None:
@@ -793,7 +943,7 @@ def _resolve_field(
 ) -> tuple[
     object,
     ConfigurationSource | None,
-    list[ConfigurationIssue],
+    list[_ConfigurationIssueView],
 ]:
     policy = policy_for(specification.domain)
     issues = [
@@ -833,18 +983,13 @@ def _resolve_field(
 
         reference = present[0][1]
         if any(value != reference for _, value in present[1:]):
-            sources = ", ".join(
-                sorted(source.value for source, _ in present)
-            )
+            sources = ", ".join(sorted(source.value for source, _ in present))
             issues.append(
                 _error(
                     ConfigurationSource.RUNTIME_DERIVED,
                     name,
                     tuple(value for _, value in present),
-                    (
-                        "Equivalent sources supplied conflicting values "
-                        f"for {name!r}: {sources}."
-                    ),
+                    (f"Equivalent sources supplied conflicting values for {name!r}: {sources}."),
                     "Use one source at this tier or make all values agree.",
                 )
             )
@@ -877,8 +1022,8 @@ def _provenance(
     source: ConfigurationSource,
     provided_value: object,
     resolved_value: object,
-) -> ConfigurationProvenance:
-    return ConfigurationProvenance(
+) -> _ConfigurationProvenanceView:
+    return _model_contracts().provenance_factory(
         field_path=field_path,
         source=source,
         provided_value=provided_value,
@@ -892,9 +1037,10 @@ def _error(
     provided_value: object,
     message: str,
     remediation: str,
-) -> ConfigurationIssue:
-    return ConfigurationIssue(
-        severity=IssueSeverity.ERROR,
+) -> _ConfigurationIssueView:
+    contracts = _model_contracts()
+    return contracts.issue_factory(
+        severity=contracts.severity.ERROR,
         source=source,
         field_path=field_path,
         provided_value=provided_value,
@@ -904,12 +1050,13 @@ def _error(
 
 
 def _ordered_issues(
-    issues: list[ConfigurationIssue],
-) -> tuple[ConfigurationIssue, ...]:
+    issues: list[_ConfigurationIssueView],
+) -> tuple[_ConfigurationIssueView, ...]:
+    severity = _model_contracts().severity
     rank = {
-        IssueSeverity.ERROR: 0,
-        IssueSeverity.WARNING: 1,
-        IssueSeverity.INFO: 2,
+        severity.ERROR: 0,
+        severity.WARNING: 1,
+        severity.INFO: 2,
     }
     return tuple(
         sorted(

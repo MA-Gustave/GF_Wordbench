@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import os
 from pathlib import Path
 from typing import Final, Protocol, runtime_checkable
 
@@ -58,29 +58,21 @@ class PreflightCheck(StrEnum):
 
 @runtime_checkable
 class PreflightFilesystem(Protocol):
-    def normalize(self, path: Path) -> Path:
-        ...
+    def normalize(self, path: Path) -> Path: ...
 
-    def resolve(self, path: Path) -> Path:
-        ...
+    def resolve(self, path: Path) -> Path: ...
 
-    def exists(self, path: Path) -> bool:
-        ...
+    def exists(self, path: Path) -> bool: ...
 
-    def is_file(self, path: Path) -> bool:
-        ...
+    def is_file(self, path: Path) -> bool: ...
 
-    def is_directory(self, path: Path) -> bool:
-        ...
+    def is_directory(self, path: Path) -> bool: ...
 
-    def is_readable(self, path: Path) -> bool:
-        ...
+    def is_readable(self, path: Path) -> bool: ...
 
-    def is_executable(self, path: Path) -> bool:
-        ...
+    def is_executable(self, path: Path) -> bool: ...
 
-    def is_writable_directory(self, path: Path) -> bool:
-        ...
+    def is_writable_directory(self, path: Path) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,14 +88,10 @@ class PreflightIssue:
     def __post_init__(self) -> None:
         _require_non_empty_text("code", self.code)
         if not self.code.startswith("GF-WB-CONFIG-"):
-            raise ValueError(
-                "code must use the GF-WB-CONFIG-<NNN> domain"
-            )
+            raise ValueError("code must use the GF-WB-CONFIG-<NNN> domain")
         suffix = self.code.removeprefix("GF-WB-CONFIG-")
         if len(suffix) != 3 or not suffix.isdigit():
-            raise ValueError(
-                "code must use the GF-WB-CONFIG-<NNN> form"
-            )
+            raise ValueError("code must use the GF-WB-CONFIG-<NNN> form")
         if not isinstance(self.severity, IssueSeverity):
             raise TypeError("severity must be an IssueSeverity")
         if not isinstance(self.check, PreflightCheck):
@@ -130,22 +118,13 @@ class PreflightResult:
 
     def __post_init__(self) -> None:
         if not isinstance(self.configuration, RunConfig):
-            raise TypeError(
-                "configuration must be a RunConfig"
-            )
+            raise TypeError("configuration must be a RunConfig")
         if not isinstance(self.issues, tuple):
             raise TypeError("issues must be a tuple")
         if len(self.issues) > _MAX_ISSUES:
-            raise ValueError(
-                f"issues must contain at most {_MAX_ISSUES} entries"
-            )
-        if any(
-            not isinstance(issue, PreflightIssue)
-            for issue in self.issues
-        ):
-            raise TypeError(
-                "issues must contain PreflightIssue values"
-            )
+            raise ValueError(f"issues must contain at most {_MAX_ISSUES} entries")
+        if any(not isinstance(issue, PreflightIssue) for issue in self.issues):
+            raise TypeError("issues must contain PreflightIssue values")
         if not isinstance(self.checked_paths, tuple):
             raise TypeError("checked_paths must be a tuple")
 
@@ -157,14 +136,9 @@ class PreflightResult:
             for index, path in enumerate(self.checked_paths)
         )
         if len(
-            {
-                os.path.normcase(os.path.normpath(os.fspath(path)))
-                for path in normalized_paths
-            }
+            {os.path.normcase(os.path.normpath(os.fspath(path))) for path in normalized_paths}
         ) != len(normalized_paths):
-            raise ValueError(
-                "checked_paths must not contain duplicate paths"
-            )
+            raise ValueError("checked_paths must not contain duplicate paths")
         object.__setattr__(
             self,
             "checked_paths",
@@ -173,34 +147,19 @@ class PreflightResult:
 
     @property
     def succeeded(self) -> bool:
-        return not any(
-            issue.severity is IssueSeverity.ERROR
-            for issue in self.issues
-        )
+        return not any(issue.severity is IssueSeverity.ERROR for issue in self.issues)
 
     @property
     def errors(self) -> tuple[PreflightIssue, ...]:
-        return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is IssueSeverity.ERROR
-        )
+        return tuple(issue for issue in self.issues if issue.severity is IssueSeverity.ERROR)
 
     @property
     def warnings(self) -> tuple[PreflightIssue, ...]:
-        return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is IssueSeverity.WARNING
-        )
+        return tuple(issue for issue in self.issues if issue.severity is IssueSeverity.WARNING)
 
     @property
     def information(self) -> tuple[PreflightIssue, ...]:
-        return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is IssueSeverity.INFO
-        )
+        return tuple(issue for issue in self.issues if issue.severity is IssueSeverity.INFO)
 
     def require(self) -> RunConfig:
         if self.succeeded:
@@ -209,19 +168,12 @@ class PreflightResult:
         errors = self.errors
         detail_issues = errors[:_MAX_DETAIL_ISSUES]
         detail = "\n".join(
-            (
-                f"{issue.code} {issue.field_path}: "
-                f"{issue.message} "
-                f"Remediation: {issue.remediation}"
-            )
+            (f"{issue.code} {issue.field_path}: {issue.message} Remediation: {issue.remediation}")
             for issue in detail_issues
         )
         omitted = len(errors) - len(detail_issues)
         if omitted:
-            detail = (
-                f"{detail}\n"
-                f"{omitted} additional preflight error(s) omitted."
-            )
+            detail = f"{detail}\n{omitted} additional preflight error(s) omitted."
 
         first = errors[0]
         raise ConfigurationError(
@@ -289,9 +241,7 @@ class _LocalPreflightFilesystem:
             return False
 
 
-_LOCAL_FILESYSTEM: Final[PreflightFilesystem] = (
-    _LocalPreflightFilesystem()
-)
+_LOCAL_FILESYSTEM: Final[PreflightFilesystem] = _LocalPreflightFilesystem()
 
 
 class _IssueCollector:
@@ -375,15 +325,11 @@ def preflight_run(
     filesystem: PreflightFilesystem | None = None,
 ) -> PreflightResult:
     if not isinstance(configuration, RunConfig):
-        raise TypeError(
-            "configuration must be a RunConfig"
-        )
+        raise TypeError("configuration must be a RunConfig")
 
     fs = filesystem or _LOCAL_FILESYSTEM
     if not isinstance(fs, PreflightFilesystem):
-        raise TypeError(
-            "filesystem must satisfy PreflightFilesystem"
-        )
+        raise TypeError("filesystem must satisfy PreflightFilesystem")
 
     issues = _IssueCollector()
     checked_paths: list[Path] = []
@@ -415,9 +361,7 @@ def preflight_run(
         )
 
     source_field = (
-        "project.source_root"
-        if project is not None
-        else "language_context.language_directory"
+        "project.source_root" if project is not None else "language_context.language_directory"
     )
     source_root = _check_directory(
         fs,
@@ -431,11 +375,7 @@ def preflight_run(
         readable=True,
     )
 
-    if (
-        project is not None
-        and project_root is not None
-        and source_root is not None
-    ):
+    if project is not None and project_root is not None and source_root is not None:
         _check_containment(
             issues,
             check=PreflightCheck.SOURCE_ROOT,
@@ -444,8 +384,7 @@ def preflight_run(
             candidate=source_root,
             code="GF-WB-CONFIG-107",
             remediation=(
-                "Set sources.directory to a portable path "
-                "inside the validation-profile root."
+                "Set sources.directory to a portable path inside the validation-profile root."
             ),
         )
 
@@ -458,10 +397,7 @@ def preflight_run(
                 compatibility_root,
                 checked_paths,
             )
-            if (
-                project_root is not None
-                and normalized_compatibility_root != project_root
-            ):
+            if project_root is not None and normalized_compatibility_root != project_root:
                 issues.error(
                     code="GF-WB-CONFIG-108",
                     check=PreflightCheck.ENVIRONMENT_PROJECT_ROOT,
@@ -482,8 +418,7 @@ def preflight_run(
                 check=PreflightCheck.ENVIRONMENT_PROJECT_ROOT,
                 field_path="environment.validation_profile_root",
                 message=(
-                    "The resolved environment does not identify the "
-                    "loaded validation-profile root."
+                    "The resolved environment does not identify the loaded validation-profile root."
                 ),
                 remediation=(
                     "Resolve the explicit validation profile and rebuild "
@@ -496,10 +431,7 @@ def preflight_run(
                 profile_root,
                 checked_paths,
             )
-            if (
-                project_root is not None
-                and normalized_profile_root != project_root
-            ):
+            if project_root is not None and normalized_profile_root != project_root:
                 issues.error(
                     code="GF-WB-CONFIG-108",
                     check=PreflightCheck.ENVIRONMENT_PROJECT_ROOT,
@@ -551,10 +483,7 @@ def preflight_run(
                 code="GF-WB-CONFIG-116",
                 check=PreflightCheck.OUTPUT_ROOT,
                 field_path="environment.output_root",
-                message=(
-                    "The output root is not writable for run "
-                    "directory allocation."
-                ),
+                message=("The output root is not writable for run directory allocation."),
                 remediation=(
                     "Choose an existing writable output directory "
                     "outside language sources and validation assets."
@@ -636,13 +565,9 @@ def _check_project_config(
             code="GF-WB-CONFIG-103",
             check=PreflightCheck.PROJECT_CONFIG,
             field_path="project.project_file",
-            message=(
-                "The authoritative active-project configuration "
-                "does not exist."
-            ),
+            message=("The authoritative active-project configuration does not exist."),
             remediation=(
-                "Restore project/project.toml or select the "
-                "correct GF Wordbench workspace."
+                "Restore project/project.toml or select the correct GF Wordbench workspace."
             ),
             path=normalized,
         )
@@ -652,13 +577,9 @@ def _check_project_config(
             code="GF-WB-CONFIG-104",
             check=PreflightCheck.PROJECT_CONFIG,
             field_path="project.project_file",
-            message=(
-                "The authoritative project configuration is not "
-                "a readable regular file."
-            ),
+            message=("The authoritative project configuration is not a readable regular file."),
             remediation=(
-                "Provide a readable project.toml file and correct "
-                "filesystem permissions."
+                "Provide a readable project.toml file and correct filesystem permissions."
             ),
             path=normalized,
         )
@@ -671,8 +592,7 @@ def _check_project_config(
             candidate=normalized,
             code="GF-WB-CONFIG-109",
             remediation=(
-                "Use the canonical project.toml located directly "
-                "under the active project root."
+                "Use the canonical project.toml located directly under the active project root."
             ),
         )
 
@@ -695,8 +615,7 @@ def _check_gf_executable(
             field_path="environment.gf_executable",
             message="The resolved GF executable does not exist.",
             remediation=(
-                "Select the installed gf or gf.exe executable "
-                "and rebuild the resolved environment."
+                "Select the installed gf or gf.exe executable and rebuild the resolved environment."
             ),
             path=normalized,
         )
@@ -706,10 +625,7 @@ def _check_gf_executable(
             code="GF-WB-CONFIG-111",
             check=PreflightCheck.GF_EXECUTABLE,
             field_path="environment.gf_executable",
-            message=(
-                "The resolved GF executable is not an executable "
-                "regular file."
-            ),
+            message=("The resolved GF executable is not an executable regular file."),
             remediation=(
                 "Select a readable executable file and correct "
                 "its execute permissions where applicable."
@@ -737,9 +653,7 @@ def _check_gf_path(
         )
         return
 
-    for index, path in enumerate(
-        configuration.environment.gf_path
-    ):
+    for index, path in enumerate(configuration.environment.gf_path):
         _check_directory(
             fs,
             issues,
@@ -759,10 +673,7 @@ def _check_mode_policy(
 ) -> None:
     project = configuration.validation_profile
 
-    if (
-        configuration.mode is ValidationMode.QUICK
-        and configuration.target is None
-    ):
+    if configuration.mode is ValidationMode.QUICK and configuration.target is None:
         issues.error(
             code="GF-WB-CONFIG-120",
             check=PreflightCheck.MODE,
@@ -780,10 +691,7 @@ def _check_mode_policy(
                 code="GF-WB-CONFIG-121",
                 check=PreflightCheck.MODE,
                 field_path="project",
-                message=(
-                    "Checkpoint mode requires an explicit compatible "
-                    "validation profile."
-                ),
+                message=("Checkpoint mode requires an explicit compatible validation profile."),
                 remediation=(
                     "Select a validation profile that declares checkpoint "
                     "modules for the resolved language."
@@ -796,8 +704,7 @@ def _check_mode_policy(
                 field_path="selected_checkpoints",
                 message="Checkpoint mode selected no checkpoint modules.",
                 remediation=(
-                    "Resolve at least one configured checkpoint in "
-                    "validation-profile order."
+                    "Resolve at least one configured checkpoint in validation-profile order."
                 ),
             )
 
@@ -807,10 +714,7 @@ def _check_mode_policy(
                 code="GF-WB-CONFIG-122",
                 check=PreflightCheck.MODE,
                 field_path="project",
-                message=(
-                    "Release mode requires an explicit compatible "
-                    "validation profile."
-                ),
+                message=("Release mode requires an explicit compatible validation profile."),
                 remediation=(
                     "Select a validation profile that declares release "
                     "entrypoints, scenarios, and release policy."
@@ -822,10 +726,7 @@ def _check_mode_policy(
                 check=PreflightCheck.MODE,
                 field_path="selected_entrypoints",
                 message="Release mode selected no entrypoint modules.",
-                remediation=(
-                    "Resolve every required release entrypoint before "
-                    "starting the run."
-                ),
+                remediation=("Resolve every required release entrypoint before starting the run."),
             )
 
 
@@ -843,14 +744,9 @@ def _check_target(
 
     if target.kind is TargetKind.PROJECT:
         expected_identity = (
-            str(project.project_id)
-            if project is not None
-            else configuration.language_key
+            str(project.project_id) if project is not None else configuration.language_key
         )
-        if (
-            target.value is not None
-            and target.value != expected_identity
-        ):
+        if target.value is not None and target.value != expected_identity:
             issues.error(
                 code="GF-WB-CONFIG-123",
                 check=PreflightCheck.TARGET,
@@ -872,30 +768,19 @@ def _check_target(
                 code="GF-WB-CONFIG-124",
                 check=PreflightCheck.TARGET,
                 field_path="target.value",
-                message=(
-                    "Scenario targets require an explicit compatible "
-                    "validation profile."
-                ),
+                message=("Scenario targets require an explicit compatible validation profile."),
                 remediation=(
                     "Select a validation profile that declares the requested "
                     "scenario before starting the run."
                 ),
             )
-        elif target.value not in {
-            str(value)
-            for value in project.validation.all_scenarios
-        }:
+        elif target.value not in {str(value) for value in project.validation.all_scenarios}:
             issues.error(
                 code="GF-WB-CONFIG-124",
                 check=PreflightCheck.TARGET,
                 field_path="target.value",
-                message=(
-                    "The scenario target is not declared by the "
-                    "validation profile."
-                ),
-                remediation=(
-                    "Select a scenario ID declared in project.toml."
-                ),
+                message=("The scenario target is not declared by the validation profile."),
+                remediation=("Select a scenario ID declared in project.toml."),
             )
         return
 
@@ -931,13 +816,9 @@ def _check_target(
             check=PreflightCheck.TARGET,
             field_path="target.value",
             message=(
-                "The selected file or module target does not "
-                "identify an existing regular file."
+                "The selected file or module target does not identify an existing regular file."
             ),
-            remediation=(
-                "Select an existing GF source file owned by the "
-                "resolved language."
-            ),
+            remediation=("Select an existing GF source file owned by the resolved language."),
             path=normalized,
         )
         return
@@ -959,9 +840,7 @@ def _check_target(
         root=configuration.source_root,
         candidate=normalized,
         code="GF-WB-CONFIG-128",
-        remediation=(
-            "Select a target contained by the resolved language directory."
-        ),
+        remediation=("Select a target contained by the resolved language directory."),
     )
 
 
@@ -982,12 +861,10 @@ def _check_modules(
         declared_entrypoints: tuple[Path, ...] | None = None
     else:
         declared_checkpoints = tuple(
-            resolve_module_path(source_root, path)
-            for path in project.modules.checkpoints
+            resolve_module_path(source_root, path) for path in project.modules.checkpoints
         )
         declared_entrypoints = tuple(
-            resolve_module_path(source_root, path)
-            for path in project.modules.entrypoints
+            resolve_module_path(source_root, path) for path in project.modules.entrypoints
         )
 
     _check_module_collection(
@@ -1015,28 +892,18 @@ def _check_modules(
         undeclared_code="GF-WB-CONFIG-132",
     )
 
-    if (
-        project is not None
-        and configuration.mode is ValidationMode.RELEASE
-    ):
+    if project is not None and configuration.mode is ValidationMode.RELEASE:
         assert declared_entrypoints is not None
-        selected_keys = {
-            _path_key(path)
-            for path in configuration.selected_entrypoints
-        }
+        selected_keys = {_path_key(path) for path in configuration.selected_entrypoints}
         for path in declared_entrypoints:
             if _path_key(path) not in selected_keys:
                 issues.error(
                     code="GF-WB-CONFIG-133",
                     check=PreflightCheck.ENTRYPOINTS,
                     field_path="selected_entrypoints",
-                    message=(
-                        "Release mode omitted a configured "
-                        "entrypoint."
-                    ),
+                    message=("Release mode omitted a configured entrypoint."),
                     remediation=(
-                        "Include every configured entrypoint in "
-                        "validation-profile order."
+                        "Include every configured entrypoint in validation-profile order."
                     ),
                     path=path,
                 )
@@ -1055,11 +922,7 @@ def _check_module_collection(
     missing_code: str,
     undeclared_code: str,
 ) -> None:
-    declared_keys = (
-        {_path_key(path) for path in declared}
-        if declared is not None
-        else None
-    )
+    declared_keys = {_path_key(path) for path in declared} if declared is not None else None
 
     for index, path in enumerate(selected):
         normalized = _normalized_checked_path(
@@ -1075,10 +938,7 @@ def _check_module_collection(
             root=source_root,
             candidate=normalized,
             code=undeclared_code,
-            remediation=(
-                "Select only GF modules inside the resolved language "
-                "directory."
-            ),
+            remediation=("Select only GF modules inside the resolved language directory."),
         )
         if normalized.suffix.casefold() != ".gf":
             issues.error(
@@ -1094,20 +954,13 @@ def _check_module_collection(
                 code=missing_code,
                 check=check,
                 field_path=item_field,
-                message=(
-                    "The selected module does not identify an "
-                    "existing regular file."
-                ),
+                message=("The selected module does not identify an existing regular file."),
                 remediation=(
-                    "Restore the selected module or correct the resolved "
-                    "run configuration."
+                    "Restore the selected module or correct the resolved run configuration."
                 ),
                 path=normalized,
             )
-        if (
-            declared_keys is not None
-            and _path_key(normalized) not in declared_keys
-        ):
+        if declared_keys is not None and _path_key(normalized) not in declared_keys:
             issues.error(
                 code=undeclared_code,
                 check=check,
@@ -1134,48 +987,32 @@ def _check_scenarios(
 ) -> None:
     project = configuration.validation_profile
     if project is None:
-        for index, _scenario_id in enumerate(
-            configuration.selected_scenarios
-        ):
+        for index, _scenario_id in enumerate(configuration.selected_scenarios):
             issues.error(
                 code="GF-WB-CONFIG-134",
                 check=PreflightCheck.SCENARIOS,
                 field_path=f"selected_scenarios[{index}]",
-                message=(
-                    "Scenario selection requires an explicit compatible "
-                    "validation profile."
-                ),
+                message=("Scenario selection requires an explicit compatible validation profile."),
                 remediation=(
-                    "Select a validation profile that declares scenarios for "
-                    "the resolved language."
+                    "Select a validation profile that declares scenarios for the resolved language."
                 ),
             )
         return
 
     assert project_paths is not None
-    declared = tuple(
-        str(value)
-        for value in project.validation.all_scenarios
-    )
+    declared = tuple(str(value) for value in project.validation.all_scenarios)
     declared_set = set(declared)
     selected_set = set(configuration.selected_scenarios)
 
-    for index, scenario_id in enumerate(
-        configuration.selected_scenarios
-    ):
+    for index, scenario_id in enumerate(configuration.selected_scenarios):
         field_path = f"selected_scenarios[{index}]"
         if scenario_id not in declared_set:
             issues.error(
                 code="GF-WB-CONFIG-134",
                 check=PreflightCheck.SCENARIOS,
                 field_path=field_path,
-                message=(
-                    "The selected scenario is not declared by "
-                    "the validation profile."
-                ),
-                remediation=(
-                    "Select only scenario IDs declared in project.toml."
-                ),
+                message=("The selected scenario is not declared by the validation profile."),
+                remediation=("Select only scenario IDs declared in project.toml."),
             )
             continue
 
@@ -1193,14 +1030,8 @@ def _check_scenarios(
                 code="GF-WB-CONFIG-135",
                 check=PreflightCheck.SCENARIOS,
                 field_path=field_path,
-                message=(
-                    "The selected scenario file is missing or "
-                    "is not a regular file."
-                ),
-                remediation=(
-                    "Restore the canonical validation/scenarios/"
-                    "<scenario-id>.gfs file."
-                ),
+                message=("The selected scenario file is missing or is not a regular file."),
+                remediation=("Restore the canonical validation/scenarios/<scenario-id>.gfs file."),
                 path=normalized,
             )
         elif not fs.is_readable(normalized):
@@ -1209,10 +1040,7 @@ def _check_scenarios(
                 check=PreflightCheck.SCENARIOS,
                 field_path=field_path,
                 message="The selected scenario file is not readable.",
-                remediation=(
-                    "Correct file permissions without changing "
-                    "the scenario identity."
-                ),
+                remediation=("Correct file permissions without changing the scenario identity."),
                 path=normalized,
             )
 
@@ -1227,10 +1055,7 @@ def _check_scenarios(
                         "Release mode omitted a required validation-profile "
                         f"scenario: {scenario_id}."
                     ),
-                    remediation=(
-                        "Include every required scenario in "
-                        "validation-profile order."
-                    ),
+                    remediation=("Include every required scenario in validation-profile order."),
                 )
 
 
@@ -1241,27 +1066,18 @@ def _check_release_policy(
     project = configuration.validation_profile
 
     if project is None:
-        if (
-            configuration.mode is ValidationMode.RELEASE
-            or configuration.release_requires_pgf
-        ):
+        if configuration.mode is ValidationMode.RELEASE or configuration.release_requires_pgf:
             issues.error(
                 code="GF-WB-CONFIG-138",
                 check=PreflightCheck.RELEASE_POLICY,
                 field_path="project",
-                message=(
-                    "Release policy requires an explicit compatible "
-                    "validation profile."
-                ),
+                message=("Release policy requires an explicit compatible validation profile."),
                 remediation=(
                     "Select a validation profile before enabling release "
                     "policy or release validation."
                 ),
             )
-    elif (
-        configuration.release_requires_pgf
-        != project.validation.release_requires_pgf
-    ):
+    elif configuration.release_requires_pgf != project.validation.release_requires_pgf:
         issues.error(
             code="GF-WB-CONFIG-138",
             check=PreflightCheck.RELEASE_POLICY,
@@ -1285,10 +1101,7 @@ def _check_release_policy(
             check=PreflightCheck.RELEASE_POLICY,
             field_path="skip_version_probe",
             message="Release mode cannot skip the GF version probe.",
-            remediation=(
-                "Enable the version probe and apply the documented "
-                "compatibility policy."
-            ),
+            remediation=("Enable the version probe and apply the documented compatibility policy."),
         )
 
     if configuration.no_compile:
@@ -1296,12 +1109,8 @@ def _check_release_policy(
             code="GF-WB-CONFIG-140",
             check=PreflightCheck.RELEASE_POLICY,
             field_path="no_compile",
-            message=(
-                "Release mode cannot omit required compilation."
-            ),
-            remediation=(
-                "Enable compilation for release validation."
-            ),
+            message=("Release mode cannot omit required compilation."),
+            remediation=("Enable compilation for release validation."),
         )
 
 
@@ -1309,17 +1118,14 @@ def _copy_compatibility_warnings(
     issues: _IssueCollector,
     configuration: RunConfig,
 ) -> None:
-    for index, warning in enumerate(
-        configuration.compatibility_warnings
-    ):
+    for index, warning in enumerate(configuration.compatibility_warnings):
         issues.warning(
             code="GF-WB-CONFIG-141",
             check=PreflightCheck.COMPATIBILITY,
             field_path=f"compatibility_warnings[{index}]",
             message=warning,
             remediation=(
-                "Review the compatibility warning before relying "
-                "on the resulting evidence."
+                "Review the compatibility warning before relying on the resulting evidence."
             ),
         )
 
@@ -1348,8 +1154,7 @@ def _check_directory(
             field_path=field_path,
             message="The required directory does not exist.",
             remediation=(
-                "Provide the documented directory and rebuild "
-                "the resolved configuration."
+                "Provide the documented directory and rebuild the resolved configuration."
             ),
             path=normalized,
         )
@@ -1419,10 +1224,7 @@ def _check_output_root_safety(
                 code="GF-WB-CONFIG-142",
                 check=PreflightCheck.OUTPUT_ROOT,
                 field_path="environment.output_root",
-                message=(
-                    "The output root overlaps a protected path: "
-                    f"{label}."
-                ),
+                message=(f"The output root overlaps a protected path: {label}."),
                 remediation=(
                     "Choose a dedicated machine-local output root outside "
                     "language sources and validation-profile assets."
@@ -1451,9 +1253,7 @@ def _check_containment(
             code=code,
             check=check,
             field_path=field_path,
-            message=(
-                "The resolved path escapes its approved ownership root."
-            ),
+            message=("The resolved path escapes its approved ownership root."),
             remediation=remediation,
             path=candidate,
         )
@@ -1477,10 +1277,7 @@ def _resolve_target_path(
         TargetKind.CHECKPOINT,
         TargetKind.ENTRYPOINT,
     }:
-        if (
-            kind is not TargetKind.FILE
-            and raw.suffix.casefold() != ".gf"
-        ):
+        if kind is not TargetKind.FILE and raw.suffix.casefold() != ".gf":
             return None
         return require_lexical_containment(
             configuration.source_root,
@@ -1517,9 +1314,7 @@ def _deduplicate_paths(
 
 
 def _path_key(path: Path) -> str:
-    return os.path.normcase(
-        os.path.normpath(os.fspath(path))
-    )
+    return os.path.normcase(os.path.normpath(os.fspath(path)))
 
 
 def _paths_overlap(left: Path, right: Path) -> bool:

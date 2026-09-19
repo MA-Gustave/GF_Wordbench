@@ -1,10 +1,13 @@
 """Diagnostic-result panel for the GF Wordbench Qt entrypoint."""
+
 from __future__ import annotations
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
 from typing import Final, TypeVar
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -23,6 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 __all__ = (
     "DiagnosticEvidenceAction",
     "DiagnosticEvidenceActionKind",
@@ -42,8 +46,9 @@ _DISPLAY_LIMIT: Final[int] = 48_000
 _ITEM_ID_ROLE: Final[int] = int(Qt.ItemDataRole.UserRole)
 _E = TypeVar("_E", bound=StrEnum)
 _T = TypeVar("_T")
-@unique
 
+
+@unique
 class DiagnosticPanelGroup(StrEnum):
     FRAMEWORK_ENVIRONMENT = "framework_environment"
     DIRECT_FAILURES = "direct_failures"
@@ -54,8 +59,9 @@ class DiagnosticPanelGroup(StrEnum):
     ARTIFACT_FAILURES = "artifact_failures"
     NONBLOCKING_SCAN_FINDINGS = "nonblocking_scan_findings"
     REGRESSIONS = "regressions"
-@unique
 
+
+@unique
 class DiagnosticEvidenceActionKind(StrEnum):
     STDOUT = "stdout"
     STDERR = "stderr"
@@ -64,6 +70,8 @@ class DiagnosticEvidenceActionKind(StrEnum):
     SOURCE_LOCATION = "source_location"
     SCENARIO_OUTPUT = "scenario_output"
     GOLD_DIFF = "gold_diff"
+
+
 _GROUP_ORDER: Final[tuple[DiagnosticPanelGroup, ...]] = tuple(DiagnosticPanelGroup)
 _GROUP_TITLES: Final[dict[DiagnosticPanelGroup, str]] = {
     DiagnosticPanelGroup.FRAMEWORK_ENVIRONMENT: "Framework and environment errors",
@@ -86,14 +94,15 @@ _ACTION_LABELS: Final[dict[DiagnosticEvidenceActionKind, str]] = {
     DiagnosticEvidenceActionKind.GOLD_DIFF: "Open gold diff",
 }
 
-@dataclass(frozen=True, slots=True)
 
+@dataclass(frozen=True, slots=True)
 class DiagnosticSourceLocation:
     path: Path
     line: int | None = None
     column: int | None = None
     end_line: int | None = None
     end_column: int | None = None
+
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", _coerce_path(self.path, "path"))
         for name in ("line", "column", "end_line", "end_column"):
@@ -104,6 +113,7 @@ class DiagnosticSourceLocation:
             raise ValueError("end_column requires column")
         if self.line is not None and self.end_line is not None and self.end_line < self.line:
             raise ValueError("end_line must not precede line")
+
     def display_text(self) -> str:
         result = self.path.as_posix()
         if self.line is not None:
@@ -112,13 +122,14 @@ class DiagnosticSourceLocation:
                 result += f":{self.column}"
         return result
 
-@dataclass(frozen=True, slots=True)
 
+@dataclass(frozen=True, slots=True)
 class DiagnosticEvidenceAction:
     kind: DiagnosticEvidenceActionKind
     target: Path
     available: bool = True
     location: DiagnosticSourceLocation | None = None
+
     def __post_init__(self) -> None:
         object.__setattr__(
             self,
@@ -128,9 +139,7 @@ class DiagnosticEvidenceAction:
         object.__setattr__(self, "target", _coerce_path(self.target, "target"))
         if type(self.available) is not bool:
             raise TypeError("available must be bool")
-        if self.location is not None and not isinstance(
-            self.location, DiagnosticSourceLocation
-        ):
+        if self.location is not None and not isinstance(self.location, DiagnosticSourceLocation):
             raise TypeError("location must be DiagnosticSourceLocation or None")
         if self.kind is DiagnosticEvidenceActionKind.SOURCE_LOCATION and self.location is None:
             object.__setattr__(
@@ -138,14 +147,16 @@ class DiagnosticEvidenceAction:
                 "location",
                 DiagnosticSourceLocation(self.target),
             )
+
     @property
     def label(self) -> str:
         return _ACTION_LABELS[self.kind]
+
     def is_enabled(self) -> bool:
         return self.available and self.target.exists()
 
-@dataclass(frozen=True, slots=True)
 
+@dataclass(frozen=True, slots=True)
 class DiagnosticPanelItem:
     item_id: str
     group: DiagnosticPanelGroup
@@ -159,6 +170,7 @@ class DiagnosticPanelItem:
     location: DiagnosticSourceLocation | None = None
     raw_excerpt: str = ""
     actions: tuple[DiagnosticEvidenceAction, ...] = ()
+
     def __post_init__(self) -> None:
         object.__setattr__(self, "item_id", _text(self.item_id, "item_id", _MAX_IDENTIFIER))
         object.__setattr__(
@@ -185,9 +197,7 @@ class DiagnosticPanelItem:
             "blockers",
             _unique_texts(self.blockers, "blockers", _MAX_SUBJECT),
         )
-        if self.location is not None and not isinstance(
-            self.location, DiagnosticSourceLocation
-        ):
+        if self.location is not None and not isinstance(self.location, DiagnosticSourceLocation):
             raise TypeError("location must be DiagnosticSourceLocation or None")
         object.__setattr__(
             self,
@@ -199,6 +209,7 @@ class DiagnosticPanelItem:
         if len(kinds) != len(set(kinds)):
             raise ValueError("actions must contain unique action kinds")
         object.__setattr__(self, "actions", actions)
+
     def searchable_text(self) -> str:
         location = "" if self.location is None else self.location.display_text()
         return " ".join(
@@ -215,11 +226,12 @@ class DiagnosticPanelItem:
             )
         ).casefold()
 
-@dataclass(frozen=True, slots=True)
 
+@dataclass(frozen=True, slots=True)
 class DiagnosticPanelModel:
     items: tuple[DiagnosticPanelItem, ...] = ()
     selected_item_id: str | None = None
+
     def __post_init__(self) -> None:
         items = _typed_tuple(self.items, DiagnosticPanelItem, "items")
         if len(items) > _MAX_ITEMS:
@@ -238,9 +250,11 @@ class DiagnosticPanelModel:
             object.__setattr__(self, "selected_item_id", selected)
         object.__setattr__(self, "items", items)
 
+
 class DiagnosticsPanel(QWidget):
     evidence_action_requested = Signal(object)
     selected_item_changed = Signal(str)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._model = DiagnosticPanelModel()
@@ -256,8 +270,10 @@ class DiagnosticsPanel(QWidget):
         self._build_ui()
         self._connect_signals()
         self._render()
+
     def model(self) -> DiagnosticPanelModel:
         return self._model
+
     def set_model(self, model: DiagnosticPanelModel) -> None:
         if not isinstance(model, DiagnosticPanelModel):
             raise TypeError("model must be DiagnosticPanelModel")
@@ -266,6 +282,7 @@ class DiagnosticsPanel(QWidget):
         self._render()
         if model.selected_item_id is not None:
             self.select_item(model.selected_item_id)
+
     def set_items(
         self,
         items: Iterable[DiagnosticPanelItem],
@@ -273,14 +290,17 @@ class DiagnosticsPanel(QWidget):
         selected_item_id: str | None = None,
     ) -> None:
         self.set_model(DiagnosticPanelModel(tuple(items), selected_item_id))
+
     def clear(self) -> None:
         self.set_model(DiagnosticPanelModel())
+
     def selected_item(self) -> DiagnosticPanelItem | None:
-        current = self._tree.currentItem()
-        if current is None:
+        current: object = self._tree.currentItem()
+        if not isinstance(current, QTreeWidgetItem):
             return None
         item_id = current.data(0, _ITEM_ID_ROLE)
         return self._items_by_id.get(item_id) if isinstance(item_id, str) else None
+
     def select_item(self, item_id: str) -> bool:
         canonical = _text(item_id, "item_id", _MAX_IDENTIFIER)
         root = self._tree.invisibleRootItem()
@@ -293,8 +313,10 @@ class DiagnosticsPanel(QWidget):
                     self._tree.scrollToItem(row)
                     return True
         return False
+
     def refresh_action_availability(self) -> None:
         self._update_actions(self.selected_item())
+
     def _build_ui(self) -> None:
         self.setObjectName("diagnosticsPanel")
         self.setAccessibleName(self.tr("Diagnostic results"))
@@ -325,6 +347,7 @@ class DiagnosticsPanel(QWidget):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         layout.addWidget(splitter)
+
     def _build_tree(self, parent: QWidget) -> QTreeWidget:
         tree = QTreeWidget(parent)
         tree.setAccessibleName(self.tr("Diagnostic result table"))
@@ -348,6 +371,7 @@ class DiagnosticsPanel(QWidget):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         return tree
+
     def _build_detail(self, parent: QWidget) -> QWidget:
         container = QWidget(parent)
         layout = QVBoxLayout(container)
@@ -375,26 +399,22 @@ class DiagnosticsPanel(QWidget):
             button = QPushButton(self.tr(_ACTION_LABELS[kind]), group)
             button.setAccessibleName(self.tr(_ACTION_LABELS[kind]))
             button.setEnabled(False)
-            button.clicked.connect(
-                lambda checked=False, value=kind: self._request_action(value)
-            )
+            button.clicked.connect(lambda checked=False, value=kind: self._request_action(value))
             self._action_buttons[kind] = button
             action_layout.addWidget(button)
         action_layout.addStretch(1)
         group_layout.addLayout(action_layout)
         layout.addWidget(group)
         return container
+
     def _connect_signals(self) -> None:
         self._group_filter.currentIndexChanged.connect(self._render)
         self._search.textChanged.connect(self._render)
         self._tree.currentItemChanged.connect(self._selection_changed)
+
     def _render(self, *_: object) -> None:
         current = self.selected_item()
-        selected_id = (
-            current.item_id
-            if current is not None
-            else self._model.selected_item_id
-        )
+        selected_id = current.item_id if current is not None else self._model.selected_item_id
         selected_group = self._group_filter.currentData()
         query = self._search.text().strip().casefold()
         visible = 0
@@ -406,8 +426,7 @@ class DiagnosticsPanel(QWidget):
             items = tuple(
                 item
                 for item in self._model.items
-                if item.group is group
-                and (not query or query in item.searchable_text())
+                if item.group is group and (not query or query in item.searchable_text())
             )
             if not items:
                 continue
@@ -443,6 +462,7 @@ class DiagnosticsPanel(QWidget):
             self._select_first()
         if self.selected_item() is None:
             self._show_item(None)
+
     def _select_first(self) -> None:
         root = self._tree.invisibleRootItem()
         for index in range(root.childCount()):
@@ -450,6 +470,7 @@ class DiagnosticsPanel(QWidget):
             if group.childCount():
                 self._tree.setCurrentItem(group.child(0))
                 return
+
     def _selection_changed(
         self,
         current: QTreeWidgetItem | None,
@@ -460,6 +481,7 @@ class DiagnosticsPanel(QWidget):
         self._show_item(item)
         if item is not None:
             self.selected_item_changed.emit(item.item_id)
+
     def _show_item(self, item: DiagnosticPanelItem | None) -> None:
         if item is None:
             self._detail_subject.clear()
@@ -478,12 +500,11 @@ class DiagnosticsPanel(QWidget):
         self._detail_subject.setText(item.subject)
         self._detail_status.setText(" · ".join(status))
         self._detail_location.setText(
-            self.tr("Not available")
-            if item.location is None
-            else item.location.display_text()
+            self.tr("Not available") if item.location is None else item.location.display_text()
         )
         self._detail_text.setPlainText(_detail_text(item))
         self._update_actions(item)
+
     def _update_actions(self, item: DiagnosticPanelItem | None) -> None:
         self._current_actions = (
             {} if item is None else {action.kind: action for action in item.actions}
@@ -496,17 +517,18 @@ class DiagnosticsPanel(QWidget):
             elif not action.available:
                 tooltip = self.tr("This action is not available for this result.")
             elif not action.target.exists():
-                tooltip = (
-                    self.tr("The referenced artifact does not exist: %1")
-                    .replace("%1", action.target.as_posix())
+                tooltip = self.tr("The referenced artifact does not exist: %1").replace(
+                    "%1", action.target.as_posix()
                 )
             else:
                 tooltip = action.target.as_posix()
             button.setToolTip(tooltip)
+
     def _request_action(self, kind: DiagnosticEvidenceActionKind) -> None:
         action = self._current_actions.get(kind)
         if action is not None and action.is_enabled():
             self.evidence_action_requested.emit(action)
+
 
 def _detail_text(item: DiagnosticPanelItem) -> str:
     parts = [item.message]
@@ -525,13 +547,17 @@ def _detail_text(item: DiagnosticPanelItem) -> str:
         + f"\n\n[Diagnostic detail truncated in the GUI: {omitted} characters omitted]"
     )
 
+
 def _coerce_enum(value: object, enum_type: type[_E], field: str) -> _E:
     if isinstance(value, enum_type):
         return value
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be a string or {enum_type.__name__}")
     try:
         return enum_type(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{field} has an unsupported value: {value!r}") from exc
+
 
 def _text(value: object, field: str, maximum: int) -> str:
     if not isinstance(value, str):
@@ -540,8 +566,10 @@ def _text(value: object, field: str, maximum: int) -> str:
         raise ValueError(f"{field} must not be empty")
     return _plain_text(value, field, maximum)
 
+
 def _optional_text(value: object, field: str, maximum: int) -> str:
     return "" if value == "" else _text(value, field, maximum)
+
 
 def _plain_text(value: object, field: str, maximum: int) -> str:
     if not isinstance(value, str):
@@ -552,12 +580,14 @@ def _plain_text(value: object, field: str, maximum: int) -> str:
         raise ValueError(f"{field} exceeds {maximum} characters")
     return value
 
+
 def _coerce_path(value: object, field: str) -> Path:
     if not isinstance(value, (str, Path)):
         raise TypeError(f"{field} must be a string or Path")
     if "\x00" in str(value):
         raise ValueError(f"{field} must not contain NUL")
     return Path(value)
+
 
 def _positive_or_none(value: object, field: str) -> None:
     if value is None:
@@ -566,6 +596,7 @@ def _positive_or_none(value: object, field: str) -> None:
         raise TypeError(f"{field} must be an integer or None")
     if value < 1:
         raise ValueError(f"{field} must be positive")
+
 
 def _unique_texts(
     values: Iterable[str],
@@ -578,6 +609,7 @@ def _unique_texts(
     if len(result) != len(set(result)):
         raise ValueError(f"{field} must not contain duplicates")
     return result
+
 
 def _typed_tuple(
     values: Iterable[_T],

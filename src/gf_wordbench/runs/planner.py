@@ -70,9 +70,7 @@ class PlannedStage:
         if self.stage_id in self.prerequisites:
             raise ValueError("a stage cannot depend on itself")
         if self.timeout_sec is not None:
-            if isinstance(self.timeout_sec, bool) or not isinstance(
-                self.timeout_sec, int
-            ):
+            if isinstance(self.timeout_sec, bool) or not isinstance(self.timeout_sec, int):
                 raise TypeError("timeout_sec must be an integer or None")
             if self.timeout_sec < 1:
                 raise ValueError("timeout_sec must be positive")
@@ -114,9 +112,7 @@ class RunPlan:
     def __post_init__(self) -> None:
         if not isinstance(self.mode, ValidationMode):
             raise TypeError("mode must be a ValidationMode")
-        if self.target is not None and not isinstance(
-            self.target, ValidationTarget
-        ):
+        if self.target is not None and not isinstance(self.target, ValidationTarget):
             raise TypeError("target must be a ValidationTarget or None")
         if not isinstance(self.stages, tuple):
             raise TypeError("stages must be a tuple")
@@ -138,10 +134,7 @@ class RunPlan:
                         f"{prerequisite.value}"
                     )
                 if positions[prerequisite] >= positions[stage.stage_id]:
-                    raise ValueError(
-                        f"{prerequisite.value} must precede "
-                        f"{stage.stage_id.value}"
-                    )
+                    raise ValueError(f"{prerequisite.value} must precede {stage.stage_id.value}")
 
         for name, values, expected_type in (
             ("selected_checkpoints", self.selected_checkpoints, Path),
@@ -151,9 +144,7 @@ class RunPlan:
             if not isinstance(values, tuple):
                 raise TypeError(f"{name} must be a tuple")
             if any(not isinstance(value, expected_type) for value in values):
-                raise TypeError(
-                    f"{name} contains an invalid {expected_type.__name__} value"
-                )
+                raise TypeError(f"{name} contains an invalid {expected_type.__name__} value")
             if len(set(values)) != len(values):
                 raise ValueError(f"{name} must not contain duplicates")
 
@@ -190,9 +181,7 @@ class RunPlan:
     @property
     def skipped_stage_ids(self) -> tuple[StageId, ...]:
         return tuple(
-            stage.stage_id
-            for stage in self.stages
-            if stage.requirement is StageRequirement.SKIPPED
+            stage.stage_id for stage in self.stages if stage.requirement is StageRequirement.SKIPPED
         )
 
     def stage(self, stage_id: StageId) -> PlannedStage:
@@ -304,9 +293,7 @@ def resolve_execution_plan(
     )
 
     if request.mode is not ValidationMode.RELEASE:
-        warnings.append(
-            f"{request.mode.value} mode cannot establish release eligibility"
-        )
+        warnings.append(f"{request.mode.value} mode cannot establish release eligibility")
 
     return RunPlan(
         mode=request.mode,
@@ -410,11 +397,7 @@ def _enabled_stages(request: RunConfig) -> frozenset[StageId]:
             }
         )
 
-    if (
-        request.release_requires_pgf
-        and request.selected_entrypoints
-        and not request.no_compile
-    ):
+    if request.release_requires_pgf and request.selected_entrypoints and not request.no_compile:
         enabled.add(StageId.BUILD_PGF)
 
     if request.diff_previous:
@@ -447,10 +430,14 @@ def _required_stages(
     if not request.no_compile:
         required.add(StageId.COMPILE_SOURCES)
 
-    if request.mode in {
-        ValidationMode.CHECKPOINT,
-        ValidationMode.RELEASE,
-    } and StageId.COMPILE_CHECKPOINTS in enabled:
+    if (
+        request.mode
+        in {
+            ValidationMode.CHECKPOINT,
+            ValidationMode.RELEASE,
+        }
+        and StageId.COMPILE_CHECKPOINTS in enabled
+    ):
         required.add(StageId.COMPILE_CHECKPOINTS)
 
     if request.mode is ValidationMode.RELEASE:
@@ -540,10 +527,7 @@ def _validate_preflight(
 
     if not gf_available and not request.no_compile:
         raise ValueError("GF is unavailable for the resolved execution plan")
-    if (
-        request.mode is ValidationMode.RELEASE
-        and not version_compatible
-    ):
+    if request.mode is ValidationMode.RELEASE and not version_compatible:
         raise ValueError("release mode requires a compatible GF version")
     if (
         request.mode is ValidationMode.RELEASE

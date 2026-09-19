@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum, unique
 from typing import Final
 
+
 @unique
 class LineRole(StrEnum):
     DIAGNOSTIC_START = "diagnostic_start"
@@ -14,6 +15,7 @@ class LineRole(StrEnum):
     CONTEXT = "context"
     KNOWN_NOISE = "known_noise"
     UNKNOWN = "unknown"
+
 
 @unique
 class CloseReason(StrEnum):
@@ -28,6 +30,7 @@ class CloseReason(StrEnum):
     STREAM_END = "stream_end"
     STREAM_TRUNCATED = "stream_truncated"
 
+
 @unique
 class MultilineWarningCode(StrEnum):
     ORPHAN_CONTINUATION = "orphan_continuation"
@@ -38,6 +41,7 @@ class MultilineWarningCode(StrEnum):
     RECORD_LIMIT_REACHED = "record_limit_reached"
     TOTAL_CHARACTER_LIMIT_REACHED = "total_character_limit_reached"
     STREAM_TRUNCATED = "stream_truncated"
+
 
 @dataclass(frozen=True, slots=True)
 class MultilineLimits:
@@ -59,7 +63,9 @@ class MultilineLimits:
             if value < 1:
                 raise ValueError(f"{name} must be positive")
 
+
 DEFAULT_MULTILINE_LIMITS: Final = MultilineLimits()
+
 
 @dataclass(frozen=True, slots=True)
 class ClassifiedLine:
@@ -92,6 +98,7 @@ class ClassifiedLine:
             raise TypeError("terminates must be a boolean")
         _optional_positive_int(self.max_continuation_lines, "max_continuation_lines")
         _optional_positive_int(self.max_characters, "max_characters")
+
 
 @dataclass(frozen=True, slots=True)
 class DiagnosticBlock:
@@ -132,6 +139,7 @@ class DiagnosticBlock:
     def raw_excerpt(self) -> str:
         return "\n".join(self.lines)
 
+
 @dataclass(frozen=True, slots=True)
 class MultilineWarning:
     code: MultilineWarningCode
@@ -146,6 +154,7 @@ class MultilineWarning:
         _text(self.message, "message", allow_empty=False)
         if self.pattern_id is not None:
             _identifier(self.pattern_id, "pattern_id")
+
 
 @dataclass(frozen=True, slots=True)
 class MultilineGroupingResult:
@@ -168,6 +177,7 @@ class MultilineGroupingResult:
         if type(self.stream_truncated) is not bool:
             raise TypeError("stream_truncated must be a boolean")
 
+
 @dataclass(slots=True)
 class _OpenBlock:
     pattern_id: str
@@ -182,6 +192,7 @@ class _OpenBlock:
     def continuation_count(self) -> int:
         return len(self.lines) - 1
 
+
 def group_multiline_diagnostics(
     lines: Iterable[ClassifiedLine],
     *,
@@ -192,7 +203,8 @@ def group_multiline_diagnostics(
         raise TypeError("limits must be MultilineLimits")
     if type(stream_truncated) is not bool:
         raise TypeError("stream_truncated must be a boolean")
-    if isinstance(lines, (str, bytes)):
+    raw_lines: object = lines
+    if isinstance(raw_lines, (str, bytes)):
         raise TypeError("lines must be an iterable of ClassifiedLine")
 
     ordered = tuple(lines)
@@ -390,12 +402,14 @@ def group_multiline_diagnostics(
         stream_truncated,
     )
 
+
 def _warning(
     code: MultilineWarningCode,
     line: ClassifiedLine,
     message: str,
 ) -> MultilineWarning:
     return MultilineWarning(code, line.line_number, message, line.pattern_id)
+
 
 def _validate_order(lines: tuple[ClassifiedLine, ...]) -> None:
     previous = 0
@@ -406,8 +420,10 @@ def _validate_order(lines: tuple[ClassifiedLine, ...]) -> None:
             raise ValueError("line numbers must be strictly increasing")
         previous = line.line_number
 
+
 def _character_count(lines: tuple[str, ...]) -> int:
     return sum(map(len, lines)) + max(0, len(lines) - 1)
+
 
 def _typed_tuple(value: object, item_type: type, field_name: str) -> None:
     if not isinstance(value, tuple):
@@ -415,11 +431,13 @@ def _typed_tuple(value: object, item_type: type, field_name: str) -> None:
     if any(not isinstance(item, item_type) for item in value):
         raise TypeError(f"{field_name} contains an invalid item")
 
+
 def _identifier(value: object, field_name: str) -> str:
     text = _text(value, field_name, allow_empty=False)
     if len(text) > 128:
         raise ValueError(f"{field_name} exceeds the supported length")
     return text
+
 
 def _text(value: object, field_name: str, *, allow_empty: bool) -> str:
     if not isinstance(value, str):
@@ -430,12 +448,14 @@ def _text(value: object, field_name: str, *, allow_empty: bool) -> str:
         raise ValueError(f"{field_name} must not be empty")
     return value
 
+
 def _positive_int(value: object, field_name: str) -> int:
     if type(value) is not int:
         raise TypeError(f"{field_name} must be an integer")
     if value < 1:
         raise ValueError(f"{field_name} must be positive")
     return value
+
 
 def _non_negative_int(value: object, field_name: str) -> int:
     if type(value) is not int:
@@ -444,9 +464,11 @@ def _non_negative_int(value: object, field_name: str) -> int:
         raise ValueError(f"{field_name} must be non-negative")
     return value
 
+
 def _optional_positive_int(value: object, field_name: str) -> None:
     if value is not None:
         _positive_int(value, field_name)
+
 
 __all__ = (
     "DEFAULT_MULTILINE_LIMITS",

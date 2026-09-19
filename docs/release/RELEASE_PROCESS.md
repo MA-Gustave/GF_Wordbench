@@ -2,17 +2,32 @@
 
 **Document ID:** `GF-WB-RELEASE-PROCESS`  
 **Status:** Normative release procedure  
-**Applies to:** GF Wordbench framework releases, project-template releases, active-project releases, prereleases, hotfixes and security releases  
+**Applies to:** GF Wordbench framework releases, validation-profile-template releases, selected-language validation releases, prereleases, hotfixes and security releases  
 **Owner:** GF Wordbench maintainers and designated release manager  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Versioning authority:** `CHANGELOG.md` and the published package metadata  
 **Schema authority:** `docs/PERSISTED_SCHEMA_LOCK.md`  
 **Contract authorities:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`  
 **Process version:** `1.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines the release process for GF Wordbench.
@@ -52,15 +67,15 @@ This process covers:
 
 ```text
 GF Wordbench framework
-GF Wordbench project template
-one active GF language project
+GF Wordbench validation-profile template
+one selected GF language context
 ```
 
 It does not cover a `gf-portfolio` product release.
 
 A Portfolio release may consume public, versioned Wordbench artifacts. Wordbench release tooling must not depend on Portfolio code, runtime, storage, schemas, configuration or publication state.
 
-One Wordbench project release concerns exactly one project identity and one normative language target.
+One selected-language validation release concerns exactly one resolved language identity, one source revision and one normative language target.
 
 ---
 
@@ -82,10 +97,10 @@ docs/reports/REPORTING_OVERVIEW.md
 docs/reports/ARTIFACT_MANIFEST.md
 docs/validation/RELEASE_GATES.md
 docs/projects/PROJECT_COMPLETION_CHECKLIST.md
-project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
-project/docs/STATUS_LEDGER__PROJECT_DOCS.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+<validation-profile-root>/docs/STATUS_LEDGER__PROJECT_DOCS.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
+templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Priority when rules overlap:
@@ -96,7 +111,7 @@ Priority when rules overlap:
 4. contract locks govern provider, consumer and external-tool boundaries;
 5. testing policy governs executable evidence;
 6. this document governs release sequencing and approval;
-7. project release criteria govern the active project.
+7. language validation release criteria govern the selected language context.
 
 ---
 
@@ -106,23 +121,13 @@ GF Wordbench recognizes three independently releasable deliverables:
 
 ```text
 framework
-project template
-active project
+validation-profile template
+selected-language validation evidence package
 ```
 
-A combined publication may include more than one deliverable. Each deliverable retains its own:
-
-- version;
-- source identity;
-- compatibility statement;
-- gates;
-- artifacts;
-- approval;
-- publication evidence.
+The selected language source tree is not copied into or published as part of the Wordbench framework repository. A language evidence package certifies one external source revision and may include reports, manifests, checksums, PGF output and profile-owned acceptance assets.
 
 A successful release of one deliverable does not prove that another deliverable is releasable.
-
----
 
 ## 5. Framework release
 
@@ -141,76 +146,49 @@ It may include:
 - diagnostics;
 - report writers;
 - migration utilities;
-- project template.
+- validation-profile template.
 
-A framework release does not certify the linguistic completeness of the active project.
+A framework release does not certify the linguistic completeness of the selected language context.
 
-Framework integration tests use language-neutral fixture projects rather than depending on the active `project/`.
+Framework integration tests use language-neutral fixture source trees and optional profiles rather than a root `project/` directory.
 
 ---
 
-## 6. Project-template release
+## 6. Validation-profile-template release
 
-A template release publishes the reusable structure under:
+A template release publishes the reusable optional policy structure under:
 
 ```text
-templates/project/
+templates/validation-profile/
 ```
 
-It proves that a new project can be initialized from a language-neutral source.
+The template may contain generic placeholders for checkpoints, scenarios, inputs, golds, required entrypoints, PGF targets, artifact requirements and release gates.
 
-Template requirements:
+It must not contain:
 
-- generic placeholders only;
-- no active-language identity;
-- no machine-local path;
-- no application state;
-- no run artifact;
-- valid project documentation structure;
-- compatibility with the framework project loader;
-- successful initialization and smoke validation.
+- selected-language identity;
+- a language source path;
+- a machine-local GF executable;
+- an output root;
+- application state;
+- run artifacts.
 
 The template may be bundled with a framework release, but its version and evidence remain identifiable.
 
----
+## 7. Selected-language validation release
 
-## 7. Active-project release
+A selected-language validation release certifies one external GF source revision through one resolved language context.
 
-An active-project release publishes or certifies the project under:
+The source remains in its original repository or checkout. Wordbench may publish an evidence package containing:
 
-```text
-project/
-```
+- resolved language identity and selected source revision;
+- GF Wordbench, GF and RGL versions;
+- optional validation-profile identity and checksum;
+- normalized scenario and gold evidence;
+- PGF and required artifacts;
+- release reports, artifact manifest and checksums.
 
-It may include:
-
-- GF source modules;
-- project configuration;
-- project documentation;
-- native `.gfs` scenarios;
-- inputs;
-- reviewed gold files;
-- PGF;
-- release reports;
-- artifact manifest;
-- checksums.
-
-The project release records:
-
-```text
-project ID
-project version
-source revision
-GF Wordbench version
-GF version
-RGL release or revision
-normalization version
-PGF SHA-256
-```
-
-A project release does not change the GF Wordbench framework version automatically.
-
----
+The evidence package is written under the configured output or publication root. It must not create a maintained copy of the language tree under the Wordbench repository.
 
 ## 8. Release types
 
@@ -368,10 +346,10 @@ Confirms:
 
 ### 9.5 Project maintainer
 
-For an active-project release, confirms:
+For a selected-language validation release, confirms:
 
-- project scope;
-- project version;
+- selected-language scope;
+- source revision and optional profile version;
 - scenarios;
 - gold expectations;
 - release criteria;
@@ -440,7 +418,7 @@ A published or tagged identifier is never reused for different bytes.
 
 ## 11. Release evidence
 
-Release preparation creates a dedicated evidence directory outside the active project source and package source.
+Release preparation creates a dedicated evidence directory outside the selected language context source and package source.
 
 Canonical shape:
 
@@ -668,8 +646,8 @@ Review:
 ```text
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
+templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 For every changed contract:
@@ -825,7 +803,7 @@ Verify that:
 
 ## 22. Framework and template isolation
 
-A framework release test must not depend on the linguistic correctness of the active project.
+A framework release test must not depend on the linguistic correctness of the selected language context.
 
 Use a dedicated language-neutral fixture project.
 
@@ -1017,7 +995,7 @@ Required inclusions:
 Required exclusions:
 
 - local state;
-- active project source unless intentionally packaged;
+- selected language context source unless intentionally packaged;
 - generated run artifacts;
 - evidence directory;
 - secrets;
@@ -1207,7 +1185,7 @@ Publication destinations may include:
 - source-hosting release page;
 - internal artifact repository;
 - signed archive location;
-- project release location.
+- language validation release location.
 
 The release plan names the actual destinations.
 
@@ -1341,12 +1319,12 @@ Checklist:
 
 ---
 
-## 35. Active-project release process
+## 35. Selected-language validation release process
 
-The active project release is driven by:
+The selected-language validation release is driven by:
 
 ```text
-project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 Sequence:
@@ -1366,14 +1344,14 @@ Sequence:
 13. publish reports;
 14. verify the artifact manifest;
 15. review linguistic changes;
-16. prepare project release notes;
+16. prepare language validation release notes;
 17. tag or archive the project revision;
 18. publish project artifacts;
 19. verify published PGF and evidence.
 
 Required prerequisites:
 
-- one active project identity;
+- one selected language context identity;
 - one normative language target;
 - canonical `project.toml`;
 - no unresolved required placeholder;
@@ -1741,7 +1719,7 @@ Release drift exists when:
 - gold changes without review;
 - required real-GF tests skip;
 - framework release depends on active-project success;
-- project release omits PGF verification;
+- language validation release omits PGF verification;
 - manifest is generated before owned artifacts are closed;
 - published artifacts are overwritten under the same version;
 - release notes omit a required migration;
@@ -1782,15 +1760,15 @@ The following are prohibited:
 - overwriting previous release artifacts;
 - announcing stable release before post-publication verification;
 - deleting historical evidence to conceal a defect;
-- publishing several active projects as one Wordbench project release;
+- publishing several selected language contexts as one Wordbench language validation release;
 - treating `gf-portfolio` as an internal Wordbench release module.
 
 ---
 
 ## 46. Governing invariants
 
-1. Framework, template and project releases remain distinct.
-2. One project release represents one project identity and one normative language target.
+1. Framework, template and language validation releases remain distinct.
+2. One language validation release represents one project identity and one normative language target.
 3. Each deliverable has one classified version in its own domain.
 4. Published versions, tags and candidate identifiers are immutable.
 5. Stable releases come from clean source.
@@ -1800,7 +1778,7 @@ The following are prohibited:
 9. Normalization changes trigger deliberate gold review.
 10. Required gates cannot skip silently.
 11. Real-GF integration is required for stable framework release evidence.
-12. Active-project release uses release-mode validation.
+12. Selected-language validation release uses release-mode validation.
 13. Required project scenarios cannot be skipped.
 14. Required PGF is present and non-empty.
 15. Required reports and manifest exist.
@@ -1814,7 +1792,7 @@ The following are prohibited:
 23. Automation never provides approval by itself.
 24. Exceptions are explicit, bounded and approved.
 25. Framework fixtures remain language-neutral.
-26. Project release evidence records framework and GF versions.
+26. Language validation release evidence records framework and GF versions.
 27. Compatibility claims do not exceed evidence.
 28. Release notes do not replace migration documentation.
 29. Candidate identifiers are immutable and sequential.

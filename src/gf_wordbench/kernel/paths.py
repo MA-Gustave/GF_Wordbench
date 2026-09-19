@@ -8,10 +8,10 @@ filesystem infrastructure adapter.
 
 from __future__ import annotations
 
-import os
-import re
 from enum import Enum
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
 from typing import Final, TypeAlias
 
 from .errors import ContractViolationError, PathSecurityError
@@ -47,9 +47,7 @@ _WINDOWS_RESERVED_BASENAMES: Final[frozenset[str]] = frozenset(
         *(f"LPT{index}" for index in range(1, 10)),
     }
 )
-_WINDOWS_INVALID_PORTABLE_CHARACTERS: Final[frozenset[str]] = frozenset(
-    '<>:"|?*'
-)
+_WINDOWS_INVALID_PORTABLE_CHARACTERS: Final[frozenset[str]] = frozenset('<>:"|?*')
 _ENVIRONMENT_EXPRESSION_RE: Final[re.Pattern[str]] = re.compile(
     r"(?:%[^%\r\n]+%|\$\{[^}\r\n]+\}|\$[A-Za-z_][A-Za-z0-9_]*)"
 )
@@ -91,30 +89,19 @@ def normalize_portable_path(
     text = _coerce_path_text(value, role=role, trim=False)
 
     if text.startswith("~") and (len(text) == 1 or text[1] in "/\\"):
-        raise ContractViolationError(
-            f"{role} must not use a user-home alias: {text!r}"
-        )
+        raise ContractViolationError(f"{role} must not use a user-home alias: {text!r}")
 
     if _ENVIRONMENT_EXPRESSION_RE.search(text):
         raise ContractViolationError(
-            f"{role} must not contain an environment-variable expression: "
-            f"{text!r}"
+            f"{role} must not contain an environment-variable expression: {text!r}"
         )
 
     windows_path = PureWindowsPath(text)
-    if (
-        windows_path.drive
-        or windows_path.root
-        or _WINDOWS_DRIVE_PREFIX_RE.match(text)
-    ):
-        raise PathSecurityError(
-            f"{role} must be relative and portable: {text!r}"
-        )
+    if windows_path.drive or windows_path.root or _WINDOWS_DRIVE_PREFIX_RE.match(text):
+        raise PathSecurityError(f"{role} must be relative and portable: {text!r}")
 
     if text.startswith(("/", "\\")):
-        raise PathSecurityError(
-            f"{role} must not use an absolute or UNC root: {text!r}"
-        )
+        raise PathSecurityError(f"{role} must not use an absolute or UNC root: {text!r}")
 
     if "\\" in text:
         if not accept_backslash:
@@ -125,9 +112,7 @@ def normalize_portable_path(
 
     raw_parts = text.split("/")
     if any(part == "" for part in raw_parts):
-        raise ContractViolationError(
-            f"{role} contains an empty path segment: {text!r}"
-        )
+        raise ContractViolationError(f"{role} contains an empty path segment: {text!r}")
 
     normalized_parts: list[str] = []
     for part in raw_parts:
@@ -135,9 +120,7 @@ def normalize_portable_path(
             continue
 
         if part == "..":
-            raise PathSecurityError(
-                f"{role} contains prohibited parent traversal: {text!r}"
-            )
+            raise PathSecurityError(f"{role} contains prohibited parent traversal: {text!r}")
 
         validate_portable_segment(part, role=role)
         normalized_parts.append(part)
@@ -146,9 +129,7 @@ def normalize_portable_path(
         if allow_root:
             return PurePosixPath(".")
 
-        raise ContractViolationError(
-            f"{role} must identify a child path, not the root"
-        )
+        raise ContractViolationError(f"{role} must identify a child path, not the root")
 
     return PurePosixPath(*normalized_parts)
 
@@ -188,16 +169,14 @@ def normalize_environment_path(
 
     if _ENVIRONMENT_EXPRESSION_RE.search(text):
         raise ContractViolationError(
-            f"{role} must not contain an environment-variable expression: "
-            f"{text!r}"
+            f"{role} must not contain an environment-variable expression: {text!r}"
         )
 
     if expand_user:
         text = os.path.expanduser(text)
     elif text.startswith("~") and (len(text) == 1 or text[1] in "/\\"):
         raise ContractViolationError(
-            f"{role} uses a user-home alias but expansion was not explicitly "
-            "enabled"
+            f"{role} uses a user-home alias but expansion was not explicitly enabled"
         )
 
     _reject_drive_relative(text, role=role)
@@ -206,8 +185,7 @@ def normalize_environment_path(
     if not candidate.is_absolute():
         if base is None:
             raise ContractViolationError(
-                f"relative {role} requires an explicit resolution base: "
-                f"{text!r}"
+                f"relative {role} requires an explicit resolution base: {text!r}"
             )
 
         base_path = _normalize_absolute_base(
@@ -216,13 +194,7 @@ def normalize_environment_path(
         )
         candidate = base_path / candidate
 
-    return Path(
-        os.path.abspath(
-            os.path.normpath(
-                os.fspath(candidate)
-            )
-        )
-    )
+    return Path(os.path.abspath(os.path.normpath(os.fspath(candidate))))
 
 
 def serialize_environment_path(
@@ -241,9 +213,7 @@ def serialize_environment_path(
 
     path = Path(text)
     if not path.is_absolute():
-        raise ContractViolationError(
-            f"{role} must be absolute before serialization: {text!r}"
-        )
+        raise ContractViolationError(f"{role} must be absolute before serialization: {text!r}")
 
     return path.as_posix()
 
@@ -289,15 +259,9 @@ def path_identity_key(
 
     path = Path(text)
     if not path.is_absolute():
-        raise ContractViolationError(
-            f"{role} must be absolute for identity comparison"
-        )
+        raise ContractViolationError(f"{role} must be absolute for identity comparison")
 
-    return os.path.normcase(
-        os.path.normpath(
-            os.fspath(path)
-        )
-    )
+    return os.path.normcase(os.path.normpath(os.fspath(path)))
 
 
 def portable_identity_key(
@@ -312,11 +276,7 @@ def portable_identity_key(
         value,
         role=role,
     )
-    return (
-        canonical
-        if case_sensitive
-        else canonical.casefold()
-    )
+    return canonical if case_sensitive else canonical.casefold()
 
 
 def lexically_contains(
@@ -359,10 +319,7 @@ def lexically_contains(
     if common != root_key:
         return False
 
-    if (
-        mode is ContainmentMode.STRICTLY_INSIDE
-        and candidate_key == root_key
-    ):
+    if mode is ContainmentMode.STRICTLY_INSIDE and candidate_key == root_key:
         return False
 
     return True
@@ -429,9 +386,7 @@ def relative_portable_path(
     return normalize_portable_path(
         relative_text,
         role=role,
-        allow_root=(
-            mode is ContainmentMode.INSIDE_OR_EQUAL
-        ),
+        allow_root=(mode is ContainmentMode.INSIDE_OR_EQUAL),
     )
 
 
@@ -443,24 +398,16 @@ def validate_portable_segment(
     """Validate one cross-platform project/run path segment."""
 
     if not isinstance(segment, str):
-        raise ContractViolationError(
-            f"{role} must be text"
-        )
+        raise ContractViolationError(f"{role} must be text")
 
     if segment in {"", ".", ".."}:
-        raise ContractViolationError(
-            f"{role} is prohibited: {segment!r}"
-        )
+        raise ContractViolationError(f"{role} is prohibited: {segment!r}")
 
     if segment != segment.strip():
-        raise ContractViolationError(
-            f"{role} must not begin or end with whitespace"
-        )
+        raise ContractViolationError(f"{role} must not begin or end with whitespace")
 
     if segment.endswith((".", " ")):
-        raise ContractViolationError(
-            f"{role} must not end with a dot or space: {segment!r}"
-        )
+        raise ContractViolationError(f"{role} must not end with a dot or space: {segment!r}")
 
     if any(
         character in segment
@@ -469,33 +416,19 @@ def validate_portable_segment(
             "\\",
         )
     ):
-        raise ContractViolationError(
-            f"{role} must not contain a path separator: {segment!r}"
-        )
+        raise ContractViolationError(f"{role} must not contain a path separator: {segment!r}")
 
-    if any(
-        ord(character) < 32
-        or ord(character) == 127
-        for character in segment
-    ):
-        raise ContractViolationError(
-            f"{role} must not contain control characters"
-        )
+    if any(ord(character) < 32 or ord(character) == 127 for character in segment):
+        raise ContractViolationError(f"{role} must not contain control characters")
 
-    if any(
-        character in _WINDOWS_INVALID_PORTABLE_CHARACTERS
-        for character in segment
-    ):
+    if any(character in _WINDOWS_INVALID_PORTABLE_CHARACTERS for character in segment):
         raise ContractViolationError(
-            f"{role} contains a character that is not portable to Windows: "
-            f"{segment!r}"
+            f"{role} contains a character that is not portable to Windows: {segment!r}"
         )
 
     basename = segment.split(".", 1)[0].upper()
     if basename in _WINDOWS_RESERVED_BASENAMES:
-        raise ContractViolationError(
-            f"{role} uses a reserved Windows device name: {segment!r}"
-        )
+        raise ContractViolationError(f"{role} uses a reserved Windows device name: {segment!r}")
 
     return segment
 
@@ -507,33 +440,23 @@ def _coerce_path_text(
     trim: bool,
 ) -> str:
     if isinstance(value, bytes):
-        raise ContractViolationError(
-            f"{role} must be text, not bytes"
-        )
+        raise ContractViolationError(f"{role} must be text, not bytes")
 
     try:
         raw = os.fspath(value)
     except TypeError as exc:
-        raise ContractViolationError(
-            f"{role} must be a string or os.PathLike value"
-        ) from exc
+        raise ContractViolationError(f"{role} must be a string or os.PathLike value") from exc
 
     if not isinstance(raw, str):
-        raise ContractViolationError(
-            f"{role} must resolve to text, not bytes"
-        )
+        raise ContractViolationError(f"{role} must resolve to text, not bytes")
 
     text = raw.strip() if trim else raw
 
     if text == "":
-        raise ContractViolationError(
-            f"{role} must not be empty"
-        )
+        raise ContractViolationError(f"{role} must not be empty")
 
     if "\x00" in text:
-        raise PathSecurityError(
-            f"{role} contains a NUL byte"
-        )
+        raise PathSecurityError(f"{role} contains a NUL byte")
 
     return text
 
@@ -552,17 +475,9 @@ def _normalize_absolute_base(
 
     path = Path(text)
     if not path.is_absolute():
-        raise ContractViolationError(
-            f"{role} must be absolute: {text!r}"
-        )
+        raise ContractViolationError(f"{role} must be absolute: {text!r}")
 
-    return Path(
-        os.path.abspath(
-            os.path.normpath(
-                os.fspath(path)
-            )
-        )
-    )
+    return Path(os.path.abspath(os.path.normpath(os.fspath(path))))
 
 
 def _reject_drive_relative(
@@ -572,6 +487,4 @@ def _reject_drive_relative(
 ) -> None:
     windows_path = PureWindowsPath(text)
     if windows_path.drive and not windows_path.root:
-        raise PathSecurityError(
-            f"{role} must not be drive-relative: {text!r}"
-        )
+        raise PathSecurityError(f"{role} must not be drive-relative: {text!r}")

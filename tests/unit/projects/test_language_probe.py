@@ -7,15 +7,19 @@ from pathlib import Path
 
 import pytest
 
-from gf_wordbench.projects.languages.probe import (
-    LanguagePathKind,
+from gf_wordbench.projects.languages.models import (
+    LanguageCapability,
     LanguageProbeRequest,
-    LanguageProbeService,
+    LanguageProbeResult,
     LanguageProbeSeverity,
     LanguageProbeStatus,
+    LanguageResolutionSource,
+    SelectedPathKind,
+)
+from gf_wordbench.projects.languages.probe import (
+    LanguageProbeService,
     probe_language_path,
 )
-from gf_wordbench.validation.selection.service import SelectionService
 
 
 def _write_gf(path: Path) -> Path:
@@ -45,24 +49,40 @@ def _make_rgl_language(
 
     language_directory = source_root.joinpath(*Path(relative_language).parts)
     language_directory.mkdir(parents=True, exist_ok=True)
-    files = tuple(
-        _write_gf(language_directory / module)
-        for module in modules
-    )
+    files = tuple(_write_gf(language_directory / module) for module in modules)
     return rgl_root, source_root, language_directory.resolve(), files
 
 
-def _diagnostic_codes(result: object) -> tuple[str, ...]:
-    diagnostics = getattr(result, "diagnostics")
+def _diagnostic_codes(result: LanguageProbeResult) -> tuple[str, ...]:
+    diagnostics = result.diagnostics
     return tuple(diagnostic.code for diagnostic in diagnostics)
+
+
+class _RecordingSourceSelector:
+    """Minimal source-inventory test double for the projects-layer port."""
+
+    def __init__(self, selected: tuple[Path, ...]) -> None:
+        self._selected = selected
+        self.calls: list[tuple[Path, Path, int]] = []
+
+    def select_source_tree(
+        self,
+        source_root: Path,
+        *,
+        containment_root: Path,
+        max_files: int = 0,
+    ) -> tuple[tuple[Path, ...], tuple[object, ...]]:
+        self.calls.append((source_root, containment_root, max_files))
+        selected = self._selected
+        if max_files:
+            selected = selected[:max_files]
+        return selected, ()
 
 
 def test_directory_selection_resolves_standard_language_context(
     tmp_path: Path,
 ) -> None:
-    rgl_root, source_root, language_directory, _files = _make_rgl_language(
-        tmp_path
-    )
+    rgl_root, source_root, language_directory, _files = _make_rgl_language(tmp_path)
 
     result = probe_language_path(language_directory)
 
@@ -74,7 +94,7 @@ def test_directory_selection_resolves_standard_language_context(
     assert context.language_key == "english"
     assert context.display_name == "english"
     assert context.selected_path == language_directory
-    assert context.selected_path_kind is LanguagePathKind.DIRECTORY
+    assert context.selected_path_kind is SelectedPathKind.DIRECTORY
     assert context.language_directory == language_directory
     assert context.rgl_source_root == source_root
     assert context.rgl_root == rgl_root
@@ -82,7 +102,7 @@ def test_directory_selection_resolves_standard_language_context(
     assert context.focused_target is None
     assert context.module_suffix == "Eng"
     assert context.module_suffix_candidates == ("Eng",)
-    assert tuple(path.name for path in context.available_entrypoints) == (
+    assert tuple(path.name for path in context.entrypoint_paths) == (
         "LangEng.gf",
         "GrammarEng.gf",
         "AllEng.gf",
@@ -93,33 +113,44 @@ def test_directory_selection_resolves_standard_language_context(
         "GrammarEng.gf",
         "LangEng.gf",
     )
-    assert context.gf_path_requirements == (language_directory,)
-    assert context.capabilities.source_ready is True
-    assert context.capabilities.scan_ready is True
-    assert "selection_service" in context.resolution_provenance
-    assert "standard_src_root_with_shared_directories" in (
-        context.resolution_provenance
+    assert context.gf_path_requirements == (
+        language_directory,
+        source_root / "abstract",
+        source_root / "api",
+        source_root / "common",
+        source_root / "prelude",
     )
+    source_capability = context.capability(LanguageCapability.SOURCE_READY)
+    scan_capability = context.capability(LanguageCapability.SCAN_READY)
+    assert source_capability is not None
+    assert source_capability.available is True
+    assert scan_capability is not None
+    assert scan_capability.available is True
+
+    provenance_sources = {item.source for item in context.resolution_provenance}
+    assert {
+        LanguageResolutionSource.EXPLICIT_SELECTED_PATH,
+        LanguageResolutionSource.LANGUAGE_PROBE,
+        LanguageResolutionSource.MODULE_CLASSIFICATION,
+    } <= provenance_sources
 
 
 def test_selected_gf_file_remains_the_focused_target(
     tmp_path: Path,
 ) -> None:
-    _rgl_root, _source_root, language_directory, _files = (
-        _make_rgl_language(tmp_path)
-    )
+    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(tmp_path)
     focused = language_directory / "AdjectiveEng.gf"
 
     result = probe_language_path(focused)
 
     assert result.status is LanguageProbeStatus.RESOLVED
     assert result.context is not None
-    assert result.context.selected_path_kind is LanguagePathKind.GF_FILE
+    assert result.context.selected_path_kind is SelectedPathKind.FILE
     assert result.context.selected_path == focused
     assert result.context.selected_file == focused
     assert result.context.focused_target == focused
     assert focused in result.context.source_inventory
-    assert tuple(path.name for path in result.context.available_entrypoints) == (
+    assert tuple(path.name for path in result.context.entrypoint_paths) == (
         "LangEng.gf",
         "GrammarEng.gf",
         "AllEng.gf",
@@ -129,9 +160,7 @@ def test_selected_gf_file_remains_the_focused_target(
 def test_probe_does_not_require_project_toml_catalog_or_language_bundle(
     tmp_path: Path,
 ) -> None:
-    rgl_root, _source_root, language_directory, _files = _make_rgl_language(
-        tmp_path
-    )
+    rgl_root, _source_root, language_directory, _files = _make_rgl_language(tmp_path)
 
     assert not (rgl_root / "project" / "project.toml").exists()
     assert not (rgl_root / "rgl-language-catalog.json").exists()
@@ -147,9 +176,7 @@ def test_explicit_rgl_root_accepts_repository_or_source_root(
     tmp_path: Path,
     explicit_kind: str,
 ) -> None:
-    rgl_root, source_root, language_directory, _files = _make_rgl_language(
-        tmp_path
-    )
+    rgl_root, source_root, language_directory, _files = _make_rgl_language(tmp_path)
     explicit_root = rgl_root if explicit_kind == "repository" else source_root
 
     result = probe_language_path(
@@ -161,12 +188,8 @@ def test_explicit_rgl_root_accepts_repository_or_source_root(
     assert result.context is not None
     assert result.context.rgl_root == rgl_root
     assert result.context.rgl_source_root == source_root
-    expected_provenance = (
-        "explicit_rgl_root"
-        if explicit_kind == "repository"
-        else "explicit_rgl_source_root"
-    )
-    assert expected_provenance in result.context.resolution_provenance
+    provenance_sources = {item.source for item in result.context.resolution_provenance}
+    assert LanguageResolutionSource.EXPLICIT_RGL_ROOT in provenance_sources
 
 
 def test_missing_selected_path_is_rejected(tmp_path: Path) -> None:
@@ -182,9 +205,7 @@ def test_missing_selected_path_is_rejected(tmp_path: Path) -> None:
 
 
 def test_non_gf_file_is_rejected(tmp_path: Path) -> None:
-    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(
-        tmp_path
-    )
+    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(tmp_path)
     selected = language_directory / "README.md"
     selected.write_text("not GF\n", encoding="utf-8")
 
@@ -196,9 +217,7 @@ def test_non_gf_file_is_rejected(tmp_path: Path) -> None:
 
 
 def test_invalid_gf_filename_is_rejected(tmp_path: Path) -> None:
-    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(
-        tmp_path
-    )
+    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(tmp_path)
     selected = _write_gf(language_directory / "bad-name.gf")
 
     result = probe_language_path(selected)
@@ -247,9 +266,13 @@ def test_language_without_standard_roles_remains_source_ready(
     assert result.context is not None
     assert result.context.module_suffix is None
     assert result.context.module_suffix_candidates == ()
-    assert result.context.available_entrypoints == ()
-    assert result.context.capabilities.source_ready is True
-    assert result.context.capabilities.scan_ready is True
+    assert result.context.entrypoint_paths == ()
+    source_capability = result.context.capability(LanguageCapability.SOURCE_READY)
+    scan_capability = result.context.capability(LanguageCapability.SCAN_READY)
+    assert source_capability is not None
+    assert source_capability.available is True
+    assert scan_capability is not None
+    assert scan_capability.available is True
     assert _diagnostic_codes(result) == (
         "GF-WB-CONFIG-259",
         "GF-WB-CONFIG-253",
@@ -301,10 +324,7 @@ def test_required_unambiguous_suffix_returns_explicit_choices(
     assert result.status is LanguageProbeStatus.NEEDS_USER_INPUT
     assert result.context is None
     assert tuple(choice.value for choice in result.choices) == ("Eng", "Fre")
-    assert tuple(
-        tuple(path.name for path in choice.entrypoints)
-        for choice in result.choices
-    ) == (
+    assert tuple(tuple(path.name for path in choice.entrypoints) for choice in result.choices) == (
         ("LangEng.gf", "GrammarEng.gf"),
         ("LangFre.gf", "GrammarFre.gf"),
     )
@@ -334,7 +354,7 @@ def test_focused_standard_file_disambiguates_multiple_suffixes(
     assert result.context is not None
     assert result.context.module_suffix == "Fre"
     assert result.context.module_suffix_candidates == ("Eng", "Fre")
-    assert tuple(path.name for path in result.context.available_entrypoints) == (
+    assert tuple(path.name for path in result.context.entrypoint_paths) == (
         "LangFre.gf",
         "GrammarFre.gf",
     )
@@ -364,76 +384,70 @@ def test_source_limit_is_delegated_and_deterministic(tmp_path: Path) -> None:
     )
 
 
-def test_probe_delegates_inventory_to_source_tree_selection_service(
+def test_probe_delegates_inventory_to_injected_source_selector(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _rgl_root, source_root, language_directory, _files = _make_rgl_language(
-        tmp_path
-    )
-    calls: list[tuple[Path, Path | None, int]] = []
-    original_select_source_tree = SelectionService.select_source_tree
-
-    def reject_legacy_run_selection(
-        self: SelectionService,
-        run_config: object,
-    ) -> object:
-        del self, run_config
-        raise AssertionError(
-            "LanguageProbeService must not create a synthetic RunConfig"
+    _rgl_root, source_root, language_directory, files = _make_rgl_language(tmp_path)
+    selected = tuple(
+        sorted(
+            files,
+            key=lambda path: (path.name.casefold(), str(path)),
         )
-
-    def recording_select_source_tree(
-        self: SelectionService,
-        source_directory: Path,
-        *,
-        containment_root: Path | None = None,
-        max_files: int = 0,
-        **kwargs: object,
-    ) -> object:
-        calls.append((source_directory, containment_root, max_files))
-        return original_select_source_tree(
-            self,
-            source_directory,
-            containment_root=containment_root,
-            max_files=max_files,
-            **kwargs,
-        )
-
-    monkeypatch.setattr(
-        SelectionService,
-        "select",
-        reject_legacy_run_selection,
     )
-    monkeypatch.setattr(
-        SelectionService,
-        "select_source_tree",
-        recording_select_source_tree,
-    )
+    selector = _RecordingSourceSelector(selected)
 
-    result = LanguageProbeService().probe(
+    result = LanguageProbeService(source_selector=selector).probe(
         LanguageProbeRequest(selected_path=language_directory)
     )
 
     assert result.status is LanguageProbeStatus.RESOLVED
-    assert calls == [(language_directory, source_root, 0)]
+    assert result.context is not None
+    assert result.context.source_inventory == selected
+    assert selector.calls == [(language_directory, language_directory, 0)]
 
 
-def test_explicit_root_must_contain_selected_language(tmp_path: Path) -> None:
-    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(
-        tmp_path / "selected"
+def test_external_language_accepts_explicit_disjoint_rgl_dependency_root(
+    tmp_path: Path,
+) -> None:
+    rgl_root, source_root, _stock_language, _stock_files = _make_rgl_language(
+        tmp_path / "dependencies"
     )
-    unrelated_root, _unrelated_source, _other_language, _other_files = (
-        _make_rgl_language(tmp_path / "unrelated")
-    )
+    external_language = (
+        tmp_path / "external-project" / "GF" / "lib" / "src" / "albanian"
+    ).resolve()
+    _write_gf(external_language / "LangSqi.gf")
+    _write_gf(external_language / "GrammarSqi.gf")
+    _write_gf(external_language.parent / "SyntaxSqi.gf")
 
     result = probe_language_path(
-        language_directory,
+        external_language,
+        explicit_rgl_root=rgl_root,
+    )
+
+    assert result.status is LanguageProbeStatus.RESOLVED
+    assert result.context is not None
+    assert result.context.language_directory == external_language
+    assert result.context.rgl_root == rgl_root
+    assert result.context.rgl_source_root == source_root
+    assert result.context.language_key == "albanian"
+    assert external_language in result.context.gf_path_requirements
+    assert external_language.parent in result.context.gf_path_requirements
+    assert source_root / "abstract" in result.context.gf_path_requirements
+    assert all(path.is_relative_to(external_language) for path in result.context.source_inventory)
+
+
+def test_explicit_rgl_root_must_be_a_supported_checkout(tmp_path: Path) -> None:
+    external_language = (tmp_path / "external" / "albanian").resolve()
+    _write_gf(external_language / "LangSqi.gf")
+    unrelated_root = (tmp_path / "not-rgl").resolve()
+    unrelated_root.mkdir(parents=True)
+
+    result = probe_language_path(
+        external_language,
         explicit_rgl_root=unrelated_root,
     )
 
     assert result.status is LanguageProbeStatus.UNSUPPORTED_LAYOUT
-    assert result.context is None
     assert _diagnostic_codes(result) == ("GF-WB-PATH-252",)
 
 
@@ -482,9 +496,7 @@ def test_request_rejects_invalid_discovery_limits(tmp_path: Path) -> None:
 
 
 def test_resolved_context_is_immutable(tmp_path: Path) -> None:
-    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(
-        tmp_path
-    )
+    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(tmp_path)
     result = probe_language_path(language_directory)
     assert result.context is not None
 

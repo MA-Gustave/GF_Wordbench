@@ -116,7 +116,7 @@ def _release_executors(
 
         return _ok_stage_result(context)
 
-    return {stage_id: execute for stage_id in CANONICAL_STAGE_ORDER}
+    return dict.fromkeys(CANONICAL_STAGE_ORDER, execute)
 
 
 @dataclass(frozen=True, slots=True)
@@ -302,12 +302,11 @@ def test_release_mode_completes_required_pipeline_and_validates_run_directory(
         for item in result.stage_results
         if item.required
     )
-    assert result.result_for(
-        ValidationStageId.BUILD_RELEASE_ARTIFACTS
-    ).validation_status is ValidationStatus.OK
-    assert result.result_for(
-        ValidationStageId.EVALUATE_RELEASE
-    ).payload == {
+    assert (
+        result.result_for(ValidationStageId.BUILD_RELEASE_ARTIFACTS).validation_status
+        is ValidationStatus.OK
+    )
+    assert result.result_for(ValidationStageId.EVALUATE_RELEASE).payload == {
         "decision": "READY",
         "all_required_gates_passed": True,
     }
@@ -386,11 +385,13 @@ def test_release_mode_requires_explicit_activation_of_conditional_release_work(
         monotonic_now=lambda: 0.0,
     )
 
-    assert result.result_for(
-        ValidationStageId.COMPARE_GOLD
-    ).validation_status is ValidationStatus.SKIPPED
-    assert result.result_for(
-        ValidationStageId.BUILD_RELEASE_ARTIFACTS
-    ).validation_status is ValidationStatus.SKIPPED
+    assert (
+        result.result_for(ValidationStageId.COMPARE_GOLD).validation_status
+        is ValidationStatus.SKIPPED
+    )
+    assert (
+        result.result_for(ValidationStageId.BUILD_RELEASE_ARTIFACTS).validation_status
+        is ValidationStatus.SKIPPED
+    )
     assert result.overall_status is OverallStatus.OK
     assert not (paths.pgf_dir / "TestLanguage.pgf").exists()

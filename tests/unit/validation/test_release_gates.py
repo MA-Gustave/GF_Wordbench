@@ -10,12 +10,13 @@ specified by ``docs/validation/RELEASE_GATES.md``.
 from __future__ import annotations
 
 import ast
-import importlib
+from collections.abc import MutableMapping
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta, timezone
+import importlib
 from pathlib import Path
 from types import MappingProxyType, ModuleType
-from typing import Final
+from typing import Final, cast
 
 import pytest
 
@@ -31,12 +32,8 @@ from gf_wordbench.validation.release.models import (
     validate_release_gate_id,
 )
 
-_EXPECTED_GATE_IDS: Final[tuple[str, ...]] = tuple(
-    f"RG-{index:02d}" for index in range(15)
-)
-_CONDITIONAL_GATE_IDS: Final[frozenset[str]] = frozenset(
-    {"RG-05", "RG-08", "RG-10"}
-)
+_EXPECTED_GATE_IDS: Final[tuple[str, ...]] = tuple(f"RG-{index:02d}" for index in range(15))
+_CONDITIONAL_GATE_IDS: Final[frozenset[str]] = frozenset({"RG-05", "RG-08", "RG-10"})
 _EXPECTED_ACTIVATION_CONDITIONS: Final[dict[str, str]] = {
     "RG-05": "checkpoints_declared",
     "RG-08": "required_gold_backed_scenarios_declared",
@@ -96,11 +93,7 @@ def _decision(
     skipped_required_gate_ids: tuple[str, ...] = (),
     decided_at: datetime = _FIXED_TIME,
 ) -> ReleaseDecision:
-    blocking_count = (
-        len(failed_gate_ids)
-        + len(error_gate_ids)
-        + len(skipped_required_gate_ids)
-    )
+    blocking_count = len(failed_gate_ids) + len(error_gate_ids) + len(skipped_required_gate_ids)
     required_gate_count = sum(
         result.applicability is not ReleaseGateApplicability.NOT_APPLICABLE
         for result in gate_results
@@ -220,7 +213,7 @@ def test_release_gate_rejects_boolean_order() -> None:
             name="Project identity",
             applicability=ReleaseGateApplicability.REQUIRED,
             owner="Project validator",
-            order=True,  # type: ignore[arg-type]
+            order=True,
         )
 
 
@@ -458,9 +451,7 @@ def test_release_decision_uses_error_precedence_for_gate_errors() -> None:
     )
 
     assert decision.decision is ReleaseDecisionValue.ERROR
-    assert decision.statement == (
-        "GF Wordbench could not complete the release decision reliably."
-    )
+    assert decision.statement == ("GF Wordbench could not complete the release decision reliably.")
 
 
 def test_skipped_required_gate_forces_error_decision() -> None:
@@ -603,17 +594,17 @@ def test_release_registry_imports_cleanly_and_is_canonical() -> None:
 
     assert registry.GATE_POLICY_VERSION == RELEASE_GATE_POLICY_VERSION
     assert registry.CANONICAL_RELEASE_GATE_IDS == _EXPECTED_GATE_IDS
-    assert tuple(gate.gate_id for gate in registry.CANONICAL_RELEASE_GATES) == (
-        _EXPECTED_GATE_IDS
-    )
-    assert tuple(registry.iter_release_gates()) == (
-        registry.CANONICAL_RELEASE_GATES
-    )
+    assert tuple(gate.gate_id for gate in registry.CANONICAL_RELEASE_GATES) == (_EXPECTED_GATE_IDS)
+    assert tuple(registry.iter_release_gates()) == (registry.CANONICAL_RELEASE_GATES)
     assert tuple(registry.CANONICAL_RELEASE_GATE_BY_ID) == _EXPECTED_GATE_IDS
     assert isinstance(registry.CANONICAL_RELEASE_GATE_BY_ID, MappingProxyType)
 
     with pytest.raises(TypeError):
-        registry.CANONICAL_RELEASE_GATE_BY_ID["RG-99"] = object()
+        mutable_registry = cast(
+            MutableMapping[str, object],
+            registry.CANONICAL_RELEASE_GATE_BY_ID,
+        )
+        mutable_registry["RG-99"] = object()
 
 
 def test_release_registry_preserves_conditional_activation_and_decision_phase() -> None:
@@ -626,8 +617,7 @@ def test_release_registry_preserves_conditional_activation_and_decision_phase() 
     }
     assert set(conditionals) == _CONDITIONAL_GATE_IDS
     assert {
-        gate_id: gate.activation_condition
-        for gate_id, gate in conditionals.items()
+        gate_id: gate.activation_condition for gate_id, gate in conditionals.items()
     } == _EXPECTED_ACTIVATION_CONDITIONS
 
     decision = registry.decision_gate_definition()
@@ -674,7 +664,7 @@ def test_release_registry_activates_conditional_gates_only_from_typed_conditions
 
     with pytest.raises(TypeError, match="bool"):
         registry.active_release_gates(
-            {"release_requires_pgf": "yes"},  # type: ignore[dict-item]
+            {"release_requires_pgf": "yes"},
         )
 
 
@@ -718,7 +708,9 @@ def test_release_submodules_import_as_one_coherent_public_contract() -> None:
 
 def test_release_package_has_no_portfolio_or_entrypoint_dependency() -> None:
     package = importlib.import_module("gf_wordbench.validation.release")
-    package_root = Path(package.__file__).resolve().parent
+    package_file = package.__file__
+    assert package_file is not None
+    package_root = Path(package_file).resolve().parent
     forbidden_prefixes = (
         "gf_portfolio",
         "gf_wordbench.entrypoints",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 from pathlib import Path
+from typing import Any, cast
 from types import MappingProxyType
 
 import pytest
@@ -75,7 +76,10 @@ def _sha256(path: Path) -> str:
         (_current_summary(), SummaryShape.CURRENT),
         ({"metadata": {}, "totals": {}, "artifacts": {}}, SummaryShape.NESTED_UNVERSIONED),
         ({"started_at": "2026-07-25T12:00:00Z", "ok": 1}, SummaryShape.FLAT_UNVERSIONED),
-        ({"schema_id": RUN_SUMMARY_SCHEMA_ID, "schema_version": "2.0"}, SummaryShape.UNSUPPORTED_VERSIONED),
+        (
+            {"schema_id": RUN_SUMMARY_SCHEMA_ID, "schema_version": "2.0"},
+            SummaryShape.UNSUPPORTED_VERSIONED,
+        ),
         ({"unrelated": True}, SummaryShape.UNKNOWN),
     ),
 )
@@ -146,7 +150,7 @@ def test_summary_migration_is_idempotent_for_current_documents() -> None:
 
 
 def test_strict_summary_migration_blocks_unrecoverable_required_fields() -> None:
-    source = {"metadata": {}, "totals": {}, "artifacts": {}}
+    source: dict[str, object] = {"metadata": {}, "totals": {}, "artifacts": {}}
 
     migration = migrate_summary_document(source, strict=True)
 
@@ -214,7 +218,9 @@ def test_manifest_migration_hashes_real_artifacts_and_preserves_source(
 
     entries = document["artifacts"]
     assert isinstance(entries, list)
-    by_path = {entry["path"]: entry for entry in entries}
+    assert all(isinstance(entry, dict) for entry in entries)
+    typed_entries = cast(list[dict[str, Any]], entries)
+    by_path = {str(entry["path"]): entry for entry in typed_entries}
     assert set(by_path) == {"raw/master.log", "summary.json"}
     assert by_path["summary.json"]["required"] is True
     assert by_path["summary.json"]["sha256"] == _sha256(summary_path)

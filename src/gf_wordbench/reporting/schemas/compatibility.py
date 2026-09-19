@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from functools import total_ordering
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -103,9 +103,7 @@ class SchemaVersion:
             raise ValueError("schema version must not contain NUL characters")
         match = _SCHEMA_VERSION_PATTERN.fullmatch(value)
         if match is None:
-            raise ValueError(
-                "schema version must use major.minor or major.minor.patch"
-            )
+            raise ValueError("schema version must use major.minor or major.minor.patch")
         patch_text = match.group("patch")
         return cls(
             major=int(match.group("major")),
@@ -202,21 +200,13 @@ class SchemaCompatibilityPolicy:
         )
 
         if current in historical or current in migrations:
-            raise ValueError(
-                "current_version cannot be historical or require migration"
-            )
+            raise ValueError("current_version cannot be historical or require migration")
         if readable.intersection(historical):
-            raise ValueError(
-                "readable_versions and historical_versions must not overlap"
-            )
+            raise ValueError("readable_versions and historical_versions must not overlap")
         if readable.intersection(migrations):
-            raise ValueError(
-                "readable_versions and migration_sources must not overlap"
-            )
+            raise ValueError("readable_versions and migration_sources must not overlap")
         if historical.intersection(migrations):
-            raise ValueError(
-                "historical_versions and migration_sources must not overlap"
-            )
+            raise ValueError("historical_versions and migration_sources must not overlap")
 
         for name in (
             "allow_newer_patch",
@@ -227,9 +217,7 @@ class SchemaCompatibilityPolicy:
                 raise TypeError(f"{name} must be a bool")
 
         if self.allow_newer_minor and not self.allow_unknown_optional_fields:
-            raise ValueError(
-                "allow_newer_minor requires allow_unknown_optional_fields"
-            )
+            raise ValueError("allow_newer_minor requires allow_unknown_optional_fields")
 
         object.__setattr__(self, "readable_versions", readable)
         object.__setattr__(self, "historical_versions", historical)
@@ -260,15 +248,11 @@ class SchemaCompatibilityPolicy:
         return cls(
             schema_id=schema_id,
             current_version=SchemaVersion.parse(current_version),
-            readable_versions=frozenset(
-                SchemaVersion.parse(value) for value in readable_versions
-            ),
+            readable_versions=frozenset(SchemaVersion.parse(value) for value in readable_versions),
             historical_versions=frozenset(
                 SchemaVersion.parse(value) for value in historical_versions
             ),
-            migration_sources=frozenset(
-                SchemaVersion.parse(value) for value in migration_sources
-            ),
+            migration_sources=frozenset(SchemaVersion.parse(value) for value in migration_sources),
             allow_newer_patch=allow_newer_patch,
             allow_newer_minor=True,
             allow_unknown_optional_fields=True,
@@ -303,18 +287,8 @@ class SchemaCompatibilityResult:
     metadata: Mapping[str, str] = _EMPTY_METADATA
 
     def __post_init__(self) -> None:
-        if not isinstance(self.status, CompatibilityStatus):
-            object.__setattr__(
-                self,
-                "status",
-                CompatibilityStatus(self.status),
-            )
-        if not isinstance(self.reason, CompatibilityReason):
-            object.__setattr__(
-                self,
-                "reason",
-                CompatibilityReason(self.reason),
-            )
+        object.__setattr__(self, "status", _compatibility_status(self.status))
+        object.__setattr__(self, "reason", _compatibility_reason(self.reason))
         if not isinstance(self.expected, SchemaIdentity):
             raise TypeError("expected must be a SchemaIdentity")
         if self.observed is not None and not isinstance(
@@ -421,6 +395,28 @@ def extract_schema_identity(document: SchemaDocument) -> SchemaIdentity:
         ) from exc
 
 
+def _compatibility_status(value: object) -> CompatibilityStatus:
+    if isinstance(value, CompatibilityStatus):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("status must be a CompatibilityStatus or string")
+    try:
+        return CompatibilityStatus(value)
+    except ValueError as exc:
+        raise ValueError("status must be a canonical CompatibilityStatus") from exc
+
+
+def _compatibility_reason(value: object) -> CompatibilityReason:
+    if isinstance(value, CompatibilityReason):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("reason must be a CompatibilityReason or string")
+    try:
+        return CompatibilityReason(value)
+    except ValueError as exc:
+        raise ValueError("reason must be a canonical CompatibilityReason") from exc
+
+
 def check_schema_compatibility(
     document_or_identity: SchemaDocument | SchemaIdentity,
     policy: SchemaCompatibilityPolicy,
@@ -436,14 +432,9 @@ def check_schema_compatibility(
         malformed = _identity_failure(document_or_identity, expected)
         if malformed is not None:
             return malformed
-        observed = SchemaIdentity.from_values(
-            document_or_identity["schema_id"],
-            document_or_identity["schema_version"],
-        )
+        observed = extract_schema_identity(document_or_identity)
     else:
-        raise TypeError(
-            "document_or_identity must be a mapping or SchemaIdentity"
-        )
+        raise TypeError("document_or_identity must be a mapping or SchemaIdentity")
 
     if observed.schema_id != policy.schema_id:
         return SchemaCompatibilityResult(
@@ -451,10 +442,7 @@ def check_schema_compatibility(
             reason=CompatibilityReason.WRONG_SCHEMA_ID,
             expected=expected,
             observed=observed,
-            message=(
-                f"Expected schema {policy.schema_id!r}, "
-                f"observed {observed.schema_id!r}."
-            ),
+            message=(f"Expected schema {policy.schema_id!r}, observed {observed.schema_id!r}."),
         )
 
     version = observed.schema_version
@@ -479,8 +467,7 @@ def check_schema_compatibility(
             expected=expected,
             observed=observed,
             message=(
-                f"Schema {observed.schema_id} {version} is explicitly "
-                "supported by this reader."
+                f"Schema {observed.schema_id} {version} is explicitly supported by this reader."
             ),
         )
 
@@ -534,10 +521,7 @@ def check_schema_compatibility(
                     ),
                 )
             reason = CompatibilityReason.UNSUPPORTED_NEWER_PATCH
-        elif (
-            policy.allow_newer_minor
-            and policy.allow_unknown_optional_fields
-        ):
+        elif policy.allow_newer_minor and policy.allow_unknown_optional_fields:
             return SchemaCompatibilityResult(
                 status=CompatibilityStatus.COMPATIBLE,
                 reason=CompatibilityReason.COMPATIBLE_NEWER_MINOR,
@@ -597,23 +581,13 @@ def require_schema_compatibility(
         CompatibilityStatus.COMPATIBLE,
     }
     if allow_historical:
-        accepted = accepted or (
-            result.status is CompatibilityStatus.HISTORICAL_READ
-        )
+        accepted = accepted or (result.status is CompatibilityStatus.HISTORICAL_READ)
 
     if accepted:
         return result
 
-    observed_version = (
-        str(result.observed.schema_version)
-        if result.observed is not None
-        else None
-    )
-    subject = (
-        result.observed.schema_id
-        if result.observed is not None
-        else policy.schema_id
-    )
+    observed_version = str(result.observed.schema_version) if result.observed is not None else None
+    subject = result.observed.schema_id if result.observed is not None else policy.schema_id
 
     if result.reason in {
         CompatibilityReason.MISSING_SCHEMA_ID,
@@ -653,11 +627,7 @@ def require_current_schema(
     if result.status is CompatibilityStatus.EXACT:
         return result
 
-    observed = (
-        result.observed.schema_id
-        if result.observed is not None
-        else policy.schema_id
-    )
+    observed = result.observed.schema_id if result.observed is not None else policy.schema_id
     raise UnsupportedVersionError(
         (
             f"Canonical writing requires schema "
@@ -744,8 +714,7 @@ def _validate_schema_id(value: str) -> str:
         raise ValueError("schema_id must use ASCII characters")
     if _SCHEMA_ID_PATTERN.fullmatch(value) is None:
         raise ValueError(
-            "schema_id must be lowercase dotted identifiers using "
-            "letters, digits, and hyphens"
+            "schema_id must be lowercase dotted identifiers using letters, digits, and hyphens"
         )
     return value
 
@@ -777,7 +746,5 @@ def _metadata(values: Mapping[str, str]) -> Mapping[str, str]:
         raise TypeError("metadata must be a mapping")
     copied: dict[str, str] = {}
     for key, value in values.items():
-        copied[
-            _required_text(key, "metadata key")
-        ] = _required_text(value, f"metadata[{key!r}]")
+        copied[_required_text(key, "metadata key")] = _required_text(value, f"metadata[{key!r}]")
     return _EMPTY_METADATA if not copied else MappingProxyType(copied)

@@ -20,7 +20,7 @@ from gf_wordbench.entrypoints.cli.exit_codes import (
 from gf_wordbench.kernel.statuses import OverallStatus
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class _CommandResult:
     overall_status: OverallStatus
     cancelled: bool = False
@@ -202,4 +202,4 @@ def test_exit_code_mapping_rejects_non_boolean_cancellation_state() -> None:
 
 def test_exit_code_mapping_requires_a_structured_command_result() -> None:
     with pytest.raises(TypeError, match="command result"):
-        determine_exit_code(object())
+        determine_exit_code(object())  # type: ignore[arg-type]

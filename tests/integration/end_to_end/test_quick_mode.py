@@ -12,12 +12,13 @@ from gf_wordbench.config.models import (
     ValidationTarget,
 )
 from gf_wordbench.kernel.errors import ConfigurationError
+from gf_wordbench.kernel.ids import validate_project_id
 from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
 from gf_wordbench.projects.models import (
-    GFProjectConfig,
-    ModuleTargets,
     PROJECT_SCHEMA_ID,
     PROJECT_SCHEMA_VERSION,
+    GFProjectConfig,
+    ModuleTargets,
     ProjectConfig,
     ProjectIdentity,
     SourceConfig,
@@ -65,7 +66,7 @@ def _quick_run_config(
         schema_id=PROJECT_SCHEMA_ID,
         schema_version=PROJECT_SCHEMA_VERSION,
         identity=ProjectIdentity(
-            id="quick-mode-fixture",
+            id=validate_project_id("quick-mode-fixture"),
             name="Quick mode fixture",
             language_code="en",
             root=Path("."),
@@ -133,7 +134,9 @@ def test_quick_mode_selects_one_target_and_builds_a_bounded_plan(
     included_files, excluded_files = select_files(run_config)
     plan = resolve_execution_plan(run_config)
 
-    expected_target = run_config.project.source_root / "Target.gf"
+    project = run_config.project
+    assert project is not None
+    expected_target = project.source_root / "Target.gf"
     assert included_files == [expected_target]
     assert excluded_files == []
     assert len(included_files) == 1
@@ -172,10 +175,7 @@ def test_quick_mode_selects_one_target_and_builds_a_bounded_plan(
         assert stage.requirement is StageRequirement.SKIPPED
         assert stage.reason
 
-    assert any(
-        "cannot establish release eligibility" in warning
-        for warning in plan.warnings
-    )
+    assert any("cannot establish release eligibility" in warning for warning in plan.warnings)
 
 
 def test_quick_mode_missing_target_never_falls_back_to_project_scan(
@@ -192,4 +192,6 @@ def test_quick_mode_missing_target_never_falls_back_to_project_scan(
     ):
         select_files(run_config)
 
-    assert (run_config.project.source_root / "Unrelated.gf").is_file()
+    project = run_config.project
+    assert project is not None
+    assert (project.source_root / "Unrelated.gf").is_file()

@@ -9,12 +9,17 @@ import pytest
 
 from gf_wordbench.config.models import ResolvedEnvironment, RunConfig
 from gf_wordbench.kernel.errors import ConfigurationError
+from gf_wordbench.kernel.ids import (
+    ScenarioId,
+    validate_project_id,
+    validate_scenario_id,
+)
 from gf_wordbench.kernel.statuses import ValidationMode
 from gf_wordbench.projects.models import (
-    GFProjectConfig,
-    ModuleTargets,
     PROJECT_SCHEMA_ID,
     PROJECT_SCHEMA_VERSION,
+    GFProjectConfig,
+    ModuleTargets,
     ProjectConfig,
     ProjectIdentity,
     SourceConfig,
@@ -30,6 +35,7 @@ from gf_wordbench.validation.scenarios.parser import (
     ScenarioParserPolicy,
     ScenarioScriptIssueCode,
     ScenarioScriptLineKind,
+    ParsedScenarioScript,
     ScenarioScriptParseError,
     parse_scenario_bytes,
     parse_scenario_file,
@@ -59,7 +65,7 @@ def _project(
         schema_id=PROJECT_SCHEMA_ID,
         schema_version=PROJECT_SCHEMA_VERSION,
         identity=ProjectIdentity(
-            id="scenario-test-project",
+            id=validate_project_id("scenario-test-project"),
             name="Scenario test project",
             language_code="en",
             root=Path("."),
@@ -79,8 +85,8 @@ def _project(
             checkpoints=(),
         ),
         validation=ValidationPolicy(
-            required_scenarios=required,
-            optional_scenarios=optional,
+            required_scenarios=tuple(validate_scenario_id(value) for value in required),
+            optional_scenarios=tuple(validate_scenario_id(value) for value in optional),
             release_requires_pgf=False,
         ),
         project_file=project_root / "project.toml",
@@ -151,16 +157,18 @@ def _scenario_spec(
         "scenarios",
         f"{scenario_id}.gfs",
     )
-    absolute_script = run_config.project.project_root / relative_script
+    project = run_config.project
+    assert project is not None
+    absolute_script = project.project_root / relative_script
     absolute_script.parent.mkdir(parents=True, exist_ok=True)
     absolute_script.write_text("q\n", encoding="utf-8")
 
     return ScenarioSpec(
-        scenario_id=scenario_id,
+        scenario_id=validate_scenario_id(scenario_id),
         script_path=relative_script,
         required=required,
         enabled_modes=enabled_modes,
-        working_directory=run_config.project.project_root,
+        working_directory=project.project_root,
         timeout_sec=30.0,
         output_limit_bytes=1024 * 1024,
         gold_path=None,
@@ -172,8 +180,8 @@ def _scenario_spec(
     )
 
 
-def _issue_codes(parsed: object) -> tuple[ScenarioScriptIssueCode, ...]:
-    issues = getattr(parsed, "issues")
+def _issue_codes(parsed: ParsedScenarioScript) -> tuple[ScenarioScriptIssueCode, ...]:
+    issues = parsed.issues
     return tuple(issue.code for issue in issues)
 
 
@@ -217,11 +225,7 @@ def test_parser_preserves_evidence_line_kinds_and_ordered_markers() -> None:
 
 def test_parser_reports_portability_security_and_post_termination_commands() -> None:
     parsed = parse_scenario_text(
-        "! echo unsafe\n"
-        "i /tmp/Grammar.gf\n"
-        'ps "$GF_LIB_PATH"\n'
-        "q\n"
-        "l TooLate\n",
+        '! echo unsafe\ni /tmp/Grammar.gf\nps "$GF_LIB_PATH"\nq\nl TooLate\n',
         scenario_id="security-check",
     )
 
@@ -271,9 +275,7 @@ def test_generation_requires_a_bound_when_timeout_is_not_the_bound() -> None:
         policy=policy,
     )
 
-    assert _issue_codes(unbounded) == (
-        ScenarioScriptIssueCode.UNBOUNDED_GENERATION,
-    )
+    assert _issue_codes(unbounded) == (ScenarioScriptIssueCode.UNBOUNDED_GENERATION,)
     assert bounded.valid
 
 

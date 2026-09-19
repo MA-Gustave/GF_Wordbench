@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import ast
 import base64
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 import hashlib
@@ -11,67 +11,60 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import sys
-import zlib
 from typing import Final, TypeAlias
+import zlib
 
 EXIT_OK: Final[int] = 0
 EXIT_VALIDATION_FAILED: Final[int] = 1
 EXIT_USAGE_ERROR: Final[int] = 2
 EXIT_RUNTIME_ERROR: Final[int] = 3
 
-EXPECTED_TOTAL: Final[int] = 393
-EXPECTED_RUNTIME: Final[int] = 222
+EXPECTED_TOTAL: Final[int] = 404
+EXPECTED_RUNTIME: Final[int] = 229
 EXPECTED_SUPPORT: Final[int] = 14
-EXPECTED_TESTS: Final[int] = 157
-CANONICAL_DOCUMENT_CANDIDATES: Final[tuple[str, ...]] = (
-    "docs/architecture/CANONICAL_FILE_ARCHITECTURE.md",
-    "docs/GF_WORDBENCH_CANONICAL_FILE_ARCHITECTURE.md",
-)
+EXPECTED_TESTS: Final[int] = 161
+CANONICAL_DOCUMENT: Final[str] = "docs/architecture/CANONICAL_FILE_ARCHITECTURE.md"
 
 _MANIFEST_B85: Final[str] = (
-    'c-ozt+m@^-'
-    '42JLLVY=5mk&8mgVj9H_*xfZxKjEOF5{PrN55@Oe2q6TL`WU2pEsxJ1ZN8pL|Jctz3scg)Ki;GI>*LaD1XJDcL|c_$Rv@iTS'
-    'ZB93IZWD!zZ6?0{_41r9}ni%{|-'
-    'z1@BE&P{zq{4;WX$hH*$9NQ%=%#Ys>uJJ|E>^m=mQYBdjQDzTtIyFXDP~hH>a(snznA7}>E+82Nm6%<z|V@YKbK&}{hU@a*8'
-    'd`-gy+`RuyT-wtUUnVgWuht|$Qr{-cSboeQU`r{MRizi!DdNqU*)3-'
-    'Ew8pY&l*r<D<st=lt;G&05M2&(8(F%sJ$n=tdc~~d8t-'
-    'oIma>cBbPsy2+divkGhtm8@7<*U8*<$0;xhaHI6aHaea=!hoR+w*zjC4ij^xO$!G~qR$a_Z$Yw84sH<k-'
-    'xNh3C=dXBG6KUuKowfUJVqjH63djLgAeH*_9WmQ-'
-    '>QWW{Xc$jqC}Qzv=j9r)>y^2W{yGub<HkrZ5yBWV_PewK<lbxAbCPD6){=E7QW<Fzdp6Ejj1B-%IvwLHK+o0!vD-'
-    '5B$Ti*Jeh)B^r1_~Nu7;>5KZVIu|!CiW)cX%8jz<r~)OV^P@BfSt*_XDuh!7`+^1FbX4XcR30{2>rPpW=jvOUkYsMElDDNgQ'
-    '6ES+y@6_(1A6Bh1~0qUfjGm66)Ox;ukMy47BK7fryVj_8t!5npTR?A&-NZDLv5oK^k-q&TJCO-'
-    's^YLFyrKNi#Ca(Y^~gp!DI{&Zr#;vkup&NUxCJ$h$OiN%Hs5@Zz+Dd;HpUYkL(9Q?9dNHIr@i&!iffp59RbU41D7fjstbeII'
-    '-X%N69;>DR3)TKjBZQgne5lMhg9p)f2HFu%-'
-    'rxI4Ee^pKp!Hs)@%!WT_*X%9e&GjQF#JGwL19GEMjTRSV7#2}CQSobYvWk~ujF5(j5$Y@WfwVTINwD>0RG#7caFomL6iSDPV'
-    'XdsPA0m%zcxfAKL|LC4&J1&PV&HEeXF_Epufp3M%igN^sk483fDO0&Mj#JdjNqVPqqG5Fx_h=#aUiYA2x$vc8a$Qu)`YMO%?'
-    'FJ$UWFmTe;)MM27{o&rT=&vnC_?K=TXLpRrZf5*Txch?Y37{zW<-*L!l#~QUOkj7&SY?80?6Pyca7?!1qbvSnq-'
-    '*xU2XoX12bK*G0}adxOQDr~3jXFwP~haIyP9V|NsQ=W05M;6f-PrLheoewczJ}#`%An@JnRNj<w|9zA&!SZv1G&D_{Snu-'
-    '<;45?*)ewVCBxHpm{O-!orXOJ_?AWJHMpK-%xR+1=>dv66ScqqV9qwTqn!sIN?q<V{k8fg6ymLh3V#-'
-    'I_)d&FMMDU9}>M1y=vC6=)V7^D#9*EFqKtMy}P*Lb{YLm9lb-'
-    '16HO+FPbLp*!b5CM@{p?n{`i8U%}rI>8PWGxTDOLQcr5q{ECAeJSg6XqV5H!zFQ=tJJt0KKgR6kNVD2?G`5y2)tV0df6OEn0'
-    'Bhgn7h9`kBBhtk1I4!4Yr|`gO1E%V;N?5cLsK%GgilOJ82;goiG#l|$a(KBKQn|H=M8(bd_Ba$>b^q}koCyZeRc}oFv7vFCk'
-    '4VEIB?#Y4BH-7fm8hvks1gD1UZ~#ZjLR<Q|Cgp76e6PP^&p}FrWVp8s>+b#ibaLXRQO2TQO*Dbqq`%j<#-'
-    'SYL<|=G_F3&mQ#hh`&KWezS)iG$oI_W44&lo)qhLe!tNf1HWs(qO;I6D9s)i<IUFBF_7Su9{h=OFMsm|iYfJGicYiY4Pw7?7'
-    'aY@rQq6x{26H5SWwfBu=8XY7&yBC;>+Tu|gm{onB0FJQo<*!!;$WzB;TF5T|@?&=mhOD^?7|3ac4+fuJLMq^cwx0+01p<n*9'
-    'jy`7>?Tzp2rR5s@^Np{G@dsgb?vg>PzKbqU+*B>IFKeQU{3!xUdXxpkrL^*sHe>w;w<xRRB#S)NJi$frTd~ltcuM6cL$wKrL'
-    '$&eHDh$P~ZHn7(?U+FiZn+>t&d18R3m&5s-'
-    'xewW!}hBupAiTpfgPLYE=06Aawvo=BV0*eHrRndq+PwtWjWL?8<sM>rm>sgc7P_J%ha9EU}bV2=q?Y;R(N{)e;q!F(~yQWdC'
-    '3mW{xAhEIiqMVW`FZL@iz>Qi6&riIvc^m)EDV2Q@PPN{OiPI&u+SiX33Z4W5WU?^mV<+Z9Wjd9yV04%Vp|WrI&jhMC-eE3nH'
-    '*!LTxHDpEexx-'
-    '=$Z72{nWLoVLMZTRLJFTAu7nbcfQcQ@i~2aY?t`H^gRN%#se$p`IjKbY5=LVEywuz_KdG3XN6ITqUqhI;X*^`{Z_Bf`5hLfM'
-    '8`b(Y}Iih-SZ_nF^DiuDZ6pvaSBJNd9%>+fs~PQ4G(spLuxSSLxHLNJr}K$)rj#X&bf+=jk>Ghl3S?ExT7|XU0Vf&kyQ2wnh'
-    ')#Aw<LZWs<x(Y?s4(0bS(2-n}iy+tLOMTd8r&T&DJlf-'
-    'rN#GOn5V27A7!ZQ!dXbw&sRZe1@Y66Z5)(3#nxhI0`3QV6|d-fX|0TUUNcIUFzU%JAyVDQt*nXk^MUl-TvCoaSr)rNP#5gzY'
-    'sCa~u6XIE!H`7Anwkg6=BS*-?K9gz-6IAMKqM%z;_GM)K-'
-    'AwWdb`6%HW#?PY=3W~ELQ2J8TA;alw~+v<*$kPX=FKL){&G@WM%yn<VQ{E(uq{YM!Ha{MU;0_DG?$dE%JZU~~YA2!su<4*-'
-    'z^rb4l2Is#esBv3KeQ<l>8ZDi7YO1xayTx68a8ZL(Qa^O$@LPhK$QM2z5(-WD8t-'
-    'E8d<kg+nO7;MXelpzu95!ebd7p&_E^K*qW2Sejr2#iV@Yp|J{E&!^ts9{3`SmD*<g>wk_|ZIW3xiK2EOi#c|jvll2<2EC0lV'
-    'KQIJ)z5EZA=#7vb6?&AJ(F|54x6#HM=FU5Trm(})V$X*WSp+o)_r?#tp6v+$laA>>QL6OqiABjV8T1M?z`)K299akMoWmZ`^'
-    '0M05sB+k~sZNtuztpqx+dBO2Rr3#M44Y#{wcbW>s_nzUjuOBNT+B`CT%NqV=H4?@4a^!u6P8AYG=ujY0B(nO5V*6Si5q86p;'
-    'qEB5&UT`F33h_ALW6R9UPw?Ru2ld<>{<knVKL#32AyZ-n7%JF#qbbG^d8RH_J#)8)oYS#+M6gW9HyI^%VlX(fgGF9x-'
-    'A`*{LPjIq~Ia<)t%FAbmbx2c0+bZwo!D=;oI{bR1-'
-    'QY3YUHj$(H&`PNER~;o`y#OG9zafzd^K3XG)5GGHYBlF%Zl+EcpcXi~81>b*MhdG3fLxZ9yDb5!P|v$*6lir8Km(FEhg!&cz'
-    '^A4^>nYy'
+    "c-ozt+m@^-"
+    "42JLLVY=5m5sN~~Vp_!w*xfZxKjEOF5{Pp%hvxe&gb)IWAH8y~<?;EW&DV3#Klby_!UyHvAMbJa>*LaDBp+D+L|X^RtwdU#w9amA"
+    "s-Luxe+_(@#EXeReLT2Z|F>V_|IY8(=zpYeA5MeL3ZrIcKh>lhTU+M$_V-cshC5kmGSbST<{MtO^CF=qXSjeamRhZN$&nx1q*2c|"
+    "<3_xcgQqS=hGru^`zM3<?j90e=996|UxqY}Tun&hLu+TDQ**HuI{Z|9{qc$E<dZK$dNqWR)3-"
+    "8u8s+3_*r+=>R39`ODP#wKku?e?L=P~8MW$06%)>e*Z2kRmPz>B!^;Cj8rKkU`dkk89Nn`Ko1Yc}iIyZ%|YQlfmmzr<?s+HzjAtP"
+    "OpIXyFJj3&J1Q%#+k`Zidxj2xS}vG6?l{H%gbcFR1ZHz2EEHsk1$6(e`B*bSYBm8AwXNwQ)#YUJik=Bbms@ecg-NO@!Dq?zoUxkw"
+    "73$B{G(J3p&|I(11j!%jnojTX{cdE>RMkP|mb6C~O=0<}EAKAV`+dbly>5trWz_o)T^SBk}HL&S+|H^N5t3QX)x#M2&1=*u^()yF"
+    "bmO9OT$^PaVuTx0Zdki#g9xZUL_1R?b2dYCUAuzo4<sk0=B{0)ju((r*#{la^B??-${K?WVH0kErkzn~X4FOGzIr-"
+    "XRZ3mU^SdRHJ$q|ca#Ly)J3fzTn3gK-YJr}cw0=pLN;BnNx1-$}!bQ_n3%C5o~Yc1H%2(L<1SSF^>}L<#%^8kr)J<WML}+N-"
+    "RCVOwSr`>o^;3(k;)|ER8)#LoXf9HoC~D4dzF2vki^!@>J5;lNS1q7w@~cvONZO@Uj-ffN2zgS2n!<Vd0av3er*1J+*;F%1Px5x}"
+    "i6SvB$CiMRzsQ`s~Tg^_=ja0<SoS*Gb;ziQzhB7t~lR1?0YPBN!PN#fwtj?FVzIIQOSWF@9@Qdx;_u+u7`x@t4Tgs&<9dl+m6>R)"
+    "_}R?u;`U}0!-kPRE%sC`v2-"
+    "tpNXcChjOnW2|0aE&Xd9ohMc(HCeuZZ5$_KO`B(W9^;Rylag_yfe}*ityIB3GIl6J}cRznuA7p`*7veG?{p@RcFF7CK+Ho)}P-"
+    "W?mf%y+G3=C>E^Y-j&a3iF21C@FQ}fRih^Gu&5TS*Nnqpzc882rCa6YpJJ(6aRV!k=;y*^YW*>ZbOMP%)c@I%x&z-asdQeX(-"
+    "eQmxIBiC(wtt-@Ms_fOm`6UrR`7|T@%$NH9^owVCEp|-"
+    "_PnWbHMP@lvVlRdWW(L~$D)R=IiVZgNdYJ6%H3B%^Wye}1zQDtlyJ6Seo2#mq2fpjw2zk*%<+VsLkgO3Ew7s6gge=c!M*GWvajY3"
+    "rVIjg+E?6PoWUeM6neFM)vRN|zW=5w!Y)WKl~qu^1G?gN8U2kXy+e&NUM7f7CJ$@E!wH1sAy)<b;|mUOH&tn8MBig+-M$9mvEb*-"
+    "00@7DGgR(ZBc&(k+|r<)a1g*l$bh_H?lm^~9`HM?Lk-pwjh(?G(N_?LCxJ1u)Wq;OEvIVt5`ohOOx0)SuxKYxjUSsKpq*+XU2#*P"
+    "*~sUh`j@LAm3y2>RNS0zk3+$#`;X_~<kL%5y?OSBqsFC0L>dk$LHK480lyxtLQOS7l?ZtELiIjpT$bqgUz&PQh={5ericcZT1bzm"
+    "DnpJdmLXg(!=L0G<qS|Tx;vs;t_+bt#9-"
+    "my3_pKn!V$f@&!Ab&63qza9J;!52w$EV1sk$o<#)_3lY}S(cV!h(H8d&fD#!A&pq7zE6eKfE^(r?8Eb<UqD~s)+1zy767TVxO!M*"
+    "NRW3i0)=bx#0#x4mUBKyM51x23J{|&$W0tP&az5g0f);t*D((PvRu5Pij5=t-hA0+y*Eroq!G*$(9tH~r5`sM$|=yP__-"
+    "uS&vS)su{-}spre-KvZF6s5qvFHNjP1Q2{@-Vu{pCYi-PFX-)N-"
+    "IBUGuH2^i?T|Vw#ZY>6I_(I6$|Z(ry3k(s5Sv{s5Ty2rJ=aBO>z6J9XIH~Ef=_$<IgJ)FL;bnd|Rlb4BM}seBL9JRx&=%EJU<8aw"
+    "sS)BVtg#{E~q|q+PwtWm#pG4NDnb6Z=hYJ3tfAWn$+uSee`hn&pAn3Qte}Ux&ZMX-LDGyd;COKTN?(%_!Q*+28z5;tj)Nq6t`>&P"
+    "MPs^+h_%$8IzZ|2jF@vzsoWS&FIo*s#C|eO)hdn-2uAgAEnza+x|_>E&J-"
+    "()#V)f(R^_P@Brkrwzv}f9cg<a+tw>PTSzIEgi87El>U>*`dVk)UJMgT*9{dhS==Od(uHVRM<p|&dZh>tbaZOEUOl+&{#duRRZgT"
+    "ISp3bCAagE;wzLu1S_M7_7!wPH2Ve3hcNl+s%zUTDQfp(sdl+zTX|MiW72-"
+    "cpGAqU8$C{Oenrtg&%Wy6{b%L9Rz*6NvnN+Wifh}jU4%$CN;n)W5!M5Ymz}wgEj&N$<JcO3utS)K^UI_}bJ#8y00neOCcaNOyqZ|"
+    "EB^80UGrxf16>S5q+R<LD5vICd#<l37!Jco28~EzJosp7&Ti2<H#QC%ybY^y_r5yym%0w@j3*9dTS9g>09LL+jGQ4gf6gGrWG%_V"
+    "NO6+<*PxG~ZCbD%LVLL6t+{R4@JXF8cVHIdKL3f9N*-"
+    "?K<gz<@KZ?vZsc3@UFleUtbT5~di3a6g^%Ctaivr?xD19kwmn6dVh%^k#o)CTPKFL^K|P3IW`H{#YWS5m0Ae^G-"
+    "V$M0YeDE|y5Lk?BcA#%^YN~v+j?>w4xEQe*Gu(AbTzQ3r!`Bx(~Zu@v5_{eb4cW|j?)mp*d;x3=o)ZkQh5IS=BYNRIeCGLlmM-"
+    "#qA<QP0(g04X3)uJh$%S+sAq(9tU<1(B*R;#z@{SKi<`orb147)`ii*hsiTx}QzBQJ7ou*ag+1{^ZRSwUk1UpLXbu#_mtt3;`itw"
+    "@w8$ZBkeic^Vbrb>m6aWlFYR^EC#om|>4MV1(s)mUc8Ua)qE)J|bt3C)wyIJM<1P$aJ=#G&n;3Pnl-btDdzb{VyoAjIXc7Nym(R5"
+    "O;<HsI`_`^4EgxCH`P=9oa|1w1%@D7(S2xRJ9<s;a3#-"
+    "1Hev@xrmpqs=4Zx2$1hR`5}5FGuue=v3}egbvjnMItNqD7LS)9%17w8Sai^>ue{=H+m;1tC}dc=T#9!;#$&B#I6+$85XMt&|vn=9"
+    "BUEEOfl?4vet(KzrCSB0)U$2n!_gw3#a;~=5q7fR3PW~vu?|+C4aN!G%0vU<gs(^kghzW4sXZ~nL~=MIedE(hiXD+Md1dsA=&bH$"
+    "w?FfMO<9C>S-v>2|c=K&*zaeSvrrzU$S!~ReMVJgj0%ZUA<RFK2L;^1a~`>rNPR4bQYK7OcC45Jepv<(AcWg{{wVp<Wm"
 )
 
 
@@ -81,14 +74,55 @@ def _decode_manifest() -> frozenset[str]:
 
 
 EXPECTED_PATHS: Final[frozenset[str]] = _decode_manifest()
-EXPECTED_MANIFEST_SHA256: Final[str] = "2261e217a68600a1cbbf56bad888b134a0d482385eb9e8ba615b2de524f3d348"
+EXPECTED_MANIFEST_SHA256: Final[str] = (
+    "50ae962a49493cc64258b5dfdec14f95a0401e4f64908373558bddf404c59559"
+)
 
 _PRODUCTION_ROOT: Final[PurePosixPath] = PurePosixPath("src/gf_wordbench")
 _FORBIDDEN_AREA_IMPORTS: Final[Mapping[str, frozenset[str]]] = {
-    "kernel": frozenset({"config", "state", "projects", "runs", "validation", "diagnostics", "reporting", "infrastructure", "entrypoints", "bootstrap"}),
-    "config": frozenset({"state", "projects", "runs", "validation", "diagnostics", "reporting", "infrastructure", "entrypoints", "bootstrap"}),
-    "infrastructure": frozenset({"config", "state", "projects", "runs", "validation", "diagnostics", "reporting", "entrypoints", "bootstrap"}),
-    "state": frozenset({"projects", "runs", "validation", "diagnostics", "reporting", "entrypoints", "bootstrap"}),
+    "kernel": frozenset(
+        {
+            "config",
+            "state",
+            "projects",
+            "runs",
+            "validation",
+            "diagnostics",
+            "reporting",
+            "infrastructure",
+            "entrypoints",
+            "bootstrap",
+        }
+    ),
+    "config": frozenset(
+        {
+            "state",
+            "projects",
+            "runs",
+            "validation",
+            "diagnostics",
+            "reporting",
+            "infrastructure",
+            "entrypoints",
+            "bootstrap",
+        }
+    ),
+    "infrastructure": frozenset(
+        {
+            "config",
+            "state",
+            "projects",
+            "runs",
+            "validation",
+            "diagnostics",
+            "reporting",
+            "entrypoints",
+            "bootstrap",
+        }
+    ),
+    "state": frozenset(
+        {"projects", "runs", "validation", "diagnostics", "reporting", "entrypoints", "bootstrap"}
+    ),
     "projects": frozenset({"runs", "validation", "diagnostics", "reporting", "entrypoints"}),
     "validation": frozenset({"reporting", "entrypoints"}),
     "diagnostics": frozenset({"reporting", "entrypoints"}),
@@ -153,14 +187,6 @@ _NORMAL_VALIDATION_MODULES: Final[frozenset[str]] = frozenset(
         "gf_wordbench.validation.scenarios.execution",
         "gf_wordbench.validation.scenarios.service",
     }
-)
-_DECLARATIVE_PREFIXES: Final[tuple[str, ...]] = (
-    "src/gf_wordbench/diagnostics/patterns/",
-    "src/gf_wordbench/reporting/schemas/",
-    "src/gf_wordbench/validation/scanning/rules/",
-)
-_DECLARATIVE_FILES: Final[frozenset[str]] = frozenset(
-    {"src/gf_wordbench/projects/schema.py", "src/gf_wordbench/state/schema.py"}
 )
 _IGNORED_PARTS: Final[frozenset[str]] = frozenset(
     {"__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache"}
@@ -244,7 +270,11 @@ def discover_root(explicit: Path | None) -> Path:
 
 
 def _looks_like_root(path: Path) -> bool:
-    return path.is_dir() and (path / "pyproject.toml").is_file() and (path / "src/gf_wordbench").is_dir()
+    return (
+        path.is_dir()
+        and (path / "pyproject.toml").is_file()
+        and (path / "src/gf_wordbench").is_dir()
+    )
 
 
 def verify(root: Path, *, manifest_only: bool = False) -> VerificationResult:
@@ -254,9 +284,19 @@ def verify(root: Path, *, manifest_only: bool = False) -> VerificationResult:
     missing = EXPECTED_PATHS - actual
     unexpected = actual - EXPECTED_PATHS
     for path in sorted(missing):
-        findings.append(Finding("error", "ARCH_PATH_MISSING", path, None, "required canonical file is missing"))
+        findings.append(
+            Finding("error", "ARCH_PATH_MISSING", path, None, "required canonical file is missing")
+        )
     for path in sorted(unexpected):
-        findings.append(Finding("error", "ARCH_PATH_UNEXPECTED", path, None, "file is not in the canonical fixed architecture"))
+        findings.append(
+            Finding(
+                "error",
+                "ARCH_PATH_UNEXPECTED",
+                path,
+                None,
+                "file is not in the canonical fixed architecture",
+            )
+        )
     _verify_document_manifest(root, findings)
     if not manifest_only:
         _verify_python_architecture(root, findings)
@@ -280,10 +320,26 @@ def _verify_embedded_manifest(findings: list[Finding]) -> None:
     counts = Counter(_category(path) for path in EXPECTED_PATHS)
     expected = {"runtime": EXPECTED_RUNTIME, "support": EXPECTED_SUPPORT, "tests": EXPECTED_TESTS}
     if len(EXPECTED_PATHS) != EXPECTED_TOTAL or counts != expected:
-        findings.append(Finding("error", "ARCH_MANIFEST_INTERNAL", "scripts/verify_architecture.py", None, f"embedded counts are invalid: total={len(EXPECTED_PATHS)} categories={dict(counts)}"))
+        findings.append(
+            Finding(
+                "error",
+                "ARCH_MANIFEST_INTERNAL",
+                "scripts/verify_architecture.py",
+                None,
+                f"embedded counts are invalid: total={len(EXPECTED_PATHS)} categories={dict(counts)}",
+            )
+        )
     digest = _manifest_digest(EXPECTED_PATHS)
     if digest != EXPECTED_MANIFEST_SHA256:
-        findings.append(Finding("error", "ARCH_MANIFEST_DIGEST", "scripts/verify_architecture.py", None, "embedded fixed-path manifest digest does not match"))
+        findings.append(
+            Finding(
+                "error",
+                "ARCH_MANIFEST_DIGEST",
+                "scripts/verify_architecture.py",
+                None,
+                "embedded fixed-path manifest digest does not match",
+            )
+        )
 
 
 def _category(path: str) -> str:
@@ -321,30 +377,60 @@ def _collect_fixed_zone_files(root: Path) -> frozenset[str]:
     for path in root.iterdir():
         if not path.is_file():
             continue
-        if path.name == ".gitignore" or path.suffix.lower() in {".py", ".pyw", ".bat", ".cmd", ".toml", ".yml", ".yaml"}:
+        if path.name == ".gitignore" or path.suffix.lower() in {
+            ".py",
+            ".pyw",
+            ".bat",
+            ".cmd",
+            ".toml",
+            ".yml",
+            ".yaml",
+        }:
             found.add(path.name)
     return frozenset(found)
 
 
 def _verify_document_manifest(root: Path, findings: list[Finding]) -> None:
-    documents = [root / candidate for candidate in CANONICAL_DOCUMENT_CANDIDATES if (root / candidate).is_file()]
-    if not documents:
-        findings.append(Finding("error", "ARCH_DOCUMENT_MISSING", CANONICAL_DOCUMENT_CANDIDATES[0], None, "canonical architecture document is missing"))
+    document = root / CANONICAL_DOCUMENT
+    if not document.is_file():
+        findings.append(
+            Finding(
+                "error",
+                "ARCH_DOCUMENT_MISSING",
+                CANONICAL_DOCUMENT,
+                None,
+                "canonical architecture document is missing",
+            )
+        )
         return
-    parsed: list[tuple[Path, frozenset[str]]] = []
-    for document in documents:
-        try:
-            paths = _parse_document_tree(document.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, ValueError) as exc:
-            findings.append(Finding("error", "ARCH_DOCUMENT_INVALID", document.relative_to(root).as_posix(), None, str(exc)))
-            continue
-        parsed.append((document, paths))
-        missing = EXPECTED_PATHS - paths
-        extra = paths - EXPECTED_PATHS
-        if missing or extra:
-            findings.append(Finding("error", "ARCH_DOCUMENT_DRIFT", document.relative_to(root).as_posix(), None, f"fixed tree differs from verifier manifest: missing={len(missing)} extra={len(extra)}"))
-    if len(parsed) > 1 and len({paths for _, paths in parsed}) > 1:
-        findings.append(Finding("error", "ARCH_DOCUMENT_CONFLICT", "docs", None, "canonical and legacy architecture documents declare different fixed trees"))
+    try:
+        paths = _parse_document_tree(document.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        findings.append(
+            Finding(
+                "error",
+                "ARCH_DOCUMENT_INVALID",
+                CANONICAL_DOCUMENT,
+                None,
+                str(exc),
+            )
+        )
+        return
+    missing = EXPECTED_PATHS - paths
+    extra = paths - EXPECTED_PATHS
+    if missing or extra:
+        findings.append(
+            Finding(
+                "error",
+                "ARCH_DOCUMENT_DRIFT",
+                CANONICAL_DOCUMENT,
+                None,
+                (
+                    "fixed tree differs from verifier manifest: "
+                    f"missing={len(missing)} extra={len(extra)}"
+                ),
+            )
+        )
 
 
 def _parse_document_tree(text: str) -> frozenset[str]:
@@ -391,7 +477,7 @@ def _verify_python_architecture(root: Path, findings: list[Finding]) -> None:
             findings.append(Finding("error", "ARCH_PYTHON_INVALID", relative, line, str(exc)))
             continue
         trees[module] = tree
-        _check_file_boundaries(relative, text, tree, module, findings)
+        _check_file_boundaries(relative, tree, module, findings)
     edges: dict[str, set[str]] = {module: set() for module in modules}
     for module, tree in trees.items():
         path = modules[module]
@@ -406,55 +492,174 @@ def _verify_python_architecture(root: Path, findings: list[Finding]) -> None:
                 if resolved is not None and resolved != module:
                     edges[module].add(resolved)
     for cycle in _strongly_connected_cycles(edges):
-        findings.append(Finding("error", "ARCH_IMPORT_CYCLE", modules[cycle[0]].relative_to(root).as_posix(), None, "dependency cycle: " + " -> ".join((*cycle, cycle[0]))))
+        findings.append(
+            Finding(
+                "error",
+                "ARCH_IMPORT_CYCLE",
+                modules[cycle[0]].relative_to(root).as_posix(),
+                None,
+                "dependency cycle: " + " -> ".join((*cycle, cycle[0])),
+            )
+        )
 
 
-def _check_file_boundaries(relative: str, text: str, tree: ast.Module, module: str, findings: list[Finding]) -> None:
-    lines = len(text.splitlines())
-    declarative = relative in _DECLARATIVE_FILES or relative.startswith(_DECLARATIVE_PREFIXES)
-    hard_limit = 900 if declarative else 600
-    soft_limit = 900 if declarative else 450
-    if lines > hard_limit:
-        findings.append(Finding("error", "ARCH_FILE_TOO_LARGE", relative, None, f"{lines} physical lines exceeds hard limit {hard_limit}"))
-    elif lines > soft_limit:
-        findings.append(Finding("warning", "ARCH_FILE_LARGE", relative, None, f"{lines} physical lines exceeds normal limit {soft_limit}"))
+def _check_file_boundaries(
+    relative: str,
+    tree: ast.Module,
+    module: str,
+    findings: list[Finding],
+) -> None:
     if relative.endswith("/__init__.py"):
         for statement in tree.body:
-            if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant) and isinstance(statement.value.value, str):
+            if (
+                isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Constant)
+                and isinstance(statement.value.value, str)
+            ):
                 continue
-            if isinstance(statement, (ast.Import, ast.ImportFrom, ast.Assign, ast.AnnAssign, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Pass)):
+            if isinstance(
+                statement,
+                (
+                    ast.Import,
+                    ast.ImportFrom,
+                    ast.Assign,
+                    ast.AnnAssign,
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef,
+                    ast.ClassDef,
+                    ast.Pass,
+                ),
+            ):
                 continue
-            findings.append(Finding("error", "ARCH_INIT_SIDE_EFFECT", relative, getattr(statement, "lineno", None), "package initializer contains executable top-level control flow"))
-    if module in _NORMAL_VALIDATION_MODULES and "gf_wordbench.validation.scenarios.gold_update" in _all_import_names(module, relative.endswith("/__init__.py"), tree):
-        findings.append(Finding("error", "ARCH_GOLD_UPDATE_PATH", relative, None, "normal validation path imports explicit gold-update behavior"))
+            findings.append(
+                Finding(
+                    "error",
+                    "ARCH_INIT_SIDE_EFFECT",
+                    relative,
+                    getattr(statement, "lineno", None),
+                    "package initializer contains executable top-level control flow",
+                )
+            )
+    if (
+        module in _NORMAL_VALIDATION_MODULES
+        and "gf_wordbench.validation.scenarios.gold_update"
+        in _all_import_names(module, relative.endswith("/__init__.py"), tree)
+    ):
+        findings.append(
+            Finding(
+                "error",
+                "ARCH_GOLD_UPDATE_PATH",
+                relative,
+                None,
+                "normal validation path imports explicit gold-update behavior",
+            )
+        )
 
 
-def _check_import_rules(module: str, relative: str, node: ast.Import | ast.ImportFrom, imports: tuple[str, ...], findings: list[Finding]) -> None:
+def _check_import_rules(
+    module: str,
+    relative: str,
+    node: ast.Import | ast.ImportFrom,
+    imports: tuple[str, ...],
+    findings: list[Finding],
+) -> None:
     line = getattr(node, "lineno", None)
     for target in imports:
         if target == "tests" or target.startswith("tests."):
-            findings.append(Finding("error", "ARCH_PRODUCTION_IMPORTS_TESTS", relative, line, f"production module imports {target}"))
+            findings.append(
+                Finding(
+                    "error",
+                    "ARCH_PRODUCTION_IMPORTS_TESTS",
+                    relative,
+                    line,
+                    f"production module imports {target}",
+                )
+            )
         if target == "gf_portfolio" or target.startswith("gf_portfolio."):
-            findings.append(Finding("error", "ARCH_PORTFOLIO_DEPENDENCY", relative, line, f"Wordbench imports {target}"))
+            findings.append(
+                Finding(
+                    "error",
+                    "ARCH_PORTFOLIO_DEPENDENCY",
+                    relative,
+                    line,
+                    f"Wordbench imports {target}",
+                )
+            )
     if isinstance(node, ast.ImportFrom):
         if any(alias.name == "*" for alias in node.names):
-            findings.append(Finding("error", "ARCH_WILDCARD_IMPORT", relative, line, "wildcard imports are prohibited"))
+            findings.append(
+                Finding(
+                    "error",
+                    "ARCH_WILDCARD_IMPORT",
+                    relative,
+                    line,
+                    "wildcard imports are prohibited",
+                )
+            )
         for alias in node.names:
-            if alias.name.startswith("_") and alias.name not in {"__version__"} and not alias.name.endswith("__"):
-                findings.append(Finding("error", "ARCH_PRIVATE_IMPORT", relative, line, f"imports private symbol {alias.name!r}"))
+            if (
+                alias.name.startswith("_")
+                and alias.name not in {"__version__"}
+                and not alias.name.endswith("__")
+            ):
+                findings.append(
+                    Finding(
+                        "error",
+                        "ARCH_PRIVATE_IMPORT",
+                        relative,
+                        line,
+                        f"imports private symbol {alias.name!r}",
+                    )
+                )
     area = _module_area(module)
     for target in imports:
         target_area = _module_area(target)
         if target_area in _FORBIDDEN_AREA_IMPORTS.get(area, frozenset()):
-            findings.append(Finding("error", "ARCH_DIRECTION", relative, line, f"{area} must not import {target}"))
+            findings.append(
+                Finding(
+                    "error", "ARCH_DIRECTION", relative, line, f"{area} must not import {target}"
+                )
+            )
         if area == "entrypoints" and target.startswith(_ENTRYPOINT_INTERNAL_PREFIXES):
-            findings.append(Finding("error", "ARCH_ENTRYPOINT_BYPASS", relative, line, f"entrypoint bypasses a public application boundary: {target}"))
+            findings.append(
+                Finding(
+                    "error",
+                    "ARCH_ENTRYPOINT_BYPASS",
+                    relative,
+                    line,
+                    f"entrypoint bypasses a public application boundary: {target}",
+                )
+            )
         if area == "reporting" and target.startswith(_REPORT_EXECUTION_PREFIXES):
-            findings.append(Finding("error", "ARCH_REPORT_EXECUTION", relative, line, f"reporting imports execution behavior: {target}"))
+            findings.append(
+                Finding(
+                    "error",
+                    "ARCH_REPORT_EXECUTION",
+                    relative,
+                    line,
+                    f"reporting imports execution behavior: {target}",
+                )
+            )
         if area == "diagnostics" and target.startswith(_DIAGNOSTIC_EXECUTION_PREFIXES):
-            findings.append(Finding("error", "ARCH_DIAGNOSTIC_EXECUTION", relative, line, f"diagnostics imports execution internals: {target}"))
+            findings.append(
+                Finding(
+                    "error",
+                    "ARCH_DIAGNOSTIC_EXECUTION",
+                    relative,
+                    line,
+                    f"diagnostics imports execution internals: {target}",
+                )
+            )
     if "subprocess" in imports and module not in _APPROVED_SUBPROCESS_MODULES:
-        findings.append(Finding("error", "ARCH_DIRECT_SUBPROCESS", relative, line, "direct subprocess access is outside the approved process adapter"))
+        findings.append(
+            Finding(
+                "error",
+                "ARCH_DIRECT_SUBPROCESS",
+                relative,
+                line,
+                "direct subprocess access is outside the approved process adapter",
+            )
+        )
 
 
 def _module_name(path: Path, source_root: Path) -> str:
@@ -469,7 +674,9 @@ def _module_area(module: str) -> str:
     return parts[1] if len(parts) > 1 else "package_root"
 
 
-def _import_targets(module: str, is_package: bool, node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
+def _import_targets(
+    module: str, is_package: bool, node: ast.Import | ast.ImportFrom
+) -> tuple[str, ...]:
     if isinstance(node, ast.Import):
         return tuple(alias.name for alias in node.names)
     if node.level:
@@ -486,7 +693,11 @@ def _import_targets(module: str, is_package: bool, node: ast.Import | ast.Import
     if base:
         targets.append(base)
     if node.module is None:
-        targets.extend(f"{base}.{alias.name}" if base else alias.name for alias in node.names if alias.name != "*")
+        targets.extend(
+            f"{base}.{alias.name}" if base else alias.name
+            for alias in node.names
+            if alias.name != "*"
+        )
     return tuple(dict.fromkeys(targets))
 
 
@@ -570,10 +781,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"usage error: {exc}", file=sys.stderr)
         return EXIT_USAGE_ERROR
     except Exception as exc:
-        print(f"architecture verification failed unexpectedly: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(
+            f"architecture verification failed unexpectedly: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return EXIT_RUNTIME_ERROR
     if args.json:
-        print(json.dumps(result.to_json(), ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+        print(
+            json.dumps(result.to_json(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
     else:
         print(render_text(result, quiet=args.quiet))
     failed = not result.passed or (args.warnings_as_errors and result.warning_count > 0)

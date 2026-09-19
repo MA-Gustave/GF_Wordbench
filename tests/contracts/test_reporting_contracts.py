@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import ast
-import importlib
-import sys
 from collections.abc import Iterable, Mapping, Sequence
+import importlib
 from pathlib import Path
+import sys
 from types import ModuleType
 from typing import Final, TypeAlias, cast
 
@@ -277,8 +277,7 @@ def _literal_all(tree: ast.Module) -> tuple[str, ...] | None:
     for node in tree.body:
         if isinstance(node, ast.Assign):
             if any(
-                isinstance(target, ast.Name) and target.id == "__all__"
-                for target in node.targets
+                isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
             ):
                 values.append(node.value)
         elif (
@@ -296,11 +295,9 @@ def _literal_all(tree: ast.Module) -> tuple[str, ...] | None:
         raw = ast.literal_eval(values[0])
     except (ValueError, TypeError) as exc:
         pytest.fail(f"__all__ must be a literal tuple or list: {exc}")
-    if not isinstance(raw, (tuple, list)) or not all(
-        isinstance(value, str) for value in raw
-    ):
+    if not isinstance(raw, (tuple, list)) or not all(isinstance(value, str) for value in raw):
         pytest.fail("__all__ must contain strings only")
-    return tuple(cast(Sequence[str], raw))
+    return tuple(cast("Sequence[str]", raw))
 
 
 def _from_import_map(tree: ast.Module) -> dict[str, str]:
@@ -405,13 +402,14 @@ def test_reporting_package_initializers_are_side_effect_free(relative_path: str)
         if isinstance(node, ast.ImportFrom):
             if node.module == "__future__" and node.level == 0:
                 continue
-            if node.level == 1 and node.module is not None and all(
-                alias.name != "*" for alias in node.names
+            if (
+                node.level == 1
+                and node.module is not None
+                and all(alias.name != "*" for alias in node.names)
             ):
                 continue
         if isinstance(node, ast.Assign) and all(
-            isinstance(target, ast.Name) and target.id == "__all__"
-            for target in node.targets
+            isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
         ):
             continue
         if (
@@ -421,8 +419,8 @@ def test_reporting_package_initializers_are_side_effect_free(relative_path: str)
         ):
             continue
         violations.append(f"line {getattr(node, 'lineno', '?')}: {type(node).__name__}")
-    assert not violations, (
-        f"{relative_path} performs package-initializer work: " + ", ".join(violations)
+    assert not violations, f"{relative_path} performs package-initializer work: " + ", ".join(
+        violations
     )
     exports = _literal_all(tree)
     if relative_path in _EMPTY_INITIALIZERS:
@@ -492,9 +490,7 @@ def test_reporting_does_not_import_execution_or_project_authority(
 ) -> None:
     tree = _parse(relative_path)
     forbidden = sorted(
-        module_name
-        for module_name in _absolute_imports(tree)
-        if _is_forbidden_import(module_name)
+        module_name for module_name in _absolute_imports(tree) if _is_forbidden_import(module_name)
     )
     assert not forbidden, (
         f"{relative_path} crosses the reporting boundary through imports: {forbidden!r}"
@@ -534,9 +530,7 @@ def test_stable_report_writers_use_owned_atomic_publication(
     assert not locally_owned, (
         f"{relative_path} duplicates atomic publication helpers: {locally_owned!r}"
     )
-    direct_atomic_calls = sorted(
-        _call_names(tree).intersection(_FORBIDDEN_LOCAL_ATOMIC_CALLS)
-    )
+    direct_atomic_calls = sorted(_call_names(tree).intersection(_FORBIDDEN_LOCAL_ATOMIC_CALLS))
     assert not direct_atomic_calls, (
         f"{relative_path} bypasses the atomic publication owner: {direct_atomic_calls!r}"
     )
@@ -544,14 +538,14 @@ def test_stable_report_writers_use_owned_atomic_publication(
 
 def test_canonical_report_paths_are_owned_by_the_run_registry(tmp_path: Path) -> None:
     runs_paths = _import_module("gf_wordbench.runs.paths")
-    build_run_paths = getattr(runs_paths, "build_run_paths")
+    build_run_paths = runs_paths.build_run_paths
     run_id = "20260725_153043"
     run_dir = (tmp_path / f"run_{run_id}").resolve()
     run_dir.mkdir()
     paths = build_run_paths(run_id, run_dir)
 
     actual = {
-        field: cast(Path, getattr(paths, field)).relative_to(run_dir).as_posix()
+        field: cast("Path", getattr(paths, field)).relative_to(run_dir).as_posix()
         for field in _CANONICAL_RUN_PATHS
     }
     assert actual == dict(_CANONICAL_RUN_PATHS)
@@ -665,26 +659,21 @@ def test_human_reports_are_not_machine_schema_dependencies() -> None:
                 "gf_wordbench.reporting.ai_packet.renderer",
             }
         ),
-        "summary/markdown_writer.py": frozenset(
-            {"gf_wordbench.reporting.ai_packet.renderer"}
-        ),
-        "ai_packet/renderer.py": frozenset(
-            {"gf_wordbench.reporting.summary.markdown_writer"}
-        ),
+        "summary/markdown_writer.py": frozenset({"gf_wordbench.reporting.ai_packet.renderer"}),
+        "ai_packet/renderer.py": frozenset({"gf_wordbench.reporting.summary.markdown_writer"}),
     }
     for relative_path, prohibited in prohibited_edges.items():
         imports = _absolute_imports(_parse(relative_path))
         offending = sorted(imports.intersection(prohibited))
         assert not offending, (
-            f"{relative_path} reconstructs facts through another human report: "
-            f"{offending!r}"
+            f"{relative_path} reconstructs facts through another human report: {offending!r}"
         )
 
 
 def test_aggregate_logs_explicitly_exclude_canonical_reports() -> None:
     module = _import_module("gf_wordbench.reporting.logs.aggregates")
     forbidden = _constant(module, "_FORBIDDEN_OPERATION_PATHS")
-    actual = {str(path).replace("\\", "/") for path in cast(Iterable[object], forbidden)}
+    actual = {str(path).replace("\\", "/") for path in cast("Iterable[object]", forbidden)}
     assert actual == {
         "summary.json",
         "summary.md",

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import math
-import os
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+import math
+import os
 from pathlib import Path
+import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -28,6 +28,7 @@ from gf_wordbench.kernel.statuses import ExecutionState
 if TYPE_CHECKING:
     from gf_wordbench.infrastructure.process.termination import CancellationToken
 
+
 class GfOperationKind(StrEnum):
     PROBE_VERSION = "probe_version"
     COMPILE_MODULE = "compile_module"
@@ -35,13 +36,16 @@ class GfOperationKind(StrEnum):
     RUN_SCENARIO = "run_scenario"
     INSPECT_GRAMMAR = "inspect_grammar"
 
+
 class GfArtifactKind(StrEnum):
     FILE = "file"
     DIRECTORY = "directory"
 
+
 class GfDiagnosticStream(StrEnum):
     STDOUT = "stdout"
     STDERR = "stderr"
+
 
 class GrammarInspectionKind(StrEnum):
     ABSTRACT_INFO = "abstract_info"
@@ -52,6 +56,7 @@ class GrammarInspectionKind(StrEnum):
     GENERATE_RANDOM = "generate_random"
     GENERATE_TREES = "generate_trees"
     MORPHOLOGY = "morphology"
+
 
 @dataclass(frozen=True, slots=True)
 class GfArtifactExpectation:
@@ -70,12 +75,14 @@ class GfArtifactExpectation:
         if self.require_non_empty and self.kind is not GfArtifactKind.FILE:
             raise ValueError("require_non_empty applies only to file artifacts")
 
+
 @dataclass(frozen=True, slots=True)
 class VersionProbePayload:
     operation_kind: GfOperationKind = field(
         default=GfOperationKind.PROBE_VERSION,
         init=False,
     )
+
 
 @dataclass(frozen=True, slots=True)
 class ModuleCompilePayload:
@@ -88,6 +95,7 @@ class ModuleCompilePayload:
         init=False,
     )
 
+
 @dataclass(frozen=True, slots=True)
 class PgfBuildPayload:
     entrypoint_paths: tuple[Path, ...]
@@ -97,6 +105,7 @@ class PgfBuildPayload:
         default=GfOperationKind.BUILD_PGF,
         init=False,
     )
+
 
 @dataclass(frozen=True, slots=True)
 class ScenarioRunPayload:
@@ -108,6 +117,7 @@ class ScenarioRunPayload:
         default=GfOperationKind.RUN_SCENARIO,
         init=False,
     )
+
 
 @dataclass(frozen=True, slots=True)
 class GrammarInspectionPayload:
@@ -121,6 +131,7 @@ class GrammarInspectionPayload:
         init=False,
     )
 
+
 GfOperationPayload = (
     VersionProbePayload
     | ModuleCompilePayload
@@ -128,6 +139,7 @@ GfOperationPayload = (
     | ScenarioRunPayload
     | GrammarInspectionPayload
 )
+
 
 @dataclass(frozen=True, slots=True)
 class GfOperationRequest:
@@ -179,6 +191,7 @@ class GfOperationRequest:
     def operation_kind(self) -> GfOperationKind:
         return self.payload.operation_kind
 
+
 @dataclass(frozen=True, slots=True)
 class GfArtifactObservation:
     path: Path
@@ -200,6 +213,7 @@ class GfArtifactObservation:
             _non_negative_int(self.size_bytes, "size_bytes")
         if not self.exists and (self.kind_matches or self.fresh):
             raise ValueError("a missing artifact cannot match its kind or be fresh")
+
 
 @dataclass(frozen=True, slots=True)
 class GfDiagnosticEvidence:
@@ -227,6 +241,7 @@ class GfDiagnosticEvidence:
         if self.column is not None and self.line is None:
             raise ValueError("diagnostic column requires a line number")
 
+
 @runtime_checkable
 class ProcessEvidence(Protocol):
     @property
@@ -252,6 +267,7 @@ class ProcessEvidence(Protocol):
 
     @property
     def stderr_path(self) -> Path: ...
+
 
 @dataclass(frozen=True, slots=True)
 class GfOperationResult:
@@ -301,9 +317,9 @@ class GfOperationResult:
     @property
     def process_completed_successfully(self) -> bool:
         return (
-            self.process.execution_state is ExecutionState.COMPLETED
-            and self.process.exit_code == 0
+            self.process.execution_state is ExecutionState.COMPLETED and self.process.exit_code == 0
         )
+
 
 @runtime_checkable
 class GfToolPort(Protocol):
@@ -342,6 +358,7 @@ class GfToolPort(Protocol):
         cancellation_token: CancellationToken | None = None,
     ) -> GfOperationResult: ...
 
+
 @runtime_checkable
 class SourceReader(Protocol):
     def read_bytes(self, path: Path, *, maximum_bytes: int | None = None) -> bytes: ...
@@ -353,6 +370,7 @@ class SourceReader(Protocol):
         encoding: str = "utf-8",
         maximum_bytes: int | None = None,
     ) -> str: ...
+
 
 @runtime_checkable
 class ValidationEvidenceWriter(Protocol):
@@ -366,9 +384,11 @@ class ValidationEvidenceWriter(Protocol):
         encoding: str = "utf-8",
     ) -> None: ...
 
+
 @runtime_checkable
 class GoldReader(Protocol):
     def read_gold(self, path: Path, *, encoding: str = "utf-8") -> str: ...
+
 
 @runtime_checkable
 class GoldWriter(Protocol):
@@ -379,6 +399,7 @@ class GoldWriter(Protocol):
         *,
         encoding: str = "utf-8",
     ) -> None: ...
+
 
 @runtime_checkable
 class SourceFingerprintView(Protocol):
@@ -394,9 +415,11 @@ class SourceFingerprintView(Protocol):
     @property
     def last_modified_utc(self) -> datetime: ...
 
+
 @runtime_checkable
 class FingerprintService(Protocol):
     def fingerprint_file(self, path: Path) -> SourceFingerprintView: ...
+
 
 @runtime_checkable
 class NormalizationProfileView(Protocol):
@@ -406,12 +429,14 @@ class NormalizationProfileView(Protocol):
     @property
     def version(self) -> str: ...
 
+
 @runtime_checkable
 class NormalizationProfileReader(Protocol):
     def read_profile(
         self,
         profile_id: NormalizationProfileId,
     ) -> NormalizationProfileView: ...
+
 
 def validate_gf_operation_request(
     request: GfOperationRequest,
@@ -426,6 +451,8 @@ def validate_gf_operation_request(
                 f"expected {expected_kind.value!r}, got {request.operation_kind.value!r}"
             )
     return request
+
+
 def _payload(value: object) -> GfOperationPayload:
     if isinstance(value, VersionProbePayload):
         return value
@@ -434,9 +461,13 @@ def _payload(value: object) -> GfOperationPayload:
         module = _line(value.module_name, "module name")
         if re.fullmatch(r"[A-Z][A-Za-z0-9_']*", module) is None:
             raise ValueError(f"invalid GF module name: {module!r}")
-        expected = None if value.expected_object_path is None else _path(
-            value.expected_object_path,
-            "expected object path",
+        expected = (
+            None
+            if value.expected_object_path is None
+            else _path(
+                value.expected_object_path,
+                "expected object path",
+            )
         )
         return ModuleCompilePayload(
             source,
@@ -474,6 +505,8 @@ def _payload(value: object) -> GfOperationPayload:
             value.maximum_results,
         )
     raise TypeError("payload must be a supported GF operation payload")
+
+
 def _operation_contract(request: GfOperationRequest) -> None:
     if request.operation_kind is GfOperationKind.PROBE_VERSION:
         if request.expected_artifacts:
@@ -486,8 +519,19 @@ def _operation_contract(request: GfOperationRequest) -> None:
             raise ValueError("expected object path must be a required artifact")
     if isinstance(payload, PgfBuildPayload) and _key(payload.output_path) not in required:
         raise ValueError("PGF output path must be a required artifact")
+
+
 def _path(value: object, name: str) -> Path:
-    return normalize_environment_path(value, role=name)
+    if isinstance(value, str):
+        return normalize_environment_path(value, role=name)
+    if isinstance(value, os.PathLike):
+        raw = os.fspath(value)
+        if isinstance(raw, bytes):
+            raise TypeError(f"{name} must be a text path")
+        return normalize_environment_path(raw, role=name)
+    raise TypeError(f"{name} must be a string or path-like value")
+
+
 def _paths(values: Sequence[Path], name: str) -> tuple[Path, ...]:
     if isinstance(values, (str, bytes, os.PathLike)):
         raise TypeError(f"{name} must be a sequence of paths")
@@ -495,20 +539,28 @@ def _paths(values: Sequence[Path], name: str) -> tuple[Path, ...]:
     if len({_key(value) for value in result}) != len(result):
         raise ValueError(f"{name} must contain unique paths")
     return result
+
+
 def _key(path: Path) -> str:
     return os.path.normcase(os.path.normpath(os.fspath(path)))
+
+
 def _line(value: object, name: str) -> str:
     if not isinstance(value, str):
         raise TypeError(f"{name} must be a string")
     if not value or value != value.strip() or any(char in value for char in "\x00\r\n"):
         raise ValueError(f"{name} must be a non-empty trimmed single line")
     return value
+
+
 def _text(value: object, name: str) -> str:
     if not isinstance(value, str):
         raise TypeError(f"{name} must be a string")
     if "\x00" in value:
         raise ValueError(f"{name} must not contain NUL")
     return value
+
+
 def _environment(values: Mapping[str, str]) -> Mapping[str, str]:
     if not isinstance(values, Mapping):
         raise TypeError("environment_overrides must be a mapping")
@@ -519,6 +571,8 @@ def _environment(values: Mapping[str, str]) -> Mapping[str, str]:
             raise ValueError("environment variable names must not contain '='")
         result[key] = _text(value, f"environment variable {key}")
     return MappingProxyType(dict(sorted(result.items())))
+
+
 def _process(value: object) -> None:
     required = (
         "operation_id",
@@ -532,30 +586,44 @@ def _process(value: object) -> None:
     )
     if any(not hasattr(value, name) for name in required):
         raise TypeError("process must satisfy the ProcessEvidence protocol")
+
+
 def _unique_artifacts(values: Sequence[GfArtifactExpectation]) -> None:
     if len({_key(item.path) for item in values}) != len(values):
         raise ValueError("expected artifact paths must be unique")
+
+
 def _positive_number(value: object, name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a number")
     if not math.isfinite(float(value)) or value <= 0:
         raise ValueError(f"{name} must be finite and positive")
+
+
 def _positive_int(value: object, name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an integer")
     if value <= 0:
         raise ValueError(f"{name} must be positive")
+
+
 def _non_negative_int(value: object, name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an integer")
     if value < 0:
         raise ValueError(f"{name} must be non-negative")
+
+
 def _bool(value: object, name: str) -> None:
     if not isinstance(value, bool):
         raise TypeError(f"{name} must be a boolean")
+
+
 def _enum(value: object, enum_type: type[StrEnum], name: str) -> None:
     if not isinstance(value, enum_type):
         raise TypeError(f"{name} must be a {enum_type.__name__}")
+
+
 __all__ = (
     "FingerprintService",
     "GfArtifactExpectation",

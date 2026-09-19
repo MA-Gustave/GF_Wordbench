@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+from pathlib import Path
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -19,16 +19,12 @@ def _resolve_gf_executable() -> Path:
     if configured:
         executable = Path(configured).expanduser().resolve()
         if not executable.is_file():
-            pytest.fail(
-                f"{_GF_EXECUTABLE_ENV} does not identify a file: {executable}"
-            )
+            pytest.fail(f"{_GF_EXECUTABLE_ENV} does not identify a file: {executable}")
         return executable
 
     discovered = shutil.which("gf")
     if discovered is None:
-        pytest.skip(
-            "real GF integration requires GF_WORDBENCH_TEST_GF or gf on PATH"
-        )
+        pytest.skip("real GF integration requires GF_WORDBENCH_TEST_GF or gf on PATH")
     return Path(discovered).resolve()
 
 
@@ -154,10 +150,7 @@ def test_real_gf_builds_current_non_empty_optimized_pgf(
     assert expected_pgf.stat().st_size > 0
     assert _sha256(expected_pgf) != stale_hash
     assert _sha256(previous_pgf) == previous_hash
-    assert {
-        path: _sha256(path)
-        for path in source_hashes
-    } == source_hashes
+    assert {path: _sha256(path) for path in source_hashes} == source_hashes
 
 
 def test_real_gf_rejects_invalid_pgf_entrypoint_without_false_artifact(
@@ -185,12 +178,7 @@ def test_real_gf_rejects_invalid_pgf_entrypoint_without_false_artifact(
         entrypoints=(concrete_path,),
     )
 
-    assert result.returncode != 0 or not expected_pgf.exists(), (
-        _failure_message(result)
-    )
+    assert result.returncode != 0 or not expected_pgf.exists(), _failure_message(result)
     assert not expected_pgf.exists(), _failure_message(result)
     assert result.stdout or result.stderr
-    assert {
-        path: _sha256(path)
-        for path in source_hashes
-    } == source_hashes
+    assert {path: _sha256(path) for path in source_hashes} == source_hashes

@@ -114,19 +114,22 @@ def test_source_target_kinds_are_an_explicit_closed_set() -> None:
 
 
 def test_format_target_identity_is_typed_portable_and_stable() -> None:
-    assert format_target_identity(
-        ValidationTarget(TargetKind.FILE, r"grammar\Main.gf")
-    ) == "file:grammar/Main.gf"
-    assert format_target_identity(
-        ValidationTarget(TargetKind.MODULE, "Syntax")
-    ) == "module:Syntax"
-    assert format_target_identity(
-        ValidationTarget(TargetKind.SCENARIO, "parse-smoke")
-    ) == "scenario:parse-smoke"
-    assert format_target_identity(
-        ValidationTarget(TargetKind.PROJECT, None),
-        project_id="example-language",
-    ) == "project:example-language"
+    assert (
+        format_target_identity(ValidationTarget(TargetKind.FILE, r"grammar\Main.gf"))
+        == "file:grammar/Main.gf"
+    )
+    assert format_target_identity(ValidationTarget(TargetKind.MODULE, "Syntax")) == "module:Syntax"
+    assert (
+        format_target_identity(ValidationTarget(TargetKind.SCENARIO, "parse-smoke"))
+        == "scenario:parse-smoke"
+    )
+    assert (
+        format_target_identity(
+            ValidationTarget(TargetKind.PROJECT, None),
+            project_id="example-language",
+        )
+        == "project:example-language"
+    )
 
 
 def test_format_target_identity_requires_the_project_fallback_value() -> None:
@@ -182,16 +185,22 @@ def test_quick_target_accepts_project_and_source_relative_paths(
     main = _source_file(source_root, "Main.gf")
     nested = _source_file(source_root, "syntax/Nested.gf")
 
-    assert resolve_quick_target(
-        Path("grammar/Main.gf"),
-        project_root=project_root,
-        source_root=source_root,
-    ) == main
-    assert resolve_quick_target(
-        Path("syntax/Nested.gf"),
-        project_root=project_root,
-        source_root=source_root,
-    ) == nested
+    assert (
+        resolve_quick_target(
+            Path("grammar/Main.gf"),
+            project_root=project_root,
+            source_root=source_root,
+        )
+        == main
+    )
+    assert (
+        resolve_quick_target(
+            Path("syntax/Nested.gf"),
+            project_root=project_root,
+            source_root=source_root,
+        )
+        == nested
+    )
 
 
 def test_quick_module_target_appends_the_gf_suffix(tmp_path: Path) -> None:
@@ -213,18 +222,24 @@ def test_quick_target_uses_unique_basename_fallback_only_after_direct_paths(
     project_root, source_root = _project_tree(tmp_path)
     nested = _source_file(source_root, "nested/Main.gf")
 
-    assert resolve_quick_target(
-        "Main.gf",
-        project_root=project_root,
-        source_root=source_root,
-    ) == nested
+    assert (
+        resolve_quick_target(
+            "Main.gf",
+            project_root=project_root,
+            source_root=source_root,
+        )
+        == nested
+    )
 
     direct = _source_file(source_root, "Main.gf")
-    assert resolve_quick_target(
-        "Main.gf",
-        project_root=project_root,
-        source_root=source_root,
-    ) == direct
+    assert (
+        resolve_quick_target(
+            "Main.gf",
+            project_root=project_root,
+            source_root=source_root,
+        )
+        == direct
+    )
 
 
 def test_quick_target_rejects_ambiguous_basename_in_stable_order(
@@ -242,8 +257,7 @@ def test_quick_target_rejects_ambiguous_basename_in_stable_order(
         )
 
     assert str(caught.value) == (
-        "Quick target 'Main.gf' is ambiguous; matches: "
-        "Alpha/Main.gf, zeta/Main.gf"
+        "Quick target 'Main.gf' is ambiguous; matches: Alpha/Main.gf, zeta/Main.gf"
     )
     assert caught.value.stage == "selection"
     assert caught.value.operation == "resolve_quick_target"
@@ -281,11 +295,14 @@ def test_absolute_quick_target_must_remain_inside_the_source_root(
     outside = project_root / "Outside.gf"
     outside.write_text("abstract Outside = {}\n", encoding="utf-8")
 
-    assert resolve_quick_target(
-        inside,
-        project_root=project_root,
-        source_root=source_root,
-    ) == inside
+    assert (
+        resolve_quick_target(
+            inside,
+            project_root=project_root,
+            source_root=source_root,
+        )
+        == inside
+    )
 
     with pytest.raises(PathSecurityError, match="escapes the approved root"):
         resolve_quick_target(
@@ -312,11 +329,14 @@ def test_configured_target_is_exactly_source_relative_without_fallback(
     project_root, source_root = _project_tree(tmp_path)
     expected = _source_file(source_root, "syntax/Main.gf")
 
-    assert resolve_configured_target(
-        "syntax/Main.gf",
-        project_root=project_root,
-        source_root=source_root,
-    ) == expected
+    assert (
+        resolve_configured_target(
+            "syntax/Main.gf",
+            project_root=project_root,
+            source_root=source_root,
+        )
+        == expected
+    )
 
     with pytest.raises(ProjectConfigurationError, match="does not exist"):
         resolve_configured_target(
@@ -398,16 +418,22 @@ def test_resolve_source_target_dispatches_by_typed_kind(tmp_path: Path) -> None:
     quick = _source_file(source_root, "quick/Main.gf")
     checkpoint = _source_file(source_root, "layers/Checkpoint.gf")
 
-    assert resolve_source_target(
-        ValidationTarget(TargetKind.MODULE, "quick/Main"),
-        project_root=project_root,
-        source_root=source_root,
-    ) == quick
-    assert resolve_source_target(
-        ValidationTarget(TargetKind.CHECKPOINT, "layers/Checkpoint.gf"),
-        project_root=project_root,
-        source_root=source_root,
-    ) == checkpoint
+    assert (
+        resolve_source_target(
+            ValidationTarget(TargetKind.MODULE, "quick/Main"),
+            project_root=project_root,
+            source_root=source_root,
+        )
+        == quick
+    )
+    assert (
+        resolve_source_target(
+            ValidationTarget(TargetKind.CHECKPOINT, "layers/Checkpoint.gf"),
+            project_root=project_root,
+            source_root=source_root,
+        )
+        == checkpoint
+    )
 
     with pytest.raises(ContractViolationError, match="does not resolve"):
         resolve_source_target(
@@ -430,7 +456,10 @@ def test_resolved_target_must_be_readable(
 ) -> None:
     project_root, source_root = _project_tree(tmp_path)
     target = _source_file(source_root, "Main.gf")
-    monkeypatch.setattr(targets_module.os, "access", lambda *_args: False)
+    monkeypatch.setattr(
+        "gf_wordbench.validation.selection.targets.os.access",
+        lambda *_args: False,
+    )
 
     with pytest.raises(EvidenceIOError, match="not readable") as caught:
         resolve_quick_target(

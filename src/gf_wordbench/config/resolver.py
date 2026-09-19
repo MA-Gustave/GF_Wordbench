@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol, cast, runtime_checkable
 
 from .environment import resolve_environment
 from .models import (
@@ -13,10 +13,44 @@ from .models import (
     ConfigurationProvenance,
     ConfigurationResolution,
     ConfigurationResolutionRequest,
+    EvidenceLevel,
     IssueSeverity,
     RunConfig,
+    ValidationTarget,
 )
 from .precedence import ConfigurationSource, resolve_precedence
+
+
+@runtime_checkable
+class _ProfileModulesView(Protocol):
+    @property
+    def checkpoints(self) -> Sequence[Path]: ...
+
+    @property
+    def entrypoints(self) -> Sequence[Path]: ...
+
+
+@runtime_checkable
+class _ProfileValidationView(Protocol):
+    @property
+    def all_scenarios(self) -> Sequence[object]: ...
+
+    @property
+    def release_requires_pgf(self) -> bool: ...
+
+
+@runtime_checkable
+class _ValidationProfileView(Protocol):
+    @property
+    def modules(self) -> _ProfileModulesView: ...
+
+    @property
+    def validation(self) -> _ProfileValidationView: ...
+
+
+def _is_validation_profile(value: object) -> bool:
+    return isinstance(value, _ValidationProfileView)
+
 
 _SEVERITY_RANK: Final[dict[IssueSeverity, int]] = {
     IssueSeverity.ERROR: 0,
@@ -58,9 +92,7 @@ def resolve_configuration(
     """
 
     if not isinstance(request, ConfigurationResolutionRequest):
-        raise TypeError(
-            "request must be a ConfigurationResolutionRequest"
-        )
+        raise TypeError("request must be a ConfigurationResolutionRequest")
 
     language_context = getattr(request, "language_context", None)
     validation_profile = getattr(request, "validation_profile", None)
@@ -75,9 +107,7 @@ def resolve_configuration(
     precedence = resolve_precedence(request)
     environment = resolve_environment(request)
 
-    issues = _ordered_issues(
-        (*precedence.issues, *environment.issues)
-    )
+    issues = _ordered_issues((*precedence.issues, *environment.issues))
 
     try:
         base_provenance = _merge_provenance(
@@ -88,17 +118,11 @@ def resolve_configuration(
     except ValueError as exc:
         return ConfigurationResolution(
             configuration=None,
-            issues=_ordered_issues(
-                (*issues, _composition_issue(exc))
-            ),
+            issues=_ordered_issues((*issues, _composition_issue(exc))),
             provenance=(),
         )
 
-    if (
-        precedence.values is None
-        or environment.value is None
-        or _contains_errors(issues)
-    ):
+    if precedence.values is None or environment.value is None or _contains_errors(issues):
         return ConfigurationResolution(
             configuration=None,
             issues=issues,
@@ -119,7 +143,7 @@ def resolve_configuration(
             validation_profile=validation_profile,
             environment=environment.value,
             mode=values.mode,
-            target=values.target,
+            target=_validation_target(values.target),
             timeout_sec=values.timeout_sec,
             max_files=values.max_files,
             keep_ok_details=values.keep_ok_details,
@@ -131,13 +155,11 @@ def resolve_configuration(
             selected_entrypoints=profile_values.entrypoints,
             selected_scenarios=profile_values.scenarios,
             release_requires_pgf=profile_values.release_requires_pgf,
-            evidence_level=values.evidence_level,
+            evidence_level=_evidence_level(values.evidence_level),
             compatibility_warnings=_warning_messages(issues),
         )
 
-        provenance_groups: list[
-            Iterable[ConfigurationProvenance]
-        ] = [base_provenance]
+        provenance_groups: list[Iterable[ConfigurationProvenance]] = [base_provenance]
         if validation_profile is not None:
             provenance_groups.append(_validation_profile_provenance())
 
@@ -145,9 +167,7 @@ def resolve_configuration(
     except (AttributeError, TypeError, ValueError) as exc:
         return ConfigurationResolution(
             configuration=None,
-            issues=_ordered_issues(
-                (*issues, _composition_issue(exc))
-            ),
+            issues=_ordered_issues((*issues, _composition_issue(exc))),
             provenance=base_provenance,
         )
 
@@ -195,38 +215,52 @@ def _resolve_profile_values(
             release_requires_pgf=False,
         )
 
-    modules = getattr(validation_profile, "modules")
-    validation = getattr(validation_profile, "validation")
+    if not _is_validation_profile(validation_profile):
+        raise TypeError("validation_profile must be a ProjectConfig")
+
+    profile = cast("_ValidationProfileView", validation_profile)
+    modules = profile.modules
+    validation = profile.validation
 
     return _ResolvedProfileValues(
         checkpoints=_absolute_profile_module_paths(
             language_directory,
-            tuple(getattr(modules, "checkpoints")),
+            tuple(modules.checkpoints),
         ),
         entrypoints=_absolute_profile_module_paths(
             language_directory,
-            tuple(getattr(modules, "entrypoints")),
+            tuple(modules.entrypoints),
         ),
-        scenarios=tuple(
-            str(scenario)
-            for scenario in getattr(validation, "all_scenarios")
-        ),
-        release_requires_pgf=_profile_release_requires_pgf(
-            validation
-        ),
+        scenarios=tuple(str(scenario) for scenario in validation.all_scenarios),
+        release_requires_pgf=_profile_release_requires_pgf(validation),
     )
 
 
-def _profile_release_requires_pgf(validation: object) -> bool:
+def _profile_release_requires_pgf(validation: _ProfileValidationView) -> bool:
     """Return the profile release flag without truthiness coercion."""
 
-    value = getattr(validation, "release_requires_pgf")
+    value = validation.release_requires_pgf
     if type(value) is not bool:
-        raise TypeError(
-            "validation_profile.validation.release_requires_pgf "
-            "must be a boolean"
-        )
+        raise TypeError("validation_profile.validation.release_requires_pgf must be a boolean")
     return value
+
+
+def _validation_target(value: object | None) -> ValidationTarget | None:
+    """Narrow a precedence-selected target to the canonical model."""
+
+    if value is None:
+        return None
+    if not isinstance(value, ValidationTarget):
+        raise TypeError("resolved target must be a ValidationTarget or None")
+    return value
+
+
+def _evidence_level(value: str) -> EvidenceLevel:
+    """Validate and narrow the canonical evidence-level literal."""
+
+    if value not in {"bounded", "standard", "complete", "expanded"}:
+        raise ValueError(f"unsupported evidence level: {value!r}")
+    return cast("EvidenceLevel", value)
 
 
 def _language_directory(language_context: object) -> Path:
@@ -234,13 +268,9 @@ def _language_directory(language_context: object) -> Path:
 
     value = getattr(language_context, "language_directory", None)
     if not isinstance(value, Path):
-        raise TypeError(
-            "language_context.language_directory must be a Path"
-        )
+        raise TypeError("language_context.language_directory must be a Path")
     if not value.is_absolute():
-        raise ValueError(
-            "language_context.language_directory must be absolute"
-        )
+        raise ValueError("language_context.language_directory must be absolute")
     return value
 
 
@@ -257,27 +287,18 @@ def _absolute_profile_module_paths(
     resolved: list[Path] = []
     for relative_path in relative_paths:
         if not isinstance(relative_path, Path):
-            raise TypeError(
-                "validation-profile module paths must be Path values"
-            )
+            raise TypeError("validation-profile module paths must be Path values")
         if relative_path.is_absolute():
-            raise ValueError(
-                "validation-profile module paths must be relative"
-            )
+            raise ValueError("validation-profile module paths must be relative")
         if ".." in relative_path.parts:
-            raise ValueError(
-                "validation-profile module paths must not traverse parents"
-            )
+            raise ValueError("validation-profile module paths must not traverse parents")
 
-        resolved.append(
-            language_directory.joinpath(*relative_path.parts)
-        )
+        resolved.append(language_directory.joinpath(*relative_path.parts))
 
     return tuple(resolved)
 
 
-def _language_context_provenance(
-) -> tuple[ConfigurationProvenance, ...]:
+def _language_context_provenance() -> tuple[ConfigurationProvenance, ...]:
     """Return provenance for facts owned by ResolvedLanguageContext."""
 
     return tuple(
@@ -296,8 +317,7 @@ def _language_context_provenance(
     )
 
 
-def _validation_profile_provenance(
-) -> tuple[ConfigurationProvenance, ...]:
+def _validation_profile_provenance() -> tuple[ConfigurationProvenance, ...]:
     """Return provenance for explicitly loaded profile-owned policy."""
 
     return tuple(
@@ -324,8 +344,7 @@ def _missing_language_context_issue() -> ConfigurationIssue:
         field_path="language_context",
         provided_value=None,
         message=(
-            "A resolved language context is required before run "
-            "configuration can be composed."
+            "A resolved language context is required before run configuration can be composed."
         ),
         remediation=(
             "Select a GF language directory or .gf file and complete "
@@ -344,10 +363,7 @@ def _composition_issue(
         source=ConfigurationSource.RUNTIME_DERIVED,
         field_path="configuration",
         provided_value=None,
-        message=(
-            "The resolved values cannot form a valid RunConfig: "
-            f"{error}"
-        ),
+        message=(f"The resolved values cannot form a valid RunConfig: {error}"),
         remediation=(
             "Correct the resolved language context, optional validation "
             "profile, environment, or run options and resolve again."
@@ -358,10 +374,7 @@ def _composition_issue(
 def _contains_errors(
     issues: Iterable[ConfigurationIssue],
 ) -> bool:
-    return any(
-        issue.severity is IssueSeverity.ERROR
-        for issue in issues
-    )
+    return any(issue.severity is IssueSeverity.ERROR for issue in issues)
 
 
 def _warning_messages(
@@ -370,11 +383,7 @@ def _warning_messages(
     """Return unique warning messages in encounter order."""
 
     return tuple(
-        dict.fromkeys(
-            issue.message
-            for issue in issues
-            if issue.severity is IssueSeverity.WARNING
-        )
+        dict.fromkeys(issue.message for issue in issues if issue.severity is IssueSeverity.WARNING)
     )
 
 
@@ -389,10 +398,7 @@ def _merge_provenance(
         for record in group:
             existing = merged.get(record.field_path)
 
-            if (
-                existing is not None
-                and existing.source is not record.source
-            ):
+            if existing is not None and existing.source is not record.source:
                 raise ValueError(
                     "conflicting provenance for "
                     f"{record.field_path!r}: "
@@ -402,10 +408,7 @@ def _merge_provenance(
 
             merged[record.field_path] = record
 
-    return tuple(
-        merged[field_path]
-        for field_path in sorted(merged)
-    )
+    return tuple(merged[field_path] for field_path in sorted(merged))
 
 
 def _ordered_issues(

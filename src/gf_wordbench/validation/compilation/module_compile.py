@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Protocol
 
 from gf_wordbench.infrastructure.process.models import (
+    ArtifactExpectation,
+    ArtifactKind,
     ProcessOperationKind,
     ProcessRequest,
     ProcessResult,
@@ -34,7 +36,6 @@ from .models import (
     CompileSummary,
     CompileTargetKind,
 )
-
 
 _MAX_MESSAGE_CHARS = 4_000
 _LANGUAGE_FAILURE_KINDS = frozenset(
@@ -99,7 +100,7 @@ class ArtifactVerifier(Protocol):
     ) -> ArtifactFacts: ...
 
 
-ProcessExecutor = Callable[[ProcessRequest], ProcessResult]
+ProcessExecutor = Callable[[ProcessRequest], object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +135,7 @@ def compile_module(
     _require_callable("verify_artifacts", verify_artifacts)
     _require_callable("execute_process", execute_process)
 
-    process_request = request.process_request
+    process_request = _process_request(request)
 
     try:
         _validate_module_request(request)
@@ -165,10 +166,7 @@ def compile_module(
             status=ValidationStatus.ERROR,
             error_kind=ErrorKind.INTERNAL,
             first_error="process executor returned an invalid result",
-            error_detail=(
-                "expected ProcessResult, received "
-                f"{type(process_result).__name__}"
-            ),
+            error_detail=(f"expected ProcessResult, received {type(process_result).__name__}"),
         )
 
     consistency_error = _process_consistency_error(
@@ -273,11 +271,8 @@ def skipped_compile_summary(
     _require_compile_request(request)
     reason = _bounded_required_text("reason", reason)
 
-    process_request = request.process_request
-    expected = tuple(
-        expectation.path
-        for expectation in process_request.expected_artifacts
-    )
+    process_request = _process_request(request)
+    expected = tuple(expectation.path for expectation in process_request.expected_artifacts)
 
     return CompileSummary(
         target_id=request.target.target_id,
@@ -301,14 +296,99 @@ def skipped_compile_summary(
     )
 
 
+def _process_request(request: CompileRequest) -> ProcessRequest:
+    """Return a bound process request or translate the canonical compile request.
+
+    Older callers may provide a read-only ``process_request`` compatibility
+    property. New callers use the current ``CompileRequest`` fields and are
+    translated here, which keeps process construction inside the compilation
+    boundary instead of the domain model.
+    """
+
+    bound = getattr(request, "process_request", None)
+    if bound is not None:
+        if not isinstance(bound, ProcessRequest):
+            raise TypeError("request.process_request must be a ProcessRequest")
+        return bound
+
+    target = request.target
+    source_path = (
+        target.source_path
+        if target.source_path.is_absolute()
+        else request.working_directory / target.source_path
+    )
+    expected_artifacts = tuple(
+        ArtifactExpectation(
+            path=path,
+            role="gfo",
+            required=target.required,
+            kind=ArtifactKind.FILE,
+            minimum_size_bytes=1,
+        )
+        for path in request.expected_artifacts
+    )
+
+    read_roots = _unique_roots(
+        (
+            request.working_directory,
+            request.executable.parent,
+            source_path.parent,
+            *request.effective_gf_path,
+        )
+    )
+    write_roots = _unique_roots(
+        (
+            request.stdout_path.parent,
+            request.stderr_path.parent,
+            *(path.parent for path in request.expected_artifacts),
+        )
+    )
+
+    operation_id = f"compile-{target.target_id}"
+    return ProcessRequest(
+        request_id=operation_id,
+        tool_id="gf",
+        operation_id=operation_id,
+        operation_kind=ProcessOperationKind.COMPILE,
+        executable=request.executable,
+        args=request.args,
+        cwd=request.working_directory,
+        stdout_path=request.stdout_path,
+        stderr_path=request.stderr_path,
+        timeout_sec=request.timeout_sec,
+        approved_read_roots=read_roots,
+        approved_write_roots=write_roots,
+        evidence_policy="retain-raw-streams-v1",
+        env_overrides=request.environment,
+        expected_artifacts=expected_artifacts,
+        metadata={
+            "gf_operation_kind": "compile_module",
+            "target_module": target.module_name,
+        },
+        mutability_class="run_artifacts_only",
+        network_policy="denied",
+    )
+
+
+def _unique_roots(values: Iterable[Path]) -> tuple[Path, ...]:
+    roots: list[Path] = []
+    keys: set[str] = set()
+    for value in values:
+        path = Path(value).resolve(strict=False)
+        key = str(path).casefold()
+        if key not in keys:
+            keys.add(key)
+            roots.append(path)
+    return tuple(roots)
+
+
 def _validate_module_request(request: CompileRequest) -> None:
     target = request.target
-    process_request = request.process_request
+    process_request = _process_request(request)
 
     if target.kind not in _MODULE_TARGET_KINDS:
         raise ContractViolationError(
-            "module compilation accepts only source, checkpoint, or "
-            "entrypoint targets",
+            "module compilation accepts only source, checkpoint, or entrypoint targets",
             code="GF-WB-CONTRACT-001",
             stage="compilation",
             operation="module_compile",
@@ -348,8 +428,7 @@ def _validate_module_request(request: CompileRequest) -> None:
 
     request_expected = _path_keys(target.expected_artifacts)
     process_expected = _path_keys(
-        expectation.path
-        for expectation in process_request.expected_artifacts
+        expectation.path for expectation in process_request.expected_artifacts
     )
     if request_expected != process_expected:
         raise ContractViolationError(
@@ -416,8 +495,7 @@ def _verify(
     except Exception as exc:
         return _ArtifactSnapshot(
             expected_artifacts=tuple(
-                expectation.path
-                for expectation in request.process_request.expected_artifacts
+                expectation.path for expectation in _process_request(request).expected_artifacts
             ),
             produced_artifacts=tuple(
                 observation.path
@@ -432,8 +510,7 @@ def _verify(
         )
 
     declared = _path_keys(
-        expectation.path
-        for expectation in request.process_request.expected_artifacts
+        expectation.path for expectation in _process_request(request).expected_artifacts
     )
     reported = _path_keys(snapshot.expected_artifacts)
 
@@ -460,8 +537,7 @@ def _classify(
         return (
             ValidationStatus.ERROR,
             ErrorKind.TOOL,
-            process_result.launch_error_message
-            or "GF process launch failed",
+            process_result.launch_error_message or "GF process launch failed",
             diagnostics.error_detail,
         )
 
@@ -535,8 +611,7 @@ def _classify(
         return (
             ValidationStatus.FAIL,
             _language_or_default(diagnostics.error_kind),
-            diagnostics.first_error
-            or f"GF exited with code {process_result.exit_code}",
+            diagnostics.first_error or f"GF exited with code {process_result.exit_code}",
             diagnostics.error_detail,
         )
 
@@ -556,11 +631,8 @@ def _summary_without_process(
     first_error: str,
     error_detail: str,
 ) -> CompileSummary:
-    process_request = request.process_request
-    expected = tuple(
-        expectation.path
-        for expectation in process_request.expected_artifacts
-    )
+    process_request = _process_request(request)
+    expected = tuple(expectation.path for expectation in process_request.expected_artifacts)
 
     return CompileSummary(
         target_id=request.target.target_id,
@@ -601,12 +673,9 @@ def _summary_from_process(
         command=process_result.command,
         working_directory=process_result.cwd,
         exit_code=process_result.exit_code,
-        launched=process_result.execution_state
-        is not ExecutionState.LAUNCH_FAILED,
-        timed_out=process_result.execution_state
-        is ExecutionState.TIMED_OUT,
-        cancelled=process_result.execution_state
-        is ExecutionState.CANCELLED,
+        launched=process_result.execution_state is not ExecutionState.LAUNCH_FAILED,
+        timed_out=process_result.execution_state is ExecutionState.TIMED_OUT,
+        cancelled=process_result.execution_state is ExecutionState.CANCELLED,
         duration_ms=process_result.duration_ms,
         error_kind=error_kind,
         first_error=_bounded_text(first_error),
@@ -623,10 +692,7 @@ def _artifact_facts_from_process(
     request: CompileRequest,
     process_result: ProcessResult,
 ) -> _ArtifactSnapshot:
-    expected = tuple(
-        expectation.path
-        for expectation in request.process_request.expected_artifacts
-    )
+    expected = tuple(expectation.path for expectation in _process_request(request).expected_artifacts)
     produced = tuple(
         observation.path
         for observation in process_result.artifact_observations
@@ -697,8 +763,7 @@ def _require_target_kind(
     _require_compile_request(request)
     if request.target.kind is not expected:
         raise ContractViolationError(
-            f"expected {expected.value!r} compile target, received "
-            f"{request.target.kind.value!r}",
+            f"expected {expected.value!r} compile target, received {request.target.kind.value!r}",
             code="GF-WB-CONTRACT-006",
             stage="compilation",
             operation=f"compile_{expected.value}",
@@ -712,11 +777,7 @@ def _terminal_source_matches(
     source_path: Path,
 ) -> bool:
     argument_path = Path(argument)
-    candidate = (
-        argument_path
-        if argument_path.is_absolute()
-        else cwd / argument_path
-    )
+    candidate = argument_path if argument_path.is_absolute() else cwd / argument_path
     source = source_path if source_path.is_absolute() else cwd / source_path
     return _path_key(candidate) == _path_key(source)
 

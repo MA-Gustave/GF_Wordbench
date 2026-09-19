@@ -8,10 +8,25 @@
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Contract references:** `IFC-WB-001`, `IFC-WB-002`, `IFC-WB-004`  
 **Document version:** `1.1.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines how GF Wordbench decides which Grammatical Framework source files belong to one validation run.
@@ -72,13 +87,13 @@ This document does not govern:
 
 ### 2.1 Product boundary
 
-File selection operates on exactly one resolved Wordbench workspace, one active project and one validation run.
+File selection operates on exactly one resolved Wordbench workspace, one selected language context and one validation run.
 
 It MUST NOT:
 
 - discover projects through a Portfolio registry;
 - combine source roots from several Wordbench workspaces;
-- select files for several active language projects in one run;
+- select files for several selected language contexts in one run;
 - depend on `gf-portfolio` state, storage or configuration.
 
 `gf-portfolio` may invoke independent Wordbench runs and consume their finalized public artifacts. It does not participate in source-file selection.
@@ -89,7 +104,7 @@ It MUST NOT:
 
 ### 3.1 Project configuration owns
 
-`project/project.toml` owns:
+`<validation-profile-root>/project.toml` owns:
 
 - the active source directory;
 - the source glob;
@@ -157,7 +172,7 @@ A dependency compiled by GF is not automatically a separately selected file.
 The file-selection subsystem MUST satisfy all of the following:
 
 ```text
-[ ] one active project is used
+[ ] one selected language context is used
 [ ] one resolved source root is used
 [ ] every selected target is a regular `.gf` file
 [ ] every selected target is inside the allowed source root
@@ -198,7 +213,7 @@ A path named directly by quick-mode configuration, checkpoint configuration, or 
 
 ### Enumerated target
 
-A path found recursively beneath the configured source root using the configured glob.
+A path found recursively beneath the resolved source root using the configured glob.
 
 ### Source root
 
@@ -338,7 +353,7 @@ Values containing traversal such as:
 ../other-project
 ```
 
-MUST be rejected when resolution escapes the active project root.
+MUST be rejected when resolution escapes the selected language context root.
 
 ### 8.4 Symlinks
 
@@ -427,7 +442,7 @@ A larger value has no effect and SHOULD produce a configuration warning.
 
 ## 11.1 Purpose
 
-Checkpoint mode validates the ordered development checkpoints declared by the active project.
+Checkpoint mode validates the ordered development checkpoints declared by the selected language context.
 
 ## 11.2 Source list
 
@@ -569,11 +584,7 @@ Path.rglob(sources.glob)
 Conceptual algorithm:
 
 ```python
-candidates = [
-    path.resolve()
-    for path in source_root.rglob(source_glob)
-    if path.is_file()
-]
+candidates = [path.resolve() for path in source_root.rglob(source_glob) if path.is_file()]
 ```
 
 ## 13.3 Filter order
@@ -891,7 +902,7 @@ $
 
 Framework defaults MUST NOT contain names tied to one active language.
 
-Copy, backup, temporary, and disabled-file conventions may be represented by generic template defaults, but the active project owns its final policy.
+Copy, backup, temporary, and disabled-file conventions may be represented by generic template defaults, but the selected language context owns its final policy.
 
 ---
 
@@ -1079,8 +1090,8 @@ duplicate_candidate
 | `missing_file` | candidate no longer exists |
 | `not_a_file` | candidate exists but is not a regular file |
 | `not_gf_file` | suffix is not `.gf` |
-| `outside_project_root` | resolved candidate escapes the active project |
-| `outside_source_root` | resolved candidate is not under the configured source root |
+| `outside_project_root` | resolved candidate escapes the selected language context |
+| `outside_source_root` | resolved candidate is not under the resolved source root |
 | `unreadable_file` | platform access policy cannot read the candidate |
 | `excluded_by_regex` | exclude regex matched filename or relative path |
 | `not_matched_by_include_regex` | include regex existed and matched neither |
@@ -1133,8 +1144,7 @@ The public file-selection API is:
 ```python
 def select_files(
     run_config: RunConfig,
-) -> tuple[list[Path], list[ExcludedFileEntry]]:
-    ...
+) -> tuple[list[Path], list[ExcludedFileEntry]]: ...
 ```
 
 Where:
@@ -1165,7 +1175,7 @@ Excluded entries contain:
 
 ## 23.3 Persisted representation
 
-Persisted project-owned paths are project-relative and use `/`.
+Persisted profile-owned paths are project-relative and use `/`.
 
 The JSON report writer, not the selector, owns serialization.
 
@@ -1607,10 +1617,12 @@ def select_files(run_config: RunConfig) -> tuple[list[Path], list[ExcludedFileEn
             return select_required_targets(targets, config, project_root, source_root)
 
         case "release":
-            target_specs = ordered_unique([
-                *config.checkpoints,
-                *config.entrypoints,
-            ])
+            target_specs = ordered_unique(
+                [
+                    *config.checkpoints,
+                    *config.entrypoints,
+                ]
+            )
             targets = resolve_configured_targets(target_specs, source_root)
             return select_required_targets(targets, config, project_root, source_root)
 
@@ -2012,7 +2024,7 @@ this document
 | Topic | Document |
 |---|---|
 | Documentation alignment | `docs/DOCUMENTATION_ALIGNMENT_LOCK.md` |
-| Single active project | `docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md` |
+| Single selected language context | `docs/decisions/ADR-0001-SINGLE-ACTIVE-LANGUAGE.md` |
 | Independent Portfolio boundary | `docs/decisions/ADR-0011-SEPARATE-PORTFOLIO.md`, `docs/decisions/ADR-0012-INDEPENDENT-PRODUCTS.md` |
 | Framework file boundary | `docs/INTERFILE_CONTRACT_LOCK.md` |
 | Project configuration schema | `docs/PERSISTED_SCHEMA_LOCK.md` |
@@ -2022,9 +2034,9 @@ this document
 | Compilation | `docs/gf/GF_COMPILATION.md` |
 | Pipeline order | `docs/validation/VALIDATION_PIPELINE.md` |
 | Status values | `docs/reference/STATUS_VALUES.md` |
-| Active project targets | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
-| Dependency map | `project/docs/MODULE_DEPENDENCY_MAP.md` |
-| Validation specification | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` |
+| Validation profile targets | `<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md` |
+| Dependency map | `<validation-profile-root>/docs/MODULE_DEPENDENCY_MAP.md` |
+| Validation specification | `<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md` |
 
 ---
 

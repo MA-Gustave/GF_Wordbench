@@ -75,18 +75,12 @@ def test_registry_declares_scenario_output_as_canonical_text() -> None:
     assert str(definition.version) == "1.0"
     assert definition.format is SchemaFormat.CANONICAL_TEXT
     assert definition.contract_class is SchemaContractClass.CANONICAL_TEXT
-    assert definition.canonical_path_pattern == (
-        "run_<run-id>/raw/scenarios/<scenario-id>.out"
-    )
+    assert definition.canonical_path_pattern == ("run_<run-id>/raw/scenarios/<scenario-id>.out")
     assert definition.encoding == "utf-8"
     assert definition.newline == "lf"
     assert definition.writer_owner == "validation.scenarios.normalization"
-    assert definition.matches_path(
-        "run_20260725_153043/raw/scenarios/parse-basic.out"
-    )
-    assert not definition.matches_path(
-        "project/validation/gold/parse-basic.gold"
-    )
+    assert definition.matches_path("run_20260725_153043/raw/scenarios/parse-basic.out")
+    assert not definition.matches_path("project/validation/gold/parse-basic.gold")
 
 
 def test_canonical_document_round_trip_preserves_unicode_and_section_order() -> None:

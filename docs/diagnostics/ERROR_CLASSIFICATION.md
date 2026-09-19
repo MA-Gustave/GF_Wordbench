@@ -1741,8 +1741,7 @@ Canonical contract:
 ```python
 def classify_file_results(
     file_results: list[FileResult],
-) -> list[FileResult]:
-    ...
+) -> list[FileResult]: ...
 ```
 
 The classifier may update classification-owned fields on the supplied objects or return equivalent immutable replacements. Within one call and one public API version, the transformation model MUST be consistent and MUST preserve result identity, ordering, raw evidence, source paths and compile summaries.
@@ -1778,8 +1777,7 @@ Canonical public function:
 ```python
 def classify_file_results(
     file_results: list[FileResult],
-) -> list[FileResult]:
-    ...
+) -> list[FileResult]: ...
 ```
 
 Optional focused helper:
@@ -1788,8 +1786,7 @@ Optional focused helper:
 def classify_single_result(
     file_result: FileResult,
     file_results: list[FileResult],
-) -> FileResult:
-    ...
+) -> FileResult: ...
 ```
 
 Optional blocker helper:
@@ -1798,8 +1795,7 @@ Optional blocker helper:
 def resolve_blocked_by(
     file_result: FileResult,
     file_results: list[FileResult],
-) -> list[str]:
-    ...
+) -> list[str]: ...
 ```
 
 The all-results function is authoritative because causal classification requires peer context.

@@ -9,11 +9,11 @@ from typing import Any, cast
 import pytest
 
 from gf_wordbench.projects.models import (
-    GFProjectConfig,
-    ModuleTargets,
     PROJECT_CONFIG_FILENAME,
     PROJECT_SCHEMA_ID,
     PROJECT_SCHEMA_VERSION,
+    GFProjectConfig,
+    ModuleTargets,
     ProjectCheckScope,
     ProjectConfig,
     ProjectDiagnostic,
@@ -33,7 +33,7 @@ def _identity(**overrides: object) -> ProjectIdentity:
         "root": Path("."),
     }
     values.update(overrides)
-    return ProjectIdentity(**cast(Any, values))
+    return ProjectIdentity(**cast("Any", values))
 
 
 def _sources(**overrides: object) -> SourceConfig:
@@ -44,7 +44,7 @@ def _sources(**overrides: object) -> SourceConfig:
         "exclude_regex": r"(?:^|/)(?:build|vendor)/",
     }
     values.update(overrides)
-    return SourceConfig(**cast(Any, values))
+    return SourceConfig(**cast("Any", values))
 
 
 def _gf(**overrides: object) -> GFProjectConfig:
@@ -55,7 +55,7 @@ def _gf(**overrides: object) -> GFProjectConfig:
     values.update(overrides)
     if values["path_parts"] == ("src", "../forbidden-not-used"):
         values["path_parts"] = ("src", "rgl")
-    return GFProjectConfig(**cast(Any, values))
+    return GFProjectConfig(**cast("Any", values))
 
 
 def _modules(**overrides: object) -> ModuleTargets:
@@ -67,7 +67,7 @@ def _modules(**overrides: object) -> ModuleTargets:
         ),
     }
     values.update(overrides)
-    return ModuleTargets(**cast(Any, values))
+    return ModuleTargets(**cast("Any", values))
 
 
 def _validation(**overrides: object) -> ValidationPolicy:
@@ -77,7 +77,7 @@ def _validation(**overrides: object) -> ValidationPolicy:
         "release_requires_pgf": True,
     }
     values.update(overrides)
-    return ValidationPolicy(**cast(Any, values))
+    return ValidationPolicy(**cast("Any", values))
 
 
 def _project_config(tmp_path: Path, **overrides: object) -> ProjectConfig:
@@ -96,7 +96,7 @@ def _project_config(tmp_path: Path, **overrides: object) -> ProjectConfig:
         "source_root": project_root / default_sources.directory,
     }
     values.update(overrides)
-    return ProjectConfig(**cast(Any, values))
+    return ProjectConfig(**cast("Any", values))
 
 
 def _diagnostic(tmp_path: Path, **overrides: object) -> ProjectDiagnostic:
@@ -110,7 +110,7 @@ def _diagnostic(tmp_path: Path, **overrides: object) -> ProjectDiagnostic:
         "subject": tmp_path / "src" / "Example.gf",
     }
     values.update(overrides)
-    return ProjectDiagnostic(**cast(Any, values))
+    return ProjectDiagnostic(**cast("Any", values))
 
 
 def test_project_model_constants_are_canonical() -> None:
@@ -160,7 +160,7 @@ def test_project_enums_have_closed_canonical_values(
         ProjectValidationResult,
     ],
 )
-def test_project_models_are_frozen_slotted_dataclasses(model_type: type[object]) -> None:
+def test_project_models_are_frozen_slotted_dataclasses(model_type: type[Any]) -> None:
     assert is_dataclass(model_type)
     assert model_type.__dataclass_params__.frozen
     assert "__slots__" in model_type.__dict__
@@ -548,7 +548,7 @@ def test_project_validation_result_rejects_invalid_diagnostics(
     message: str,
 ) -> None:
     with pytest.raises(exception, match=message):
-        ProjectValidationResult(cast(Any, diagnostics))
+        ProjectValidationResult(cast("Any", diagnostics))
 
 
 def test_project_models_are_immutable_at_runtime(tmp_path: Path) -> None:

@@ -6,10 +6,11 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
+from gf_wordbench.kernel.serialization import JsonValue
 from gf_wordbench.reporting.schemas.summary_v1 import validate_summary_v1
 from gf_wordbench.reporting.summary.projection import (
     SUMMARY_PRODUCER_NAME,
@@ -32,6 +33,17 @@ from gf_wordbench.reporting.summary.projection import (
 _TIMESTAMP = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
 _SHA_A = "a" * 64
 _SHA_B = "b" * 64
+
+
+def _json_object(value: JsonValue) -> dict[str, JsonValue]:
+    assert isinstance(value, dict)
+    return value
+
+
+def _json_object_array(value: JsonValue) -> list[dict[str, JsonValue]]:
+    assert isinstance(value, list)
+    assert all(isinstance(item, dict) for item in value)
+    return cast("list[dict[str, JsonValue]]", value)
 
 
 def _namespace(**values: Any) -> SimpleNamespace:
@@ -301,7 +313,7 @@ def test_complete_projection_matches_schema_and_canonical_order(tmp_path: Path) 
         "version": "1.2.3",
     }
 
-    metadata = document["metadata"]
+    metadata = _json_object(document["metadata"])
     assert metadata["run_id"] == "20260725_120000"
     assert metadata["mode"] == "diagnostic"
     assert metadata["target_file"] == "src/Main.gf"
@@ -332,22 +344,25 @@ def test_complete_projection_matches_schema_and_canonical_order(tmp_path: Path) 
         "out_dir": "artifacts/out",
         "pgf_dir": "artifacts/pgf",
     }
-    assert [item["file_path"] for item in document["file_results"]] == [
+    file_results = _json_object_array(document["file_results"])
+    scenario_results = _json_object_array(document["scenario_results"])
+    diff_entries = _json_object_array(document["diff_entries"])
+    top_errors = _json_object_array(document["top_errors"])
+
+    assert [item["file_path"] for item in file_results] == [
         "src/alpha.gf",
         "src/Zeta.gf",
     ]
-    assert document["file_results"][1]["blocked_by"] == [
+    assert file_results[1]["blocked_by"] == [
         "src/alpha.gf",
         "src/Beta.gf",
     ]
-    assert [item["scenario_id"] for item in document["scenario_results"]] == [
-        "parse-smoke"
-    ]
-    assert [item["change_kind"] for item in document["diff_entries"]] == [
+    assert [item["scenario_id"] for item in scenario_results] == ["parse-smoke"]
+    assert [item["change_kind"] for item in diff_entries] == [
         "regressed",
         "unchanged",
     ]
-    assert [item["count"] for item in document["top_errors"]] == [3, 1]
+    assert [item["count"] for item in top_errors] == [3, 1]
 
 
 def test_projection_is_deterministic_and_does_not_mutate_input(tmp_path: Path) -> None:
@@ -496,12 +511,13 @@ def test_file_projection_normalizes_paths_and_digest(tmp_path: Path) -> None:
         run_paths=run_paths,
     )
 
+    fingerprint = _json_object(projected["fingerprint"])
+    compile_summary = _json_object(projected["compile_summary"])
+
     assert projected["file_path"] == "src/Zeta.gf"
     assert projected["blocked_by"] == ["src/Alpha.gf", "src/beta.gf"]
-    assert projected["fingerprint"]["hash"] == _SHA_B
-    assert projected["compile_summary"]["stdout_path"] == (
-        "raw/compile/Zeta.stdout.log"
-    )
+    assert fingerprint["hash"] == _SHA_B
+    assert compile_summary["stdout_path"] == "raw/compile/Zeta.stdout.log"
     assert projected["scan_log_path"] == "raw/scan/Zeta.log"
 
 
@@ -628,7 +644,8 @@ def test_top_errors_use_count_then_case_insensitive_message_order(
 
     document = build_summary_document(run_result, producer_version="1.0.0")
 
-    assert [item["message"] for item in document["top_errors"]] == [
+    top_errors = _json_object_array(document["top_errors"])
+    assert [item["message"] for item in top_errors] == [
         "beta",
         "Alpha",
         "zeta",
@@ -637,27 +654,21 @@ def test_top_errors_use_count_then_case_insensitive_message_order(
 
 
 def test_top_error_requires_positive_non_boolean_count() -> None:
-    assert project_top_error(
-        _namespace(error_kind="TYPE", message="Type mismatch", count=2)
-    ) == {
+    assert project_top_error(_namespace(error_kind="TYPE", message="Type mismatch", count=2)) == {
         "error_kind": "TYPE",
         "message": "Type mismatch",
         "count": 2,
     }
 
     with pytest.raises(SummaryProjectionError, match="positive"):
-        project_top_error(
-            _namespace(error_kind="TYPE", message="Type mismatch", count=0)
-        )
+        project_top_error(_namespace(error_kind="TYPE", message="Type mismatch", count=0))
 
     with pytest.raises(TypeError, match="must be int"):
-        project_top_error(
-            _namespace(error_kind="TYPE", message="Type mismatch", count=True)
-        )
+        project_top_error(_namespace(error_kind="TYPE", message="Type mismatch", count=True))
 
 
 def test_projection_invariants_reject_missing_types_and_order() -> None:
-    base = {
+    base: dict[str, JsonValue] = {
         "schema_id": SUMMARY_SCHEMA_ID,
         "schema_version": SUMMARY_SCHEMA_VERSION,
         "metadata": {},
@@ -670,28 +681,28 @@ def test_projection_invariants_reject_missing_types_and_order() -> None:
     }
     validate_projection_invariants(base)
 
-    missing = dict(base)
+    missing: dict[str, JsonValue] = dict(base)
     missing.pop("totals")
     with pytest.raises(SummaryProjectionError, match="missing required fields"):
         validate_projection_invariants(missing)
 
-    wrong_type = dict(base, file_results={})
+    wrong_type: dict[str, JsonValue] = {**base, "file_results": {}}
     with pytest.raises(SummaryProjectionError, match="must be an array"):
         validate_projection_invariants(wrong_type)
 
-    unordered_files = dict(
-        base,
-        file_results=[{"file_path": "z.gf"}, {"file_path": "A.gf"}],
-    )
+    unordered_files: dict[str, JsonValue] = {
+        **base,
+        "file_results": [{"file_path": "z.gf"}, {"file_path": "A.gf"}],
+    }
     with pytest.raises(SummaryProjectionError, match="file_results"):
         validate_projection_invariants(unordered_files)
 
-    unordered_errors = dict(
-        base,
-        top_errors=[
+    unordered_errors: dict[str, JsonValue] = {
+        **base,
+        "top_errors": [
             {"error_kind": "TYPE", "message": "minor", "count": 1},
             {"error_kind": "TYPE", "message": "major", "count": 2},
         ],
-    )
+    }
     with pytest.raises(SummaryProjectionError, match="top_errors"):
         validate_projection_invariants(unordered_errors)

@@ -9,6 +9,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
+from gf_wordbench.diagnostics.vocabulary import DiagnosticStream
+
 StreamMetadata: TypeAlias = Mapping[str, str]
 
 _UTF8: Final[str] = "utf-8"
@@ -16,12 +18,6 @@ _MAX_STREAM_CHARACTERS: Final[int] = 64 * 1024 * 1024
 _MAX_STREAM_BYTES: Final[int] = 64 * 1024 * 1024
 _DEFAULT_SEPARATOR: Final[str] = "\n\n--- GF WORDBENCH STREAM: STDERR ---\n\n"
 _EMPTY_METADATA: Final[StreamMetadata] = MappingProxyType({})
-
-
-@unique
-class DiagnosticStream(StrEnum):
-    STDOUT = "stdout"
-    STDERR = "stderr"
 
 
 @unique
@@ -108,13 +104,9 @@ class StreamDocument:
         decode_issues = tuple(self.decode_issues)
         for issue in decode_issues:
             if not isinstance(issue, StreamDecodeIssue):
-                raise TypeError(
-                    "decode_issues must contain StreamDecodeIssue values"
-                )
+                raise TypeError("decode_issues must contain StreamDecodeIssue values")
             if issue.stream is not self.stream:
-                raise ValueError(
-                    "decode issue stream must match the document stream"
-                )
+                raise ValueError("decode issue stream must match the document stream")
 
         metadata = _freeze_metadata(self.metadata)
 
@@ -162,9 +154,7 @@ class StreamLine:
         if type(self.start_offset) is not int or self.start_offset < 0:
             raise ValueError("start_offset must be a non-negative integer")
         if type(self.end_offset) is not int or self.end_offset < self.start_offset:
-            raise ValueError(
-                "end_offset must be greater than or equal to start_offset"
-            )
+            raise ValueError("end_offset must be greater than or equal to start_offset")
         if type(self.terminated) is not bool:
             raise TypeError("terminated must be a bool")
 
@@ -222,9 +212,7 @@ class StreamBundle:
         selection: StreamSelection | str = StreamSelection.EITHER,
     ) -> tuple[StreamLine, ...]:
         return tuple(
-            line
-            for document in self.documents(selection)
-            for line in iter_stream_lines(document)
+            line for document in self.documents(selection) for line in iter_stream_lines(document)
         )
 
 
@@ -298,40 +286,28 @@ class CombinedAnalysisView:
         segments = tuple(self.segments)
         for segment in segments:
             if not isinstance(segment, AnalysisSegment):
-                raise TypeError(
-                    "segments must contain AnalysisSegment values"
-                )
+                raise TypeError("segments must contain AnalysisSegment values")
 
         stream_order = tuple(self.stream_order)
         if stream_order != (
             DiagnosticStream.STDOUT,
             DiagnosticStream.STDERR,
         ):
-            raise ValueError(
-                "combined analysis stream order must be stdout then stderr"
-            )
+            raise ValueError("combined analysis stream order must be stdout then stderr")
         if type(self.chronology_known) is not bool:
             raise TypeError("chronology_known must be a bool")
         if self.chronology_known:
-            raise ValueError(
-                "combined analysis view must not claim cross-stream chronology"
-            )
+            raise ValueError("combined analysis view must not claim cross-stream chronology")
 
         previous_end = 0
         seen_streams: set[DiagnosticStream] = set()
         for segment in segments:
             if segment.stream in seen_streams:
-                raise ValueError(
-                    "combined analysis view may contain one segment per stream"
-                )
+                raise ValueError("combined analysis view may contain one segment per stream")
             if segment.combined_start < previous_end:
                 raise ValueError("analysis segments must not overlap")
-            if text[
-                segment.combined_start : segment.combined_end
-            ] != segment.text:
-                raise ValueError(
-                    "analysis segment text must match the combined view"
-                )
+            if text[segment.combined_start : segment.combined_end] != segment.text:
+                raise ValueError("analysis segment text must match the combined view")
             previous_end = segment.combined_end
             seen_streams.add(segment.stream)
 
@@ -348,9 +324,7 @@ class CombinedAnalysisView:
 
         for segment in self.segments:
             if segment.combined_start <= offset < segment.combined_end:
-                source_offset = segment.source_start + (
-                    offset - segment.combined_start
-                )
+                source_offset = segment.source_start + (offset - segment.combined_start)
                 return segment.stream, source_offset
         return None
 
@@ -495,11 +469,7 @@ def build_combined_analysis_view(
     )
 
     documents = (bundle.stdout, bundle.stderr)
-    included = tuple(
-        document
-        for document in documents
-        if include_empty_streams or document.text
-    )
+    included = tuple(document for document in documents if include_empty_streams or document.text)
 
     if not included:
         return CombinedAnalysisView(
@@ -571,7 +541,8 @@ def line_excerpt(
     before: int = 2,
     after: int = 2,
 ) -> tuple[StreamLine, ...]:
-    if isinstance(lines, (str, bytes)):
+    raw_lines: object = lines
+    if isinstance(raw_lines, (str, bytes)):
         raise TypeError("lines must be an iterable of StreamLine values")
     prepared = tuple(lines)
     if any(not isinstance(line, StreamLine) for line in prepared):
@@ -653,11 +624,7 @@ def _locate_line_end(
     newline = text.find("\n", start)
     carriage = text.find("\r", start)
 
-    candidates = tuple(
-        position
-        for position in (newline, carriage)
-        if position >= 0
-    )
+    candidates = tuple(position for position in (newline, carriage) if position >= 0)
     if not candidates:
         return len(text), len(text), False
 
@@ -687,9 +654,7 @@ def _freeze_metadata(values: StreamMetadata) -> StreamMetadata:
         )
         copied[canonical_key] = canonical_value
 
-    return MappingProxyType(
-        {key: copied[key] for key in sorted(copied)}
-    )
+    return MappingProxyType({key: copied[key] for key in sorted(copied)})
 
 
 def _coerce_stream(

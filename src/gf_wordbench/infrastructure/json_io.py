@@ -128,7 +128,7 @@ def _validate_document(value: object) -> JsonObject:
             f"root type {type(value).__name__}",
         )
     _validate(value, location="$", active=set())
-    return cast(JsonObject, value)
+    return cast("JsonObject", value)
 
 
 def _reject_constant(token: str) -> NoReturn:
@@ -195,7 +195,7 @@ def _decode_text(text: str, *, source: str) -> JsonObject:
             subject=source,
             detail=error.detail,
         ) from error
-    return cast(JsonObject, value)
+    return cast("JsonObject", value)
 
 
 def _decode_bytes(data: bytes, *, source: str) -> JsonObject:

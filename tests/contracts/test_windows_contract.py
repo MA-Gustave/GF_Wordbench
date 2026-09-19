@@ -6,7 +6,6 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import sys
 import tomllib
 from typing import Final
 
@@ -19,19 +18,13 @@ _CLI_LAUNCHER: Final[Path] = _REPOSITORY_ROOT / "launch_cli.bat"
 _GUI_LAUNCHER: Final[Path] = _REPOSITORY_ROOT / "launch_gui.bat"
 _PYPROJECT: Final[Path] = _REPOSITORY_ROOT / "pyproject.toml"
 
-_DRIVE_PATH_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?i)(?<![%~])[a-z]:[\\/]"
-)
+_DRIVE_PATH_RE: Final[re.Pattern[str]] = re.compile(r"(?i)(?<![%~])[a-z]:[\\/]")
 _UNC_PATH_RE: Final[re.Pattern[str]] = re.compile(r"(?m)(?<!%)\\\\[^\\\r\n]+\\")
-_DIRECT_GF_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?ix)(?:^|[\s\"'])gf(?:\.exe)?(?:[\s\"']|$)"
-)
+_DIRECT_GF_RE: Final[re.Pattern[str]] = re.compile(r"(?ix)(?:^|[\s\"'])gf(?:\.exe)?(?:[\s\"']|$)")
 _TEMP_FILE_RE: Final[re.Pattern[str]] = re.compile(
     r"(?ix)(?:%temp%|%tmp%|\\temp\\|mktemp|temporary)"
 )
-_EXIT_LITERAL_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?im)^\s*exit\s+/b\s+(-?\d+)\s*$"
-)
+_EXIT_LITERAL_RE: Final[re.Pattern[str]] = re.compile(r"(?im)^\s*exit\s+/b\s+(-?\d+)\s*$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,13 +78,38 @@ def _active_lines(text: str) -> tuple[str, ...]:
 
 
 def _without_echo_commands(text: str) -> str:
-    lines = []
+    lines: list[str] = []
     for line in _normalized(text).splitlines():
         stripped = line.lstrip(" @")
-        if stripped.casefold().startswith("echo "):
+        lowered = stripped.casefold()
+        if lowered.startswith(("rem ", "::")):
+            continue
+        if re.match(
+            r"^(?:(?:1?>&2|2?>&1)\s*)?echo(?:\s|$)",
+            lowered,
+        ):
             continue
         lines.append(line)
     return "\n".join(lines)
+
+
+def _cmd_batch_command_line(
+    command_processor: str,
+    launcher: Path,
+    *arguments: str,
+) -> str:
+    """Build one verbatim command line for ``cmd.exe /s /c``.
+
+    Passing the ``/c`` payload as an element of an argument list makes
+    ``subprocess`` escape its embedded quotes with backslashes. ``cmd.exe`` does
+    not treat those backslashes as quote escapes. Supplying one complete command
+    line preserves the required nested quoting for a batch path containing
+    spaces.
+    """
+
+    processor = subprocess.list2cmdline([command_processor])
+    payload = subprocess.list2cmdline([str(launcher), *arguments])
+    return f'{processor} /d /s /c "{payload}"'
 
 
 def _has_repository_anchor(text: str) -> bool:
@@ -105,9 +123,7 @@ def _has_argument_forwarding(text: str) -> bool:
 
 def _has_exit_code_propagation(text: str) -> bool:
     lowered = text.casefold()
-    direct = bool(
-        re.search(r"(?im)^\s*exit\s+/b\s+%errorlevel%\s*$", lowered)
-    )
+    direct = bool(re.search(r"(?im)^\s*exit\s+/b\s+%errorlevel%\s*$", lowered))
     captured = bool(
         re.search(
             r'(?im)^\s*set\s+"?([a-z_][a-z0-9_]*)\s*=\s*%errorlevel%"?\s*$',
@@ -146,9 +162,7 @@ def _has_actionable_missing_environment_branch(text: str) -> bool:
         or re.search(r"(?im)^\s*echo\s+\S.*(?:error|missing|not found|unavailable)", lowered)
     )
     nonzero_literals = {
-        int(value)
-        for value in _EXIT_LITERAL_RE.findall(lowered)
-        if int(value) != 0
+        int(value) for value in _EXIT_LITERAL_RE.findall(lowered) if int(value) != 0
     }
     exits_nonzero = bool(nonzero_literals) or bool(
         re.search(r"(?im)^\s*exit\s+/b\s+%[a-z_][a-z0-9_]*%\s*$", lowered)
@@ -207,9 +221,7 @@ def _assert_no_hidden_policy(text: str, launcher_name: str) -> None:
     }
     lowered = non_echo_text.casefold()
     violations = [
-        description
-        for fragment, description in prohibited_fragments.items()
-        if fragment in lowered
+        description for fragment, description in prohibited_fragments.items() if fragment in lowered
     ]
     assert violations == [], (
         f"{launcher_name} duplicates application policy: {', '.join(violations)}"
@@ -226,12 +238,8 @@ def test_windows_launchers_are_fixed_repository_files() -> None:
 def test_launcher_console_scripts_match_package_metadata() -> None:
     metadata = tomllib.loads(_PYPROJECT.read_text(encoding="utf-8"))
     project = metadata["project"]
-    assert project["scripts"]["gf-wordbench"] == (
-        "gf_wordbench.entrypoints.cli.main:main"
-    )
-    assert project["gui-scripts"]["gf-wordbench-gui"] == (
-        "gf_wordbench.entrypoints.gui.main:main"
-    )
+    assert project["scripts"]["gf-wordbench"] == ("gf_wordbench.entrypoints.cli.main:main")
+    assert project["gui-scripts"]["gf-wordbench-gui"] == ("gf_wordbench.entrypoints.gui.main:main")
 
 
 def test_gui_launcher_defers_language_selection_to_the_application() -> None:
@@ -254,8 +262,7 @@ def test_gui_launcher_defers_language_selection_to_the_application() -> None:
     ]
 
     assert violations == [], (
-        "launch_gui.bat embeds a language-specific startup default: "
-        f"{', '.join(violations)}"
+        f"launch_gui.bat embeds a language-specific startup default: {', '.join(violations)}"
     )
     assert _has_argument_forwarding(text), (
         "launch_gui.bat must forward explicit caller intent unchanged; the GUI "
@@ -333,8 +340,7 @@ def test_launcher_forwards_arguments_and_preserves_child_exit_code(
         f"{contract.path.name} must return the child process exit code"
     )
     assert not re.search(r"(?im)^\s*start(?:\s|$)", text), (
-        f"{contract.path.name} must not use START because it detaches and loses the child "
-        "exit code"
+        f"{contract.path.name} must not use START because it detaches and loses the child exit code"
     )
 
 
@@ -366,20 +372,32 @@ def test_launchers_work_from_a_repository_path_with_spaces_and_preserve_exit_cod
     scripts_dir = repository / ".venv" / "Scripts"
     scripts_dir.mkdir(parents=True)
 
+    command_processor = Path(os.environ.get("COMSPEC", "cmd.exe"))
+    assert command_processor.is_file(), (
+        f"Windows command processor is unavailable: {command_processor}"
+    )
+
     for contract in _LAUNCHERS:
         launcher = repository / contract.path.name
         shutil.copy2(contract.path, launcher)
+
+        # Use a self-contained Windows executable as the documented entrypoint
+        # shim. Copying ``sys.executable`` under another name is not portable:
+        # the renamed interpreter can fail before startup when its Python DLL
+        # cannot be resolved. ``cmd.exe`` needs no repository-local runtime and
+        # gives the launcher a deterministic child exit code to propagate.
         shim = scripts_dir / contract.executable_name
-        shutil.copy2(sys.executable, shim)
+        shutil.copy2(command_processor, shim)
 
         completed = subprocess.run(
-            [
+            _cmd_batch_command_line(
                 os.environ.get("COMSPEC", "cmd.exe"),
+                launcher,
                 "/d",
                 "/s",
                 "/c",
-                f'"{launcher}" -c "import sys;sys.exit(37)"',
-            ],
+                "exit /b 37",
+            ),
             cwd=tmp_path,
             check=False,
             capture_output=True,
@@ -408,7 +426,10 @@ def test_launchers_fail_actionably_when_the_local_environment_is_missing(
         launcher = repository / contract.path.name
         shutil.copy2(contract.path, launcher)
         completed = subprocess.run(
-            [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c", str(launcher)],
+            _cmd_batch_command_line(
+                os.environ.get("COMSPEC", "cmd.exe"),
+                launcher,
+            ),
             cwd=tmp_path,
             check=False,
             capture_output=True,

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from gf_wordbench.reporting.schemas.registry import (
@@ -63,9 +61,7 @@ def test_gold_schema_registry_entry_is_canonical_and_owned() -> None:
     assert definition.format is SchemaFormat.CANONICAL_TEXT
     assert definition.contract_class is SchemaContractClass.CANONICAL_TEXT
     assert definition.support is SchemaSupportClass.CANONICAL
-    assert definition.canonical_path_pattern == (
-        "project/validation/gold/<scenario-id>.gold"
-    )
+    assert definition.canonical_path_pattern == ("project/validation/gold/<scenario-id>.gold")
     assert definition.writer_owner == "validation.scenarios.gold_update"
     assert "validation.scenarios.gold_compare" in definition.readers
     assert "validation.release" in definition.readers
@@ -113,9 +109,7 @@ def test_canonical_gold_document_round_trips_without_loss() -> None:
     )
     assert strict.scenario_id == _SCENARIO_ID
     assert strict.normalization_version == _NORMALIZATION_VERSION
-    assert tuple(str(section_id) for section_id in strict.section_ids) == (
-        _SECTION_ID,
-    )
+    assert tuple(str(section_id) for section_id in strict.section_ids) == (_SECTION_ID,)
     assert strict.sections[0].content == "hello world\n"
     assert strict.canonical_text == _GOLD_TEXT
     assert len(strict.sha256) == 64
@@ -167,8 +161,7 @@ def test_output_and_gold_compare_by_canonical_projection() -> None:
             "closes as",
         ),
         (
-            _GOLD_TEXT
-            + "--- BEGIN parse-basic ---\nagain\n--- END parse-basic ---\n",
+            _GOLD_TEXT + "--- BEGIN parse-basic ---\nagain\n--- END parse-basic ---\n",
             "duplicate section ID",
         ),
         (

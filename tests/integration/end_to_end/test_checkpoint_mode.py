@@ -84,8 +84,7 @@ def _run_config(tmp_path: Path, project: ProjectConfig) -> RunConfig:
     gf_executable.write_text("", encoding="utf-8")
 
     selected_checkpoints = tuple(
-        project.source_root / checkpoint
-        for checkpoint in project.modules.checkpoints
+        project.source_root / checkpoint for checkpoint in project.modules.checkpoints
     )
 
     return RunConfig(

@@ -102,13 +102,9 @@ class SourceViews:
 
         expected_length = len(self.original)
         if len(self.comment_stripped) != expected_length:
-            raise ValueError(
-                "comment_stripped must preserve original character alignment"
-            )
+            raise ValueError("comment_stripped must preserve original character alignment")
         if len(self.string_masked) != expected_length:
-            raise ValueError(
-                "string_masked must preserve original character alignment"
-            )
+            raise ValueError("string_masked must preserve original character alignment")
         if not isinstance(self.spans, tuple):
             raise TypeError("spans must be a tuple")
         if not isinstance(self.issues, tuple):

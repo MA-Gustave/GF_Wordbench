@@ -6,40 +6,43 @@
 **Owner:** GF Wordbench maintainers  
 **Canonical path:** `docs/usage/QUICK_START.md`  
 **Guide version:** `1.0.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Goal
 
-This guide takes a new GF Wordbench checkout from zero to a first validated GF source file.
+This guide takes a new GF Wordbench checkout from zero to a first validation of an existing GF source tree.
 
 The shortest successful path is:
 
 ```text
-install Python environment
-→ identify GF and RGL
-→ verify project/project.toml
-→ check configuration
+install the Python environment
+→ identify GF and the RGL checkout
+→ select a GF file or RGL language directory
+→ optionally load a validation profile
 → run quick validation
 → open the generated summary
 ```
 
-One GF Wordbench workspace contains exactly one active GF language project.
+One ordinary run resolves exactly one language context. The selected language sources remain in their original checkout. Wordbench selects targets, invokes GF, captures evidence, classifies results and writes reports without creating a second maintained copy of the language tree.
 
-The active project is defined by:
-
-```text
-project/project.toml
-```
-
-GF remains the execution engine.
-
-GF Wordbench selects targets, invokes GF, captures evidence, classifies results and writes reports.
-
-Multi-workspace and multilingual aggregation belong to the independent `gf-portfolio` product. GF Wordbench does not require `gf-portfolio` to install, validate or report one active project.
-
----
+Cross-language aggregation belongs to the independent `gf-portfolio` product.
 
 ## 2. Open the repository root
 
@@ -48,44 +51,21 @@ Open PowerShell, Command Prompt or a POSIX shell in the GF Wordbench repository 
 PowerShell:
 
 ```powershell
-Set-Location "<WORKSPACE_ROOT>"
+Set-Location "<WORDBENCH_ROOT>"
 ```
 
-Command Prompt:
+The repository root contains the framework, documentation, tests, templates and `pyproject.toml`. It does not need a root `project/` directory.
 
-```bat
-cd /d "<WORKSPACE_ROOT>"
-```
-
-POSIX shell:
-
-```bash
-cd "<WORKSPACE_ROOT>"
-```
-
-The repository root contains at least:
+Keep the language checkout separate, for example:
 
 ```text
-app/
-docs/
-project/
-templates/
-tests/
-pyproject.toml
+<WORDBENCH_ROOT>/                 GF Wordbench framework
+<RGL_ROOT>/src/<language>/        selected language sources
+<OUTPUT_ROOT>/<language-key>/     Wordbench run directories
+<PROFILE_ROOT>/                   optional validation profile
 ```
 
-The active project contains:
-
-```text
-project/
-├── project.toml
-├── docs/
-└── validation/
-```
-
-GF language sources may live inside the repository or at the project-relative source location declared by `project/project.toml`.
-
----
+The profile root is needed only for profile-dependent checkpoint, scenario or release policy.
 
 ## 3. Prerequisites
 
@@ -94,32 +74,28 @@ Required:
 ```text
 Python version supported by pyproject.toml
 Grammatical Framework executable: gf or gf.exe
-GF Resource Grammar Library sources or another configured GF library root
-one initialized active project
+an existing GF source file or RGL language directory
+a writable output root
 ```
 
-Useful local tools:
+Optional:
 
 ```text
-Git
-PowerShell on Windows
-an editor with TOML and Markdown support
+an explicit validation profile for checkpoints, scenarios, golds or release gates
 ```
 
-GF Wordbench does not install or replace Grammatical Framework.
+GF Wordbench does not install GF, copy the selected language tree or require a root `project/` directory.
 
 Before continuing, identify:
 
 ```text
-<WORKSPACE_ROOT>  GF Wordbench repository root
-<GF>              absolute path to gf or gf.exe
-<RGL>             absolute path to the RGL source root
-<OUT>             writable output root for run directories
+<WORDBENCH_ROOT>   GF Wordbench repository root
+<LANGUAGE_PATH>    selected .gf file or RGL language directory
+<GF>               absolute path to gf or gf.exe
+<RGL_ROOT>         RGL checkout or source root, when applicable
+<OUTPUT_ROOT>      writable output root for run directories
+<PROFILE_ROOT>     optional validation-profile directory
 ```
-
-Paths containing spaces are supported when passed as one quoted argument.
-
----
 
 ## 4. Verify GF directly
 
@@ -229,85 +205,19 @@ docs/usage/CLI_REFERENCE.md
 
 ## 7. Verify the active project
 
-Open:
+Select the source to validate.
+
+Examples:
 
 ```text
-project/project.toml
+<RGL_ROOT>/src/french
+<RGL_ROOT>/src/french/LangFre.gf
+<OTHER_GF_ROOT>/MyGrammar.gf
 ```
 
-It identifies the single active language project for the workspace.
+Wordbench resolves the selected path into one immutable `ResolvedLanguageContext`. Verify that the resolved language identity, source root, RGL root and candidate entrypoints match the selected source.
 
-Verify at least:
-
-```text
-project ID
-project name
-language code
-source directory
-source glob
-GF path parts
-entrypoints
-checkpoints
-required scenarios
-optional scenarios
-release PGF policy
-```
-
-A simplified project configuration resembles:
-
-```toml
-schema_id = "gf-wordbench.project"
-schema_version = "1.0"
-
-[project]
-id = "example"
-name = "Example Language"
-language_code = "xxx"
-root = "."
-
-[sources]
-directory = "lib/src/example"
-glob = "*.gf"
-include_regex = "^[A-Z][A-Za-z0-9_]*\\.gf$"
-exclude_regex = "(\\.bak\\.gf$|\\.tmp\\.gf$)"
-
-[gf]
-path_parts = [
-  "lib/src",
-  "lib/src/example",
-]
-minimum_version = ""
-
-[modules]
-entrypoints = [
-  "GrammarXxx.gf",
-]
-checkpoints = [
-  "MorphoXxx.gf",
-  "NounXxx.gf",
-  "VerbXxx.gf",
-]
-
-[validation]
-required_scenarios = [
-  "load-main",
-  "linearize-basic",
-]
-optional_scenarios = [
-  "generation-bounded",
-]
-release_requires_pgf = true
-```
-
-Use the exact schema documented in:
-
-```text
-docs/configuration/PROJECT_TOML_REFERENCE.md
-```
-
-Do not store local absolute paths to GF, the RGL or run output inside `project.toml`. Those values belong to local environment configuration or explicit run input.
-
----
+Load `<validation-profile-root>/project.toml` only when a checkpoint, scenario, gold comparison or release policy requires it. The profile must be compatible with the resolved language context and must not redefine its source path or identity.
 
 ## 8. Validate configuration before running GF
 
@@ -600,7 +510,7 @@ gf-wordbench validate `
   --output-root "<OUT>"
 ```
 
-Checkpoint IDs come from the active project configuration.
+Checkpoint IDs come from the explicitly loaded validation profile.
 
 A checkpoint run may validate:
 
@@ -634,7 +544,7 @@ gf-wordbench validate `
 Scenarios are stored under:
 
 ```text
-project/validation/scenarios/
+<validation-profile-root>/validation/scenarios/
 ```
 
 A scenario is registered in the active-project configuration.
@@ -814,7 +724,7 @@ project registry
 portfolio membership
 ```
 
-Deleting it does not damage the active project or change its contract.
+Deleting a run directory does not damage the selected source tree or change the optional profile.
 
 ---
 
@@ -824,7 +734,7 @@ Deleting it does not damage the active project or change its contract.
 1. verify gf --version
 2. create and activate .venv
 3. install gf-wordbench
-4. inspect project/project.toml
+4. select a GF file or RGL language directory
 5. run gf-wordbench config check
 6. run quick on one small source file
 7. fix direct compile failures
@@ -872,7 +782,7 @@ project interfile contract
 A normal run never changes:
 
 ```text
-project/validation/gold/*.gold
+<validation-profile-root>/validation/gold/*.gold
 ```
 
 When an intentional grammar change modifies normalized scenario output:
@@ -943,7 +853,7 @@ Inspect the resolved GF path reported by the checker.
 
 ### 26.4 Source directory is missing
 
-Correct `project/project.toml` or restore the project files.
+Correct the selected source path or restore the source files.
 
 GF Wordbench does not create a missing source directory automatically.
 
@@ -958,7 +868,7 @@ GF Wordbench does not guess another entrypoint from naming conventions.
 Restore or create:
 
 ```text
-project/validation/scenarios/<scenario-id>.gfs
+<validation-profile-root>/validation/scenarios/<scenario-id>.gfs
 ```
 
 Then verify that the registry and script ID agree.
@@ -1003,9 +913,9 @@ Use raw run evidence rather than the rendered summary alone.
 Do not:
 
 - hardcode the active language in framework configuration;
-- store the GF executable in portable `project.toml`;
+- store a developer-specific GF executable path in a portable validation profile;
 - use application state as project truth;
-- define several active projects in one Wordbench workspace;
+- mix several language identities in one run;
 - store or read private `gf-portfolio` state from Wordbench;
 - run release mode with required stages disabled;
 - treat a zero scenario exit code as complete success;
@@ -1152,7 +1062,7 @@ docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 [ ] GF executable launches
 [ ] GF version recorded
 [ ] RGL root identified
-[ ] project/project.toml validated
+[ ] selected language path resolved
 [ ] Source directory exists
 [ ] Entrypoint exists
 [ ] Output root is writable
@@ -1172,9 +1082,9 @@ docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 A reliable first run has:
 
 ```text
-one active project
+one selected language context
 + one explicit GF executable
-+ one explicit RGL root
++ one resolved RGL root when applicable
 + one writable output root
 + one bounded quick target
 ```

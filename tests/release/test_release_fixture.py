@@ -39,12 +39,8 @@ from gf_wordbench.validation.release.models import (
 
 _RELEASE_PROJECT_ID: Final[ProjectId] = ProjectId("release-fixture")
 _RELEASE_RUN_ID: Final[RunId] = RunId("20260725_120000")
-_RELEASE_GATE_IDS: Final[tuple[str, ...]] = tuple(
-    f"RG-{index:02d}" for index in range(15)
-)
-_CONDITIONAL_GATE_IDS: Final[frozenset[str]] = frozenset(
-    {"RG-05", "RG-08", "RG-10"}
-)
+_RELEASE_GATE_IDS: Final[tuple[str, ...]] = tuple(f"RG-{index:02d}" for index in range(15))
+_CONDITIONAL_GATE_IDS: Final[frozenset[str]] = frozenset({"RG-05", "RG-08", "RG-10"})
 _RELEASE_CONDITIONS: Final[dict[str, bool]] = {
     "checkpoints_declared": True,
     "required_gold_backed_scenarios_declared": True,
@@ -107,8 +103,7 @@ def _write_release_fixture(root: Path) -> None:
         encoding="utf-8",
     )
     (source / "FixtureEng.gf").write_text(
-        "concrete FixtureEng of Fixture = { "
-        "lincat Item = Str ; lin Sample = \"sample\" ; }\n",
+        'concrete FixtureEng of Fixture = { lincat Item = Str ; lin Sample = "sample" ; }\n',
         encoding="utf-8",
     )
 
@@ -129,8 +124,7 @@ def _release_registry() -> ModuleType:
         return import_module("gf_wordbench.validation.release.registry")
     except Exception as exc:  # pragma: no cover - assertion carries root cause
         pytest.fail(
-            "the canonical release-gate registry must import cleanly: "
-            f"{type(exc).__name__}: {exc}",
+            f"the canonical release-gate registry must import cleanly: {type(exc).__name__}: {exc}",
             pytrace=True,
         )
 
@@ -231,9 +225,7 @@ def test_release_fixture_produces_a_ready_terminal_decision() -> None:
     assert decision.is_ready is True
     assert decision.decision is ReleaseDecisionValue.READY
     assert decision.statement == "GF Wordbench release gates passed."
-    assert tuple(result.gate_id for result in decision.gate_results) == (
-        _RELEASE_GATE_IDS
-    )
+    assert tuple(result.gate_id for result in decision.gate_results) == (_RELEASE_GATE_IDS)
     assert decision.release_artifact_paths == release_artifacts
 
 

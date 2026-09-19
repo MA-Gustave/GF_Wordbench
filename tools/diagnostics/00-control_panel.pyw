@@ -38,8 +38,20 @@ LEVELS = (
     (
         "N05",
         "Release Validation",
-        "05-release_validation.pyw",
+        "08-release_validation.pyw",
         "Run and inspect Wordbench release evidence",
+    ),
+    (
+        "N06",
+        "GUI Startup Lifecycle",
+        "06-gui_startup_lifecycle.pyw",
+        "Canonical GUI startup API and lifecycle checks",
+    ),
+    (
+        "N07",
+        "Multilanguage Switching",
+        "07-multilanguage_switching.pyw",
+        "Language switching and cross-language isolation",
     ),
 )
 

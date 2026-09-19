@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
+import hashlib
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 
 import pytest
 
 from gf_wordbench.kernel.errors import ContractViolationError, ReportError
-from gf_wordbench.kernel.events import EventLevel, LifecycleEvent, event_fields
+from gf_wordbench.kernel.events import (
+    EventLevel,
+    EventScalar,
+    LifecycleEvent,
+    event_fields,
+)
 from gf_wordbench.reporting.logs.aggregates import (
     ALL_LOGS_RELATIVE_PATH,
     ALL_SCAN_LOGS_RELATIVE_PATH,
@@ -26,12 +31,12 @@ from gf_wordbench.reporting.logs.aggregates import (
     write_all_scan_logs as write_scan_sources,
 )
 from gf_wordbench.reporting.logs.lifecycle import (
-    LifecycleLogPolicy,
-    LifecycleLogWriter,
     MASTER_LOG_ENCODING,
     MASTER_LOG_NEWLINE,
     MASTER_LOG_RELATIVE_PATH,
     REDACTED_VALUE,
+    LifecycleLogPolicy,
+    LifecycleLogWriter,
     append_lifecycle_event,
     create_lifecycle_log,
     format_lifecycle_event,
@@ -80,7 +85,6 @@ from gf_wordbench.reporting.logs.truncation import (
     truncate_text,
 )
 
-
 _GENERATED_AT = datetime(2026, 7, 25, 12, 34, 56, 789000, tzinfo=UTC)
 _SECTION_RULE = "=" * 80
 
@@ -93,13 +97,12 @@ class _Capture:
     stderr_size_bytes: int
 
 
-
 def _event(
     *,
     name: str = "stage_completed",
     level: EventLevel = EventLevel.INFO,
     message: str = "",
-    fields: dict[str, object] | None = None,
+    fields: dict[str, EventScalar] | None = None,
 ) -> LifecycleEvent:
     return LifecycleEvent(
         timestamp=datetime(
@@ -125,7 +128,6 @@ def _event(
     )
 
 
-
 def _metadata(*, mode: str | None = "diagnostic") -> AggregateRunMetadata:
     return AggregateRunMetadata(
         run_id="run-20260725-123456",
@@ -135,12 +137,10 @@ def _metadata(*, mode: str | None = "diagnostic") -> AggregateRunMetadata:
     )
 
 
-
 def _write(path: Path, payload: bytes) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
     return path
-
 
 
 def _source(
@@ -167,7 +167,6 @@ def _source(
     )
 
 
-
 def test_lifecycle_format_is_utf8_lf_utc_and_deterministic() -> None:
     line = format_lifecycle_event(
         _event(
@@ -186,12 +185,11 @@ def test_lifecycle_format_is_utf8_lf_utc_and_deterministic() -> None:
         "subject=lib/src/french/GrammaireÉté.gf status=OK "
         "evidence_path=raw/compile/grammaire-ete.err.txt "
         'message="compilation terminée avec succès" cached=false '
-        "duration_ms=17 note=\"valeur avec espaces\"\n"
+        'duration_ms=17 note="valeur avec espaces"\n'
     )
     assert line.encode(MASTER_LOG_ENCODING).decode("utf-8") == line
     assert line.endswith(MASTER_LOG_NEWLINE)
     assert "\r" not in line
-
 
 
 def test_lifecycle_format_redacts_sensitive_fields_and_custom_values() -> None:
@@ -204,9 +202,7 @@ def test_lifecycle_format_redacts_sensitive_fields_and_custom_values() -> None:
 
     line = format_lifecycle_event(
         event,
-        redactor=lambda key, value: (
-            "<HOME>" if key == "workspace" else value
-        ),
+        redactor=lambda key, value: "<HOME>" if key == "workspace" else value,
     )
 
     assert f'api_key="{REDACTED_VALUE}"' in line
@@ -215,13 +211,11 @@ def test_lifecycle_format_redacts_sensitive_fields_and_custom_values() -> None:
     assert "Alice" not in line
 
 
-
 def test_lifecycle_line_limit_is_measured_after_utf8_encoding() -> None:
     event = _event(message="é" * 20)
 
     with pytest.raises(ValueError, match="line limit"):
         format_lifecycle_event(event, maximum_line_bytes=64)
-
 
 
 def test_lifecycle_writer_suppresses_debug_and_finalizes_once(
@@ -256,7 +250,6 @@ def test_lifecycle_writer_suppresses_debug_and_finalizes_once(
         writer.append(_event())
 
 
-
 def test_lifecycle_create_and_append_preserve_existing_content(
     tmp_path: Path,
 ) -> None:
@@ -280,7 +273,6 @@ def test_lifecycle_create_and_append_preserve_existing_content(
     assert not path.read_bytes().endswith(b"\n\n")
 
 
-
 def test_lifecycle_writer_rejects_destination_outside_run_root(
     tmp_path: Path,
 ) -> None:
@@ -289,7 +281,6 @@ def test_lifecycle_writer_rejects_destination_outside_run_root(
 
     with pytest.raises(OSError, match="escapes"):
         LifecycleLogWriter(run_root, path=(tmp_path / "outside.log").resolve())
-
 
 
 def test_process_stream_inspection_distinguishes_present_empty_and_missing(
@@ -311,7 +302,6 @@ def test_process_stream_inspection_distinguishes_present_empty_and_missing(
     assert missing_artifact.state is ProcessStreamState.MISSING
     assert missing_artifact.size_bytes is None
     assert missing_artifact.sha256 is None
-
 
 
 def test_process_stream_writer_copies_exact_bytes_and_preserves_empty_stream(
@@ -349,7 +339,6 @@ def test_process_stream_writer_copies_exact_bytes_and_preserves_empty_stream(
     assert result.stderr.state is ProcessStreamState.EMPTY
 
 
-
 def test_process_stream_writer_detects_declared_size_mismatch(
     tmp_path: Path,
 ) -> None:
@@ -360,7 +349,6 @@ def test_process_stream_writer_detects_declared_size_mismatch(
 
     with pytest.raises(ReportError, match="size mismatch"):
         ProcessStreamWriter(run_root, sync=False).inspect(capture)
-
 
 
 def test_process_stream_contract_rejects_aliasing_missing_and_escape(
@@ -388,16 +376,13 @@ def test_process_stream_contract_rejects_aliasing_missing_and_escape(
         validate_stream_paths(escaped, run_root=run_root)
 
 
-
 def test_stream_paths_are_extracted_from_direct_or_nested_capture(
     tmp_path: Path,
 ) -> None:
     stdout = (tmp_path / "stdout.txt").resolve()
     stderr = (tmp_path / "stderr.txt").resolve()
 
-    direct = stream_paths_from_capture(
-        {"stdout_path": stdout, "stderr_path": stderr}
-    )
+    direct = stream_paths_from_capture({"stdout_path": stdout, "stderr_path": stderr})
     nested = stream_paths_from_capture(
         SimpleNamespace(
             stdout=SimpleNamespace(path=stdout),
@@ -409,8 +394,6 @@ def test_stream_paths_are_extracted_from_direct_or_nested_capture(
 
     with pytest.raises(ContractViolationError, match="both"):
         stream_paths_from_capture({"stdout_path": stdout})
-
-
 
 
 def test_scan_source_aggregate_preserves_unicode_and_escapes_boundaries(
@@ -447,7 +430,6 @@ def test_scan_source_aggregate_preserves_unicode_and_escapes_boundaries(
     assert scan_path.read_bytes().decode("utf-8").count(_SECTION_RULE) == 1
     assert rendered.text.endswith("\n")
     assert "\r" not in rendered.text.split("message: élève détecté", 1)[1]
-
 
 
 def test_operation_aggregate_orders_sources_and_references_scan_logs(
@@ -531,7 +513,6 @@ def test_operation_aggregate_orders_sources_and_references_scan_logs(
     assert rendered.included_sections == 5
 
 
-
 def test_operation_aggregate_represents_missing_evidence_without_creating_it(
     tmp_path: Path,
 ) -> None:
@@ -557,7 +538,6 @@ def test_operation_aggregate_represents_missing_evidence_without_creating_it(
     assert "reason: scenario was skipped" in rendered.text
     assert "<MISSING EVIDENCE: scenario:unicode>" in rendered.text
     assert list(run_root.rglob("*.txt")) == []
-
 
 
 def test_operation_aggregate_rejects_reports_and_invalid_utf8(
@@ -590,7 +570,6 @@ def test_operation_aggregate_rejects_reports_and_invalid_utf8(
 
     with pytest.raises(UnicodeDecodeError):
         render_all_logs(_metadata(), [invalid_source], run_root=run_root)
-
 
 
 def test_aggregate_writer_is_utf8_lf_verified_and_replace_is_explicit(
@@ -635,7 +614,6 @@ def test_aggregate_writer_is_utf8_lf_verified_and_replace_is_explicit(
     assert replacement.sha256 == result.sha256
 
 
-
 def test_scan_source_writer_uses_canonical_destination_and_digest(
     tmp_path: Path,
 ) -> None:
@@ -661,10 +639,7 @@ def test_scan_source_writer_uses_canonical_destination_and_digest(
     assert result.kind is AggregateKind.SCAN
     assert result.path == destination
     assert result.sha256 == hashlib.sha256(destination.read_bytes()).hexdigest()
-    assert destination.read_text(encoding="utf-8").startswith(
-        "GF WORDBENCH — ALL SCAN LOGS\n"
-    )
-
+    assert destination.read_text(encoding="utf-8").startswith("GF WORDBENCH — ALL SCAN LOGS\n")
 
 
 def test_scan_log_sections_sort_and_distinguish_missing_required_evidence(
@@ -723,7 +698,6 @@ def test_scan_log_sections_sort_and_distinguish_missing_required_evidence(
     assert "message: élève" in aggregate.text
 
 
-
 def test_scan_log_render_is_partial_when_only_optional_evidence_is_missing() -> None:
     sections = (
         ScanLogSection(
@@ -745,7 +719,6 @@ def test_scan_log_render_is_partial_when_only_optional_evidence_is_missing() -> 
     assert aggregate.missing_required_count == 0
     assert "path: null" in aggregate.text
     assert "reason: not selected" in aggregate.text
-
 
 
 def test_scan_log_writer_persists_hash_size_utf8_and_lf(
@@ -784,7 +757,6 @@ def test_scan_log_writer_persists_hash_size_utf8_and_lf(
     assert payload.decode("utf-8") == aggregate.text
 
 
-
 def test_scan_log_builder_rejects_escape_duplicate_path_and_invalid_utf8(
     tmp_path: Path,
 ) -> None:
@@ -821,7 +793,6 @@ def test_scan_log_builder_rejects_escape_duplicate_path_and_invalid_utf8(
         )
 
 
-
 def test_log_redaction_records_explicit_reasons_without_mutating_unicode() -> None:
     policy = LogRedactionPolicy(
         protected_values=("été-secret",),
@@ -840,7 +811,8 @@ def test_log_redaction_records_explicit_reasons_without_mutating_unicode() -> No
         "password=bonjour\n"
         "token: abc123\n"
         "secret=été-secret\n"
-        r"path=C:\Users\Alice\project" "\n"
+        r"path=C:\Users\Alice\project"
+        "\n"
         "reference=TICKET-4831\n"
     )
 
@@ -873,7 +845,6 @@ def test_log_redaction_records_explicit_reasons_without_mutating_unicode() -> No
     } <= reasons
 
 
-
 def test_subject_keys_are_portable_deterministic_and_collision_safe() -> None:
     identity = "lib/src/french/Grammaire française.gf"
 
@@ -892,7 +863,6 @@ def test_subject_keys_are_portable_deterministic_and_collision_safe() -> None:
 
     with pytest.raises(ContractViolationError, match="reserved Windows"):
         make_subject_key("CON.gf")
-
 
 
 def test_truncation_helpers_preserve_bounds_and_emit_auditable_metadata() -> None:
@@ -926,7 +896,6 @@ def test_truncation_helpers_preserve_bounds_and_emit_auditable_metadata() -> Non
     assert rendered.startswith("evidence\n")
     assert "<TRUNCATED:" in rendered
     assert "reason=output_limit" in rendered
-
 
 
 def test_excerpt_around_line_preserves_requested_context_and_line_identity() -> None:

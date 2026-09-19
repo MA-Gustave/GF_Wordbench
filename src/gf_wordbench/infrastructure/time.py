@@ -7,8 +7,8 @@ runtime behavior.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import time
-from datetime import datetime, timezone
 from typing import Final
 
 
@@ -20,7 +20,7 @@ class SystemClock:
     def utc_now(self) -> datetime:
         """Return the current timezone-aware UTC timestamp."""
 
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
     def monotonic_now(self) -> float:
         """Return a monotonic instant expressed in fractional seconds."""

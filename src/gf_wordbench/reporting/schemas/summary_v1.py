@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import math
-import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+import math
 from pathlib import PurePosixPath, PureWindowsPath
+import re
 from typing import Any, Final, Literal, NotRequired, TypeAlias, TypedDict, cast
 
 SUMMARY_SCHEMA_ID: Final[str] = "gf-wordbench.run-summary"
@@ -404,12 +404,8 @@ TOP_ERROR_FIELDS: Final[tuple[str, ...]] = (
 VALIDATION_MODES: Final[frozenset[str]] = frozenset(
     {"quick", "checkpoint", "release", "diagnostic"}
 )
-VALIDATION_STATUSES: Final[frozenset[str]] = frozenset(
-    {"OK", "FAIL", "ERROR", "SKIPPED"}
-)
-OVERALL_STATUSES: Final[frozenset[str]] = frozenset(
-    {"OK", "FAIL", "ERROR"}
-)
+VALIDATION_STATUSES: Final[frozenset[str]] = frozenset({"OK", "FAIL", "ERROR", "SKIPPED"})
+OVERALL_STATUSES: Final[frozenset[str]] = frozenset({"OK", "FAIL", "ERROR"})
 DIAGNOSTIC_CLASSES: Final[frozenset[str]] = frozenset(
     {
         "ok",
@@ -438,9 +434,7 @@ ERROR_KINDS: Final[frozenset[str]] = frozenset(
 CHANGE_KINDS: Final[frozenset[str]] = frozenset(
     {"unchanged", "improved", "regressed", "new", "removed"}
 )
-DIFF_SUBJECT_KINDS: Final[frozenset[str]] = frozenset(
-    {"file", "scenario", "run"}
-)
+DIFF_SUBJECT_KINDS: Final[frozenset[str]] = frozenset({"file", "scenario", "run"})
 DIFF_CHANGE_ORDER: Final[Mapping[str, int]] = {
     "regressed": 0,
     "new": 1,
@@ -448,18 +442,10 @@ DIFF_CHANGE_ORDER: Final[Mapping[str, int]] = {
     "removed": 3,
     "unchanged": 4,
 }
-_RUN_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^[0-9]{8}_[0-9]{6}(?:_[0-9]{2,})?$"
-)
-_SCHEMA_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
-)
-_SHA256_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^[0-9a-f]{64}$"
-)
-_PROJECT_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
-)
+_RUN_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9]{8}_[0-9]{6}(?:_[0-9]{2,})?$")
+_SCHEMA_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+_SHA256_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
+_PROJECT_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -485,10 +471,7 @@ class SummaryV1ValidationError(ValueError):
         if not prepared:
             raise ValueError("issues must not be empty")
         self.issues = prepared
-        preview = "; ".join(
-            f"{issue.path}: {issue.message}"
-            for issue in prepared[:8]
-        )
+        preview = "; ".join(f"{issue.path}: {issue.message}" for issue in prepared[:8])
         if len(prepared) > 8:
             preview += f"; and {len(prepared) - 8} more"
         super().__init__(preview)
@@ -520,7 +503,7 @@ def new_summary_v1(
     }
     if producer is not None:
         document["producer"] = deepcopy(dict(producer))
-    result = cast(SummaryV1, document)
+    result = cast("SummaryV1", document)
     if canonicalize:
         result = canonicalize_summary_v1(result, validate=False)
     if validate:
@@ -639,7 +622,6 @@ def validate_summary_v1(
     return tuple(sorted(set(issues)))
 
 
-
 def validate_summary_document(document: object) -> None:
     """Strictly validate one canonical persisted summary document.
 
@@ -669,7 +651,7 @@ def require_summary_v1(
     )
     if issues:
         raise SummaryV1ValidationError(issues)
-    return cast(SummaryV1, document)
+    return cast("SummaryV1", document)
 
 
 def is_summary_v1(
@@ -698,27 +680,31 @@ def canonicalize_summary_v1(
     if isinstance(file_results, list):
         file_results.sort(
             key=lambda item: (
-                str(item.get("file_path", "")).casefold(),
-                str(item.get("file_path", "")),
+                (
+                    str(item.get("file_path", "")).casefold(),
+                    str(item.get("file_path", "")),
+                )
+                if isinstance(item, Mapping)
+                else ("", "")
             )
-            if isinstance(item, Mapping)
-            else ("", "")
         )
 
     diff_entries = copied.get("diff_entries")
     if isinstance(diff_entries, list):
         diff_entries.sort(
             key=lambda item: (
-                DIFF_CHANGE_ORDER.get(
-                    str(item.get("change_kind", "")),
-                    len(DIFF_CHANGE_ORDER),
-                ),
-                str(item.get("subject_kind", "")).casefold(),
-                str(item.get("subject_id", "")).casefold(),
-                str(item.get("subject_id", "")),
+                (
+                    DIFF_CHANGE_ORDER.get(
+                        str(item.get("change_kind", "")),
+                        len(DIFF_CHANGE_ORDER),
+                    ),
+                    str(item.get("subject_kind", "")).casefold(),
+                    str(item.get("subject_id", "")).casefold(),
+                    str(item.get("subject_id", "")),
+                )
+                if isinstance(item, Mapping)
+                else (len(DIFF_CHANGE_ORDER), "", "", "")
             )
-            if isinstance(item, Mapping)
-            else (len(DIFF_CHANGE_ORDER), "", "", "")
         )
 
     top_errors = copied.get("top_errors")
@@ -726,19 +712,14 @@ def canonicalize_summary_v1(
         top_errors.sort(
             key=lambda item: (
                 -int(item.get("count", 0))
-                if isinstance(item, Mapping)
-                and type(item.get("count")) is int
+                if isinstance(item, Mapping) and type(item.get("count")) is int
                 else 0,
-                str(item.get("message", "")).casefold()
-                if isinstance(item, Mapping)
-                else "",
-                str(item.get("message", ""))
-                if isinstance(item, Mapping)
-                else "",
+                str(item.get("message", "")).casefold() if isinstance(item, Mapping) else "",
+                str(item.get("message", "")) if isinstance(item, Mapping) else "",
             )
         )
 
-    result = cast(SummaryV1, copied)
+    result = cast("SummaryV1", copied)
     if validate:
         return require_summary_v1(result)
     return result
@@ -839,10 +820,7 @@ def _validate_metadata(
         f"{path}.project_id",
         issues,
     )
-    if (
-        project_id is not None
-        and _PROJECT_ID_PATTERN.fullmatch(project_id) is None
-    ):
+    if project_id is not None and _PROJECT_ID_PATTERN.fullmatch(project_id) is None:
         _issue(
             issues,
             f"{path}.project_id",
@@ -891,9 +869,7 @@ def _validate_metadata(
         f"{path}.source_glob",
         issues,
     )
-    if source_glob is not None and (
-        "/" in source_glob or "\\" in source_glob
-    ):
+    if source_glob is not None and ("/" in source_glob or "\\" in source_glob):
         _issue(
             issues,
             f"{path}.source_glob",
@@ -951,9 +927,7 @@ def _validate_totals(
         return
     _fields(item, path, TOTALS_FIELDS, (), strict, issues)
     count_fields = tuple(
-        field_name
-        for field_name in TOTALS_FIELDS
-        if field_name != "overall_status"
+        field_name for field_name in TOTALS_FIELDS if field_name != "overall_status"
     )
     for field_name in count_fields:
         _non_negative_integer(
@@ -1109,21 +1083,14 @@ def _validate_file_results(
             f"{item_path}.is_direct",
             issues,
         )
-        if (
-            diagnostic_class == "direct"
-            and is_direct is not True
-        ):
+        if diagnostic_class == "direct" and is_direct is not True:
             _issue(
                 issues,
                 f"{item_path}.is_direct",
                 "direct_compatibility",
                 "diagnostic_class direct requires is_direct true",
             )
-        if (
-            diagnostic_class is not None
-            and diagnostic_class != "direct"
-            and is_direct is True
-        ):
+        if diagnostic_class is not None and diagnostic_class != "direct" and is_direct is True:
             _issue(
                 issues,
                 f"{item_path}.is_direct",
@@ -1139,9 +1106,7 @@ def _validate_file_results(
         if blockers is not None:
             seen: set[str] = set()
             for blocker_index, blocker in enumerate(blockers):
-                blocker_path = (
-                    f"{item_path}.blocked_by[{blocker_index}]"
-                )
+                blocker_path = f"{item_path}.blocked_by[{blocker_index}]"
                 text = _nonempty_string(blocker, blocker_path, issues)
                 if text is None:
                     continue
@@ -1238,11 +1203,7 @@ def _validate_fingerprint(
         issues,
     )
     digest = _string(item.get("hash"), f"{path}.hash", issues)
-    if (
-        algorithm == "sha256"
-        and digest is not None
-        and _SHA256_PATTERN.fullmatch(digest) is None
-    ):
+    if algorithm == "sha256" and digest is not None and _SHA256_PATTERN.fullmatch(digest) is None:
         _issue(
             issues,
             f"{path}.hash",
@@ -1498,9 +1459,7 @@ def _validate_scenario_results(
         if artifacts is not None:
             seen_artifacts: set[str] = set()
             for artifact_index, artifact in enumerate(artifacts):
-                artifact_path = (
-                    f"{item_path}.artifacts[{artifact_index}]"
-                )
+                artifact_path = f"{item_path}.artifacts[{artifact_index}]"
                 text = _nonempty_string(
                     artifact,
                     artifact_path,
@@ -1551,11 +1510,7 @@ def _validate_scenario_results(
                     "scenario status OK requires diagnostic_class ok",
                 )
 
-        if (
-            required is True
-            and gold_path is None
-            and gold_match is True
-        ):
+        if required is True and gold_path is None and gold_match is True:
             _issue(
                 issues,
                 f"{item_path}.gold_match",
@@ -1672,11 +1627,7 @@ def _validate_diff_entries(
         )
         _string(item.get("message"), f"{item_path}.message", issues)
 
-        if (
-            subject_kind is not None
-            and subject_id is not None
-            and change_kind is not None
-        ):
+        if subject_kind is not None and subject_id is not None and change_kind is not None:
             sortable.append(
                 (
                     DIFF_CHANGE_ORDER[change_kind],
@@ -1780,7 +1731,7 @@ def _validate_cross_invariants(
             if status not in counts:
                 valid = False
             else:
-                counts[cast(str, status)] += 1
+                counts[cast("str", status)] += 1
             if diagnostic_class == "direct":
                 direct += 1
             elif diagnostic_class == "downstream":
@@ -1830,7 +1781,7 @@ def _validate_cross_invariants(
             if status not in counts:
                 valid = False
                 continue
-            counts[cast(str, status)] += 1
+            counts[cast("str", status)] += 1
             if item.get("required") is True and status in {
                 "FAIL",
                 "ERROR",
@@ -1901,7 +1852,7 @@ def _mapping(
                 "object keys must be strings",
             )
             return None
-    return cast(Mapping[str, Any], value)
+    return cast("Mapping[str, Any]", value)
 
 
 def _list(
@@ -1967,7 +1918,7 @@ def _boolean(
     if type(value) is not bool:
         _issue(issues, path, "type", "expected a boolean")
         return None
-    return cast(bool, value)
+    return value
 
 
 def _optional_boolean(
@@ -1988,7 +1939,7 @@ def _non_negative_integer(
     if type(value) is not int:
         _issue(issues, path, "type", "expected an integer")
         return None
-    integer = cast(int, value)
+    integer = value
     if integer < 0:
         _issue(
             issues,
@@ -2032,7 +1983,7 @@ def _optional_integer(
             "expected an integer or null",
         )
         return None
-    return cast(int, value)
+    return value
 
 
 def _nullable_status(
@@ -2077,14 +2028,14 @@ def _utc_timestamp(
             "timestamp must include an explicit timezone",
         )
         return None
-    if parsed.utcoffset() != timezone.utc.utcoffset(parsed):
+    if parsed.utcoffset() != UTC.utcoffset(parsed):
         _issue(
             issues,
             path,
             "timestamp_utc",
             "canonical summary timestamps must be UTC",
         )
-    return parsed.astimezone(timezone.utc)
+    return parsed.astimezone(UTC)
 
 
 def _portable_relative_path(
@@ -2152,7 +2103,7 @@ def _count_invariant(
     total = mapping.get(total_field)
     values = tuple(mapping.get(field_name) for field_name in parts)
     if type(total) is int and all(type(value) is int for value in values):
-        expected = sum(cast(int, value) for value in values)
+        expected = sum(cast("int", value) for value in values)
         if total != expected:
             _issue(
                 issues,
@@ -2181,7 +2132,7 @@ def _assert_json_safe(value: object, path: str = "$") -> None:
     if value is None or type(value) in (str, bool, int):
         return
     if type(value) is float:
-        if not math.isfinite(cast(float, value)):
+        if not math.isfinite(value):
             raise ValueError(f"{path} contains a non-finite number")
         return
     if isinstance(value, list):
@@ -2194,10 +2145,7 @@ def _assert_json_safe(value: object, path: str = "$") -> None:
                 raise TypeError(f"{path} contains a non-string key")
             _assert_json_safe(item, f"{path}.{key}")
         return
-    raise TypeError(
-        f"{path} contains a non-JSON value of type "
-        f"{type(value).__name__}"
-    )
+    raise TypeError(f"{path} contains a non-JSON value of type {type(value).__name__}")
 
 
 def assert_summary_v1_json_safe(document: object) -> None:
@@ -2206,39 +2154,21 @@ def assert_summary_v1_json_safe(document: object) -> None:
 
 __all__ = (
     "ARTIFACT_FIELDS",
-    "ArtifactsDocument",
-    "ArtifactsV1",
     "CHANGE_KINDS",
     "COMPILE_SUMMARY_FIELDS",
-    "ChangeKindValue",
-    "CompileSummaryV1",
     "DIAGNOSTIC_CLASSES",
     "DIFF_CHANGE_ORDER",
     "DIFF_ENTRY_FIELDS",
     "DIFF_SUBJECT_KINDS",
-    "DiagnosticClassValue",
-    "DiffEntryDocument",
-    "DiffEntryV1",
-    "DiffSubjectKindValue",
     "ERROR_KINDS",
-    "ErrorKindValue",
     "FILE_RESULT_FIELDS",
     "FINGERPRINT_FIELDS",
-    "FileResultDocument",
-    "FileResultV1",
-    "FingerprintV1",
     "METADATA_FIELDS",
-    "MetadataDocument",
-    "MetadataV1",
     "OVERALL_STATUSES",
-    "OverallStatusValue",
-    "ProducerDocument",
-    "ProducerV1",
     "ROOT_OPTIONAL_FIELDS",
     "ROOT_REQUIRED_FIELDS",
     "RUN_SUMMARY_SCHEMA_ID",
     "RUN_SUMMARY_SCHEMA_VERSION",
-    "RunSummaryDocument",
     "SCAN_COUNT_FIELDS",
     "SCENARIO_RESULT_FIELDS",
     "SCENARIO_SECTION_FIELDS",
@@ -2248,6 +2178,28 @@ __all__ = (
     "SUMMARY_SCHEMA_MAJOR",
     "SUMMARY_SCHEMA_MINOR",
     "SUMMARY_SCHEMA_VERSION",
+    "TOP_ERROR_FIELDS",
+    "TOTALS_FIELDS",
+    "VALIDATION_MODES",
+    "VALIDATION_STATUSES",
+    "ArtifactsDocument",
+    "ArtifactsV1",
+    "ChangeKindValue",
+    "CompileSummaryV1",
+    "DiagnosticClassValue",
+    "DiffEntryDocument",
+    "DiffEntryV1",
+    "DiffSubjectKindValue",
+    "ErrorKindValue",
+    "FileResultDocument",
+    "FileResultV1",
+    "FingerprintV1",
+    "MetadataDocument",
+    "MetadataV1",
+    "OverallStatusValue",
+    "ProducerDocument",
+    "ProducerV1",
+    "RunSummaryDocument",
     "ScanCountsV1",
     "ScenarioResultDocument",
     "ScenarioResultV1",
@@ -2256,14 +2208,10 @@ __all__ = (
     "SummaryV1",
     "SummaryV1Issue",
     "SummaryV1ValidationError",
-    "TOP_ERROR_FIELDS",
-    "TOTALS_FIELDS",
     "TopErrorDocument",
     "TopErrorV1",
     "TotalsDocument",
     "TotalsV1",
-    "VALIDATION_MODES",
-    "VALIDATION_STATUSES",
     "ValidationModeValue",
     "ValidationStatusValue",
     "assert_summary_v1_json_safe",

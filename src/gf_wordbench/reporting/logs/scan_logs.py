@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
-import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum, unique
+import hashlib
+import os
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, TypeAlias
 
@@ -22,7 +22,6 @@ __all__ = (
     "ScanLogSection",
     "build_scan_log_sections",
     "render_all_scan_logs",
-    "write_all_scan_logs",
     "write_all_scan_logs_result",
 )
 
@@ -150,8 +149,7 @@ class ScanLogAggregate:
             raise ValueError("aggregate text must end with a newline")
         if "\x00" in self.text:
             raise ValueError("aggregate text must not contain a NUL character")
-        if not isinstance(self.status, ScanLogAggregateStatus):
-            object.__setattr__(self, "status", ScanLogAggregateStatus(self.status))
+        object.__setattr__(self, "status", _aggregate_status(self.status))
         issues = tuple(self.issues)
         if not all(isinstance(item, ScanLogAggregateIssue) for item in issues):
             raise TypeError("issues must contain ScanLogAggregateIssue values")
@@ -180,12 +178,7 @@ class ScanLogAggregate:
 
     @property
     def missing_required_count(self) -> int:
-        return sum(
-            1
-            for section in self.sections
-            if not section.included and section.required
-        )
-
+        return sum(1 for section in self.sections if not section.included and section.required)
 
 
 def build_scan_log_sections(
@@ -321,7 +314,6 @@ def build_scan_log_sections(
     return tuple(sections)
 
 
-
 def render_all_scan_logs(
     *,
     run_id: str,
@@ -401,7 +393,6 @@ def render_all_scan_logs(
     )
 
 
-
 def write_all_scan_logs_result(
     run_result: ResultLike | None = None,
     *,
@@ -465,8 +456,7 @@ def write_all_scan_logs_result(
     )
 
 
-
-def write_all_scan_logs(
+def _write_all_scan_logs_compat(
     run_result: ResultLike | None = None,
     **kwargs: Any,
 ) -> Path:
@@ -485,7 +475,6 @@ class _WriterContext:
     run_id: str
     project_id: str
     generated_at: datetime
-
 
 
 def _resolve_context(
@@ -584,7 +573,6 @@ def _resolve_context(
 _MISSING: Final = object()
 
 
-
 def _extract_run_root(run_result: ResultLike) -> Path | None:
     direct = _first_field(run_result, ("run_root", "run_directory", "output_root"), None)
     if direct is not None:
@@ -594,7 +582,6 @@ def _extract_run_root(run_result: ResultLike) -> Path | None:
         return None
     value = _first_field(paths, ("run_root", "root", "run_directory"), None)
     return _absolute_path(value, "run_root") if value is not None else None
-
 
 
 def _extract_project_root(run_result: ResultLike) -> Path | None:
@@ -633,13 +620,11 @@ def _extract_destination(run_result: ResultLike) -> Path | None:
     return _absolute_path(value, "destination") if value is not None else None
 
 
-
 def _infer_run_root(destination: Path) -> Path:
     parent = destination.parent
     if parent.name.casefold() == "raw":
         return parent.parent
     raise ValueError("run_root cannot be inferred from destination")
-
 
 
 def _result_subject(
@@ -683,13 +668,11 @@ def _result_subject(
     return _canonical_subject(text)
 
 
-
 def _result_required(result: ResultLike) -> bool:
     value = _first_field(result, ("required", "is_required", "gating"), True)
     if not isinstance(value, bool):
         raise TypeError("file-result required flag must be a bool")
     return value
-
 
 
 def _result_status(result: ResultLike) -> str:
@@ -703,6 +686,24 @@ def _result_status(result: ResultLike) -> str:
     return _single_line(text or "UNKNOWN", "status")
 
 
+def _aggregate_status(value: object) -> ScanLogAggregateStatus:
+    if isinstance(value, ScanLogAggregateStatus):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("status must be a ScanLogAggregateStatus or string")
+    try:
+        return ScanLogAggregateStatus(value)
+    except ValueError as exc:
+        raise ValueError("status must be a canonical ScanLogAggregateStatus") from exc
+
+
+def _pathlike_or_none(value: object, field_name: str) -> PathLike | None:
+    if value is None:
+        return None
+    if not isinstance(value, (str, os.PathLike)):
+        raise TypeError(f"{field_name} must be path-like or None")
+    return value
+
 
 def _result_scan_log_path(result: ResultLike) -> PathLike | None:
     direct = _first_field(
@@ -711,16 +712,18 @@ def _result_scan_log_path(result: ResultLike) -> PathLike | None:
         None,
     )
     if direct is not None:
-        return direct
+        return _pathlike_or_none(direct, "scan log path")
     scan = _first_field(result, ("scan_result", "scan_summary"), None)
     if scan is None:
         return None
-    return _first_field(
-        scan,
-        ("scan_log_path", "log_path", "evidence_path"),
-        None,
+    return _pathlike_or_none(
+        _first_field(
+            scan,
+            ("scan_log_path", "log_path", "evidence_path"),
+            None,
+        ),
+        "scan log path",
     )
-
 
 
 def _missing_reason(result: ResultLike, fallback: str) -> str:
@@ -738,20 +741,22 @@ def _missing_reason(result: ResultLike, fallback: str) -> str:
     return _single_line(text or fallback, "missing_reason")
 
 
-
 def _render_section(section: ScanLogSection) -> str:
     path_text = section.display_path or (
         str(section.log_path) if section.log_path is not None else _NULL_TEXT
     )
-    prefix = "\n".join(
-        (
-            _SECTION_RULE,
-            "BEGIN SCAN LOG",
-            f"subject: {section.subject}",
-            f"path: {path_text}",
-            f"status: {section.status}",
+    prefix = (
+        "\n".join(
+            (
+                _SECTION_RULE,
+                "BEGIN SCAN LOG",
+                f"subject: {section.subject}",
+                f"path: {path_text}",
+                f"status: {section.status}",
+            )
         )
-    ) + "\n"
+        + "\n"
+    )
     if not section.included:
         return (
             prefix
@@ -791,7 +796,6 @@ def _first_field(
     return default
 
 
-
 def _text_field(obj: ResultLike, names: Sequence[str]) -> str | None:
     value = _first_field(obj, names, None)
     if value is None:
@@ -799,7 +803,6 @@ def _text_field(obj: ResultLike, names: Sequence[str]) -> str | None:
     raw = getattr(value, "value", value)
     text = str(raw).strip()
     return text or None
-
 
 
 def _canonical_subject(value: str) -> str:
@@ -813,10 +816,8 @@ def _canonical_subject(value: str) -> str:
     return pure.as_posix()
 
 
-
 def _subject_sort_key(value: str) -> str:
     return _canonical_subject(value).casefold()
-
 
 
 def _canonical_display_path(value: str) -> str:
@@ -827,12 +828,10 @@ def _canonical_display_path(value: str) -> str:
     return pure.as_posix()
 
 
-
 def _display_path(path: Path, run_root: Path | None) -> str:
     if run_root is not None and _is_within(path, run_root):
         return path.relative_to(run_root).as_posix()
     return path.as_posix()
-
 
 
 def _required_text(value: object, field_name: str) -> str:
@@ -845,13 +844,11 @@ def _required_text(value: object, field_name: str) -> str:
     return value
 
 
-
 def _single_line(value: object, field_name: str) -> str:
     text = _required_text(value, field_name).strip()
     if "\n" in text or "\r" in text:
         raise ValueError(f"{field_name} must be a single line")
     return text
-
 
 
 def _absolute_path(value: PathLike, field_name: str) -> Path:
@@ -866,22 +863,18 @@ def _absolute_path(value: PathLike, field_name: str) -> Path:
     return path
 
 
-
 def _optional_absolute_path(value: PathLike | None, field_name: str) -> Path | None:
     return None if value is None else _absolute_path(value, field_name)
-
 
 
 def _path_key(path: Path) -> str:
     return os.path.normcase(os.path.normpath(os.fspath(path)))
 
 
-
 def _is_within(path: Path, root: Path) -> bool:
     candidate = _absolute_path(path, "path")
     boundary = _absolute_path(root, "root")
     return candidate == boundary or candidate.is_relative_to(boundary)
-
 
 
 def _utc(value: datetime, field_name: str) -> datetime:
@@ -892,10 +885,8 @@ def _utc(value: datetime, field_name: str) -> datetime:
     return value.astimezone(UTC)
 
 
-
 def _rfc3339_utc(value: datetime) -> str:
     return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-
 
 
 def _positive_int(value: int, field_name: str) -> int:
@@ -906,14 +897,12 @@ def _positive_int(value: int, field_name: str) -> int:
     return value
 
 
-
 def _non_negative_int(value: int, field_name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{field_name} must be an integer")
     if value < 0:
         raise ValueError(f"{field_name} must be non-negative")
     return value
-
 
 
 def _issue_key(issue: ScanLogAggregateIssue) -> tuple[int, str, str, str]:
@@ -923,7 +912,6 @@ def _issue_key(issue: ScanLogAggregateIssue) -> tuple[int, str, str, str]:
         issue.code,
         issue.message,
     )
-
 
 
 def _contract_error(

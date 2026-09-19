@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -56,9 +56,7 @@ APPLICATION_OCTET_STREAM: Final[str] = "application/octet-stream"
 MANIFEST_FILENAME: Final[str] = "manifest.json"
 
 _ROLE_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
-_PRODUCER_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
+_PRODUCER_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 _MEDIA_TYPE_RE: Final[re.Pattern[str]] = re.compile(
     r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+"
     r"(?:\s*;\s*[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+\-\"]+)*$"
@@ -173,7 +171,7 @@ class ArtifactDeclarationSet:
         prepared = validate_artifact_declarations(self.declarations)
         object.__setattr__(self, "declarations", prepared)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[ArtifactDeclaration]:
         return iter(self.declarations)
 
     def __len__(self) -> int:
@@ -293,21 +291,30 @@ def validate_artifact_declaration(
     return declaration
 
 
+def _materialize_artifact_declarations(
+    declarations: object,
+) -> tuple[ArtifactDeclaration, ...]:
+    if isinstance(declarations, (str, bytes)) or not isinstance(declarations, Iterable):
+        raise TypeError("declarations must be an iterable of ArtifactDeclaration")
+    prepared: list[ArtifactDeclaration] = []
+    for declaration in declarations:
+        if not isinstance(declaration, ArtifactDeclaration):
+            raise TypeError("declarations must contain ArtifactDeclaration values")
+        prepared.append(declaration)
+    return tuple(prepared)
+
+
 def validate_artifact_declarations(
     declarations: Iterable[ArtifactDeclaration],
 ) -> tuple[ArtifactDeclaration, ...]:
-    if isinstance(declarations, (str, bytes)):
-        raise TypeError("declarations must be an iterable of ArtifactDeclaration")
-    prepared = tuple(declarations)
+    prepared = _materialize_artifact_declarations(declarations)
     seen_paths: dict[str, ArtifactDeclaration] = {}
     for declaration in prepared:
-        validate_artifact_declaration(declaration)
         identity = artifact_path_identity(declaration.path)
         previous = seen_paths.get(identity)
         if previous is not None:
             raise ValueError(
-                "duplicate artifact declaration path: "
-                f"{previous.path!s} and {declaration.path!s}"
+                f"duplicate artifact declaration path: {previous.path!s} and {declaration.path!s}"
             )
         seen_paths[identity] = declaration
     return tuple(sorted(prepared, key=artifact_declaration_sort_key))
@@ -318,9 +325,7 @@ def merge_artifact_declarations(
 ) -> tuple[ArtifactDeclaration, ...]:
     merged: list[ArtifactDeclaration] = []
     for group in groups:
-        if isinstance(group, (str, bytes)):
-            raise TypeError("declaration groups must contain iterables")
-        merged.extend(group)
+        merged.extend(_materialize_artifact_declarations(group))
     return validate_artifact_declarations(merged)
 
 
@@ -332,10 +337,7 @@ def group_artifact_declarations(
     for declaration in prepared:
         grouped.setdefault(declaration.role, []).append(declaration)
     return MappingProxyType(
-        {
-            role: tuple(items)
-            for role, items in sorted(grouped.items(), key=lambda item: item[0])
-        }
+        {role: tuple(items) for role, items in sorted(grouped.items(), key=lambda item: item[0])}
     )
 
 
@@ -372,8 +374,7 @@ def _validate_fixed_path(role: ArtifactRole, path: Path) -> None:
     if actual not in expected:
         rendered = ", ".join(repr(item) for item in expected)
         raise ValueError(
-            f"artifact role {role.value!r} requires canonical path {rendered}; "
-            f"received {actual!r}"
+            f"artifact role {role.value!r} requires canonical path {rendered}; received {actual!r}"
         )
 
 

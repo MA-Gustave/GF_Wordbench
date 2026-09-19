@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
 from pathlib import Path
+import re
 from types import MappingProxyType
 from typing import Final
 
@@ -50,9 +50,7 @@ _OPERATION_ALIASES: Final[Mapping[str, str]] = MappingProxyType(
         "scenario-runtime": "scenario_runtime",
     }
 )
-_STREAM_ORDER: Final[Mapping[str, int]] = MappingProxyType(
-    {"stderr": 0, "stdout": 1}
-)
+_STREAM_ORDER: Final[Mapping[str, int]] = MappingProxyType({"stderr": 0, "stdout": 1})
 
 
 @unique
@@ -232,21 +230,12 @@ class PGFPatternResult:
     def __post_init__(self) -> None:
         if any(not isinstance(item, PGFPatternMatch) for item in self.matches):
             raise TypeError("matches must contain PGFPatternMatch values")
-        if any(
-            not isinstance(item, PGFObservedEvidence)
-            for item in self.observations
-        ):
-            raise TypeError(
-                "observations must contain PGFObservedEvidence values"
-            )
+        if any(not isinstance(item, PGFObservedEvidence) for item in self.observations):
+            raise TypeError("observations must contain PGFObservedEvidence values")
         if tuple(sorted(self.matches, key=_match_sort_key)) != self.matches:
             raise ValueError("matches must use canonical deterministic order")
-        if tuple(
-            sorted(self.observations, key=_observation_sort_key)
-        ) != self.observations:
-            raise ValueError(
-                "observations must use canonical deterministic order"
-            )
+        if tuple(sorted(self.observations, key=_observation_sort_key)) != self.observations:
+            raise ValueError("observations must use canonical deterministic order")
 
     @property
     def primary(self) -> PGFPatternMatch | None:
@@ -336,9 +325,7 @@ def find_missing_inflection_rule_evidence(
     context_lines = _context_line_count(context_lines)
     matches = tuple(canonical_matches)
     if any(not isinstance(item, PGFPatternMatch) for item in matches):
-        raise TypeError(
-            "canonical_matches must contain PGFPatternMatch values"
-        )
+        raise TypeError("canonical_matches must contain PGFPatternMatch values")
     observations: list[PGFObservedEvidence] = []
     for stream, stream_text, artifact_path in _streams(evidence):
         stream_lines = _split_lines(stream_text)
@@ -367,9 +354,7 @@ def find_missing_inflection_rule_evidence(
                     raw_excerpt=excerpt,
                     raw_artifact_path=artifact_path,
                     confidence=PGFPatternConfidence.MEDIUM,
-                    canonical_pattern_id=(
-                        GENERATE_PMCFG_PATTERN_ID if associated else None
-                    ),
+                    canonical_pattern_id=(GENERATE_PMCFG_PATTERN_ID if associated else None),
                     references=(
                         _reference(stream, index + 1, index + 1),
                         _reference(stream, excerpt_start, excerpt_end),
@@ -520,9 +505,7 @@ def _context_line_count(value: object) -> int:
     if type(value) is not int:
         raise TypeError("context_lines must be an integer")
     if not 0 <= value <= _MAX_CONTEXT_LINES:
-        raise ValueError(
-            f"context_lines must be between 0 and {_MAX_CONTEXT_LINES}"
-        )
+        raise ValueError(f"context_lines must be between 0 and {_MAX_CONTEXT_LINES}")
     return value
 
 

@@ -10,7 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
-from typing import Final
+from collections.abc import MutableMapping
+from typing import Final, cast
 
 import pytest
 
@@ -65,7 +66,10 @@ _FORBIDDEN_PERSISTED_LANGUAGE_AUTHORITY: Final[frozenset[str]] = frozenset(
 
 
 def _persisted_document() -> dict[str, object]:
-    document: dict[str, object] = deepcopy(default_app_state_document())
+    document = cast(
+        "dict[str, object]",
+        deepcopy(default_app_state_document()),
+    )
     document["producer"] = producer_document("1.2.3")
     return document
 
@@ -92,12 +96,12 @@ def test_schema_identity_and_filenames_are_canonical() -> None:
     assert APP_STATE_SCHEMA_VERSION == _CURRENT_SCHEMA_VERSION
     assert APP_STATE_FILENAME == ".gf_wordbench_state.json"
     assert LEGACY_APP_STATE_FILENAME == ".gf_audit_state.json"
-    assert CANONICAL_MODES == {
+    assert {
         "quick",
         "checkpoint",
         "diagnostic",
         "release",
-    }
+    } == CANONICAL_MODES
     assert MAX_STATE_WARNINGS == 32
 
 
@@ -132,9 +136,7 @@ def test_default_document_contains_only_safe_disposable_state() -> None:
         },
     }
 
-    assert _all_mapping_keys(document).isdisjoint(
-        _FORBIDDEN_PERSISTED_LANGUAGE_AUTHORITY
-    )
+    assert _all_mapping_keys(document).isdisjoint(_FORBIDDEN_PERSISTED_LANGUAGE_AUTHORITY)
 
 
 def test_default_state_does_not_restore_language_truth() -> None:
@@ -172,38 +174,34 @@ def test_all_canonical_modes_round_trip_in_strict_state(
 def test_tolerant_recovery_normalizes_paths_and_defaults_bad_preferences() -> None:
     document = default_app_state_document()
     document["environment"]["last_selected_language_path"] = (
-        r"C:\work\gf-rgl\src\english\LangEng.gf"
+        r"C:\work\gf-rgl\src\testlang\LangTst.gf"
     )
     document["environment"]["last_selected_validation_profile"] = (
-        r"C:\work\profiles\english-release.toml"
+        r"C:\work\profiles\testlang-release.toml"
     )
     document["environment"]["last_rgl_root"] = r"C:\work\gf-rgl"
-    document["environment"]["gf_executable"] = (
-        r"C:\Program Files\GF\gf.exe"
-    )
-    document["selection"]["target_file"] = r"AdjectiveEng.gf"
+    document["environment"]["gf_executable"] = r"C:\Program Files\GF\gf.exe"
+    document["selection"]["target_file"] = r"AdjectiveTst.gf"
     document["selection"]["mode"] = "file"
     document["selection"]["timeout_sec"] = True
     document["selection"]["max_files"] = -4
-    document["selection"]["keep_ok_details"] = "yes"
+    selection = cast(MutableMapping[str, object], document["selection"])
+    selection["keep_ok_details"] = "yes"
 
     result = recover_app_state_document(document)
 
     assert result.compatible is True
     assert result.rewrite_safe is True
     assert result.document["environment"]["last_selected_language_path"] == (
-        "C:/work/gf-rgl/src/english/LangEng.gf"
+        "C:/work/gf-rgl/src/testlang/LangTst.gf"
     )
-    assert result.document["environment"][
-        "last_selected_validation_profile"
-    ] == "C:/work/profiles/english-release.toml"
-    assert result.document["environment"]["last_rgl_root"] == (
-        "C:/work/gf-rgl"
+    assert (
+        result.document["environment"]["last_selected_validation_profile"]
+        == "C:/work/profiles/testlang-release.toml"
     )
-    assert result.document["environment"]["gf_executable"] == (
-        "C:/Program Files/GF/gf.exe"
-    )
-    assert result.document["selection"]["target_file"] == "AdjectiveEng.gf"
+    assert result.document["environment"]["last_rgl_root"] == ("C:/work/gf-rgl")
+    assert result.document["environment"]["gf_executable"] == ("C:/Program Files/GF/gf.exe")
+    assert result.document["selection"]["target_file"] == "AdjectiveTst.gf"
     assert result.document["selection"]["mode"] == "diagnostic"
     assert result.document["selection"]["timeout_sec"] == 60
     assert result.document["selection"]["max_files"] == 0
@@ -234,14 +232,18 @@ def test_unsafe_environment_paths_default_to_null(
     unsafe_path: str,
 ) -> None:
     document = default_app_state_document()
-    document["environment"][field_name] = unsafe_path
+    environment = cast(MutableMapping[str, object], document["environment"])
+    environment[field_name] = unsafe_path
 
     result = recover_app_state_document(document)
 
-    assert result.document["environment"][field_name] is None
+    recovered_environment = cast(
+        MutableMapping[str, object],
+        result.document["environment"],
+    )
+    assert recovered_environment[field_name] is None
     assert any(
-        warning.code == "invalid_path"
-        and warning.field == f"$.environment.{field_name}"
+        warning.code == "invalid_path" and warning.field == f"$.environment.{field_name}"
         for warning in result.warnings
     )
 
@@ -262,8 +264,7 @@ def test_future_minor_is_read_compatibly_but_not_rewrite_safe() -> None:
     assert state.schema_version == _CURRENT_SCHEMA_VERSION
     assert state.selection.mode is ValidationMode.QUICK
     assert warnings == (
-        "$.schema_version: known fields were recovered; "
-        "automatic rewrite is unsafe",
+        "$.schema_version: known fields were recovered; automatic rewrite is unsafe",
     )
 
 
@@ -335,19 +336,15 @@ def test_serialize_emits_whitelisted_disposable_state() -> None:
             version="9.8.7",
         ),
         environment=EnvironmentState(
-            last_selected_language_path=(
-                r"C:\work\gf-rgl\src\english\LangEng.gf"
-            ),
-            last_selected_validation_profile=(
-                r"C:\work\profiles\english-release.toml"
-            ),
+            last_selected_language_path=(r"C:\work\gf-rgl\src\testlang\LangTst.gf"),
+            last_selected_validation_profile=(r"C:\work\profiles\testlang-release.toml"),
             last_rgl_root=r"C:\work\gf-rgl",
             gf_executable=r"C:\tools\gf\gf.exe",
             output_root=r"D:\runs",
         ),
         selection=SelectionState(
             mode=ValidationMode.CHECKPOINT,
-            target_file=r"MorphoEng.gf",
+            target_file=r"MorphoTst.gf",
             timeout_sec=90,
             max_files=25,
             keep_ok_details=True,
@@ -358,9 +355,7 @@ def test_serialize_emits_whitelisted_disposable_state() -> None:
         ),
         last_run=LastRunState(
             run_dir=r"D:\runs\run_20260725T120000Z",
-            summary_path=(
-                r"D:\runs\run_20260725T120000Z\summary.json"
-            ),
+            summary_path=(r"D:\runs\run_20260725T120000Z\summary.json"),
             status_message="Terminé — 日本語",
         ),
     )
@@ -377,25 +372,19 @@ def test_serialize_emits_whitelisted_disposable_state() -> None:
         "producer",
     )
     assert document["environment"] == {
-        "last_selected_language_path": (
-            "C:/work/gf-rgl/src/english/LangEng.gf"
-        ),
-        "last_selected_validation_profile": (
-            "C:/work/profiles/english-release.toml"
-        ),
+        "last_selected_language_path": ("C:/work/gf-rgl/src/testlang/LangTst.gf"),
+        "last_selected_validation_profile": ("C:/work/profiles/testlang-release.toml"),
         "last_rgl_root": "C:/work/gf-rgl",
         "gf_executable": "C:/tools/gf/gf.exe",
         "output_root": "D:/runs",
     }
-    assert document["selection"]["target_file"] == "MorphoEng.gf"
-    assert document["last_run"]["run_dir"] == (
-        "D:/runs/run_20260725T120000Z"
-    )
-    assert document["last_run"]["summary_path"].endswith("/summary.json")
+    assert document["selection"]["target_file"] == "MorphoTst.gf"
+    assert document["last_run"]["run_dir"] == ("D:/runs/run_20260725T120000Z")
+    summary_path = document["last_run"]["summary_path"]
+    assert summary_path is not None
+    assert summary_path.endswith("/summary.json")
     assert document["last_run"]["status_message"] == "Terminé — 日本語"
-    assert _all_mapping_keys(document).isdisjoint(
-        _FORBIDDEN_PERSISTED_LANGUAGE_AUTHORITY
-    )
+    assert _all_mapping_keys(document).isdisjoint(_FORBIDDEN_PERSISTED_LANGUAGE_AUTHORITY)
 
 
 def test_serializer_requires_a_canonical_producer() -> None:

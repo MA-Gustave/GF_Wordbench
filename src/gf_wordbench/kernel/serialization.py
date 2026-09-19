@@ -7,17 +7,19 @@ it never traverses dataclasses, ``__dict__`` attributes, or arbitrary objects.
 
 from __future__ import annotations
 
-import json
-import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
+import json
+import math
 from pathlib import PurePath
-from typing import Final, TypeAlias
+from typing import Final, TypeAlias, TypeVar
 
 JsonScalar: TypeAlias = None | bool | int | float | str
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
+
+_MappingKeyT = TypeVar("_MappingKeyT")
 
 CANONICAL_JSON_INDENT: Final[int] = 2
 
@@ -56,17 +58,11 @@ def format_rfc3339_utc(value: datetime) -> str:
     if not isinstance(value, datetime):
         raise TypeError("value must be a datetime")
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(
-            "Canonical timestamps require a timezone-aware datetime"
-        )
+        raise ValueError("Canonical timestamps require a timezone-aware datetime")
 
-    utc_value = value.astimezone(timezone.utc)
+    utc_value = value.astimezone(UTC)
     timespec = "microseconds" if utc_value.microsecond else "seconds"
-    return (
-        utc_value.isoformat(timespec=timespec)
-        .removesuffix("+00:00")
-        + "Z"
-    )
+    return utc_value.isoformat(timespec=timespec).removesuffix("+00:00") + "Z"
 
 
 def path_to_portable_string(value: PurePath) -> str:
@@ -81,9 +77,7 @@ def path_to_portable_string(value: PurePath) -> str:
 
     serialized = value.as_posix()
     if "\x00" in serialized:
-        raise ValueError(
-            "Paths containing NUL cannot be serialized"
-        )
+        raise ValueError("Paths containing NUL cannot be serialized")
 
     return serialized
 
@@ -109,9 +103,7 @@ def to_json_object(
     """Convert a mapping and require the canonical root-object shape."""
 
     if not isinstance(value, Mapping):
-        raise TypeError(
-            "Canonical JSON documents require a mapping at the root"
-        )
+        raise TypeError("Canonical JSON documents require a mapping at the root")
 
     return _mapping_to_json(
         value,
@@ -149,8 +141,7 @@ def _to_json_value(
         enum_value = value.value
         if not isinstance(enum_value, str):
             raise TypeError(
-                "Canonical enums must expose string values, "
-                f"got {type(enum_value).__name__}"
+                f"Canonical enums must expose string values, got {type(enum_value).__name__}"
             )
         return enum_value
 
@@ -168,9 +159,7 @@ def _to_json_value(
 
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise ValueError(
-                "NaN and infinite numbers are not valid canonical JSON"
-            )
+            raise ValueError("NaN and infinite numbers are not valid canonical JSON")
         return float(value)
 
     if isinstance(value, Mapping):
@@ -190,9 +179,7 @@ def _to_json_value(
             value,
             active_containers=active_containers,
         )
-        converted.sort(
-            key=_deterministic_json_sort_key
-        )
+        converted.sort(key=_deterministic_json_sort_key)
         return converted
 
     value_type = type(value)
@@ -203,7 +190,7 @@ def _to_json_value(
 
 
 def _mapping_to_json(
-    value: Mapping[object, object],
+    value: Mapping[_MappingKeyT, object],
     *,
     active_containers: set[int],
 ) -> dict[str, JsonValue]:
@@ -217,9 +204,7 @@ def _mapping_to_json(
 
         for key, item in value.items():
             if isinstance(key, Enum) or not isinstance(key, str):
-                raise TypeError(
-                    "Canonical JSON object keys must be plain strings"
-                )
+                raise TypeError("Canonical JSON object keys must be plain strings")
 
             result[key] = _to_json_value(
                 item,
@@ -260,9 +245,7 @@ def _enter_container(
     container_id = id(value)
 
     if container_id in active_containers:
-        raise ValueError(
-            "Cyclic structures cannot be serialized as canonical JSON"
-        )
+        raise ValueError("Cyclic structures cannot be serialized as canonical JSON")
 
     active_containers.add(container_id)
     return container_id
@@ -285,16 +268,10 @@ def _require_non_empty_text(
     value: object,
 ) -> None:
     if not isinstance(value, str):
-        raise TypeError(
-            f"{name} must be a string"
-        )
+        raise TypeError(f"{name} must be a string")
 
     if not value.strip():
-        raise ValueError(
-            f"{name} must not be empty"
-        )
+        raise ValueError(f"{name} must not be empty")
 
     if "\x00" in value:
-        raise ValueError(
-            f"{name} must not contain NUL characters"
-        )
+        raise ValueError(f"{name} must not contain NUL characters")

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import math
-import os
-import re
-import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import math
+import os
 from pathlib import Path
+import re
+import sys
 from typing import Any, Final, TypeAlias
 
 from gf_wordbench.kernel.errors import ContractViolationError
@@ -33,21 +33,13 @@ __all__ = (
 ToolObject: TypeAlias = Mapping[str, Any] | object
 
 _MISSING: Final = object()
-_TOOL_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-)
+_TOOL_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _VERSION_RE: Final[re.Pattern[str]] = re.compile(
     r"^[0-9]+(?:\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.-]+)?$"
 )
-_ROLE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$"
-)
-_FLAG_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$"
-)
-_PROFILE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-)
+_ROLE_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$")
+_FLAG_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$")
+_PROFILE_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _ALLOWED_RESOLUTION_TYPES: Final = frozenset(
     {
         "bundled",
@@ -93,21 +85,13 @@ _ALLOWED_AVAILABILITY: Final = frozenset(
         "diagnostic_only",
     }
 )
-_ALLOWED_PLATFORMS: Final = frozenset(
-    {"windows", "linux", "macos"}
-)
-_ALLOWED_FLAG_TYPES: Final = frozenset(
-    {"boolean", "integer", "number", "string", "enum", "path"}
-)
-_ALLOWED_RESULT_STATUSES: Final = frozenset(
-    {"completed", "failed", "error", "skipped"}
-)
+_ALLOWED_PLATFORMS: Final = frozenset({"windows", "linux", "macos"})
+_ALLOWED_FLAG_TYPES: Final = frozenset({"boolean", "integer", "number", "string", "enum", "path"})
+_ALLOWED_RESULT_STATUSES: Final = frozenset({"completed", "failed", "error", "skipped"})
 _ALLOWED_EXECUTION_STATES: Final = frozenset(
     {"completed", "timed_out", "cancelled", "launch_failed"}
 )
-_REQUIRED_STREAM_ROLES: Final = frozenset(
-    {"tool_stdout", "tool_stderr"}
-)
+_REQUIRED_STREAM_ROLES: Final = frozenset({"tool_stdout", "tool_stderr"})
 
 
 @unique
@@ -168,14 +152,12 @@ class ToolValidationIssue:
     message: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.code, ToolValidationCode):
-            object.__setattr__(self, "code", ToolValidationCode(self.code))
-        if not isinstance(self.severity, ToolValidationSeverity):
-            object.__setattr__(
-                self,
-                "severity",
-                ToolValidationSeverity(self.severity),
-            )
+        object.__setattr__(self, "code", _validation_code(self.code))
+        object.__setattr__(
+            self,
+            "severity",
+            _validation_severity(self.severity),
+        )
         for name in ("field", "message"):
             value = getattr(self, name)
             if not isinstance(value, str):
@@ -202,25 +184,18 @@ class ToolValidationReport:
 
     @property
     def valid(self) -> bool:
-        return not any(
-            issue.severity is ToolValidationSeverity.ERROR
-            for issue in self.issues
-        )
+        return not any(issue.severity is ToolValidationSeverity.ERROR for issue in self.issues)
 
     @property
     def errors(self) -> tuple[ToolValidationIssue, ...]:
         return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is ToolValidationSeverity.ERROR
+            issue for issue in self.issues if issue.severity is ToolValidationSeverity.ERROR
         )
 
     @property
     def warnings(self) -> tuple[ToolValidationIssue, ...]:
         return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is ToolValidationSeverity.WARNING
+            issue for issue in self.issues if issue.severity is ToolValidationSeverity.WARNING
         )
 
     def merge(self, *others: ToolValidationReport) -> ToolValidationReport:
@@ -239,9 +214,7 @@ def validate_catalog(
     issues: list[ToolValidationIssue] = []
     seen: dict[str, int] = {}
     for index, entry in enumerate(values):
-        issues.extend(
-            validate_catalog_entry(entry).issues
-        )
+        issues.extend(validate_catalog_entry(entry).issues)
         tool_id = _text(_field(entry, "tool_id", ""))
         if tool_id:
             if tool_id in seen:
@@ -293,46 +266,58 @@ def validate_catalog_entry(
     issues.extend(_validate_executable_resolution(entry))
     issues.extend(_validate_input_contract(entry))
     issues.extend(_validate_flag_contract(entry))
-    issues.extend(_validate_enum_field(
-        entry,
-        "working_directory_policy",
-        _ALLOWED_WORKING_DIRECTORY_POLICIES,
-        ToolValidationCode.WORKING_DIRECTORY_POLICY,
-    ))
+    issues.extend(
+        _validate_enum_field(
+            entry,
+            "working_directory_policy",
+            _ALLOWED_WORKING_DIRECTORY_POLICIES,
+            ToolValidationCode.WORKING_DIRECTORY_POLICY,
+        )
+    )
     issues.extend(_validate_environment_policy(entry))
-    issues.extend(_validate_enum_field(
-        entry,
-        "mutability",
-        _ALLOWED_MUTABILITY,
-        ToolValidationCode.MUTABILITY_POLICY,
-    ))
-    issues.extend(_validate_enum_field(
-        entry,
-        "confirmation_policy",
-        _ALLOWED_CONFIRMATION,
-        ToolValidationCode.CONFIRMATION_POLICY,
-    ))
+    issues.extend(
+        _validate_enum_field(
+            entry,
+            "mutability",
+            _ALLOWED_MUTABILITY,
+            ToolValidationCode.MUTABILITY_POLICY,
+        )
+    )
+    issues.extend(
+        _validate_enum_field(
+            entry,
+            "confirmation_policy",
+            _ALLOWED_CONFIRMATION,
+            ToolValidationCode.CONFIRMATION_POLICY,
+        )
+    )
     issues.extend(_validate_allowed_paths(entry))
     issues.extend(_validate_network_policy(entry))
     issues.extend(_validate_timeout(entry))
     issues.extend(_validate_output_limits(entry))
     issues.extend(_validate_evidence_roles(entry))
-    issues.extend(_validate_profile_field(
-        entry,
-        "normalization_profile",
-        ToolValidationCode.NORMALIZATION_POLICY,
-    ))
-    issues.extend(_validate_profile_field(
-        entry,
-        "parser_id",
-        ToolValidationCode.PARSER_POLICY,
-    ))
-    issues.extend(_validate_enum_field(
-        entry,
-        "availability_policy",
-        _ALLOWED_AVAILABILITY,
-        ToolValidationCode.AVAILABILITY_POLICY,
-    ))
+    issues.extend(
+        _validate_profile_field(
+            entry,
+            "normalization_profile",
+            ToolValidationCode.NORMALIZATION_POLICY,
+        )
+    )
+    issues.extend(
+        _validate_profile_field(
+            entry,
+            "parser_id",
+            ToolValidationCode.PARSER_POLICY,
+        )
+    )
+    issues.extend(
+        _validate_enum_field(
+            entry,
+            "availability_policy",
+            _ALLOWED_AVAILABILITY,
+            ToolValidationCode.AVAILABILITY_POLICY,
+        )
+    )
     issues.extend(_validate_platforms(entry))
     issues.extend(_validate_cross_field_policies(entry))
     issues.extend(_validate_product_boundary(entry))
@@ -398,9 +383,7 @@ def validate_tool_request(
         ToolValidationCode.SUBJECT_POLICY,
     )
     input_contract = _field(entry, "input_contract", {})
-    max_subjects = _positive_int_or_none(
-        _field(input_contract, "maximum_input_count", None)
-    )
+    max_subjects = _positive_int_or_none(_field(input_contract, "maximum_input_count", None))
     if max_subjects is not None and len(subject_ids) > max_subjects:
         issues.append(
             _error(
@@ -448,9 +431,7 @@ def validate_tool_result(
         )
 
     entry_catalog_version = _text(_field(entry, "catalog_version", ""))
-    result_catalog_version = _text(
-        _field(result, "catalog_version", "")
-    )
+    result_catalog_version = _text(_field(result, "catalog_version", ""))
     if result_catalog_version != entry_catalog_version:
         issues.append(
             _error(
@@ -460,9 +441,7 @@ def validate_tool_result(
             )
         )
 
-    resolved_version = _text(
-        _field(result, "resolved_tool_version", "")
-    )
+    resolved_version = _text(_field(result, "resolved_tool_version", ""))
     if not resolved_version:
         issues.append(_required("resolved_tool_version"))
     else:
@@ -510,9 +489,7 @@ def validate_tool_result(
         )
 
     exit_code = _field(result, "exit_code", None)
-    if exit_code is not None and (
-        isinstance(exit_code, bool) or not isinstance(exit_code, int)
-    ):
+    if exit_code is not None and (isinstance(exit_code, bool) or not isinstance(exit_code, int)):
         issues.append(
             _error(
                 ToolValidationCode.RESULT_EXECUTION,
@@ -548,9 +525,7 @@ def validate_tool_result(
     issues.extend(_validate_result_paths(result, run_root))
     issues.extend(_validate_result_evidence(result, entry, run_root))
 
-    ai_assisted = _strict_bool(
-        _field(result, "ai_assisted", False)
-    )
+    ai_assisted = _strict_bool(_field(result, "ai_assisted", False))
     normative = _strict_bool(_field(result, "normative", False))
     entry_ai = _strict_bool(_field(entry, "ai_assisted", False))
     entry_normative = _strict_bool(_field(entry, "normative", False))
@@ -890,8 +865,7 @@ def _validate_output_limits(
             )
     optional_names = ("generated_files", "total_files", "total_retained")
     if not any(
-        _positive_int_or_none(_field(limits, name, None)) is not None
-        for name in optional_names
+        _positive_int_or_none(_field(limits, name, None)) is not None for name in optional_names
     ):
         issues.append(
             _error(
@@ -1028,9 +1002,7 @@ def _validate_cross_field_policies(
                 "mutating tools require explicit confirmation",
             )
         )
-    if mutability == "external_mutating" and not _text(
-        _field(entry, "security_contract_id", "")
-    ):
+    if mutability == "external_mutating" and not _text(_field(entry, "security_contract_id", "")):
         issues.append(
             _error(
                 ToolValidationCode.MUTABILITY_POLICY,
@@ -1067,12 +1039,8 @@ def _validate_request_inputs(
         issues,
         ToolValidationCode.REQUEST_INPUT,
     )
-    max_count = _positive_int_or_none(
-        _field(contract, "maximum_input_count", None)
-    )
-    max_size = _positive_int_or_none(
-        _field(contract, "maximum_input_size_bytes", None)
-    )
+    max_count = _positive_int_or_none(_field(contract, "maximum_input_count", None))
+    max_size = _positive_int_or_none(_field(contract, "maximum_input_size_bytes", None))
     if max_count is not None and len(inputs) > max_count:
         issues.append(
             _error(
@@ -1081,9 +1049,7 @@ def _validate_request_inputs(
                 f"input count {len(inputs)} exceeds maximum {max_count}",
             )
         )
-    allowed_types = frozenset(
-        _text_values(_field(contract, "file_types", ()))
-    )
+    allowed_types = frozenset(_text_values(_field(contract, "file_types", ())))
     for index, item in enumerate(inputs):
         path_value = _field(item, "path", item if isinstance(item, (str, os.PathLike)) else None)
         if path_value is not None and allowed_types:
@@ -1273,7 +1239,11 @@ def _validate_request_confirmation(
     record = _field(request, "confirmation_record", None)
     if policy == "none":
         return []
-    if record is None or record is False or not _text(_field(record, "confirmation_id", record if isinstance(record, str) else "")):
+    if (
+        record is None
+        or record is False
+        or not _text(_field(record, "confirmation_id", record if isinstance(record, str) else ""))
+    ):
         return [
             _error(
                 ToolValidationCode.REQUEST_CONFIRMATION,
@@ -1289,9 +1259,7 @@ def _validate_request_platform(
     platform: str | None,
 ) -> list[ToolValidationIssue]:
     actual = _normalize_platform(platform)
-    supported = frozenset(
-        _text_values(_field(entry, "platforms", ()))
-    )
+    supported = frozenset(_text_values(_field(entry, "platforms", ())))
     if actual not in supported:
         return [
             _error(
@@ -1389,12 +1357,8 @@ def _validate_result_evidence(
     run_root: Path | None,
 ) -> list[ToolValidationIssue]:
     issues: list[ToolValidationIssue] = []
-    declared = frozenset(
-        _text_values(_field(entry, "evidence_roles", ()))
-    )
-    roles = frozenset(
-        _text_values(_field(result, "evidence_roles", ()))
-    )
+    declared = frozenset(_text_values(_field(entry, "evidence_roles", ())))
+    roles = frozenset(_text_values(_field(result, "evidence_roles", ())))
     missing_streams = _REQUIRED_STREAM_ROLES.difference(roles)
     if missing_streams:
         issues.append(
@@ -1434,11 +1398,11 @@ def _validate_result_evidence(
                     f"artifact role {role!r} is not declared",
                 )
             )
-        raw_path = _field(artifact, "path", artifact if isinstance(artifact, (str, os.PathLike)) else _MISSING)
+        raw_path = _field(
+            artifact, "path", artifact if isinstance(artifact, (str, os.PathLike)) else _MISSING
+        )
         if raw_path is _MISSING:
-            issues.append(
-                _required(f"output_artifacts[{index}].path")
-            )
+            issues.append(_required(f"output_artifacts[{index}].path"))
             continue
         try:
             path = _absolute_path(raw_path)
@@ -1570,10 +1534,7 @@ def _raise_if_invalid(
     if report.valid:
         return
     errors = report.errors
-    detail = "; ".join(
-        f"{issue.field}: {issue.message}"
-        for issue in errors[:12]
-    )
+    detail = "; ".join(f"{issue.field}: {issue.message}" for issue in errors[:12])
     if len(errors) > 12:
         detail += f"; and {len(errors) - 12} additional error(s)"
     raise ContractViolationError(
@@ -1584,6 +1545,28 @@ def _raise_if_invalid(
         operation=operation,
         subject=subject,
     )
+
+
+def _validation_code(value: object) -> ToolValidationCode:
+    if isinstance(value, ToolValidationCode):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("code must be a ToolValidationCode or string")
+    try:
+        return ToolValidationCode(value)
+    except ValueError as exc:
+        raise ValueError("code must be a canonical ToolValidationCode") from exc
+
+
+def _validation_severity(value: object) -> ToolValidationSeverity:
+    if isinstance(value, ToolValidationSeverity):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("severity must be a ToolValidationSeverity or string")
+    try:
+        return ToolValidationSeverity(value)
+    except ValueError as exc:
+        raise ValueError("severity must be a canonical ToolValidationSeverity") from exc
 
 
 def _field(
@@ -1609,15 +1592,10 @@ def _text_values(values: object) -> tuple[str, ...]:
         return (values,) if values else ()
     if isinstance(values, Mapping):
         values = values.keys()
-    try:
-        iterable = tuple(values)
-    except TypeError:
+    if not isinstance(values, Iterable):
         return ()
-    return tuple(
-        text
-        for item in iterable
-        if (text := _text(item))
-    )
+    iterable: tuple[object, ...] = tuple(values)
+    return tuple(text for item in iterable if (text := _text(item)))
 
 
 def _sequence(
@@ -1627,9 +1605,7 @@ def _sequence(
     code: ToolValidationCode,
 ) -> tuple[Any, ...]:
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
-        issues.append(
-            _error(code, field, f"{field} must be a sequence")
-        )
+        issues.append(_error(code, field, f"{field} must be a sequence"))
         return ()
     return tuple(value)
 

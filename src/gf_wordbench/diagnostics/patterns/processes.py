@@ -23,6 +23,7 @@ ProcessMetadata: TypeAlias = Mapping[str, ProcessMetadataValue]
 _EMPTY_METADATA: Final[ProcessMetadata] = MappingProxyType({})
 _MAX_DETAIL_LENGTH: Final[int] = 4_000
 
+
 def _text(value: object, field_name: str) -> str:
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a string")
@@ -157,9 +158,7 @@ class ProcessPatternContext:
             "output_limit_bytes",
         )
         if not isinstance(self.launch_failure_kind, LaunchFailureKind):
-            raise TypeError(
-                "launch_failure_kind must be LaunchFailureKind"
-            )
+            raise TypeError("launch_failure_kind must be LaunchFailureKind")
         if type(self.decoding_failed) is not bool:
             raise TypeError("decoding_failed must be a boolean")
         if type(self.decoding_lossy) is not bool:
@@ -170,25 +169,14 @@ class ProcessPatternContext:
         )
         raw_byte_paths = _paths(self.raw_byte_paths, "raw_byte_paths")
 
-        if (
-            self.result.execution_state is ExecutionState.TIMED_OUT
-            and timeout_seconds is None
-        ):
-            raise ValueError(
-                "timeout_seconds is required for timed-out process evidence"
-            )
+        if self.result.execution_state is ExecutionState.TIMED_OUT and timeout_seconds is None:
+            raise ValueError("timeout_seconds is required for timed-out process evidence")
         if self.result.output_limit_exceeded and output_limit_bytes is None:
-            raise ValueError(
-                "output_limit_bytes is required when the limit was exceeded"
-            )
+            raise ValueError("output_limit_bytes is required when the limit was exceeded")
         if self.decoding_failed and not decoding_error:
-            raise ValueError(
-                "decoding_error is required when decoding_failed is true"
-            )
+            raise ValueError("decoding_error is required when decoding_failed is true")
         if not self.decoding_failed and decoding_error:
-            raise ValueError(
-                "decoding_error is reserved for decoding failure"
-            )
+            raise ValueError("decoding_error is reserved for decoding failure")
 
         object.__setattr__(self, "timeout_seconds", timeout_seconds)
         object.__setattr__(self, "output_limit_bytes", output_limit_bytes)
@@ -216,9 +204,7 @@ class ProcessPatternMatch:
         if not isinstance(self.severity, ProcessPatternSeverity):
             raise TypeError("severity must be ProcessPatternSeverity")
         if not isinstance(self.confidence, ProcessPatternConfidence):
-            raise TypeError(
-                "confidence must be ProcessPatternConfidence"
-            )
+            raise TypeError("confidence must be ProcessPatternConfidence")
         object.__setattr__(self, "message", _text(self.message, "message"))
         object.__setattr__(
             self,
@@ -240,6 +226,7 @@ class ProcessPatternMatch:
             "metadata",
             _freeze_metadata(self.metadata),
         )
+
 
 # ``ErrorKind`` is the canonical coarse technical category. Process-specific
 # meanings such as cancellation and output-limit exhaustion remain represented
@@ -325,10 +312,7 @@ def match_process_patterns(
     if context.decoding_failed:
         matches.append(_decoding_failure_match(context))
 
-    order = {
-        spec.pattern_id: spec.precedence
-        for spec in PROCESS_PATTERNS
-    }
+    order = {spec.pattern_id: spec.precedence for spec in PROCESS_PATTERNS}
     return tuple(
         sorted(
             matches,
@@ -396,9 +380,7 @@ def _launch_failure_match(
         f"subkind: {context.launch_failure_kind.value}",
     ]
     if result.launch_error_message:
-        detail_parts.append(
-            f"runner detail: {result.launch_error_message}"
-        )
+        detail_parts.append(f"runner detail: {result.launch_error_message}")
     return _match(
         LAUNCH_FAILURE_PATTERN,
         context,
@@ -430,13 +412,9 @@ def _output_limit_match(
             "output_limit_bytes": context.output_limit_bytes,
             "stdout_size_bytes": result.stdout_size_bytes,
             "stderr_size_bytes": result.stderr_size_bytes,
-            "captured_size_bytes": (
-                result.stdout_size_bytes + result.stderr_size_bytes
-            ),
+            "captured_size_bytes": (result.stdout_size_bytes + result.stderr_size_bytes),
             "capture_complete": result.capture_complete,
-            "cancelled": (
-                result.execution_state is ExecutionState.CANCELLED
-            ),
+            "cancelled": (result.execution_state is ExecutionState.CANCELLED),
         },
     )
 
@@ -447,9 +425,7 @@ def _cancellation_match(
     result = context.result
     reason = result.cancellation_reason
     if not isinstance(reason, CancellationReason):
-        raise ValueError(
-            "cancelled process evidence requires a cancellation reason"
-        )
+        raise ValueError("cancelled process evidence requires a cancellation reason")
     detail = (
         f"Reason: {reason.value}; "
         f"duration: {result.duration_ms} ms; "
@@ -481,9 +457,7 @@ def _decoding_failure_match(
         context,
         detail=detail,
         evidence_paths=(
-            context.raw_byte_paths
-            if context.raw_byte_paths
-            else _result_evidence_paths(result)
+            context.raw_byte_paths if context.raw_byte_paths else _result_evidence_paths(result)
         ),
         metadata={
             "decoding_failed": True,
@@ -510,9 +484,7 @@ def _match(
         detail=detail,
         operation_id=context.result.operation_id,
         evidence_paths=(
-            evidence_paths
-            if evidence_paths is not None
-            else _result_evidence_paths(context.result)
+            evidence_paths if evidence_paths is not None else _result_evidence_paths(context.result)
         ),
         metadata=metadata,
     )
@@ -544,13 +516,9 @@ def _freeze_metadata(
             bool,
             float,
         ):
-            raise TypeError(
-                f"unsupported metadata value for {key!r}"
-            )
+            raise TypeError(f"unsupported metadata value for {key!r}")
         if isinstance(value, float) and not math.isfinite(value):
-            raise ValueError(
-                f"metadata value for {key!r} must be finite"
-            )
+            raise ValueError(f"metadata value for {key!r} must be finite")
         if isinstance(value, str):
             value = _optional_text(value, f"metadata[{key!r}]")
         copied[key] = value
@@ -566,18 +534,13 @@ def _paths(
     unique: dict[str, Path] = {}
     for value in values:
         if not isinstance(value, Path):
-            raise TypeError(
-                f"{field_name} must contain pathlib.Path values"
-            )
+            raise TypeError(f"{field_name} must contain pathlib.Path values")
         if "\x00" in str(value):
-            raise ValueError(
-                f"{field_name} must not contain NUL paths"
-            )
+            raise ValueError(f"{field_name} must not contain NUL paths")
         key = str(value)
         if key not in unique:
             unique[key] = value
     return tuple(unique.values())
-
 
 
 __all__ = (

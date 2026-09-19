@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -14,12 +14,8 @@ ToolId: TypeAlias = str
 
 CATALOG_VERSION: Final[str] = "1.0"
 
-_TOOL_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-)
-_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^[0-9]+(?:\.[0-9]+){1,2}$"
-)
+_TOOL_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9]+(?:\.[0-9]+){1,2}$")
 _MAX_TOOL_COUNT: Final[int] = 1_000
 _MAX_TOOL_ID_LENGTH: Final[int] = 128
 _MAX_VERSION_LENGTH: Final[int] = 32
@@ -58,21 +54,11 @@ class DiagnosticToolRegistrySnapshot:
         tool_ids = _normalize_tool_id_sequence(self.tool_ids)
 
         categories = {
-            "required_tool_ids": _normalize_tool_id_sequence(
-                self.required_tool_ids
-            ),
-            "optional_tool_ids": _normalize_tool_id_sequence(
-                self.optional_tool_ids
-            ),
-            "diagnostic_only_tool_ids": _normalize_tool_id_sequence(
-                self.diagnostic_only_tool_ids
-            ),
-            "normative_tool_ids": _normalize_tool_id_sequence(
-                self.normative_tool_ids
-            ),
-            "ai_assisted_tool_ids": _normalize_tool_id_sequence(
-                self.ai_assisted_tool_ids
-            ),
+            "required_tool_ids": _normalize_tool_id_sequence(self.required_tool_ids),
+            "optional_tool_ids": _normalize_tool_id_sequence(self.optional_tool_ids),
+            "diagnostic_only_tool_ids": _normalize_tool_id_sequence(self.diagnostic_only_tool_ids),
+            "normative_tool_ids": _normalize_tool_id_sequence(self.normative_tool_ids),
+            "ai_assisted_tool_ids": _normalize_tool_id_sequence(self.ai_assisted_tool_ids),
         }
 
         known = frozenset(tool_ids)
@@ -80,9 +66,7 @@ class DiagnosticToolRegistrySnapshot:
             unknown = frozenset(values).difference(known)
             if unknown:
                 rendered = ", ".join(sorted(unknown))
-                raise ValueError(
-                    f"{field_name} contains unknown tool IDs: {rendered}"
-                )
+                raise ValueError(f"{field_name} contains unknown tool IDs: {rendered}")
 
         availability_groups = (
             frozenset(categories["required_tool_ids"]),
@@ -94,20 +78,14 @@ class DiagnosticToolRegistrySnapshot:
             for index, left in enumerate(availability_groups)
             for right in availability_groups[index + 1 :]
         ):
-            raise ValueError(
-                "availability tool-ID groups must not overlap"
-            )
+            raise ValueError("availability tool-ID groups must not overlap")
         if frozenset().union(*availability_groups) != known:
-            raise ValueError(
-                "availability tool-ID groups must cover every tool"
-            )
+            raise ValueError("availability tool-ID groups must cover every tool")
 
         ai_assisted = frozenset(categories["ai_assisted_tool_ids"])
         normative = frozenset(categories["normative_tool_ids"])
         if ai_assisted.intersection(normative):
-            raise ValueError(
-                "AI-assisted tools must not be normative"
-            )
+            raise ValueError("AI-assisted tools must not be normative")
 
         object.__setattr__(self, "catalog_version", catalog_version)
         object.__setattr__(self, "tool_ids", tool_ids)
@@ -118,7 +96,7 @@ class DiagnosticToolRegistrySnapshot:
 class DiagnosticToolRegistry:
     """Immutable static registry of reviewed diagnostic-tool specifications."""
 
-    __slots__ = ("_catalog_version", "_specs", "_by_id")
+    __slots__ = ("_by_id", "_catalog_version", "_specs")
 
     def __init__(
         self,
@@ -134,9 +112,7 @@ class DiagnosticToolRegistry:
 
         self._catalog_version = canonical_version
         self._specs = prepared
-        self._by_id = MappingProxyType(
-            {spec.tool_id: spec for spec in prepared}
-        )
+        self._by_id = MappingProxyType({spec.tool_id: spec for spec in prepared})
 
     @property
     def catalog_version(self) -> str:
@@ -205,9 +181,7 @@ class DiagnosticToolRegistry:
             field_name="platform",
         )
         return tuple(
-            spec
-            for spec in self._specs
-            if canonical_platform in _string_values(spec.platforms)
+            spec for spec in self._specs if canonical_platform in _string_values(spec.platforms)
         )
 
     def by_availability(
@@ -219,9 +193,7 @@ class DiagnosticToolRegistry:
             field_name="availability_policy",
         )
         return tuple(
-            spec
-            for spec in self._specs
-            if _policy_value(spec.availability_policy) == canonical
+            spec for spec in self._specs if _policy_value(spec.availability_policy) == canonical
         )
 
     def by_mutability(
@@ -232,11 +204,7 @@ class DiagnosticToolRegistry:
             mutability,
             field_name="mutability",
         )
-        return tuple(
-            spec
-            for spec in self._specs
-            if _policy_value(spec.mutability) == canonical
-        )
+        return tuple(spec for spec in self._specs if _policy_value(spec.mutability) == canonical)
 
     def normative(self) -> tuple[DiagnosticToolSpec, ...]:
         return tuple(spec for spec in self._specs if spec.normative)
@@ -251,24 +219,13 @@ class DiagnosticToolRegistry:
         return DiagnosticToolRegistrySnapshot(
             catalog_version=self._catalog_version,
             tool_ids=self.tool_ids,
-            required_tool_ids=tuple(
-                spec.tool_id
-                for spec in self.by_availability("required")
-            ),
-            optional_tool_ids=tuple(
-                spec.tool_id
-                for spec in self.by_availability("optional")
-            ),
+            required_tool_ids=tuple(spec.tool_id for spec in self.by_availability("required")),
+            optional_tool_ids=tuple(spec.tool_id for spec in self.by_availability("optional")),
             diagnostic_only_tool_ids=tuple(
-                spec.tool_id
-                for spec in self.by_availability("diagnostic_only")
+                spec.tool_id for spec in self.by_availability("diagnostic_only")
             ),
-            normative_tool_ids=tuple(
-                spec.tool_id for spec in self.normative()
-            ),
-            ai_assisted_tool_ids=tuple(
-                spec.tool_id for spec in self.ai_assisted()
-            ),
+            normative_tool_ids=tuple(spec.tool_id for spec in self.normative()),
+            ai_assisted_tool_ids=tuple(spec.tool_id for spec in self.ai_assisted()),
         )
 
 
@@ -284,9 +241,7 @@ def normalize_tool_id(value: object) -> ToolId:
     if not canonical.isascii():
         raise ValueError("tool_id must use ASCII characters only")
     if _TOOL_ID_PATTERN.fullmatch(canonical) is None:
-        raise ValueError(
-            "tool_id must be lowercase ASCII letters, digits, and hyphens"
-        )
+        raise ValueError("tool_id must be lowercase ASCII letters, digits, and hyphens")
     return canonical
 
 
@@ -340,15 +295,17 @@ def registered_tool_ids(
     return selected.tool_ids
 
 
+def _reject_text_iterable(value: object) -> None:
+    if isinstance(value, (str, bytes)):
+        raise TypeError("specs must be an iterable of DiagnosticToolSpec values")
+
+
 def _prepare_specs(
     specs: Iterable[DiagnosticToolSpec],
     *,
     catalog_version: str,
 ) -> tuple[DiagnosticToolSpec, ...]:
-    if isinstance(specs, (str, bytes)):
-        raise TypeError(
-            "specs must be an iterable of DiagnosticToolSpec values"
-        )
+    _reject_text_iterable(specs)
 
     prepared = tuple(specs)
     if len(prepared) > _MAX_TOOL_COUNT:
@@ -357,14 +314,10 @@ def _prepare_specs(
     by_id: dict[str, DiagnosticToolSpec] = {}
     for spec in prepared:
         if not isinstance(spec, DiagnosticToolSpec):
-            raise TypeError(
-                "specs must contain DiagnosticToolSpec values"
-            )
+            raise TypeError("specs must contain DiagnosticToolSpec values")
 
         tool_id = normalize_tool_id(spec.tool_id)
-        entry_version = _normalize_catalog_version(
-            spec.catalog_version
-        )
+        entry_version = _normalize_catalog_version(spec.catalog_version)
         if entry_version != catalog_version:
             raise CatalogVersionMismatchError(
                 f"tool {tool_id!r} uses catalog version "
@@ -375,9 +328,7 @@ def _prepare_specs(
         _validate_registry_coherence(spec)
 
         if tool_id in by_id:
-            raise DuplicateDiagnosticToolError(
-                f"duplicate diagnostic tool ID: {tool_id!r}"
-            )
+            raise DuplicateDiagnosticToolError(f"duplicate diagnostic tool ID: {tool_id!r}")
         by_id[tool_id] = spec
 
     return tuple(by_id[tool_id] for tool_id in sorted(by_id))
@@ -399,14 +350,10 @@ def _validate_registry_coherence(
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
         raise TypeError("timeout_sec must be a positive number")
     if timeout <= 0:
-        raise DiagnosticToolRegistryError(
-            f"tool {spec.tool_id!r} must have a positive timeout"
-        )
+        raise DiagnosticToolRegistryError(f"tool {spec.tool_id!r} must have a positive timeout")
 
     if not tuple(spec.platforms):
-        raise DiagnosticToolRegistryError(
-            f"tool {spec.tool_id!r} must declare supported platforms"
-        )
+        raise DiagnosticToolRegistryError(f"tool {spec.tool_id!r} must declare supported platforms")
 
     availability = _policy_value(spec.availability_policy)
     if availability not in {
@@ -415,8 +362,7 @@ def _validate_registry_coherence(
         "diagnostic_only",
     }:
         raise DiagnosticToolRegistryError(
-            f"tool {spec.tool_id!r} has unsupported availability policy "
-            f"{availability!r}"
+            f"tool {spec.tool_id!r} has unsupported availability policy {availability!r}"
         )
 
     mutability = _policy_value(spec.mutability)
@@ -427,8 +373,7 @@ def _validate_registry_coherence(
         "external_mutating",
     }:
         raise DiagnosticToolRegistryError(
-            f"tool {spec.tool_id!r} has unsupported mutability "
-            f"{mutability!r}"
+            f"tool {spec.tool_id!r} has unsupported mutability {mutability!r}"
         )
 
     confirmation = _policy_value(spec.confirmation_policy)
@@ -438,20 +383,17 @@ def _validate_registry_coherence(
         "reviewed_batch_operation",
     }:
         raise DiagnosticToolRegistryError(
-            f"tool {spec.tool_id!r} has unsupported confirmation policy "
-            f"{confirmation!r}"
+            f"tool {spec.tool_id!r} has unsupported confirmation policy {confirmation!r}"
         )
 
     if mutability == "read_only" and confirmation != "none":
         raise DiagnosticToolRegistryError(
-            f"read-only tool {spec.tool_id!r} must not require mutation "
-            "confirmation"
+            f"read-only tool {spec.tool_id!r} must not require mutation confirmation"
         )
     if mutability in {"project_mutating", "external_mutating"}:
         if confirmation == "none":
             raise DiagnosticToolRegistryError(
-                f"mutating tool {spec.tool_id!r} requires explicit "
-                "confirmation policy"
+                f"mutating tool {spec.tool_id!r} requires explicit confirmation policy"
             )
 
     network = _policy_value(spec.network_policy)
@@ -461,8 +403,7 @@ def _validate_registry_coherence(
         "approved_endpoints",
     }:
         raise DiagnosticToolRegistryError(
-            f"tool {spec.tool_id!r} has unsupported network policy "
-            f"{network!r}"
+            f"tool {spec.tool_id!r} has unsupported network policy {network!r}"
         )
 
 
@@ -476,13 +417,9 @@ def _normalize_catalog_version(value: object) -> str:
     if len(canonical) > _MAX_VERSION_LENGTH:
         raise ValueError("catalog_version exceeds the supported length")
     if not canonical.isascii():
-        raise ValueError(
-            "catalog_version must use ASCII characters only"
-        )
+        raise ValueError("catalog_version must use ASCII characters only")
     if _VERSION_PATTERN.fullmatch(canonical) is None:
-        raise ValueError(
-            "catalog_version must use numeric dotted-version syntax"
-        )
+        raise ValueError("catalog_version must use numeric dotted-version syntax")
     return canonical
 
 
@@ -511,9 +448,7 @@ def _normalize_policy_value(
     if len(canonical) > 128:
         raise ValueError(f"{field_name} exceeds the supported length")
     if not canonical.isascii():
-        raise ValueError(
-            f"{field_name} must use ASCII characters only"
-        )
+        raise ValueError(f"{field_name} must use ASCII characters only")
     return canonical
 
 
@@ -526,13 +461,8 @@ def _policy_value(value: object) -> str:
 
 def _string_values(values: Iterable[object]) -> frozenset[str]:
     if isinstance(values, (str, bytes)):
-        return frozenset(
-            (_normalize_policy_value(values, field_name="value"),)
-        )
-    return frozenset(
-        _normalize_policy_value(value, field_name="value")
-        for value in values
-    )
+        return frozenset((_normalize_policy_value(values, field_name="value"),))
+    return frozenset(_normalize_policy_value(value, field_name="value") for value in values)
 
 
 def _require_registry(
@@ -544,16 +474,14 @@ def _require_registry(
 
 
 DEFAULT_TOOL_SPECS: Final[tuple[DiagnosticToolSpec, ...]] = ()
-DEFAULT_TOOL_REGISTRY: Final[DiagnosticToolRegistry] = (
-    DiagnosticToolRegistry(DEFAULT_TOOL_SPECS)
-)
+DEFAULT_TOOL_REGISTRY: Final[DiagnosticToolRegistry] = DiagnosticToolRegistry(DEFAULT_TOOL_SPECS)
 
 
 __all__ = (
     "CATALOG_VERSION",
-    "CatalogVersionMismatchError",
     "DEFAULT_TOOL_REGISTRY",
     "DEFAULT_TOOL_SPECS",
+    "CatalogVersionMismatchError",
     "DiagnosticToolRegistry",
     "DiagnosticToolRegistryError",
     "DiagnosticToolRegistrySnapshot",

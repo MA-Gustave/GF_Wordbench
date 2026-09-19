@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum, unique
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Callable, Final
 
 from gf_wordbench.kernel.statuses import ValidationMode
 
@@ -123,7 +123,10 @@ class RequirednessContext:
             normalize_key=_normalize_role,
             field_name="role_overrides",
         )
-        if self.require_aggregate_logs is not None and type(self.require_aggregate_logs) is not bool:
+        if (
+            self.require_aggregate_logs is not None
+            and type(self.require_aggregate_logs) is not bool
+        ):
             raise TypeError("require_aggregate_logs must be bool or None")
         if type(self.release_requires_pgf) is not bool:
             raise TypeError("release_requires_pgf must be bool")
@@ -224,11 +227,18 @@ class RequirednessPolicy:
 
     def resolve_many(
         self,
-        requests: Iterable[ArtifactRequirednessRequest],
+        requests: object,
     ) -> tuple[RequirednessDecision, ...]:
-        if isinstance(requests, (str, bytes)):
+        if isinstance(requests, (str, bytes)) or not isinstance(requests, Iterable):
             raise TypeError("requests must be an iterable of requests")
-        return tuple(self.resolve(request) for request in requests)
+        prepared: list[ArtifactRequirednessRequest] = []
+        for request in requests:
+            if not isinstance(request, ArtifactRequirednessRequest):
+                raise TypeError(
+                    "requests must contain ArtifactRequirednessRequest values"
+                )
+            prepared.append(request)
+        return tuple(self.resolve(request) for request in prepared)
 
 
 def resolve_requiredness(
@@ -359,9 +369,7 @@ def validate_requiredness_conflicts(context: RequirednessContext) -> None:
     if not isinstance(context, RequirednessContext):
         raise TypeError("context must be RequirednessContext")
     path_conflicts = {
-        path
-        for path, value in context.path_overrides.items()
-        if type(value) is not bool
+        path for path, value in context.path_overrides.items() if type(value) is not bool
     }
     if path_conflicts:
         raise ValueError("path overrides contain non-boolean values")
@@ -376,7 +384,7 @@ def _resolve(
     context: RequirednessContext,
 ) -> RequirednessDecision:
     role = request.role
-    path = request.path
+    path = None if request.path is None else _normalize_manifest_path(request.path)
 
     if path is not None and path in context.path_overrides:
         required = context.path_overrides[path]
@@ -461,10 +469,7 @@ def _resolve(
             path,
         )
 
-    if (
-        context.finalized
-        and role in context.framework_required_roles
-    ):
+    if context.finalized and role in context.framework_required_roles:
         return RequirednessDecision(
             True,
             RequirednessSource.FRAMEWORK,
@@ -474,13 +479,13 @@ def _resolve(
         )
 
     if role in AGGREGATE_ROLES:
-        required = context.require_aggregate_logs
-        if required is None:
-            required = context.mode in {
+        aggregate_required = context.require_aggregate_logs
+        if aggregate_required is None:
+            aggregate_required = context.mode in {
                 ValidationMode.CHECKPOINT,
                 ValidationMode.RELEASE,
             }
-        if required:
+        if aggregate_required:
             reason = (
                 RequirednessReason.RELEASE_AGGREGATE
                 if context.mode is ValidationMode.RELEASE
@@ -494,7 +499,11 @@ def _resolve(
                 path,
             )
 
-    if role in PGF_ROLES and context.mode is ValidationMode.RELEASE and context.release_requires_pgf:
+    if (
+        role in PGF_ROLES
+        and context.mode is ValidationMode.RELEASE
+        and context.release_requires_pgf
+    ):
         return RequirednessDecision(
             True,
             RequirednessSource.MODE,
@@ -532,7 +541,7 @@ def _resolve(
                 role,
                 path,
             )
-        if request.scenario_required and request.stage_executed is not False:
+        if request.scenario_required:
             return RequirednessDecision(
                 True,
                 RequirednessSource.SCENARIO,
@@ -558,7 +567,7 @@ def _resolve(
                 role,
                 path,
             )
-        if request.stage_required and request.stage_executed is not False:
+        if request.stage_required:
             return RequirednessDecision(
                 True,
                 RequirednessSource.EXECUTED_STAGE,
@@ -594,8 +603,8 @@ def _resolve(
 
 
 def _normalize_role(value: object) -> str:
-    if hasattr(value, "value") and isinstance(getattr(value, "value"), str):
-        value = getattr(value, "value")
+    if hasattr(value, "value") and isinstance(value.value, str):
+        value = value.value
     if not isinstance(value, str):
         raise TypeError("role must be a string or string enum")
     normalized = value.strip().lower().replace("-", "_")
@@ -611,9 +620,7 @@ def _normalize_roles(values: Iterable[str]) -> frozenset[str]:
 
 
 def _normalize_manifest_path(value: object) -> str:
-    if isinstance(value, Path):
-        value = value.as_posix()
-    elif isinstance(value, PurePosixPath):
+    if isinstance(value, Path) or isinstance(value, PurePosixPath):
         value = value.as_posix()
     if not isinstance(value, str):
         raise TypeError("manifest path must be a string or path")
@@ -632,9 +639,9 @@ def _normalize_manifest_path(value: object) -> str:
 
 
 def _freeze_bool_mapping(
-    value: Mapping[object, object],
+    value: Mapping[str, bool],
     *,
-    normalize_key: Any,
+    normalize_key: Callable[[object], str],
     field_name: str,
 ) -> Mapping[str, bool]:
     if not isinstance(value, Mapping):
@@ -692,18 +699,18 @@ def _attribute(instance: object, name: str, *, default: object = ...) -> Any:
 
 __all__ = (
     "AGGREGATE_ROLES",
-    "ArtifactRequirednessRequest",
     "COMPILE_ARTIFACT_ROLES",
     "FRAMEWORK_FINAL_ROLES",
     "PGF_ROLES",
     "PROCESS_STREAM_ROLES",
+    "SCENARIO_OUTPUT_ROLES",
+    "SCENARIO_STREAM_ROLES",
+    "ArtifactRequirednessRequest",
     "RequirednessContext",
     "RequirednessDecision",
     "RequirednessPolicy",
     "RequirednessReason",
     "RequirednessSource",
-    "SCENARIO_OUTPUT_ROLES",
-    "SCENARIO_STREAM_ROLES",
     "is_artifact_required",
     "required_framework_roles",
     "resolve_artifact_requiredness",

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from types import MappingProxyType
-from typing import Final, Iterator
+from typing import Final
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal, Slot
+from PySide6.QtGui import QStandardItemModel
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -144,8 +145,9 @@ class ValidationPanelValues:
     max_files: int | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.mode, ValidationMode):
-            object.__setattr__(self, "mode", ValidationMode(self.mode))
+        raw_mode: object = object.__getattribute__(self, "mode")
+        if not isinstance(raw_mode, ValidationMode):
+            object.__setattr__(self, "mode", ValidationMode(raw_mode))
         object.__setattr__(
             self,
             "target_file",
@@ -221,11 +223,12 @@ class ValidationLocalIssue:
             "code",
             _required_text(self.code, field="code"),
         )
-        if not isinstance(self.severity, LocalIssueSeverity):
+        raw_severity: object = object.__getattribute__(self, "severity")
+        if not isinstance(raw_severity, LocalIssueSeverity):
             object.__setattr__(
                 self,
                 "severity",
-                LocalIssueSeverity(self.severity),
+                LocalIssueSeverity(raw_severity),
             )
 
 
@@ -241,19 +244,11 @@ class ValidationLocalResult:
 
     @property
     def errors(self) -> tuple[ValidationLocalIssue, ...]:
-        return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is LocalIssueSeverity.ERROR
-        )
+        return tuple(issue for issue in self.issues if issue.severity is LocalIssueSeverity.ERROR)
 
     @property
     def warnings(self) -> tuple[ValidationLocalIssue, ...]:
-        return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is LocalIssueSeverity.WARNING
-        )
+        return tuple(issue for issue in self.issues if issue.severity is LocalIssueSeverity.WARNING)
 
     @property
     def has_errors(self) -> bool:
@@ -359,10 +354,7 @@ class ValidationPanel(QWidget):
                 )
             )
 
-        if (
-            values.mode is ValidationMode.CHECKPOINT
-            and values.checkpoint_id is None
-        ):
+        if values.mode is ValidationMode.CHECKPOINT and values.checkpoint_id is None:
             issues.append(
                 ValidationLocalIssue(
                     field=_FIELD_CHECKPOINT,
@@ -372,14 +364,8 @@ class ValidationPanel(QWidget):
             )
 
         if values.checkpoint_id is not None:
-            known_checkpoints = {
-                choice.identifier
-                for choice in self._catalog.checkpoints
-            }
-            if (
-                known_checkpoints
-                and values.checkpoint_id not in known_checkpoints
-            ):
+            known_checkpoints = {choice.identifier for choice in self._catalog.checkpoints}
+            if known_checkpoints and values.checkpoint_id not in known_checkpoints:
                 issues.append(
                     ValidationLocalIssue(
                         field=_FIELD_CHECKPOINT,
@@ -388,13 +374,8 @@ class ValidationPanel(QWidget):
                     )
                 )
 
-        known_scenarios = {
-            choice.identifier
-            for choice in self._catalog.scenarios
-        }
-        unknown_scenarios = set(values.scenario_filter).difference(
-            known_scenarios
-        )
+        known_scenarios = {choice.identifier for choice in self._catalog.scenarios}
+        unknown_scenarios = set(values.scenario_filter).difference(known_scenarios)
         if unknown_scenarios:
             rendered = ", ".join(sorted(unknown_scenarios))
             issues.append(
@@ -405,10 +386,7 @@ class ValidationPanel(QWidget):
                 )
             )
 
-        if (
-            values.mode is ValidationMode.RELEASE
-            and values.no_compile
-        ):
+        if values.mode is ValidationMode.RELEASE and values.no_compile:
             issues.append(
                 ValidationLocalIssue(
                     field=_FIELD_NO_COMPILE,
@@ -417,10 +395,7 @@ class ValidationPanel(QWidget):
                 )
             )
 
-        if (
-            values.mode is ValidationMode.RELEASE
-            and values.skip_version_probe
-        ):
+        if values.mode is ValidationMode.RELEASE and values.skip_version_probe:
             issues.append(
                 ValidationLocalIssue(
                     field=_FIELD_SKIP_VERSION,
@@ -429,10 +404,7 @@ class ValidationPanel(QWidget):
                 )
             )
 
-        if (
-            values.mode is not ValidationMode.DIAGNOSTIC
-            and values.max_files is not None
-        ):
+        if values.mode is not ValidationMode.DIAGNOSTIC and values.max_files is not None:
             issues.append(
                 ValidationLocalIssue(
                     field=_FIELD_MAX_FILES,
@@ -441,10 +413,7 @@ class ValidationPanel(QWidget):
                 )
             )
 
-        if (
-            values.mode is ValidationMode.DIAGNOSTIC
-            and values.no_compile
-        ):
+        if values.mode is ValidationMode.DIAGNOSTIC and values.no_compile:
             issues.append(
                 ValidationLocalIssue(
                     field=_FIELD_NO_COMPILE,
@@ -457,10 +426,7 @@ class ValidationPanel(QWidget):
                 )
             )
 
-        if (
-            values.mode is ValidationMode.QUICK
-            and values.skip_version_probe
-        ):
+        if values.mode is ValidationMode.QUICK and values.skip_version_probe:
             issues.append(
                 ValidationLocalIssue(
                     field=_FIELD_SKIP_VERSION,
@@ -470,9 +436,7 @@ class ValidationPanel(QWidget):
                 )
             )
 
-        return ValidationLocalResult(
-            issues=tuple(issues) + self._external_issues
-        )
+        return ValidationLocalResult(issues=tuple(issues) + self._external_issues)
 
     def set_catalog(self, catalog: ValidationPanelCatalog) -> None:
         if not isinstance(catalog, ValidationPanelCatalog):
@@ -517,20 +481,14 @@ class ValidationPanel(QWidget):
                 self.timeout_spin.setValue(values.timeout_override or 0)
                 self.keep_ok_checkbox.setChecked(values.keep_ok_details)
                 self.diff_previous_checkbox.setChecked(values.diff_previous)
-                self.skip_version_probe_checkbox.setChecked(
-                    values.skip_version_probe
-                )
+                self.skip_version_probe_checkbox.setChecked(values.skip_version_probe)
                 self.scan_only_checkbox.setChecked(values.no_compile)
                 self.cpu_stats_checkbox.setChecked(values.emit_cpu_stats)
                 self.strict_checkbox.setChecked(values.strict)
-                self.verbose_output_checkbox.setChecked(
-                    values.verbose_gf_output
-                )
+                self.verbose_output_checkbox.setChecked(values.verbose_gf_output)
                 self.max_files_spin.setValue(values.max_files or 0)
 
-                self._scenario_selection_by_mode[values.mode] = set(
-                    values.scenario_filter
-                )
+                self._scenario_selection_by_mode[values.mode] = set(values.scenario_filter)
                 self._active_mode = values.mode
                 self._apply_mode(values.mode)
         finally:
@@ -543,13 +501,8 @@ class ValidationPanel(QWidget):
         issues: Iterable[ValidationLocalIssue],
     ) -> None:
         prepared = tuple(issues)
-        if not all(
-            isinstance(issue, ValidationLocalIssue)
-            for issue in prepared
-        ):
-            raise TypeError(
-                "issues must contain ValidationLocalIssue values"
-            )
+        if not all(isinstance(issue, ValidationLocalIssue) for issue in prepared):
+            raise TypeError("issues must contain ValidationLocalIssue values")
         self._external_issues = prepared
         self._refresh_validation(emit_values=False)
 
@@ -618,9 +571,7 @@ class ValidationPanel(QWidget):
             return
 
         previous_mode = self._active_mode
-        self._scenario_selection_by_mode[previous_mode] = set(
-            self.selected_scenarios()
-        )
+        self._scenario_selection_by_mode[previous_mode] = set(self.selected_scenarios())
 
         mode = self.mode()
         self._active_mode = mode
@@ -636,18 +587,14 @@ class ValidationPanel(QWidget):
         self._external_issues = ()
         if self.mode() is ValidationMode.CHECKPOINT:
             with self._block_widget_signals(self.scenario_list):
-                self._apply_scenario_visibility_and_selection(
-                    ValidationMode.CHECKPOINT
-                )
+                self._apply_scenario_visibility_and_selection(ValidationMode.CHECKPOINT)
         self._refresh_validation(emit_values=True)
 
     @Slot()
     def _on_scenario_changed(self) -> None:
         if self._loading:
             return
-        self._scenario_selection_by_mode[self.mode()] = set(
-            self.selected_scenarios()
-        )
+        self._scenario_selection_by_mode[self.mode()] = set(self.selected_scenarios())
         self._external_issues = ()
         self._refresh_validation(emit_values=True)
 
@@ -662,26 +609,19 @@ class ValidationPanel(QWidget):
     def _toggle_advanced(self, visible: bool) -> None:
         self.advanced_frame.setVisible(visible)
         self.advanced_toggle.setArrowType(
-            Qt.ArrowType.DownArrow
-            if visible
-            else Qt.ArrowType.RightArrow
+            Qt.ArrowType.DownArrow if visible else Qt.ArrowType.RightArrow
         )
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(8)
+        root.setSpacing(6)
 
         form_group = QGroupBox("Validation", self)
         form_group.setObjectName("validationSelectionGroup")
         form_layout = QFormLayout(form_group)
-        form_layout.setFieldGrowthPolicy(
-            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
-        )
-        form_layout.setLabelAlignment(
-            Qt.AlignmentFlag.AlignLeft
-            | Qt.AlignmentFlag.AlignVCenter
-        )
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         self.mode_combo = QComboBox(form_group)
         self.mode_combo.setObjectName("validationModeCombo")
@@ -698,18 +638,14 @@ class ValidationPanel(QWidget):
         self.target_combo.setObjectName("validationTargetCombo")
         self.target_combo.setAccessibleName("Target file or module")
         self.target_combo.setEditable(True)
-        self.target_combo.setInsertPolicy(
-            QComboBox.InsertPolicy.NoInsert
-        )
+        self.target_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.target_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Fixed,
         )
         self.target_browse_button = QPushButton("Browse…", form_group)
         self.target_browse_button.setObjectName("validationTargetBrowseButton")
-        self.target_browse_button.setAccessibleName(
-            "Browse for target file"
-        )
+        self.target_browse_button.setAccessibleName("Browse for target file")
         target_row = QWidget(form_group)
         target_layout = QHBoxLayout(target_row)
         target_layout.setContentsMargins(0, 0, 0, 0)
@@ -744,10 +680,9 @@ class ValidationPanel(QWidget):
         self.scenario_list = QListWidget(scenario_group)
         self.scenario_list.setObjectName("validationScenarioList")
         self.scenario_list.setAccessibleName("Scenario filter")
-        self.scenario_list.setSelectionMode(
-            QListWidget.SelectionMode.NoSelection
-        )
-        self.scenario_list.setMinimumHeight(110)
+        self.scenario_list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self.scenario_list.setMinimumHeight(72)
+        self.scenario_list.setMaximumHeight(120)
         scenario_layout.addWidget(self.scenario_list)
         root.addWidget(scenario_group)
 
@@ -763,9 +698,7 @@ class ValidationPanel(QWidget):
             "Compare with previous compatible run",
             option_group,
         )
-        self.diff_previous_checkbox.setObjectName(
-            "validationDiffPreviousCheck"
-        )
+        self.diff_previous_checkbox.setObjectName("validationDiffPreviousCheck")
         self.cpu_stats_checkbox = QCheckBox(
             "Emit GF CPU statistics",
             option_group,
@@ -783,18 +716,14 @@ class ValidationPanel(QWidget):
         self.advanced_toggle.setText("Advanced Options")
         self.advanced_toggle.setCheckable(True)
         self.advanced_toggle.setChecked(False)
-        self.advanced_toggle.setToolButtonStyle(
-            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
-        )
+        self.advanced_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.advanced_toggle.setArrowType(Qt.ArrowType.RightArrow)
         root.addWidget(self.advanced_toggle, 0, Qt.AlignmentFlag.AlignLeft)
 
         self.advanced_frame = QFrame(self)
         self.advanced_frame.setObjectName("validationAdvancedFrame")
         advanced_form = QFormLayout(self.advanced_frame)
-        advanced_form.setFieldGrowthPolicy(
-            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
-        )
+        advanced_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
         self.timeout_spin = QSpinBox(self.advanced_frame)
         self.timeout_spin.setObjectName("validationTimeoutSpin")
@@ -815,18 +744,14 @@ class ValidationPanel(QWidget):
             "Skip GF version probe",
             self.advanced_frame,
         )
-        self.skip_version_probe_checkbox.setObjectName(
-            "validationSkipVersionProbeCheck"
-        )
+        self.skip_version_probe_checkbox.setObjectName("validationSkipVersionProbeCheck")
         advanced_form.addRow("", self.skip_version_probe_checkbox)
 
         self.verbose_output_checkbox = QCheckBox(
             "Verbose GF output",
             self.advanced_frame,
         )
-        self.verbose_output_checkbox.setObjectName(
-            "validationVerboseOutputCheck"
-        )
+        self.verbose_output_checkbox.setObjectName("validationVerboseOutputCheck")
         advanced_form.addRow("", self.verbose_output_checkbox)
 
         self.strict_checkbox = QCheckBox(
@@ -851,9 +776,7 @@ class ValidationPanel(QWidget):
 
         self.validation_summary = QLabel(self)
         self.validation_summary.setObjectName("validationErrorSummary")
-        self.validation_summary.setAccessibleName(
-            "Validation input messages"
-        )
+        self.validation_summary.setAccessibleName("Validation input messages")
         self.validation_summary.setWordWrap(True)
         self.validation_summary.setVisible(False)
         root.addWidget(self.validation_summary)
@@ -868,21 +791,11 @@ class ValidationPanel(QWidget):
         )
 
     def _connect_signals(self) -> None:
-        self.mode_combo.currentIndexChanged.connect(
-            self._on_mode_changed
-        )
-        self.target_combo.currentTextChanged.connect(
-            self._on_values_changed
-        )
-        self.target_browse_button.clicked.connect(
-            self.browse_target_requested.emit
-        )
-        self.checkpoint_combo.currentIndexChanged.connect(
-            self._on_checkpoint_changed
-        )
-        self.scenario_list.itemChanged.connect(
-            self._on_scenario_changed
-        )
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        self.target_combo.currentTextChanged.connect(self._on_values_changed)
+        self.target_browse_button.clicked.connect(self.browse_target_requested.emit)
+        self.checkpoint_combo.currentIndexChanged.connect(self._on_checkpoint_changed)
+        self.scenario_list.itemChanged.connect(self._on_scenario_changed)
 
         for checkbox in (
             self.scan_only_checkbox,
@@ -895,18 +808,10 @@ class ValidationPanel(QWidget):
         ):
             checkbox.toggled.connect(self._on_values_changed)
 
-        self.timeout_spin.valueChanged.connect(
-            self._on_values_changed
-        )
-        self.max_files_spin.valueChanged.connect(
-            self._on_values_changed
-        )
-        self.scan_only_checkbox.toggled.connect(
-            self._update_scan_only_notice
-        )
-        self.advanced_toggle.toggled.connect(
-            self._toggle_advanced
-        )
+        self.timeout_spin.valueChanged.connect(self._on_values_changed)
+        self.max_files_spin.valueChanged.connect(self._on_values_changed)
+        self.scan_only_checkbox.toggled.connect(self._update_scan_only_notice)
+        self.advanced_toggle.toggled.connect(self._toggle_advanced)
         self.preview_button.clicked.connect(self.preview_requested.emit)
 
     def _populate_targets(self) -> None:
@@ -922,16 +827,14 @@ class ValidationPanel(QWidget):
                 choice.description,
                 Qt.ItemDataRole.ToolTipRole,
             )
-            model_item = self.target_combo.model().item(index)
-            if model_item is not None:
-                model_item.setEnabled(choice.enabled)
+            _set_combo_item_enabled(self.target_combo, index, choice.enabled)
         self.target_combo.setCurrentIndex(-1)
         self.target_combo.setEditText("")
 
     def _populate_checkpoints(self) -> None:
         self.checkpoint_combo.clear()
         self.checkpoint_combo.addItem("Select a checkpoint…", None)
-        self.checkpoint_combo.model().item(0).setEnabled(False)
+        _set_combo_item_enabled(self.checkpoint_combo, 0, False)
 
         for choice in self._catalog.checkpoints:
             self.checkpoint_combo.addItem(
@@ -944,13 +847,9 @@ class ValidationPanel(QWidget):
                 choice.description,
                 Qt.ItemDataRole.ToolTipRole,
             )
-            model_item = self.checkpoint_combo.model().item(index)
-            if model_item is not None:
-                model_item.setEnabled(choice.enabled)
+            _set_combo_item_enabled(self.checkpoint_combo, index, choice.enabled)
 
-        release_label = (
-            f"All required checkpoints ({self._catalog.release_checkpoint_count})"
-        )
+        release_label = f"All required checkpoints ({self._catalog.release_checkpoint_count})"
         self.checkpoint_combo.addItem(
             release_label,
             _REQUIRED_RELEASE_CHECKPOINT_ID,
@@ -972,10 +871,7 @@ class ValidationPanel(QWidget):
                 choice.identifier,
             )
             item.setToolTip(choice.description)
-            flags = (
-                Qt.ItemFlag.ItemIsEnabled
-                | Qt.ItemFlag.ItemIsUserCheckable
-            )
+            flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
             if choice.enabled:
                 item.setFlags(flags)
             else:
@@ -1012,45 +908,30 @@ class ValidationPanel(QWidget):
                 )
             self.checkpoint_combo.setEnabled(False)
         else:
-            if (
-                self._selected_identifier(self.checkpoint_combo)
-                == _REQUIRED_RELEASE_CHECKPOINT_ID
-            ):
+            if self._selected_identifier(self.checkpoint_combo) == _REQUIRED_RELEASE_CHECKPOINT_ID:
                 with self._block_widget_signals(self.checkpoint_combo):
                     self.checkpoint_combo.setCurrentIndex(0)
-            self.checkpoint_combo.setEnabled(
-                enabled and checkpoint_visible
-            )
+            self.checkpoint_combo.setEnabled(enabled and checkpoint_visible)
 
         scan_only_allowed = mode in {
             ValidationMode.QUICK,
             ValidationMode.DIAGNOSTIC,
         }
-        self.scan_only_checkbox.setEnabled(
-            enabled and scan_only_allowed
-        )
+        self.scan_only_checkbox.setEnabled(enabled and scan_only_allowed)
         if not scan_only_allowed:
-            with self._block_widget_signals(
-                self.scan_only_checkbox
-            ):
+            with self._block_widget_signals(self.scan_only_checkbox):
                 self.scan_only_checkbox.setChecked(False)
 
         skip_probe_allowed = mode in {
             ValidationMode.QUICK,
             ValidationMode.DIAGNOSTIC,
         }
-        self.skip_version_probe_checkbox.setEnabled(
-            enabled and skip_probe_allowed
-        )
+        self.skip_version_probe_checkbox.setEnabled(enabled and skip_probe_allowed)
         if not skip_probe_allowed:
-            with self._block_widget_signals(
-                self.skip_version_probe_checkbox
-            ):
+            with self._block_widget_signals(self.skip_version_probe_checkbox):
                 self.skip_version_probe_checkbox.setChecked(False)
 
-        self.max_files_spin.setEnabled(
-            enabled and mode is ValidationMode.DIAGNOSTIC
-        )
+        self.max_files_spin.setEnabled(enabled and mode is ValidationMode.DIAGNOSTIC)
         if mode is not ValidationMode.DIAGNOSTIC:
             with self._block_widget_signals(self.max_files_spin):
                 self.max_files_spin.setValue(0)
@@ -1075,9 +956,7 @@ class ValidationPanel(QWidget):
             self._apply_scenario_visibility_and_selection(mode)
 
         self._update_mode_tooltips(mode)
-        self._update_scan_only_notice(
-            self.scan_only_checkbox.isChecked()
-        )
+        self._update_scan_only_notice(self.scan_only_checkbox.isChecked())
 
     def _apply_scenario_visibility_and_selection(
         self,
@@ -1098,9 +977,7 @@ class ValidationPanel(QWidget):
             visible = identifier in visible_ids
             item.setHidden(not visible)
             item.setCheckState(
-                Qt.CheckState.Checked
-                if identifier in selected_ids
-                else Qt.CheckState.Unchecked
+                Qt.CheckState.Checked if identifier in selected_ids else Qt.CheckState.Unchecked
             )
             choice = self._scenario_choice(identifier)
             enabled = (
@@ -1118,23 +995,16 @@ class ValidationPanel(QWidget):
         self,
         mode: ValidationMode,
     ) -> frozenset[str]:
-        all_ids = frozenset(
-            choice.identifier
-            for choice in self._catalog.scenarios
-        )
+        all_ids = frozenset(choice.identifier for choice in self._catalog.scenarios)
 
         if mode is ValidationMode.RELEASE:
             return frozenset(self._catalog.release_scenarios)
 
         if mode is ValidationMode.CHECKPOINT:
-            checkpoint_id = self._selected_identifier(
-                self.checkpoint_combo
-            )
+            checkpoint_id = self._selected_identifier(self.checkpoint_combo)
             if checkpoint_id is None:
                 return all_ids
-            scoped = self._catalog.checkpoint_scenarios.get(
-                checkpoint_id
-            )
+            scoped = self._catalog.checkpoint_scenarios.get(checkpoint_id)
             if scoped is not None:
                 return frozenset(scoped)
 
@@ -1145,11 +1015,7 @@ class ValidationPanel(QWidget):
         identifier: str,
     ) -> ValidationChoice | None:
         return next(
-            (
-                choice
-                for choice in self._catalog.scenarios
-                if choice.identifier == identifier
-            ),
+            (choice for choice in self._catalog.scenarios if choice.identifier == identifier),
             None,
         )
 
@@ -1161,27 +1027,15 @@ class ValidationPanel(QWidget):
             self.mode_combo.setToolTip(
                 "Fast validation during editing. A target file or module is required."
             )
-            self.scenario_hint.setText(
-                "Optionally select configured smoke scenarios."
-            )
+            self.scenario_hint.setText("Optionally select configured smoke scenarios.")
         elif mode is ValidationMode.CHECKPOINT:
-            self.mode_combo.setToolTip(
-                "Validate a declared project subsystem."
-            )
-            self.scenario_hint.setText(
-                "Scenario choices are limited by the selected checkpoint."
-            )
+            self.mode_combo.setToolTip("Validate a declared project subsystem.")
+            self.scenario_hint.setText("Scenario choices are limited by the selected checkpoint.")
         elif mode is ValidationMode.RELEASE:
-            self.mode_combo.setToolTip(
-                "Evaluate every declared release criterion."
-            )
-            self.scenario_hint.setText(
-                "The required release scenario set is read-only."
-            )
+            self.mode_combo.setToolTip("Evaluate every declared release criterion.")
+            self.scenario_hint.setText("The required release scenario set is read-only.")
         else:
-            self.mode_combo.setToolTip(
-                "Collect broad evidence for difficult failures."
-            )
+            self.mode_combo.setToolTip("Collect broad evidence for difficult failures.")
             self.scenario_hint.setText(
                 "Select optional scenarios or leave the filter empty for resolved defaults."
             )
@@ -1201,9 +1055,7 @@ class ValidationPanel(QWidget):
 
     @Slot(bool)
     def _update_scan_only_notice(self, checked: bool) -> None:
-        self.scan_only_notice.setVisible(
-            checked and self.mode() is ValidationMode.DIAGNOSTIC
-        )
+        self.scan_only_notice.setVisible(checked and self.mode() is ValidationMode.DIAGNOSTIC)
 
     def _refresh_validation(
         self,
@@ -1229,11 +1081,7 @@ class ValidationPanel(QWidget):
 
         lines: list[str] = []
         for issue in result.issues:
-            prefix = (
-                "Error"
-                if issue.severity is LocalIssueSeverity.ERROR
-                else "Warning"
-            )
+            prefix = "Error" if issue.severity is LocalIssueSeverity.ERROR else "Warning"
             lines.append(f"{prefix}: {issue.message}")
             widget = self._field_widget(issue.field)
             if widget is not None:
@@ -1382,14 +1230,8 @@ def _freeze_checkpoint_scenarios(
     if not isinstance(values, Mapping):
         raise TypeError("checkpoint_scenarios must be a mapping")
 
-    known_checkpoints = {
-        choice.identifier
-        for choice in checkpoints
-    }
-    known_scenarios = {
-        choice.identifier
-        for choice in scenarios
-    }
+    known_checkpoints = {choice.identifier for choice in checkpoints}
+    known_scenarios = {choice.identifier for choice in scenarios}
     prepared: dict[str, tuple[str, ...]] = {}
 
     for checkpoint_id, scenario_ids in values.items():
@@ -1399,8 +1241,7 @@ def _freeze_checkpoint_scenarios(
         )
         if checked_checkpoint not in known_checkpoints:
             raise ValueError(
-                f"checkpoint_scenarios contains unknown checkpoint "
-                f"{checked_checkpoint!r}"
+                f"checkpoint_scenarios contains unknown checkpoint {checked_checkpoint!r}"
             )
         checked_scenarios = _identifier_tuple(
             scenario_ids,
@@ -1410,8 +1251,7 @@ def _freeze_checkpoint_scenarios(
         if unknown:
             rendered = ", ".join(sorted(unknown))
             raise ValueError(
-                f"checkpoint {checked_checkpoint!r} contains unknown "
-                f"scenario IDs: {rendered}"
+                f"checkpoint {checked_checkpoint!r} contains unknown scenario IDs: {rendered}"
             )
         prepared[checked_checkpoint] = checked_scenarios
 
@@ -1438,6 +1278,16 @@ def _identifier_tuple(
         seen.add(checked)
         prepared.append(checked)
     return tuple(prepared)
+
+
+def _set_combo_item_enabled(combo: QComboBox, index: int, enabled: bool) -> None:
+    model = combo.model()
+    if not isinstance(model, QStandardItemModel):
+        raise TypeError("QComboBox must use a QStandardItemModel")
+    item = model.item(index)
+    if item is None:
+        raise IndexError(f"combo item {index} does not exist")
+    item.setEnabled(enabled)
 
 
 def _required_text(value: object, *, field: str) -> str:
@@ -1493,9 +1343,7 @@ def _optional_positive_int(
     if type(value) is not int:
         raise TypeError(f"{field} must be int or None")
     if value < 1 or value > maximum:
-        raise ValueError(
-            f"{field} must be between 1 and {maximum}"
-        )
+        raise ValueError(f"{field} must be between 1 and {maximum}")
     return value
 
 

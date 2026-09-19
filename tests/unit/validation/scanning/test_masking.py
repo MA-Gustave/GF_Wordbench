@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from typing import cast
 
 import pytest
 
 from gf_wordbench.validation.scanning.masking import (
-    MaskKind,
     MaskedSpan,
     MaskingIssue,
     MaskingIssueKind,
+    MaskKind,
     SourceViews,
     build_source_views,
     mask_comments,
@@ -60,9 +61,7 @@ def test_line_comment_after_code_masks_to_physical_line_end() -> None:
 
     views = build_source_views(source)
 
-    assert views.comment_stripped == (
-        "oper x = y ;                 \noper z = q ;\n"
-    )
+    assert views.comment_stripped == ("oper x = y ;                 \noper z = q ;\n")
     assert views.string_masked == views.comment_stripped
     _assert_aligned(source, views.comment_stripped, views.string_masked)
 
@@ -134,9 +133,7 @@ def test_nested_block_comment_markers_are_supported() -> None:
     assert views.comment_stripped == "a                                b"
     assert views.string_masked == views.comment_stripped
     span = _only_span(views)
-    assert source[span.start_offset : span.end_offset] == (
-        "{- outer {- nested -} outer -}"
-    )
+    assert source[span.start_offset : span.end_offset] == ("{- outer {- nested -} outer -}")
     assert span.terminated is True
 
 
@@ -183,12 +180,8 @@ def test_backslash_escape_does_not_close_string_early() -> None:
         MaskKind.LINE_COMMENT,
     ]
     string_span, comment_span = views.spans
-    assert source[string_span.start_offset : string_span.end_offset] == (
-        '"a \\" quoted -- text"'
-    )
-    assert source[comment_span.start_offset : comment_span.end_offset] == (
-        "-- comment"
-    )
+    assert source[string_span.start_offset : string_span.end_offset] == ('"a \\" quoted -- text"')
+    assert source[comment_span.start_offset : comment_span.end_offset] == ("-- comment")
     assert views.issues == ()
 
 
@@ -199,9 +192,7 @@ def test_gf_doubled_quotes_keep_one_coherent_string_span() -> None:
 
     span = _only_span(views)
     assert span.kind is MaskKind.STRING
-    assert source[span.start_offset : span.end_offset] == (
-        '"case x of { ""a"" => y }"'
-    )
+    assert source[span.start_offset : span.end_offset] == ('"case x of { ""a"" => y }"')
     assert "case" not in views.string_masked
     assert "=>" not in views.string_masked
     assert views.issues == ()
@@ -360,8 +351,8 @@ def test_source_views_reject_overlapping_or_out_of_bounds_spans() -> None:
 
 def test_masked_span_validates_coordinates_and_types() -> None:
     with pytest.raises(TypeError, match="kind must be a MaskKind"):
-        MaskedSpan(  # type: ignore[arg-type]
-            kind="string",
+        MaskedSpan(
+            kind=cast(MaskKind, "string"),
             start_offset=0,
             end_offset=1,
             start_line=1,

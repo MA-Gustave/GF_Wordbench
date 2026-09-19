@@ -20,16 +20,18 @@ from gf_wordbench.config.precedence import (
     ConfigurationDomain,
     ConfigurationSource,
     PrecedencePolicy,
+    PrecedenceResolution,
     policy_for,
     resolve_precedence,
 )
+from gf_wordbench.kernel.ids import validate_project_id, validate_scenario_id
 from gf_wordbench.kernel.serialization import ProducerInfo
 from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
 from gf_wordbench.projects.models import (
-    GFProjectConfig,
-    ModuleTargets,
     PROJECT_SCHEMA_ID,
     PROJECT_SCHEMA_VERSION,
+    GFProjectConfig,
+    ModuleTargets,
     ProjectConfig,
     ProjectIdentity,
     SourceConfig,
@@ -80,7 +82,7 @@ def _project(tmp_path: Path) -> ProjectConfig:
         schema_id=PROJECT_SCHEMA_ID,
         schema_version=PROJECT_SCHEMA_VERSION,
         identity=ProjectIdentity(
-            id="example",
+            id=validate_project_id("example"),
             name="Example Language",
             language_code="ex",
             root=Path("."),
@@ -100,8 +102,8 @@ def _project(tmp_path: Path) -> ProjectConfig:
             checkpoints=(Path("MorphologyEx.gf"),),
         ),
         validation=ValidationPolicy(
-            required_scenarios=("smoke",),
-            optional_scenarios=("regression",),
+            required_scenarios=(validate_scenario_id("smoke"),),
+            optional_scenarios=(validate_scenario_id("regression"),),
             release_requires_pgf=True,
         ),
         project_file=project_root / "project.toml",
@@ -129,13 +131,10 @@ def _request(
 
 
 def _provenance(
-    result: object,
+    result: PrecedenceResolution,
 ) -> dict[str, ConfigurationSource]:
-    records = getattr(result, "provenance")
-    return {
-        record.field_path: record.source
-        for record in records
-    }
+    records = result.provenance
+    return {record.field_path: record.source for record in records}
 
 
 def test_policy_registry_is_read_only_and_complete() -> None:
@@ -341,18 +340,9 @@ def test_application_state_outranks_framework_defaults_for_run_options(
 
     provenance = _provenance(result)
     assert provenance["max_files"] is ConfigurationSource.APPLICATION_STATE
-    assert (
-        provenance["keep_ok_details"]
-        is ConfigurationSource.APPLICATION_STATE
-    )
-    assert (
-        provenance["diff_previous"]
-        is ConfigurationSource.APPLICATION_STATE
-    )
-    assert (
-        provenance["evidence_level"]
-        is ConfigurationSource.APPLICATION_STATE
-    )
+    assert provenance["keep_ok_details"] is ConfigurationSource.APPLICATION_STATE
+    assert provenance["diff_previous"] is ConfigurationSource.APPLICATION_STATE
+    assert provenance["evidence_level"] is ConfigurationSource.APPLICATION_STATE
 
 
 def test_equal_tier_equal_values_are_accepted_deterministically(
@@ -375,10 +365,7 @@ def test_equal_tier_equal_values_are_accepted_deterministically(
     assert result.issues == ()
     assert result.values is not None
     assert result.values.timeout_sec == 25
-    assert (
-        _provenance(result)["timeout_sec"]
-        is ConfigurationSource.CLI
-    )
+    assert _provenance(result)["timeout_sec"] is ConfigurationSource.CLI
 
 
 def test_equal_tier_conflicts_fail_closed(tmp_path: Path) -> None:
@@ -534,10 +521,7 @@ def test_project_owned_selection_is_copied_without_surface_override(
     assert result.values.selected_entrypoints == project.modules.entrypoints
     assert result.values.selected_checkpoints == project.modules.checkpoints
     assert result.values.selected_scenarios == project.validation.all_scenarios
-    assert (
-        result.values.release_requires_pgf
-        is project.validation.release_requires_pgf
-    )
+    assert result.values.release_requires_pgf is project.validation.release_requires_pgf
 
     provenance = _provenance(result)
     for field_path in (
@@ -546,16 +530,13 @@ def test_project_owned_selection_is_copied_without_surface_override(
         "selected_scenarios",
         "release_requires_pgf",
     ):
-        assert (
-            provenance[field_path]
-            is ConfigurationSource.PROJECT_TOML
-        )
+        assert provenance[field_path] is ConfigurationSource.PROJECT_TOML
 
 
 def test_candidate_mappings_are_frozen_on_request_creation(
     tmp_path: Path,
 ) -> None:
-    raw = {
+    raw: dict[ConfigurationSource, dict[str, object]] = {
         ConfigurationSource.CLI: {
             "timeout_sec": 10,
         }
@@ -564,9 +545,7 @@ def test_candidate_mappings_are_frozen_on_request_creation(
 
     raw[ConfigurationSource.CLI]["timeout_sec"] = 99
 
-    assert request.candidates_by_source[ConfigurationSource.CLI][
-        "timeout_sec"
-    ] == 10
+    assert request.candidates_by_source[ConfigurationSource.CLI]["timeout_sec"] == 10
 
     with pytest.raises(TypeError):
         request.candidates_by_source[ConfigurationSource.CLI][  # type: ignore[index]
@@ -579,4 +558,4 @@ def test_resolver_rejects_non_request_inputs() -> None:
         TypeError,
         match="ConfigurationResolutionRequest",
     ):
-        resolve_precedence(object())  # type: ignore[arg-type]
+        resolve_precedence(object())

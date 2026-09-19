@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import json
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -30,9 +30,10 @@ from gf_wordbench.reporting.summary.markdown_writer import (
     write_summary_md,
 )
 from gf_wordbench.reporting.summary.projection import build_summary_document
+from gf_wordbench.runs.models.config import RunConfig
+from gf_wordbench.runs.models.paths import RunPaths
 from gf_wordbench.runs.models.results import RunResult, RunTotals
 from gf_wordbench.runs.paths import build_run_paths
-
 
 _REQUIRED_MARKDOWN_HEADINGS = (
     "# GF Wordbench Audit Summary",
@@ -49,18 +50,18 @@ _REQUIRED_MARKDOWN_HEADINGS = (
 class _WriterRunPaths:
     """Expose canonical paths plus the locked writer compatibility names."""
 
-    canonical: object
+    canonical: RunPaths
 
     def __getattr__(self, name: str) -> object:
         return getattr(self.canonical, name)
 
     @property
     def summary_json_path(self) -> Path:
-        return Path(getattr(self.canonical, "summary_json"))
+        return Path(self.canonical.summary_json)
 
     @property
     def summary_md_path(self) -> Path:
-        return Path(getattr(self.canonical, "summary_md"))
+        return Path(self.canonical.summary_md)
 
 
 @pytest.fixture
@@ -145,8 +146,8 @@ def completed_run_result(tmp_path: Path) -> RunResult:
         overall_status=OverallStatus.OK,
     )
     return RunResult(
-        run_config=run_config,
-        run_paths=run_paths,
+        run_config=cast(RunConfig, run_config),
+        run_paths=cast(RunPaths, run_paths),
         started_at=started_at,
         finished_at=started_at + timedelta(seconds=1),
         duration_ms=1_000,
@@ -163,7 +164,7 @@ def completed_run_result(tmp_path: Path) -> RunResult:
 def test_write_summary_document_round_trips_canonical_document(
     completed_run_result: RunResult,
 ) -> None:
-    destination = completed_run_result.run_paths.summary_json_path
+    destination = completed_run_result.run_paths.summary_json
     document = build_summary_document(completed_run_result)
     readonly_document = MappingProxyType(document)
 
@@ -198,7 +199,7 @@ def test_write_summary_document_rejects_noncanonical_filename_before_write(
 def test_write_summary_document_rejects_invalid_schema_before_write(
     completed_run_result: RunResult,
 ) -> None:
-    destination = completed_run_result.run_paths.summary_json_path
+    destination = completed_run_result.run_paths.summary_json
     document = dict(build_summary_document(completed_run_result))
     document["schema_id"] = "not-gf-wordbench"
 
@@ -212,11 +213,14 @@ def test_write_summary_document_detects_persisted_semantic_drift(
     completed_run_result: RunResult,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    destination = completed_run_result.run_paths.summary_json_path
+    destination = completed_run_result.run_paths.summary_json
     document = build_summary_document(completed_run_result)
     altered = dict(document)
-    altered["metadata"] = dict(document["metadata"])
-    altered["metadata"]["project_name"] = "Altered after persistence"
+    metadata = document["metadata"]
+    assert isinstance(metadata, dict)
+    altered_metadata = dict(metadata)
+    altered_metadata["project_name"] = "Altered after persistence"
+    altered["metadata"] = altered_metadata
 
     monkeypatch.setattr(json_writer, "read_json", lambda path: altered)
 
@@ -231,7 +235,7 @@ def test_write_summary_json_projects_to_the_run_owned_path(
 ) -> None:
     destination = write_summary_json(completed_run_result)
 
-    assert destination == completed_run_result.run_paths.summary_json_path
+    assert destination == completed_run_result.run_paths.summary_json
     assert read_json(destination) == build_summary_document(completed_run_result)
 
 
@@ -239,7 +243,7 @@ def test_summary_json_writer_adapter_delegates_write_and_call(
     completed_run_result: RunResult,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    destination = completed_run_result.run_paths.summary_json_path
+    destination = completed_run_result.run_paths.summary_json
     calls: list[RunResult] = []
 
     def fake_write(run_result: RunResult) -> Path:
@@ -259,9 +263,7 @@ def test_summary_json_writer_adapter_delegates_write_and_call(
     [
         SimpleNamespace(),
         SimpleNamespace(run_paths=SimpleNamespace()),
-        SimpleNamespace(
-            run_paths=SimpleNamespace(summary_json_path=Path("other.json"))
-        ),
+        SimpleNamespace(run_paths=SimpleNamespace(summary_json_path=Path("other.json"))),
     ],
 )
 def test_write_summary_json_requires_the_canonical_writer_path(
@@ -315,7 +317,7 @@ def test_build_summary_md_is_deterministic_and_read_only(
 def test_build_summary_md_sanitizes_untrusted_warning_text(
     completed_run_result: RunResult,
 ) -> None:
-    completed_run_result.run_config.compatibility_warnings = (
+    cast(Any, completed_run_result.run_config).compatibility_warnings = (
         "\x1b[31munsafe|<tag>\x00\nignored second line",
     )
 
@@ -334,7 +336,7 @@ def test_write_summary_md_writes_utf8_lf_and_returns_owned_path(
 ) -> None:
     destination = write_summary_md(completed_run_result)
 
-    assert destination == completed_run_result.run_paths.summary_md_path
+    assert destination == completed_run_result.run_paths.summary_md
     assert destination.name == SUMMARY_MARKDOWN_FILENAME
     payload = destination.read_bytes()
     assert b"\r\n" not in payload
@@ -345,22 +347,20 @@ def test_write_summary_md_writes_utf8_lf_and_returns_owned_path(
 def test_write_summary_md_replaces_an_existing_report_atomically(
     completed_run_result: RunResult,
 ) -> None:
-    destination = completed_run_result.run_paths.summary_md_path
+    destination = completed_run_result.run_paths.summary_md
     destination.write_text("obsolete\n", encoding="utf-8")
 
     written = write_summary_md(completed_run_result)
 
     assert written == destination
-    assert destination.read_text(encoding="utf-8").startswith(
-        "# GF Wordbench Audit Summary\n"
-    )
+    assert destination.read_text(encoding="utf-8").startswith("# GF Wordbench Audit Summary\n")
     assert not any(destination.parent.glob(f".{destination.name}.*.tmp"))
 
 
 def test_build_failure_preserves_an_existing_markdown_report(
     completed_run_result: RunResult,
 ) -> None:
-    destination = completed_run_result.run_paths.summary_md_path
+    destination = completed_run_result.run_paths.summary_md
     destination.write_text("previous valid report\n", encoding="utf-8")
     completed_run_result.overall_status = OverallStatus.FAIL
 
@@ -374,9 +374,9 @@ def test_write_summary_md_rejects_a_destination_outside_the_run_directory(
     completed_run_result: RunResult,
     tmp_path: Path,
 ) -> None:
-    canonical = completed_run_result.run_paths.canonical
+    canonical = cast(_WriterRunPaths, completed_run_result.run_paths).canonical
     outside = tmp_path / SUMMARY_MARKDOWN_FILENAME
-    completed_run_result.run_paths = SimpleNamespace(
+    completed_run_result.run_paths = cast(RunPaths, SimpleNamespace(
         run_id=canonical.run_id,
         run_dir=canonical.run_dir,
         summary_json=canonical.summary_json,
@@ -396,7 +396,7 @@ def test_write_summary_md_rejects_a_destination_outside_the_run_directory(
         gfo_dir=canonical.gfo_dir,
         out_dir=canonical.out_dir,
         pgf_dir=canonical.pgf_dir,
-    )
+    ))
 
     with pytest.raises(PathContainmentError):
         write_summary_md(completed_run_result)

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Generic, Literal, TypeAlias, TypeVar
@@ -222,9 +222,7 @@ def index_comparable_subjects(
 
     for position, subject in enumerate(run_subjects):
         if not isinstance(subject, RunComparableSubject):
-            raise TypeError(
-                f"run_subjects[{position}] must be a RunComparableSubject"
-            )
+            raise TypeError(f"run_subjects[{position}] must be a RunComparableSubject")
         _insert_subject(
             index,
             subject,
@@ -232,25 +230,23 @@ def index_comparable_subjects(
             case_sensitive_paths=case_sensitive,
         )
 
-    for position, result in enumerate(run_result.file_results):
-        if not isinstance(result, FileResult):
+    for position, file_result in enumerate(run_result.file_results):
+        if not isinstance(file_result, FileResult):
             raise TypeError(f"file_results[{position}] must be a FileResult")
         _insert_subject(
             index,
-            result,
-            file_subject_identity(result, source_root=source_root),
+            file_result,
+            file_subject_identity(file_result, source_root=source_root),
             case_sensitive_paths=case_sensitive,
         )
 
-    for position, result in enumerate(run_result.scenario_results):
-        if not isinstance(result, ScenarioResult):
-            raise TypeError(
-                f"scenario_results[{position}] must be a ScenarioResult"
-            )
+    for position, scenario_result in enumerate(run_result.scenario_results):
+        if not isinstance(scenario_result, ScenarioResult):
+            raise TypeError(f"scenario_results[{position}] must be a ScenarioResult")
         _insert_subject(
             index,
-            result,
-            scenario_subject_identity(result),
+            scenario_result,
+            scenario_subject_identity(scenario_result),
             case_sensitive_paths=case_sensitive,
         )
 
@@ -295,16 +291,8 @@ def match_comparable_subjects(
         matches.append(
             SubjectMatch(
                 identity=identity,
-                previous=(
-                    previous_item.subject
-                    if previous_item is not None
-                    else None
-                ),
-                current=(
-                    current_item.subject
-                    if current_item is not None
-                    else None
-                ),
+                previous=(previous_item.subject if previous_item is not None else None),
+                current=(current_item.subject if current_item is not None else None),
             )
         )
     return tuple(matches)
@@ -393,9 +381,7 @@ def _source_root(run_result: RunResult) -> Path:
     try:
         source_root = run_result.run_config.source_root
     except AttributeError as exc:
-        raise SubjectMatchingError(
-            "run_result.run_config.source_root is required"
-        ) from exc
+        raise SubjectMatchingError("run_result.run_config.source_root is required") from exc
     if not isinstance(source_root, Path):
         raise TypeError("source_root must be a Path")
     return normalize_environment_path(
@@ -413,9 +399,13 @@ def _resolve_case_policy(value: bool | None) -> bool:
 
 
 def _require_subject_kind(value: object) -> SubjectKind:
-    if value not in _SUBJECT_KIND_ORDER:
-        raise ValueError(f"unsupported subject kind: {value!r}")
-    return value
+    if value == "run":
+        return "run"
+    if value == "file":
+        return "file"
+    if value == "scenario":
+        return "scenario"
+    raise ValueError(f"unsupported subject kind: {value!r}")
 
 
 def _require_subject_id(value: object, *, field: str) -> str:
@@ -432,9 +422,7 @@ def _require_run_subject_id(value: object) -> str:
     subject_id = _require_subject_id(value, field="run subject ID")
     if subject_id not in _DOCUMENTED_RUN_SUBJECT_IDS:
         supported = ", ".join(sorted(_DOCUMENTED_RUN_SUBJECT_IDS))
-        raise ValueError(
-            f"unsupported run subject ID {subject_id!r}; expected one of {supported}"
-        )
+        raise ValueError(f"unsupported run subject ID {subject_id!r}; expected one of {supported}")
     return subject_id
 
 

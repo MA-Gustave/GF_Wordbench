@@ -19,7 +19,7 @@ from gf_wordbench.diagnostics.models import (
 )
 from gf_wordbench.diagnostics.parsing.service import parse_diagnostics
 
-__all__ = [
+__all__ = (
     "DEFAULT_TOP_ERROR_POLICY",
     "DiagnosticEvidence",
     "DiagnosticParseResult",
@@ -30,4 +30,4 @@ __all__ = [
     "classify_file_results",
     "classify_scenario_results",
     "parse_diagnostics",
-]
+)

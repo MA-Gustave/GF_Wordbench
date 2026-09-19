@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -61,10 +61,7 @@ def test_process_preserves_order_and_argument_boundaries(
         "$(not-a-command)",
         "%NOT_EXPANDED%",
     ]
-    probe = (
-        "import json, sys; "
-        "print(json.dumps(sys.argv[1:], ensure_ascii=False))"
-    )
+    probe = "import json, sys; print(json.dumps(sys.argv[1:], ensure_ascii=False))"
     request = _request(
         tmp_path,
         args=("-c", probe, *expected),
@@ -79,9 +76,7 @@ def test_process_preserves_order_and_argument_boundaries(
     assert result.cwd == request.cwd
     assert result.stderr_path.read_bytes() == b""
 
-    observed = json.loads(
-        result.stdout_path.read_text(encoding="utf-8")
-    )
+    observed = json.loads(result.stdout_path.read_text(encoding="utf-8"))
     assert observed == expected
 
 
@@ -90,10 +85,7 @@ def test_shell_metacharacters_are_literal_and_cannot_inject_a_command(
 ) -> None:
     marker = tmp_path / "injected.txt"
     attempted_injection = f"; echo injected > {marker}"
-    probe = (
-        "import json, sys; "
-        "print(json.dumps(sys.argv[1:], ensure_ascii=False))"
-    )
+    probe = "import json, sys; print(json.dumps(sys.argv[1:], ensure_ascii=False))"
     request = _request(
         tmp_path,
         args=("-c", probe, attempted_injection),
@@ -103,9 +95,7 @@ def test_shell_metacharacters_are_literal_and_cannot_inject_a_command(
 
     assert result.execution_state is ExecutionState.COMPLETED
     assert result.exit_code == 0
-    assert json.loads(
-        result.stdout_path.read_text(encoding="utf-8")
-    ) == [attempted_injection]
+    assert json.loads(result.stdout_path.read_text(encoding="utf-8")) == [attempted_injection]
     assert not marker.exists()
 
 
@@ -113,10 +103,7 @@ def test_display_redaction_does_not_change_executed_arguments(
     tmp_path: Path,
 ) -> None:
     secret = "token with spaces & metacharacters"
-    probe = (
-        "import json, sys; "
-        "print(json.dumps(sys.argv[1:], ensure_ascii=False))"
-    )
+    probe = "import json, sys; print(json.dumps(sys.argv[1:], ensure_ascii=False))"
     request = _request(
         tmp_path,
         args=("-c", probe, "--token", secret),
@@ -134,9 +121,7 @@ def test_display_redaction_does_not_change_executed_arguments(
     assert secret not in display
     assert request.args[3] == secret
     assert result.args[3] == secret
-    assert json.loads(
-        result.stdout_path.read_text(encoding="utf-8")
-    ) == ["--token", secret]
+    assert json.loads(result.stdout_path.read_text(encoding="utf-8")) == ["--token", secret]
 
 
 @pytest.mark.parametrize(

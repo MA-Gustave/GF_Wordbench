@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path, PureWindowsPath
+import re
 from typing import Final
 
 from gf_wordbench.kernel.ids import (
@@ -16,7 +16,6 @@ from gf_wordbench.kernel.ids import (
     validate_scenario_id,
     validate_schema_id,
 )
-
 
 PROJECT_SCHEMA_ID: Final[SchemaId] = validate_schema_id("gf-wordbench.project")
 PROJECT_SCHEMA_VERSION: Final[str] = "1.0"
@@ -162,15 +161,10 @@ class ValidationPolicy:
         overlap = set(required).intersection(optional)
         if overlap:
             duplicated = ", ".join(sorted(overlap))
-            raise ValueError(
-                "Scenario IDs cannot be both required and optional: "
-                f"{duplicated}."
-            )
+            raise ValueError(f"Scenario IDs cannot be both required and optional: {duplicated}.")
 
         if not isinstance(self.release_requires_pgf, bool):
-            raise TypeError(
-                "validation.release_requires_pgf must be a boolean."
-            )
+            raise TypeError("validation.release_requires_pgf must be a boolean.")
 
         object.__setattr__(self, "required_scenarios", required)
         object.__setattr__(self, "optional_scenarios", optional)
@@ -201,8 +195,7 @@ class ProjectConfig:
         schema_id = validate_schema_id(self.schema_id)
         if schema_id != PROJECT_SCHEMA_ID:
             raise ValueError(
-                f"Unsupported project schema ID {schema_id!r}; "
-                f"expected {PROJECT_SCHEMA_ID!r}."
+                f"Unsupported project schema ID {schema_id!r}; expected {PROJECT_SCHEMA_ID!r}."
             )
 
         _require_exact_text(
@@ -236,13 +229,10 @@ class ProjectConfig:
         expected_project_file = project_root / PROJECT_CONFIG_FILENAME
         if project_file != expected_project_file:
             raise ValueError(
-                "project_file must be exactly project_root/project.toml; "
-                f"got {project_file!s}."
+                f"project_file must be exactly project_root/project.toml; got {project_file!s}."
             )
 
-        expected_source_root = _lexically_normalize(
-            project_root / self.sources.directory
-        )
+        expected_source_root = _lexically_normalize(project_root / self.sources.directory)
         if source_root != expected_source_root:
             raise ValueError(
                 "source_root must equal project_root / sources.directory; "
@@ -375,17 +365,12 @@ def _require_instance(
     field: str,
 ) -> None:
     if not isinstance(value, expected):
-        raise TypeError(
-            f"{field} must be {expected.__name__}, "
-            f"got {type(value).__name__}."
-        )
+        raise TypeError(f"{field} must be {expected.__name__}, got {type(value).__name__}.")
 
 
 def _require_tuple(value: object, *, field: str) -> tuple[object, ...]:
     if not isinstance(value, tuple):
-        raise TypeError(
-            f"{field} must be a tuple, got {type(value).__name__}."
-        )
+        raise TypeError(f"{field} must be a tuple, got {type(value).__name__}.")
     return value
 
 
@@ -412,19 +397,13 @@ def _require_single_line_text(
     allow_empty: bool,
 ) -> str:
     if not isinstance(value, str):
-        raise TypeError(
-            f"{field} must be a string, got {type(value).__name__}."
-        )
+        raise TypeError(f"{field} must be a string, got {type(value).__name__}.")
     if not allow_empty and not value:
         raise ValueError(f"{field} must not be empty.")
     if value != value.strip():
-        raise ValueError(
-            f"{field} must not contain leading or trailing whitespace."
-        )
+        raise ValueError(f"{field} must not contain leading or trailing whitespace.")
     if "\x00" in value or "\r" in value or "\n" in value:
-        raise ValueError(
-            f"{field} must be a single-line string without NUL bytes."
-        )
+        raise ValueError(f"{field} must be a single-line string without NUL bytes.")
     return value
 
 
@@ -440,9 +419,7 @@ def _require_exact_text(
         allow_empty=False,
     )
     if text != expected:
-        raise ValueError(
-            f"Unsupported {field} {text!r}; expected {expected!r}."
-        )
+        raise ValueError(f"Unsupported {field} {text!r}; expected {expected!r}.")
     return text
 
 
@@ -453,9 +430,7 @@ def _require_language_code(value: object) -> str:
         allow_unicode=False,
     )
     if "/" in code or "\\" in code:
-        raise ValueError(
-            "project.language_code must not contain a path separator."
-        )
+        raise ValueError("project.language_code must not contain a path separator.")
     return code
 
 
@@ -478,46 +453,29 @@ def _require_relative_path(
     """
 
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field} must be pathlib.Path, got {type(value).__name__}."
-        )
+        raise TypeError(f"{field} must be pathlib.Path, got {type(value).__name__}.")
 
     text = value.as_posix()
     if not text or "\x00" in text:
-        raise ValueError(
-            f"{field} must not be empty or contain NUL bytes."
-        )
+        raise ValueError(f"{field} must not be empty or contain NUL bytes.")
 
     portable = PureWindowsPath(text)
-    if (
-        value.is_absolute()
-        or portable.is_absolute()
-        or bool(portable.drive)
-        or bool(portable.root)
-    ):
-        raise ValueError(
-            f"{field} must be project-relative, got {text!r}."
-        )
+    if value.is_absolute() or portable.is_absolute() or bool(portable.drive) or bool(portable.root):
+        raise ValueError(f"{field} must be project-relative, got {text!r}.")
 
     parts = portable.parts
     if any(part == ".." for part in parts):
-        raise ValueError(
-            f"{field} must not contain parent traversal ('..')."
-        )
+        raise ValueError(f"{field} must not contain parent traversal ('..').")
 
     normalized = Path(*parts) if parts else Path(".")
     if not allow_dot and normalized == Path("."):
-        raise ValueError(
-            f"{field} must identify a non-root relative path."
-        )
+        raise ValueError(f"{field} must identify a non-root relative path.")
     return normalized
 
 
 def _require_absolute_path(value: object, *, field: str) -> Path:
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field} must be pathlib.Path, got {type(value).__name__}."
-        )
+        raise TypeError(f"{field} must be pathlib.Path, got {type(value).__name__}.")
     if "\x00" in str(value):
         raise ValueError(f"{field} must not contain NUL bytes.")
     if not value.is_absolute():
@@ -525,9 +483,7 @@ def _require_absolute_path(value: object, *, field: str) -> Path:
 
     normalized = _lexically_normalize(value)
     if any(part == ".." for part in normalized.parts):
-        raise ValueError(
-            f"{field} must not contain unresolved parent traversal."
-        )
+        raise ValueError(f"{field} must not contain unresolved parent traversal.")
     return normalized
 
 
@@ -544,21 +500,13 @@ def _require_contained(
     try:
         path.relative_to(parent)
     except ValueError as exc:
-        raise ValueError(
-            f"{field} must remain inside project_root."
-        ) from exc
+        raise ValueError(f"{field} must remain inside project_root.") from exc
 
 
 def _reject_absolute_pattern(value: str, *, field: str) -> None:
     windows_path = PureWindowsPath(value)
-    if (
-        value.startswith(("/", "\\"))
-        or windows_path.is_absolute()
-        or windows_path.drive
-    ):
-        raise ValueError(
-            f"{field} must not contain an absolute path pattern."
-        )
+    if value.startswith(("/", "\\")) or windows_path.is_absolute() or windows_path.drive:
+        raise ValueError(f"{field} must not contain an absolute path pattern.")
     if "\x00" in value:
         raise ValueError(f"{field} must not contain NUL bytes.")
 
@@ -579,32 +527,22 @@ def _compile_regex(
     try:
         return re.compile(text)
     except re.error as exc:
-        raise ValueError(
-            f"Invalid {field} regular expression: {exc}."
-        ) from exc
+        raise ValueError(f"Invalid {field} regular expression: {exc}.") from exc
 
 
 def _require_path_part(value: object, *, field: str) -> str:
     text = _require_non_empty_text(value, field=field)
     if "\\" in text:
-        raise ValueError(
-            f"{field} must use canonical '/' separators."
-        )
+        raise ValueError(f"{field} must use canonical '/' separators.")
 
     windows_path = PureWindowsPath(text)
     path = Path(text)
     if path.is_absolute() or windows_path.is_absolute() or windows_path.drive:
-        raise ValueError(
-            f"{field} must not contain a machine-local absolute path."
-        )
+        raise ValueError(f"{field} must not contain a machine-local absolute path.")
     if "$" in text or "%" in text:
-        raise ValueError(
-            f"{field} must not embed environment-variable syntax."
-        )
+        raise ValueError(f"{field} must not embed environment-variable syntax.")
     if any(part == ".." for part in path.parts):
-        raise ValueError(
-            f"{field} must not contain parent traversal ('..')."
-        )
+        raise ValueError(f"{field} must not contain parent traversal ('..').")
     return text
 
 
@@ -629,9 +567,7 @@ def _validate_module_paths(
 
         key = path.as_posix()
         if key in seen:
-            raise ValueError(
-                f"{field} contains duplicate path {key!r}."
-            )
+            raise ValueError(f"{field} contains duplicate path {key!r}.")
 
         seen.add(key)
         validated.append(path)
@@ -654,10 +590,7 @@ def _validate_scenario_ids(
             field=f"{field}[{index}]",
         )
         if scenario_id in seen:
-            raise ValueError(
-                f"{field} contains duplicate scenario ID "
-                f"{scenario_id!r}."
-            )
+            raise ValueError(f"{field} contains duplicate scenario ID {scenario_id!r}.")
 
         seen.add(scenario_id)
         validated.append(scenario_id)
@@ -666,11 +599,11 @@ def _validate_scenario_ids(
 
 
 __all__ = (
-    "GFProjectConfig",
-    "ModuleTargets",
     "PROJECT_CONFIG_FILENAME",
     "PROJECT_SCHEMA_ID",
     "PROJECT_SCHEMA_VERSION",
+    "GFProjectConfig",
+    "ModuleTargets",
     "ProjectCheckScope",
     "ProjectConfig",
     "ProjectDiagnostic",

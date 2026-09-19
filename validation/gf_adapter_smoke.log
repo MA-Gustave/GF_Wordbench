@@ -1,0 +1,2 @@
+GF adapter smoke: PASS
+Covered canonical VersionProbePayload and ModuleCompilePayload translation through FakeProcessRunner.

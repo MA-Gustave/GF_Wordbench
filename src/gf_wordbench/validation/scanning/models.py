@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
 from typing import Final, TypeVar
 
 from gf_wordbench.kernel.statuses import ErrorKind, ValidationStatus
@@ -45,15 +45,11 @@ _SCAN_RULE_ID_RE: Final[re.Pattern[str]] = re.compile(
     r"^SCAN-(?P<domain>NOTATION|RUNTIME|PATTERN|STYLE)-"
     r"(?P<number>[0-9]{3})$"
 )
-_SCAN_DIAGNOSTIC_CODE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^GF-WB-SCAN-[0-9]{3}$"
-)
+_SCAN_DIAGNOSTIC_CODE_RE: Final[re.Pattern[str]] = re.compile(r"^GF-WB-SCAN-[0-9]{3}$")
 _SCAN_RULE_SET_ID_RE: Final[re.Pattern[str]] = re.compile(
     r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*/[1-9][0-9]*$"
 )
-_SCAN_FIELD_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
+_SCAN_FIELD_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 
 _MAX_FINDINGS: Final[int] = 100_000
 _MAX_DIAGNOSTICS: Final[int] = 1_024
@@ -127,10 +123,7 @@ class ScanCounts:
 
     @property
     def total(self) -> int:
-        return sum(
-            getattr(self, field_name)
-            for field_name in SCAN_COUNT_FIELDS
-        )
+        return sum(getattr(self, field_name) for field_name in SCAN_COUNT_FIELDS)
 
     @property
     def has_findings(self) -> bool:
@@ -138,7 +131,15 @@ class ScanCounts:
 
     def count_for(self, field_name: str) -> int:
         normalized = _validate_count_field_name(field_name)
-        return getattr(self, normalized)
+        counts = {
+            "single_slash_eq": self.single_slash_eq,
+            "double_slash_dash": self.double_slash_dash,
+            "runtime_str_match": self.runtime_str_match,
+            "untyped_case_str_pat": self.untyped_case_str_pat,
+            "untyped_table_str_pat": self.untyped_table_str_pat,
+            "trailing_spaces": self.trailing_spaces,
+        }
+        return counts[normalized]
 
     def as_tuple(self) -> tuple[tuple[str, int], ...]:
         return tuple(
@@ -160,10 +161,7 @@ class ScanCounts:
             field="amount",
             minimum=0,
         )
-        values = {
-            name: getattr(self, name)
-            for name in SCAN_COUNT_FIELDS
-        }
+        values = {name: getattr(self, name) for name in SCAN_COUNT_FIELDS}
         values[normalized] += increment
         return ScanCounts(**values)
 
@@ -175,10 +173,7 @@ class ScanCounts:
             raise TypeError("other must be a ScanCounts")
         return ScanCounts(
             **{
-                field_name: (
-                    getattr(self, field_name)
-                    + getattr(other, field_name)
-                )
+                field_name: (getattr(self, field_name) + getattr(other, field_name))
                 for field_name in SCAN_COUNT_FIELDS
             }
         )
@@ -195,9 +190,7 @@ class ScanRuleDefinition:
 
     def __post_init__(self) -> None:
         rule_id = validate_scan_rule_id(self.rule_id)
-        count_field = _validate_count_field_name(
-            self.count_field
-        )
+        count_field = _validate_count_field_name(self.count_field)
         count_unit = _require_enum(
             self.count_unit,
             ScanCountUnit,
@@ -246,9 +239,7 @@ class ScanRuleDefinition:
     def domain(self) -> ScanRuleDomain:
         match = _SCAN_RULE_ID_RE.fullmatch(self.rule_id)
         if match is None:
-            raise AssertionError(
-                "validated scan rule ID no longer matches"
-            )
+            raise AssertionError("validated scan rule ID no longer matches")
         return ScanRuleDomain(match.group("domain"))
 
 
@@ -266,9 +257,7 @@ class ScanFinding:
 
     def __post_init__(self) -> None:
         rule_id = validate_scan_rule_id(self.rule_id)
-        count_field = _validate_count_field_name(
-            self.count_field
-        )
+        count_field = _validate_count_field_name(self.count_field)
         source_path = _normalize_project_relative_source_path(
             self.source_path,
             field="source_path",
@@ -304,19 +293,14 @@ class ScanFinding:
         )
 
         if end_column is not None and start_column is None:
-            raise ValueError(
-                "end_column requires start_column"
-            )
+            raise ValueError("end_column requires start_column")
         if (
             start_column is not None
             and end_column is not None
             and start_line == end_line
             and end_column < start_column
         ):
-            raise ValueError(
-                "end_column must not precede start_column "
-                "on the same line"
-            )
+            raise ValueError("end_column must not precede start_column on the same line")
 
         object.__setattr__(self, "rule_id", rule_id)
         object.__setattr__(
@@ -402,9 +386,7 @@ class ScanDiagnostic:
         )
 
         if self.fatal and error_kind is ErrorKind.OK:
-            raise ValueError(
-                "a fatal diagnostic must not use ErrorKind.OK"
-            )
+            raise ValueError("a fatal diagnostic must not use ErrorKind.OK")
 
         object.__setattr__(self, "code", code)
         object.__setattr__(
@@ -447,9 +429,7 @@ class StaticScanRequest:
             self.source_location,
             field="source_location",
         )
-        rule_set_id = validate_scan_rule_set_id(
-            self.rule_set_id
-        )
+        rule_set_id = validate_scan_rule_set_id(self.rule_set_id)
         encoding_policy = _require_enum(
             self.encoding_policy,
             ScanEncodingPolicy,
@@ -461,10 +441,7 @@ class StaticScanRequest:
             minimum=1,
         )
         if max_source_size > _MAX_SOURCE_SIZE:
-            raise ValueError(
-                f"max_source_size must not exceed "
-                f"{_MAX_SOURCE_SIZE} bytes"
-            )
+            raise ValueError(f"max_source_size must not exceed {_MAX_SOURCE_SIZE} bytes")
         evidence_path = _normalize_run_relative_scan_log_path(
             self.evidence_path,
             field="evidence_path",
@@ -556,9 +533,7 @@ class StaticScanResult:
             ValidationStatus,
             field="status",
         )
-        rule_set_id = validate_scan_rule_set_id(
-            self.rule_set_id
-        )
+        rule_set_id = validate_scan_rule_set_id(self.rule_set_id)
         encoding_outcome = _require_enum(
             self.encoding_outcome,
             ScanEncodingOutcome,
@@ -569,16 +544,12 @@ class StaticScanResult:
             counts,
             ScanCounts,
         ):
-            raise TypeError(
-                "counts must be a ScanCounts or None"
-            )
+            raise TypeError("counts must be a ScanCounts or None")
         findings = _normalize_findings(
             self.findings,
             source_path=source_path,
         )
-        diagnostics = _normalize_diagnostics(
-            self.diagnostics
-        )
+        diagnostics = _normalize_diagnostics(self.diagnostics)
         scan_log_path = (
             None
             if self.scan_log_path is None
@@ -619,10 +590,7 @@ class StaticScanResult:
         _validate_counts_match_findings(
             counts,
             findings,
-            completed=(
-                completion_state
-                is ScanCompletionState.COMPLETED
-            ),
+            completed=(completion_state is ScanCompletionState.COMPLETED),
         )
 
         object.__setattr__(
@@ -675,17 +643,11 @@ class StaticScanResult:
 
     @property
     def completed(self) -> bool:
-        return (
-            self.completion_state
-            is ScanCompletionState.COMPLETED
-        )
+        return self.completion_state is ScanCompletionState.COMPLETED
 
     @property
     def succeeded(self) -> bool:
-        return (
-            self.completed
-            and self.status is ValidationStatus.OK
-        )
+        return self.completed and self.status is ValidationStatus.OK
 
     @property
     def has_findings(self) -> bool:
@@ -697,11 +659,7 @@ class StaticScanResult:
 
     @property
     def fatal_diagnostics(self) -> tuple[ScanDiagnostic, ...]:
-        return tuple(
-            diagnostic
-            for diagnostic in self.diagnostics
-            if diagnostic.fatal
-        )
+        return tuple(diagnostic for diagnostic in self.diagnostics if diagnostic.fatal)
 
 
 def validate_scan_rule_id(
@@ -714,10 +672,7 @@ def validate_scan_rule_id(
         field=field,
     )
     if _SCAN_RULE_ID_RE.fullmatch(candidate) is None:
-        raise ValueError(
-            f"{field} must match "
-            "SCAN-(NOTATION|RUNTIME|PATTERN|STYLE)-NNN"
-        )
+        raise ValueError(f"{field} must match SCAN-(NOTATION|RUNTIME|PATTERN|STYLE)-NNN")
     return candidate
 
 
@@ -730,12 +685,8 @@ def validate_scan_diagnostic_code(
         value,
         field=field,
     )
-    if _SCAN_DIAGNOSTIC_CODE_RE.fullmatch(
-        candidate
-    ) is None:
-        raise ValueError(
-            f"{field} must match GF-WB-SCAN-NNN"
-        )
+    if _SCAN_DIAGNOSTIC_CODE_RE.fullmatch(candidate) is None:
+        raise ValueError(f"{field} must match GF-WB-SCAN-NNN")
     return candidate
 
 
@@ -749,10 +700,7 @@ def validate_scan_rule_set_id(
         field=field,
     )
     if _SCAN_RULE_SET_ID_RE.fullmatch(candidate) is None:
-        raise ValueError(
-            f"{field} must use a lowercase stable-name/version "
-            "identity"
-        )
+        raise ValueError(f"{field} must use a lowercase stable-name/version identity")
     return candidate
 
 
@@ -764,30 +712,18 @@ def _normalize_findings(
     if not isinstance(values, tuple):
         raise TypeError("findings must be a tuple")
     if len(values) > _MAX_FINDINGS:
-        raise ValueError(
-            "findings exceeds the bounded result limit"
-        )
+        raise ValueError("findings exceeds the bounded result limit")
 
     previous_key: tuple[str, int, int, str] | None = None
     normalized: list[ScanFinding] = []
 
     for index, finding in enumerate(values):
         if not isinstance(finding, ScanFinding):
-            raise TypeError(
-                f"findings[{index}] must be a ScanFinding"
-            )
+            raise TypeError(f"findings[{index}] must be a ScanFinding")
         if finding.source_path != source_path:
-            raise ValueError(
-                "every finding must reference the result source_path"
-            )
-        if (
-            previous_key is not None
-            and finding.sort_key < previous_key
-        ):
-            raise ValueError(
-                "findings must use deterministic rule and "
-                "source-range order"
-            )
+            raise ValueError("every finding must reference the result source_path")
+        if previous_key is not None and finding.sort_key < previous_key:
+            raise ValueError("findings must use deterministic rule and source-range order")
         previous_key = finding.sort_key
         normalized.append(finding)
 
@@ -800,16 +736,9 @@ def _normalize_diagnostics(
     if not isinstance(values, tuple):
         raise TypeError("diagnostics must be a tuple")
     if len(values) > _MAX_DIAGNOSTICS:
-        raise ValueError(
-            "diagnostics exceeds the bounded result limit"
-        )
-    if any(
-        not isinstance(value, ScanDiagnostic)
-        for value in values
-    ):
-        raise TypeError(
-            "diagnostics must contain ScanDiagnostic values"
-        )
+        raise ValueError("diagnostics exceeds the bounded result limit")
+    if any(not isinstance(value, ScanDiagnostic) for value in values):
+        raise TypeError("diagnostics must contain ScanDiagnostic values")
     return values
 
 
@@ -825,92 +754,47 @@ def _validate_result_state(
     bytes_read: int | None,
 ) -> None:
     if status is ValidationStatus.FAIL:
-        raise ValueError(
-            "static scan findings must not use FAIL status"
-        )
+        raise ValueError("static scan findings must not use FAIL status")
 
     if completion_state is ScanCompletionState.COMPLETED:
         if status is not ValidationStatus.OK:
-            raise ValueError(
-                "a completed static scan must use OK status"
-            )
+            raise ValueError("a completed static scan must use OK status")
         if counts is None:
-            raise ValueError(
-                "a completed static scan requires ScanCounts"
-            )
+            raise ValueError("a completed static scan requires ScanCounts")
         if scan_log_path is None:
-            raise ValueError(
-                "a completed static scan requires scan_log_path"
-            )
-        if (
-            encoding_outcome
-            is ScanEncodingOutcome.NOT_ATTEMPTED
-        ):
-            raise ValueError(
-                "a completed static scan requires an encoding "
-                "outcome"
-            )
-        if any(
-            diagnostic.fatal
-            for diagnostic in diagnostics
-        ):
-            raise ValueError(
-                "a completed static scan must not contain a "
-                "fatal diagnostic"
-            )
+            raise ValueError("a completed static scan requires scan_log_path")
+        if encoding_outcome is ScanEncodingOutcome.NOT_ATTEMPTED:
+            raise ValueError("a completed static scan requires an encoding outcome")
+        if any(diagnostic.fatal for diagnostic in diagnostics):
+            raise ValueError("a completed static scan must not contain a fatal diagnostic")
         if bytes_read is None:
-            raise ValueError(
-                "a completed static scan requires bytes_read"
-            )
+            raise ValueError("a completed static scan requires bytes_read")
         return
 
     if completion_state is ScanCompletionState.INCOMPLETE:
         if status is not ValidationStatus.ERROR:
-            raise ValueError(
-                "an incomplete static scan must use ERROR status"
-            )
+            raise ValueError("an incomplete static scan must use ERROR status")
         if not diagnostics:
-            raise ValueError(
-                "an incomplete static scan requires diagnostics"
-            )
+            raise ValueError("an incomplete static scan requires diagnostics")
         if not any(
-            diagnostic.fatal
-            or diagnostic.error_kind is not ErrorKind.OK
+            diagnostic.fatal or diagnostic.error_kind is not ErrorKind.OK
             for diagnostic in diagnostics
         ):
-            raise ValueError(
-                "an incomplete static scan requires an error "
-                "diagnostic"
-            )
+            raise ValueError("an incomplete static scan requires an error diagnostic")
         return
 
     if status is not ValidationStatus.SKIPPED:
-        raise ValueError(
-            "a skipped static scan must use SKIPPED status"
-        )
+        raise ValueError("a skipped static scan must use SKIPPED status")
     if counts is not None:
-        raise ValueError(
-            "a skipped static scan must not contain counts"
-        )
+        raise ValueError("a skipped static scan must not contain counts")
     if findings:
-        raise ValueError(
-            "a skipped static scan must not contain findings"
-        )
+        raise ValueError("a skipped static scan must not contain findings")
     if scan_log_path is not None:
-        raise ValueError(
-            "a skipped static scan must not claim a scan log"
-        )
-    if (
-        encoding_outcome
-        is not ScanEncodingOutcome.NOT_ATTEMPTED
-    ):
-        raise ValueError(
-            "a skipped static scan must not claim decoding"
-        )
+        raise ValueError("a skipped static scan must not claim a scan log")
+    if encoding_outcome is not ScanEncodingOutcome.NOT_ATTEMPTED:
+        raise ValueError("a skipped static scan must not claim decoding")
     if bytes_read is not None:
-        raise ValueError(
-            "a skipped static scan must not claim bytes_read"
-        )
+        raise ValueError("a skipped static scan must not claim bytes_read")
 
 
 def _validate_counts_match_findings(
@@ -921,37 +805,24 @@ def _validate_counts_match_findings(
 ) -> None:
     if counts is None:
         if completed:
-            raise ValueError(
-                "completed scan requires counts"
-            )
+            raise ValueError("completed scan requires counts")
         return
 
-    finding_counts = {
-        field_name: 0
-        for field_name in SCAN_COUNT_FIELDS
-    }
+    finding_counts = dict.fromkeys(SCAN_COUNT_FIELDS, 0)
     for finding in findings:
         finding_counts[finding.count_field] += 1
 
     if completed:
         for field_name, finding_count in finding_counts.items():
-            if (
-                getattr(counts, field_name)
-                != finding_count
-            ):
+            if getattr(counts, field_name) != finding_count:
                 raise ValueError(
-                    "completed scan counts must agree with "
-                    f"structured findings for {field_name}"
+                    f"completed scan counts must agree with structured findings for {field_name}"
                 )
     else:
         for field_name, finding_count in finding_counts.items():
-            if (
-                getattr(counts, field_name)
-                < finding_count
-            ):
+            if getattr(counts, field_name) < finding_count:
                 raise ValueError(
-                    "partial counts must not be lower than "
-                    f"recorded findings for {field_name}"
+                    f"partial counts must not be lower than recorded findings for {field_name}"
                 )
 
 
@@ -959,19 +830,12 @@ def _validate_count_field_name(
     value: object,
 ) -> str:
     if not isinstance(value, str):
-        raise TypeError(
-            "count field name must be a string"
-        )
+        raise TypeError("count field name must be a string")
     if _SCAN_FIELD_RE.fullmatch(value) is None:
-        raise ValueError(
-            "count field name must use lower_snake_case"
-        )
+        raise ValueError("count field name must use lower_snake_case")
     if value not in SCAN_COUNT_FIELDS:
         allowed = ", ".join(SCAN_COUNT_FIELDS)
-        raise ValueError(
-            f"unknown scan count field {value!r}; "
-            f"expected one of {allowed}"
-        )
+        raise ValueError(f"unknown scan count field {value!r}; expected one of {allowed}")
     return value
 
 
@@ -985,9 +849,7 @@ def _normalize_project_relative_source_path(
         field=field,
     )
     if path.suffix.casefold() != ".gf":
-        raise ValueError(
-            f"{field} must identify a .gf source file"
-        )
+        raise ValueError(f"{field} must identify a .gf source file")
     return path
 
 
@@ -1002,13 +864,9 @@ def _normalize_run_relative_scan_log_path(
     )
     parts = path.as_posix().split("/")
     if len(parts) < 3 or parts[:2] != ["raw", "scan"]:
-        raise ValueError(
-            f"{field} must be beneath raw/scan"
-        )
+        raise ValueError(f"{field} must be beneath raw/scan")
     if not path.name.endswith(".scan.txt"):
-        raise ValueError(
-            f"{field} must end in .scan.txt"
-        )
+        raise ValueError(f"{field} must end in .scan.txt")
     return path
 
 
@@ -1033,32 +891,19 @@ def _normalize_relative_path(
 
     rendered = value.as_posix()
     if not rendered or "\x00" in rendered:
-        raise ValueError(
-            f"{field} must be a non-empty safe path"
-        )
+        raise ValueError(f"{field} must be a non-empty safe path")
     if _is_absolute_path_text(rendered):
-        raise ValueError(
-            f"{field} must be relative"
-        )
+        raise ValueError(f"{field} must be relative")
 
     portable = PurePosixPath(rendered)
     if portable == PurePosixPath("."):
-        raise ValueError(
-            f"{field} must identify a file"
-        )
-    if any(
-        part in {"", ".", ".."}
-        for part in portable.parts
-    ):
-        raise ValueError(
-            f"{field} must be normalized without traversal"
-        )
+        raise ValueError(f"{field} must identify a file")
+    if any(part in {"", ".", ".."} for part in portable.parts):
+        raise ValueError(f"{field} must be normalized without traversal")
 
     normalized = Path(*portable.parts)
     if normalized.as_posix() != rendered:
-        raise ValueError(
-            f"{field} must use canonical forward slashes"
-        )
+        raise ValueError(f"{field} must use canonical forward slashes")
     return normalized
 
 
@@ -1072,25 +917,13 @@ def _normalize_absolute_path(
 
     rendered = str(value)
     if not rendered or "\x00" in rendered:
-        raise ValueError(
-            f"{field} must be a non-empty safe path"
-        )
+        raise ValueError(f"{field} must be a non-empty safe path")
     if not _is_absolute_path_text(rendered):
-        raise ValueError(
-            f"{field} must be absolute"
-        )
-    if any(
-        part == ".."
-        for part in PureWindowsPath(rendered).parts
-    ) or any(
-        part == ".."
-        for part in PurePosixPath(
-            rendered.replace("\\", "/")
-        ).parts
+        raise ValueError(f"{field} must be absolute")
+    if any(part == ".." for part in PureWindowsPath(rendered).parts) or any(
+        part == ".." for part in PurePosixPath(rendered.replace("\\", "/")).parts
     ):
-        raise ValueError(
-            f"{field} must not contain traversal"
-        )
+        raise ValueError(f"{field} must not contain traversal")
     return value
 
 
@@ -1114,9 +947,7 @@ def _normalize_ascii_identifier(
     if "\x00" in value:
         raise ValueError(f"{field} must not contain NUL")
     if not value.isascii():
-        raise ValueError(
-            f"{field} must use ASCII characters"
-        )
+        raise ValueError(f"{field} must use ASCII characters")
     return value
 
 
@@ -1134,9 +965,7 @@ def _normalize_text(
     if not normalized:
         raise ValueError(f"{field} must not be empty")
     if len(normalized) > maximum:
-        raise ValueError(
-            f"{field} must not exceed {maximum} characters"
-        )
+        raise ValueError(f"{field} must not exceed {maximum} characters")
     return normalized
 
 
@@ -1158,9 +987,7 @@ def _normalize_evidence_text(
     if not allow_empty and not normalized:
         raise ValueError(f"{field} must not be empty")
     if len(normalized) > maximum:
-        raise ValueError(
-            f"{field} must not exceed {maximum} characters"
-        )
+        raise ValueError(f"{field} must not exceed {maximum} characters")
     return normalized
 
 
@@ -1187,9 +1014,7 @@ def _require_plain_int(
     if type(value) is not int:
         raise TypeError(f"{field} must be an integer")
     if value < minimum:
-        raise ValueError(
-            f"{field} must be at least {minimum}"
-        )
+        raise ValueError(f"{field} must be at least {minimum}")
     return value
 
 
@@ -1201,13 +1026,10 @@ def _require_enum(
 ) -> _EnumT:
     if isinstance(value, enum_type):
         return value
+    allowed = ", ".join(member.value for member in enum_type)
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be one of: {allowed}")
     try:
         return enum_type(value)
-    except (TypeError, ValueError) as exc:
-        allowed = ", ".join(
-            member.value
-            for member in enum_type
-        )
-        raise ValueError(
-            f"{field} must be one of: {allowed}"
-        ) from exc
+    except ValueError as exc:
+        raise ValueError(f"{field} must be one of: {allowed}") from exc

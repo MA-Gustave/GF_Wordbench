@@ -1,15 +1,21 @@
 from __future__ import annotations
 
-import hashlib
-import json
-import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
+import hashlib
+import json
 from pathlib import Path
+import re
 from types import MappingProxyType
-from typing import Any, Final, TypeAlias
+from typing import Final, TypeAlias, TypeVar
 
+from gf_wordbench.diagnostics.vocabulary import (
+    DiagnosticSeverity,
+    DiagnosticStream,
+    PatternConfidence,
+    PatternLifecycle,
+)
 from gf_wordbench.kernel.serialization import ProducerInfo
 from gf_wordbench.kernel.statuses import (
     DiagnosticClass,
@@ -23,9 +29,7 @@ _MAX_MESSAGE: Final[int] = 8_192
 _MAX_DETAIL: Final[int] = 32_768
 _MAX_EXCERPT: Final[int] = 65_536
 _MAX_ITEMS: Final[int] = 100_000
-_PATTERN_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?:DP|GF-DIAG)-[A-Z0-9]+(?:-[A-Z0-9]+)+$"
-)
+_PATTERN_ID_RE: Final[re.Pattern[str]] = re.compile(r"^(?:DP|GF-DIAG)-[A-Z0-9]+(?:-[A-Z0-9]+)+$")
 _RECORD_ID_RE: Final[re.Pattern[str]] = re.compile(r"^diag-[0-9a-f]{16}$")
 
 MetadataValue: TypeAlias = (
@@ -39,48 +43,13 @@ MetadataValue: TypeAlias = (
     | Mapping[str, "MetadataValue"]
 )
 Metadata: TypeAlias = Mapping[str, MetadataValue]
+_EnumT = TypeVar("_EnumT", bound=StrEnum)
+_ItemT = TypeVar("_ItemT")
+
 PatternMatcher: TypeAlias = Callable[
     ["DiagnosticEvidence"],
     "PatternMatch | Iterable[PatternMatch] | None",
 ]
-
-
-@unique
-class DiagnosticSeverity(StrEnum):
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-    FATAL = "fatal"
-    UNKNOWN = "unknown"
-
-
-@unique
-class PatternConfidence(StrEnum):
-    AUTHORITATIVE = "authoritative"
-    EXACT = "exact"
-    HIGH = "high"
-    STRONG = "strong"
-    MEDIUM = "medium"
-    FALLBACK = "fallback"
-    LOW = "low"
-    UNKNOWN = "unknown"
-
-
-@unique
-class PatternLifecycle(StrEnum):
-    ACTIVE = "active"
-    EXPERIMENTAL = "experimental"
-    DEPRECATED = "deprecated"
-    RETIRED = "retired"
-
-
-@unique
-class DiagnosticStream(StrEnum):
-    STDOUT = "stdout"
-    STDERR = "stderr"
-    PROCESS_STATE = "process-state"
-    FILESYSTEM = "filesystem"
-    FRAMEWORK_STATE = "framework-state"
 
 
 @unique
@@ -312,7 +281,9 @@ class DiagnosticEvidence:
             DiagnosticStream.STDOUT,
             DiagnosticStream.STDERR,
         ):
-            expected = self.stdout_path if self.stream is DiagnosticStream.STDOUT else self.stderr_path
+            expected = (
+                self.stdout_path if self.stream is DiagnosticStream.STDOUT else self.stderr_path
+            )
             if self.raw_path is not None and self.raw_path != expected:
                 raise ValueError("raw_path must match the selected stream path")
 
@@ -330,7 +301,9 @@ class DiagnosticEvidence:
 
     @property
     def source_stream(self) -> DiagnosticStream | None:
-        return self.stream
+        if self.stream is None:
+            return None
+        return _stream(self.stream, "stream")
 
     def for_stream(
         self,
@@ -343,7 +316,9 @@ class DiagnosticEvidence:
             raise ValueError("selected stream must be stdout or stderr")
         selected_text = text
         if selected_text is None:
-            selected_text = self.stdout_text if selected is DiagnosticStream.STDOUT else self.stderr_text
+            selected_text = (
+                self.stdout_text if selected is DiagnosticStream.STDOUT else self.stderr_text
+            )
         return DiagnosticEvidence(
             operation_kind=self.operation_kind,
             execution_state=self.execution_state,
@@ -470,7 +445,9 @@ class PatternMatch:
             object.__setattr__(self, "is_warning", True)
         if self.confidence is PatternConfidence.UNKNOWN and not self.is_unknown:
             object.__setattr__(self, "is_unknown", True)
-        object.__setattr__(self, "references", _text_tuple(self.references, "references", _MAX_MESSAGE))
+        object.__setattr__(
+            self, "references", _text_tuple(self.references, "references", _MAX_MESSAGE)
+        )
         object.__setattr__(self, "metadata", _freeze_metadata(self.metadata))
 
     @property
@@ -479,7 +456,9 @@ class PatternMatch:
 
     @property
     def source_stream(self) -> DiagnosticStream | None:
-        return self.stream
+        if self.stream is None:
+            return None
+        return _stream(self.stream, "stream")
 
     @property
     def file_path(self) -> Path | None:
@@ -638,7 +617,9 @@ class DiagnosticRecord:
 
     @property
     def source_stream(self) -> DiagnosticStream | None:
-        return self.stream
+        if self.stream is None:
+            return None
+        return _stream(self.stream, "stream")
 
     @property
     def file_path(self) -> Path | None:
@@ -688,9 +669,7 @@ class DiagnosticMatchResult:
         ):
             _nonnegative_int(getattr(self, name), name)
         if self.patterns_matched > self.patterns_considered:
-            raise ValueError(
-                "patterns_matched must not exceed patterns_considered"
-            )
+            raise ValueError("patterns_matched must not exceed patterns_considered")
         for name in (
             "limits_reached",
             "parse_complete",
@@ -772,9 +751,7 @@ class Finding:
             self.diagnostic_class,
             DiagnosticClass,
         ):
-            raise TypeError(
-                "diagnostic_class must be DiagnosticClass or None"
-            )
+            raise TypeError("diagnostic_class must be DiagnosticClass or None")
         if self.error_kind is not None and not isinstance(
             self.error_kind,
             ErrorKind,
@@ -941,7 +918,7 @@ class DiagnosticPattern:
 
     @property
     def lifecycle(self) -> PatternLifecycle:
-        return self.lifecycle_state
+        return _enum(self.lifecycle_state, PatternLifecycle, "lifecycle_state")
 
     @property
     def gf_versions(self) -> frozenset[str]:
@@ -1033,9 +1010,7 @@ class DiagnosticParseResult:
         if operation_kind is None:
             operation_kind = operation
         elif operation is not None and operation != operation_kind:
-            raise ValueError(
-                "operation and operation_kind must identify the same operation"
-            )
+            raise ValueError("operation and operation_kind must identify the same operation")
         if operation_kind is None:
             raise TypeError("operation_kind is required")
 
@@ -1078,26 +1053,18 @@ class DiagnosticParseResult:
                 _MAX_IDENTIFIER,
             )
             if selected_primary_id not in set(record_ids):
-                raise ValueError(
-                    "primary_record_id does not identify a record"
-                )
+                raise ValueError("primary_record_id does not identify a record")
         elif record_values:
             selected_primary_id = record_values[0].record_id
 
         primary_record = next(
-            (
-                record
-                for record in record_values
-                if record.record_id == selected_primary_id
-            ),
+            (record for record in record_values if record.record_id == selected_primary_id),
             None,
         )
 
         if primary_error_kind is None:
             if primary_record is not None:
-                primary_error_kind_value: ErrorKind | str | None = (
-                    primary_record.error_kind
-                )
+                primary_error_kind_value: ErrorKind | str | None = primary_record.error_kind
             elif status_value is ValidationStatus.OK:
                 primary_error_kind_value = ErrorKind.OK
             else:
@@ -1143,9 +1110,7 @@ class DiagnosticParseResult:
         ):
             _nonnegative_int(value, name)
         if patterns_matched > patterns_considered:
-            raise ValueError(
-                "patterns_matched must not exceed patterns_considered"
-            )
+            raise ValueError("patterns_matched must not exceed patterns_considered")
 
         if records_emitted is None:
             records_emitted_value = len(record_values)
@@ -1153,47 +1118,35 @@ class DiagnosticParseResult:
             _nonnegative_int(records_emitted, "records_emitted")
             records_emitted_value = records_emitted
             if records_emitted_value != len(record_values):
-                raise ValueError(
-                    "records_emitted must equal the number of records"
-                )
+                raise ValueError("records_emitted must equal the number of records")
 
-        fatal_value = fatal_detected or any(
-            record.is_fatal for record in record_values
-        )
-        unknown_value = unknown_failure_output or any(
-            record.is_unknown for record in record_values
-        )
+        fatal_value = fatal_detected or any(record.is_fatal for record in record_values)
+        unknown_value = unknown_failure_output or any(record.is_unknown for record in record_values)
 
-        metadata_value = _freeze_metadata(
-            {} if metadata is None else metadata
-        )
+        metadata_value = _freeze_metadata({} if metadata is None else metadata)
 
-        values = {
-            "parser_version": parser_version_value,
-            "status": status_value,
-            "gf_version": gf_version_value,
-            "operation_kind": operation_value,
-            "records": record_values,
-            "warnings": warning_values,
-            "primary_record_id": selected_primary_id,
-            "primary_error_kind": primary_error_kind_value,
-            "primary_message": primary_message_value,
-            "primary_detail": primary_detail_value,
-            "fatal_detected": fatal_value,
-            "unknown_failure_output": unknown_value,
-            "stdout_truncated": stdout_truncated,
-            "stderr_truncated": stderr_truncated,
-            "decoding_lossy": decoding_lossy,
-            "parse_complete": parse_complete,
-            "patterns_considered": patterns_considered,
-            "patterns_matched": patterns_matched,
-            "records_emitted": records_emitted_value,
-            "unknown_lines": unknown_lines,
-            "limits_reached": limits_reached,
-            "metadata": metadata_value,
-        }
-        for name, value in values.items():
-            object.__setattr__(self, name, value)
+        object.__setattr__(self, "parser_version", parser_version_value)
+        object.__setattr__(self, "status", status_value)
+        object.__setattr__(self, "gf_version", gf_version_value)
+        object.__setattr__(self, "operation_kind", operation_value)
+        object.__setattr__(self, "records", record_values)
+        object.__setattr__(self, "warnings", warning_values)
+        object.__setattr__(self, "primary_record_id", selected_primary_id)
+        object.__setattr__(self, "primary_error_kind", primary_error_kind_value)
+        object.__setattr__(self, "primary_message", primary_message_value)
+        object.__setattr__(self, "primary_detail", primary_detail_value)
+        object.__setattr__(self, "fatal_detected", fatal_value)
+        object.__setattr__(self, "unknown_failure_output", unknown_value)
+        object.__setattr__(self, "stdout_truncated", stdout_truncated)
+        object.__setattr__(self, "stderr_truncated", stderr_truncated)
+        object.__setattr__(self, "decoding_lossy", decoding_lossy)
+        object.__setattr__(self, "parse_complete", parse_complete)
+        object.__setattr__(self, "patterns_considered", patterns_considered)
+        object.__setattr__(self, "patterns_matched", patterns_matched)
+        object.__setattr__(self, "records_emitted", records_emitted_value)
+        object.__setattr__(self, "unknown_lines", unknown_lines)
+        object.__setattr__(self, "limits_reached", limits_reached)
+        object.__setattr__(self, "metadata", metadata_value)
 
     @property
     def operation(self) -> str:
@@ -1215,11 +1168,7 @@ class DiagnosticParseResult:
         primary = self.primary
         if primary is None:
             return self.records
-        return tuple(
-            record
-            for record in self.records
-            if record.record_id != primary.record_id
-        )
+        return tuple(record for record in self.records if record.record_id != primary.record_id)
 
     @property
     def references(self) -> tuple[str, ...]:
@@ -1235,9 +1184,7 @@ class DiagnosticParseResult:
     @property
     def parse_warnings(self) -> tuple[str, ...]:
         return tuple(
-            warning.message
-            if isinstance(warning, DiagnosticParseWarning)
-            else warning
+            warning.message if isinstance(warning, DiagnosticParseWarning) else warning
             for warning in self.warnings
         )
 
@@ -1342,29 +1289,23 @@ def records_from_matches(
     return tuple(result)
 
 
-
 def _diagnostic_warning_tuple(
     value: Iterable[DiagnosticParseWarning | str],
 ) -> tuple[DiagnosticParseWarning | str, ...]:
     if isinstance(value, (str, bytes, bytearray, Mapping)):
-        raise TypeError(
-            "warnings must be an iterable of DiagnosticParseWarning or str"
-        )
+        raise TypeError("warnings must be an iterable of DiagnosticParseWarning or str")
     result: list[DiagnosticParseWarning | str] = []
     for item in value:
         if isinstance(item, DiagnosticParseWarning):
             result.append(item)
         elif isinstance(item, str):
-            result.append(
-                _plain_text(item, "warning", _MAX_MESSAGE)
-            )
+            result.append(_plain_text(item, "warning", _MAX_MESSAGE))
         else:
-            raise TypeError(
-                "warnings must contain DiagnosticParseWarning or str values"
-            )
+            raise TypeError("warnings must contain DiagnosticParseWarning or str values")
         if len(result) > _MAX_ITEMS:
             raise ValueError("warnings exceeds the supported limit")
     return tuple(result)
+
 
 def _scope_accepts(scope: frozenset[str], value: str) -> bool:
     normalized = value.strip().lower().replace("-", "_")
@@ -1391,7 +1332,7 @@ def _stream(value: DiagnosticStream | str, field_name: str) -> DiagnosticStream:
         raise ValueError(f"invalid {field_name} {value!r}") from exc
 
 
-def _enum(value: object, enum_type: type[_T], field_name: str) -> _T:
+def _enum(value: object, enum_type: type[_EnumT], field_name: str) -> _EnumT:
     if isinstance(value, enum_type):
         return value
     if not isinstance(value, str):
@@ -1402,7 +1343,11 @@ def _enum(value: object, enum_type: type[_T], field_name: str) -> _T:
         raise ValueError(f"invalid {field_name} {value!r}") from exc
 
 
-def _enum_or_string(value: object, enum_type: type[_T], field_name: str) -> _T | str:
+def _enum_or_string(
+    value: object,
+    enum_type: type[_EnumT],
+    field_name: str,
+) -> _EnumT | str:
     if isinstance(value, enum_type):
         return value
     if not isinstance(value, str):
@@ -1429,7 +1374,6 @@ def _scope_set(value: Iterable[object], field_name: str) -> frozenset[str]:
     return frozenset(result)
 
 
-
 def _compatibility_scope(
     value: Iterable[object],
     field_name: str,
@@ -1440,7 +1384,8 @@ def _compatibility_scope(
         return frozenset()
     return scope
 
-def _freeze_metadata(value: Metadata) -> Metadata:
+
+def _freeze_metadata(value: object) -> Metadata:
     if not isinstance(value, Mapping):
         raise TypeError("metadata values must be mappings")
     if len(value) > _MAX_ITEMS:
@@ -1452,10 +1397,20 @@ def _freeze_metadata(value: Metadata) -> Metadata:
     return MappingProxyType(result)
 
 
-def _freeze_metadata_value(value: Any) -> MetadataValue:
-    if value is None or type(value) in (str, int, float, bool) or isinstance(value, Path):
-        if isinstance(value, str) and "\x00" in value:
+def _freeze_metadata_value(value: object) -> MetadataValue:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if "\x00" in value:
             raise ValueError("metadata text must not contain NUL")
+        return value
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value
+    if isinstance(value, Path):
         return value
     if isinstance(value, Mapping):
         return _freeze_metadata(value)
@@ -1469,15 +1424,21 @@ def _freeze_metadata_value(value: Any) -> MetadataValue:
     raise TypeError(f"unsupported metadata value type {type(value).__name__}")
 
 
-def _typed_tuple(value: Iterable[Any], item_type: type[_T], field_name: str) -> tuple[_T, ...]:
+def _typed_tuple(
+    value: Iterable[object],
+    item_type: type[_ItemT],
+    field_name: str,
+) -> tuple[_ItemT, ...]:
     if isinstance(value, (str, bytes, bytearray, Mapping)):
         raise TypeError(f"{field_name} must be an iterable of {item_type.__name__}")
-    result = tuple(value)
-    if len(result) > _MAX_ITEMS:
-        raise ValueError(f"{field_name} exceeds the supported limit")
-    if any(not isinstance(item, item_type) for item in result):
-        raise TypeError(f"{field_name} must contain {item_type.__name__} values")
-    return result
+    result: list[_ItemT] = []
+    for item in value:
+        if not isinstance(item, item_type):
+            raise TypeError(f"{field_name} must contain {item_type.__name__} values")
+        result.append(item)
+        if len(result) > _MAX_ITEMS:
+            raise ValueError(f"{field_name} exceeds the supported limit")
+    return tuple(result)
 
 
 def _text_tuple(value: Iterable[object], field_name: str, max_length: int) -> tuple[str, ...]:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Final, TypeAlias
+from typing import Final, TypeAlias, cast
 
 from gf_wordbench.kernel.events import (
     EventField,
@@ -21,9 +21,7 @@ from gf_wordbench.kernel.ids import validate_run_id
 Clock: TypeAlias = Callable[[], datetime]
 ProgressSink: TypeAlias = EventSink[ProgressEvent]
 ProgressFieldInput: TypeAlias = (
-    EventFields
-    | Mapping[str, EventScalar]
-    | Iterable[tuple[str, EventScalar]]
+    EventFields | Mapping[str, EventScalar] | Iterable[tuple[str, EventScalar]]
 )
 
 _UNSET: Final = object()
@@ -50,11 +48,13 @@ def _validate_optional_text(
 
 
 def _normalize_fields(values: ProgressFieldInput) -> EventFields:
-    if isinstance(values, tuple) and all(
-        isinstance(item, EventField) for item in values
-    ):
+    if isinstance(values, tuple) and all(isinstance(item, EventField) for item in values):
         return values
-    return event_fields(values)
+    normalized_input = cast(
+        Mapping[str, EventScalar] | Iterable[tuple[str, EventScalar]],
+        values,
+    )
+    return event_fields(normalized_input)
 
 
 def emit_progress(
@@ -118,8 +118,8 @@ class ProgressReporter:
     def scoped(
         self,
         *,
-        stage: str | None | object = _UNSET,
-        subject: str | None | object = _UNSET,
+        stage: str | object | None = _UNSET,
+        subject: str | object | None = _UNSET,
     ) -> ProgressReporter:
         next_stage = self.stage if stage is _UNSET else stage
         next_subject = self.subject if subject is _UNSET else subject
@@ -140,7 +140,7 @@ class ProgressReporter:
         self,
         subject: str,
         *,
-        stage: str | None | object = _UNSET,
+        stage: str | object | None = _UNSET,
     ) -> ProgressReporter:
         return self.scoped(stage=stage, subject=subject)
 

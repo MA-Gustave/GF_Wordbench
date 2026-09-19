@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum, unique
 from pathlib import Path, PurePosixPath
+import re
 from typing import Final
 
 from gf_wordbench.kernel.ids import RunId, validate_run_id
@@ -25,15 +26,9 @@ _MEDIA_TYPE_RE: Final[re.Pattern[str]] = re.compile(
     r"(?:\s*;\s*[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*="
     r"(?:[A-Za-z0-9][A-Za-z0-9!#$&^_.+:-]*|\"[^\"\r\n]*\"))*$"
 )
-_ROLE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
-_CREATOR_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*$"
-)
-_SCHEMA_VERSION_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
-)
+_ROLE_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+_CREATOR_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*$")
+_SCHEMA_VERSION_RE: Final[re.Pattern[str]] = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _RFC3339_UTC_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})T"
     r"(?P<time>[0-9]{2}:[0-9]{2}:[0-9]{2})"
@@ -204,16 +199,10 @@ class ArtifactManifest:
     def __post_init__(self) -> None:
         schema_id = _require_text(self.schema_id, field="schema_id")
         if schema_id != ARTIFACT_MANIFEST_SCHEMA_ID:
-            raise ValueError(
-                "schema_id must be "
-                f"{ARTIFACT_MANIFEST_SCHEMA_ID!r}"
-            )
+            raise ValueError(f"schema_id must be {ARTIFACT_MANIFEST_SCHEMA_ID!r}")
         schema_version = _validate_schema_version(self.schema_version)
         if schema_version != ARTIFACT_MANIFEST_SCHEMA_VERSION:
-            raise ValueError(
-                "schema_version must be "
-                f"{ARTIFACT_MANIFEST_SCHEMA_VERSION!r}"
-            )
+            raise ValueError(f"schema_version must be {ARTIFACT_MANIFEST_SCHEMA_VERSION!r}")
         producer = ProducerInfo(
             name=self.producer_name,
             version=self.producer_version,
@@ -225,10 +214,7 @@ class ArtifactManifest:
             field="hash_algorithm",
         ).lower()
         if hash_algorithm != ARTIFACT_MANIFEST_HASH_ALGORITHM:
-            raise ValueError(
-                "hash_algorithm must be "
-                f"{ARTIFACT_MANIFEST_HASH_ALGORITHM!r}"
-            )
+            raise ValueError(f"hash_algorithm must be {ARTIFACT_MANIFEST_HASH_ALGORITHM!r}")
         artifacts = _validate_artifacts(self.artifacts)
 
         object.__setattr__(self, "schema_id", schema_id)
@@ -296,9 +282,7 @@ class ManifestWriteResult:
             field="required_entry_count",
         )
         if required_entry_count > entry_count:
-            raise ValueError(
-                "required_entry_count must not exceed entry_count"
-            )
+            raise ValueError("required_entry_count must not exceed entry_count")
         total_size_bytes = _validate_non_negative_int(
             self.total_size_bytes,
             field="total_size_bytes",
@@ -356,9 +340,7 @@ class ManifestVerificationResult:
             field="required_artifacts_checked",
         )
         if required_artifacts_checked > artifacts_checked:
-            raise ValueError(
-                "required_artifacts_checked must not exceed artifacts_checked"
-            )
+            raise ValueError("required_artifacts_checked must not exceed artifacts_checked")
         missing_paths = _validate_path_messages(
             self.missing_paths,
             field="missing_paths",
@@ -376,12 +358,8 @@ class ManifestVerificationResult:
         )
         warnings = _validate_messages(self.warnings, field="warnings")
         message = _require_text(self.message, field="message")
-        if status is ValidationStatus.OK and (
-            missing_paths or mismatched_paths or unsafe_paths
-        ):
-            raise ValueError(
-                "an OK verification result cannot contain integrity failures"
-            )
+        if status is ValidationStatus.OK and (missing_paths or mismatched_paths or unsafe_paths):
+            raise ValueError("an OK verification result cannot contain integrity failures")
 
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "manifest_path", manifest_path)
@@ -404,9 +382,7 @@ class ManifestVerificationResult:
 
     @property
     def failure_paths(self) -> tuple[str, ...]:
-        return _stable_unique(
-            (*self.missing_paths, *self.mismatched_paths, *self.unsafe_paths)
-        )
+        return _stable_unique((*self.missing_paths, *self.mismatched_paths, *self.unsafe_paths))
 
 
 def validate_manifest_artifact_path(value: object) -> str:
@@ -420,9 +396,7 @@ def validate_manifest_artifact_path(value: object) -> str:
 
     parts = path.split("/")
     if any(part in ("", ".", "..") for part in parts):
-        raise ValueError(
-            "artifact path must be normalized and contain no traversal"
-        )
+        raise ValueError("artifact path must be normalized and contain no traversal")
     if any("\x00" in part for part in parts):
         raise ValueError("artifact path must not contain NUL characters")
 
@@ -445,9 +419,7 @@ def validate_generated_at(value: object) -> str:
     timestamp = _require_text(value, field="generated_at")
     match = _RFC3339_UTC_RE.fullmatch(timestamp)
     if match is None:
-        raise ValueError(
-            "generated_at must be an RFC 3339 UTC timestamp ending in Z"
-        )
+        raise ValueError("generated_at must be an RFC 3339 UTC timestamp ending in Z")
     try:
         datetime.fromisoformat(timestamp.removesuffix("Z") + "+00:00")
     except ValueError as exc:
@@ -456,15 +428,16 @@ def validate_generated_at(value: object) -> str:
 
 
 def _validate_artifacts(
-    values: tuple[ArtifactManifestEntry, ...],
+    values: object,
 ) -> tuple[ArtifactManifestEntry, ...]:
-    if isinstance(values, (str, bytes)):
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
         raise TypeError("artifacts must be an iterable of manifest entries")
-    artifacts = tuple(values)
-    if any(not isinstance(entry, ArtifactManifestEntry) for entry in artifacts):
-        raise TypeError(
-            "artifacts must contain ArtifactManifestEntry values"
-        )
+    artifacts_list: list[ArtifactManifestEntry] = []
+    for entry in values:
+        if not isinstance(entry, ArtifactManifestEntry):
+            raise TypeError("artifacts must contain ArtifactManifestEntry values")
+        artifacts_list.append(entry)
+    artifacts = tuple(artifacts_list)
     paths = tuple(entry.path for entry in artifacts)
     if len(paths) != len(set(paths)):
         raise ValueError("artifact paths must be unique")
@@ -507,15 +480,11 @@ def _coerce_manifest_verification_mode(
     if isinstance(value, ManifestVerificationMode):
         return value
     if not isinstance(value, str):
-        raise TypeError(
-            "mode must be ManifestVerificationMode or string"
-        )
+        raise TypeError("mode must be ManifestVerificationMode or string")
     try:
         return ManifestVerificationMode(value.strip().lower())
     except ValueError as exc:
-        raise ValueError(
-            f"unsupported manifest verification mode: {value!r}"
-        ) from exc
+        raise ValueError(f"unsupported manifest verification mode: {value!r}") from exc
 
 
 def _validate_bool(value: object, *, field: str) -> bool:
@@ -525,20 +494,15 @@ def _validate_bool(value: object, *, field: str) -> bool:
 
 
 def _validate_policy_values(
-    values: tuple[str, ...],
+    values: object,
     *,
     field: str,
-    validator: object,
+    validator: Callable[[object], str],
 ) -> tuple[str, ...]:
-    if isinstance(values, (str, bytes)):
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
         raise TypeError(f"{field} must be an iterable of strings")
-    if not callable(validator):
-        raise TypeError("validator must be callable")
 
-    prepared = tuple(
-        validator(value)  # type: ignore[operator]
-        for value in values
-    )
+    prepared = tuple(validator(value) for value in values)
     if len(prepared) != len(set(prepared)):
         raise ValueError(f"{field} must not contain duplicates")
     return prepared
@@ -555,9 +519,7 @@ def _validate_owned_directory(value: object) -> str:
 
     parts = path.split("/")
     if any(part in ("", ".", "..") for part in parts):
-        raise ValueError(
-            "owned directory must be normalized and contain no traversal"
-        )
+        raise ValueError("owned directory must be normalized and contain no traversal")
 
     normalized = PurePosixPath(*parts).as_posix()
     if normalized != path:
@@ -588,27 +550,25 @@ def _validate_optional_path(value: object, *, field: str) -> Path | None:
 
 
 def _validate_messages(
-    values: tuple[str, ...],
+    values: object,
     *,
     field: str,
 ) -> tuple[str, ...]:
-    if isinstance(values, (str, bytes)):
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
         raise TypeError(f"{field} must be an iterable of strings")
-    messages = tuple(
-        _require_text(value, field=f"{field} item") for value in values
-    )
+    messages = tuple(_require_text(value, field=f"{field} item") for value in values)
     if len(messages) != len(set(messages)):
         raise ValueError(f"{field} must not contain duplicates")
     return messages
 
 
 def _validate_path_messages(
-    values: tuple[str, ...],
+    values: object,
     *,
     field: str,
     require_safe: bool,
 ) -> tuple[str, ...]:
-    if isinstance(values, (str, bytes)):
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
         raise TypeError(f"{field} must be an iterable of strings")
     result: list[str] = []
     for value in values:

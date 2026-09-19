@@ -6,11 +6,11 @@ import errno
 import os
 from pathlib import Path
 import stat
+import time
 from typing import Any, cast
 
 import pytest
 
-from gf_wordbench.infrastructure import atomic_io
 from gf_wordbench.infrastructure.atomic_io import (
     atomic_binary_writer,
     atomic_text_writer,
@@ -311,7 +311,9 @@ def test_destination_directory_is_rejected(tmp_path: Path) -> None:
 @pytest.mark.skipif(os.name == "nt", reason="FIFO contract is POSIX-specific")
 def test_non_regular_destination_is_rejected(tmp_path: Path) -> None:
     destination = tmp_path / "pipe"
-    os.mkfifo(destination)
+    mkfifo = getattr(os, "mkfifo", None)
+    assert callable(mkfifo)
+    mkfifo(destination)
 
     with pytest.raises(OSError) as captured:
         atomic_write_text(destination, "value")
@@ -428,7 +430,7 @@ def test_sync_true_flushes_with_fsync(
     tmp_path: Path,
 ) -> None:
     calls: list[int] = []
-    monkeypatch.setattr(atomic_io.os, "fsync", calls.append)
+    monkeypatch.setattr(os, "fsync", calls.append)
 
     atomic_write_text(tmp_path / "state.json", "value", sync=True)
 
@@ -443,7 +445,7 @@ def test_sync_false_skips_fsync(
     def unexpected_fsync(_: int) -> None:
         raise AssertionError("fsync must not be called")
 
-    monkeypatch.setattr(atomic_io.os, "fsync", unexpected_fsync)
+    monkeypatch.setattr(os, "fsync", unexpected_fsync)
 
     atomic_write_text(tmp_path / "state.json", "value", sync=False)
 
@@ -454,7 +456,7 @@ def test_retryable_replace_failures_are_retried_in_declared_order(
 ) -> None:
     destination = tmp_path / "state.json"
     destination.write_text("old", encoding="utf-8")
-    real_replace = atomic_io.os.replace
+    real_replace = os.replace
     replace_calls: list[tuple[Path, Path]] = []
     sleep_calls: list[float] = []
 
@@ -466,8 +468,8 @@ def test_retryable_replace_failures_are_retried_in_declared_order(
             raise PermissionError(errno.EACCES, "temporarily locked")
         real_replace(source_path, target_path)
 
-    monkeypatch.setattr(atomic_io.os, "replace", flaky_replace)
-    monkeypatch.setattr(atomic_io.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(os, "replace", flaky_replace)
+    monkeypatch.setattr(time, "sleep", sleep_calls.append)
 
     atomic_write_text(
         destination,
@@ -496,8 +498,8 @@ def test_non_retryable_replace_failure_is_not_retried(
         replace_calls += 1
         raise OSError(errno.EXDEV, "cross-device replacement")
 
-    monkeypatch.setattr(atomic_io.os, "replace", failing_replace)
-    monkeypatch.setattr(atomic_io.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(os, "replace", failing_replace)
+    monkeypatch.setattr(time, "sleep", sleep_calls.append)
 
     with pytest.raises(OSError) as captured:
         atomic_write_text(

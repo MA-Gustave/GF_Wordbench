@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -93,9 +93,7 @@ class RunTreeEntry:
                 field_name="link_target",
             )
         elif link_target is not None:
-            raise ValueError(
-                "link_target is valid only for symlink entries"
-            )
+            raise ValueError("link_target is valid only for symlink entries")
 
         object.__setattr__(self, "relative_path", relative_path)
         object.__setattr__(self, "link_target", link_target)
@@ -198,9 +196,7 @@ class ArtifactVerificationResult:
         )
 
         if self.valid and any(issue.required for issue in issues):
-            raise ValueError(
-                "valid verification cannot contain a required issue"
-            )
+            raise ValueError("valid verification cannot contain a required issue")
 
         object.__setattr__(self, "run_id", run_id)
         object.__setattr__(self, "manifest_path", manifest_path)
@@ -246,9 +242,7 @@ class RunArchiveReceipt:
         if not isinstance(self.verified, bool):
             raise TypeError("verified must be a bool")
         if self.verified and sha256 is None:
-            raise ValueError(
-                "a verified archive receipt requires a SHA-256 digest"
-            )
+            raise ValueError("a verified archive receipt requires a SHA-256 digest")
 
         object.__setattr__(self, "run_id", run_id)
         object.__setattr__(self, "archive_path", archive_path)
@@ -548,15 +542,11 @@ def _required_text(
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a string")
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if not value.strip():
         raise ValueError(f"{field_name} must not be empty")
     if value != value.strip():
-        raise ValueError(
-            f"{field_name} must not have outer whitespace"
-        )
+        raise ValueError(f"{field_name} must not have outer whitespace")
     return value
 
 
@@ -569,9 +559,7 @@ def _path(
     if not isinstance(value, Path):
         raise TypeError(f"{field_name} must be a pathlib.Path")
     if "\x00" in str(value):
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if require_absolute and not value.is_absolute():
         raise ValueError(f"{field_name} must be an absolute path")
     return value
@@ -587,13 +575,9 @@ def _relative_path(
     if path.is_absolute():
         raise ValueError(f"{field_name} must be relative")
     if not path.parts:
-        raise ValueError(
-            f"{field_name} must identify a tree entry"
-        )
+        raise ValueError(f"{field_name} must identify a tree entry")
     if ".." in path.parts:
-        raise ValueError(
-            f"{field_name} must not contain parent traversal"
-        )
+        raise ValueError(f"{field_name} must not contain parent traversal")
 
     return path
 
@@ -668,8 +652,5 @@ def _typed_tuple(
     if not isinstance(value, tuple):
         raise TypeError(f"{field_name} must be a tuple")
     if not all(isinstance(item, item_type) for item in value):
-        raise TypeError(
-            f"every {field_name} item must be "
-            f"{item_type.__name__}"
-        )
+        raise TypeError(f"every {field_name} item must be {item_type.__name__}")
     return value

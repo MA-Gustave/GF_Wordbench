@@ -18,12 +18,12 @@ from gf_wordbench.entrypoints.cli.audit_commands import (
 )
 from gf_wordbench.entrypoints.cli.parser import (
     CliCommand,
-    CliRequest,
     CliUsageError,
     parse_cli_namespace,
     parse_cli_request,
 )
 from gf_wordbench.kernel.events import LifecycleEvent
+from gf_wordbench.kernel.ids import validate_scenario_id
 from gf_wordbench.kernel.statuses import OverallStatus, ValidationMode
 from gf_wordbench.runs.models.results import RunResult, RunTotals
 
@@ -74,8 +74,8 @@ def _run_result(status: OverallStatus = OverallStatus.OK) -> RunResult:
         overall_status=status,
     )
     return RunResult(
-        run_config=cast(Any, object()),
-        run_paths=cast(Any, object()),
+        run_config=cast("Any", object()),
+        run_paths=cast("Any", object()),
         started_at=_FIXED_TIME,
         finished_at=_FIXED_TIME,
         duration_ms=0,
@@ -217,7 +217,7 @@ def test_parsed_cli_request_is_accepted_by_the_validation_adapter() -> None:
     parsed = parse_cli_request(["validate", "--mode", "diagnostic"])
     application = _RecordingApplication(_run_result())
 
-    result = execute_validate_command(cast(Any, parsed), application)
+    result = execute_validate_command(cast("Any", parsed), application)
 
     assert result is application.result
     assert len(application.calls) == 1
@@ -237,7 +237,7 @@ def test_execute_validate_command_delegates_once_with_shared_callbacks() -> None
 
     request = ValidateCommandRequest(
         mode=ValidationMode.DIAGNOSTIC,
-        scenarios=("parse-basic",),
+        scenarios=(validate_scenario_id("parse-basic"),),
         max_files=5,
     )
 
@@ -266,7 +266,7 @@ def test_execute_validate_command_rejects_non_run_result() -> None:
         event_sink: Callable[[LifecycleEvent], None] | None = None,
     ) -> RunResult:
         del request, cancellation_check, event_sink
-        return cast(RunResult, object())
+        return cast("RunResult", object())
 
     services = AuditCommandServices(run_validation=invalid_runner)
 

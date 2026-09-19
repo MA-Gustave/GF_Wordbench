@@ -2,31 +2,23 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
 from pathlib import Path
+import re
 from types import MappingProxyType
-from typing import Final, TypeAlias
+from typing import Final, Literal, TypeAlias, TypeVar, overload
 
 from gf_wordbench.kernel.statuses import ValidationStatus
 
-_ASSERTION_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-)
-_SECTION_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-)
+_ASSERTION_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+_SECTION_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _DIAGNOSTIC_ID_RE: Final[re.Pattern[str]] = re.compile(
     r"^[A-Za-z][A-Za-z0-9]*(?:[-_.][A-Za-z0-9]+)*$"
 )
-_ARTIFACT_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*$"
-)
-_COUNT_NAME_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[_.-][a-z0-9]+)*$"
-)
+_ARTIFACT_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*$")
+_COUNT_NAME_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[_.-][a-z0-9]+)*$")
 _MAX_MESSAGE_LENGTH: Final[int] = 2_000
 _MAX_PATTERN_LENGTH: Final[int] = 512
 _MAX_TEXT_LENGTH: Final[int] = 8 * 1024 * 1024
@@ -35,6 +27,7 @@ _MAX_COLLECTION_ITEMS: Final[int] = 100_000
 
 AssertionParameter: TypeAlias = str | int | bool | tuple[str, ...] | None
 AssertionParameters: TypeAlias = Mapping[str, AssertionParameter]
+_TypedItemT = TypeVar("_TypedItemT")
 
 
 @unique
@@ -119,107 +112,89 @@ class CountComparison(StrEnum):
     GREATER_THAN_OR_EQUAL = "ge"
 
 
-_ASSERTION_CATEGORIES: Final[Mapping[AssertionKind, AssertionCategory]] = (
-    MappingProxyType(
-        {
-            AssertionKind.PROCESS_COMPLETED: AssertionCategory.PROCESS,
-            AssertionKind.EXIT_CODE_EQUALS: AssertionCategory.PROCESS,
-            AssertionKind.NOT_TIMED_OUT: AssertionCategory.PROCESS,
-            AssertionKind.NOT_CANCELLED: AssertionCategory.PROCESS,
-            AssertionKind.OUTPUT_LIMIT_NOT_EXCEEDED: AssertionCategory.PROCESS,
-            AssertionKind.CAPTURE_COMPLETED: AssertionCategory.PROCESS,
-            AssertionKind.SECTION_EXISTS: AssertionCategory.SECTION,
-            AssertionKind.SECTION_COMPLETED: AssertionCategory.SECTION,
-            AssertionKind.SECTION_NON_EMPTY: AssertionCategory.SECTION,
-            AssertionKind.DIAGNOSTIC_PRESENT: AssertionCategory.DIAGNOSTIC,
-            AssertionKind.DIAGNOSTIC_ABSENT: AssertionCategory.DIAGNOSTIC,
-            AssertionKind.TEXT_CONTAINS: AssertionCategory.TEXT,
-            AssertionKind.TEXT_EXCLUDES: AssertionCategory.TEXT,
-            AssertionKind.TEXT_EQUALS: AssertionCategory.TEXT,
-            AssertionKind.TEXT_MATCHES: AssertionCategory.TEXT,
-            AssertionKind.COUNT_COMPARE: AssertionCategory.COUNT,
-            AssertionKind.ARTIFACT_EXISTS: AssertionCategory.ARTIFACT,
-            AssertionKind.ARTIFACT_NON_EMPTY: AssertionCategory.ARTIFACT,
-            AssertionKind.ARTIFACT_CONTAINED: AssertionCategory.ARTIFACT,
-            AssertionKind.ARTIFACT_CURRENT: AssertionCategory.ARTIFACT,
-            AssertionKind.GOLD_MATCHES: AssertionCategory.GOLD,
-        }
-    )
+_ASSERTION_CATEGORIES: Final[Mapping[AssertionKind, AssertionCategory]] = MappingProxyType(
+    {
+        AssertionKind.PROCESS_COMPLETED: AssertionCategory.PROCESS,
+        AssertionKind.EXIT_CODE_EQUALS: AssertionCategory.PROCESS,
+        AssertionKind.NOT_TIMED_OUT: AssertionCategory.PROCESS,
+        AssertionKind.NOT_CANCELLED: AssertionCategory.PROCESS,
+        AssertionKind.OUTPUT_LIMIT_NOT_EXCEEDED: AssertionCategory.PROCESS,
+        AssertionKind.CAPTURE_COMPLETED: AssertionCategory.PROCESS,
+        AssertionKind.SECTION_EXISTS: AssertionCategory.SECTION,
+        AssertionKind.SECTION_COMPLETED: AssertionCategory.SECTION,
+        AssertionKind.SECTION_NON_EMPTY: AssertionCategory.SECTION,
+        AssertionKind.DIAGNOSTIC_PRESENT: AssertionCategory.DIAGNOSTIC,
+        AssertionKind.DIAGNOSTIC_ABSENT: AssertionCategory.DIAGNOSTIC,
+        AssertionKind.TEXT_CONTAINS: AssertionCategory.TEXT,
+        AssertionKind.TEXT_EXCLUDES: AssertionCategory.TEXT,
+        AssertionKind.TEXT_EQUALS: AssertionCategory.TEXT,
+        AssertionKind.TEXT_MATCHES: AssertionCategory.TEXT,
+        AssertionKind.COUNT_COMPARE: AssertionCategory.COUNT,
+        AssertionKind.ARTIFACT_EXISTS: AssertionCategory.ARTIFACT,
+        AssertionKind.ARTIFACT_NON_EMPTY: AssertionCategory.ARTIFACT,
+        AssertionKind.ARTIFACT_CONTAINED: AssertionCategory.ARTIFACT,
+        AssertionKind.ARTIFACT_CURRENT: AssertionCategory.ARTIFACT,
+        AssertionKind.GOLD_MATCHES: AssertionCategory.GOLD,
+    }
 )
 
-_ALLOWED_SOURCES: Final[Mapping[AssertionKind, frozenset[AssertionInputSource]]] = (
-    MappingProxyType(
-        {
-            AssertionKind.PROCESS_COMPLETED: frozenset({AssertionInputSource.PROCESS}),
-            AssertionKind.EXIT_CODE_EQUALS: frozenset({AssertionInputSource.PROCESS}),
-            AssertionKind.NOT_TIMED_OUT: frozenset({AssertionInputSource.PROCESS}),
-            AssertionKind.NOT_CANCELLED: frozenset({AssertionInputSource.PROCESS}),
-            AssertionKind.OUTPUT_LIMIT_NOT_EXCEEDED: frozenset(
-                {AssertionInputSource.PROCESS}
-            ),
-            AssertionKind.CAPTURE_COMPLETED: frozenset({AssertionInputSource.PROCESS}),
-            AssertionKind.SECTION_EXISTS: frozenset({AssertionInputSource.SECTIONS}),
-            AssertionKind.SECTION_COMPLETED: frozenset({AssertionInputSource.SECTIONS}),
-            AssertionKind.SECTION_NON_EMPTY: frozenset(
-                {
-                    AssertionInputSource.SECTIONS,
-                    AssertionInputSource.NORMALIZED_SECTION,
-                }
-            ),
-            AssertionKind.DIAGNOSTIC_PRESENT: frozenset(
-                {AssertionInputSource.DIAGNOSTICS}
-            ),
-            AssertionKind.DIAGNOSTIC_ABSENT: frozenset(
-                {AssertionInputSource.DIAGNOSTICS}
-            ),
-            AssertionKind.TEXT_CONTAINS: frozenset(
-                {
-                    AssertionInputSource.RAW_STDOUT,
-                    AssertionInputSource.RAW_STDERR,
-                    AssertionInputSource.NORMALIZED_OUTPUT,
-                    AssertionInputSource.NORMALIZED_SECTION,
-                }
-            ),
-            AssertionKind.TEXT_EXCLUDES: frozenset(
-                {
-                    AssertionInputSource.RAW_STDOUT,
-                    AssertionInputSource.RAW_STDERR,
-                    AssertionInputSource.NORMALIZED_OUTPUT,
-                    AssertionInputSource.NORMALIZED_SECTION,
-                }
-            ),
-            AssertionKind.TEXT_EQUALS: frozenset(
-                {
-                    AssertionInputSource.RAW_STDOUT,
-                    AssertionInputSource.RAW_STDERR,
-                    AssertionInputSource.NORMALIZED_OUTPUT,
-                    AssertionInputSource.NORMALIZED_SECTION,
-                }
-            ),
-            AssertionKind.TEXT_MATCHES: frozenset(
-                {
-                    AssertionInputSource.RAW_STDOUT,
-                    AssertionInputSource.RAW_STDERR,
-                    AssertionInputSource.NORMALIZED_OUTPUT,
-                    AssertionInputSource.NORMALIZED_SECTION,
-                }
-            ),
-            AssertionKind.COUNT_COMPARE: frozenset({AssertionInputSource.COUNTS}),
-            AssertionKind.ARTIFACT_EXISTS: frozenset(
-                {AssertionInputSource.ARTIFACTS}
-            ),
-            AssertionKind.ARTIFACT_NON_EMPTY: frozenset(
-                {AssertionInputSource.ARTIFACTS}
-            ),
-            AssertionKind.ARTIFACT_CONTAINED: frozenset(
-                {AssertionInputSource.ARTIFACTS}
-            ),
-            AssertionKind.ARTIFACT_CURRENT: frozenset(
-                {AssertionInputSource.ARTIFACTS}
-            ),
-            AssertionKind.GOLD_MATCHES: frozenset({AssertionInputSource.GOLD}),
-        }
-    )
+_ALLOWED_SOURCES: Final[Mapping[AssertionKind, frozenset[AssertionInputSource]]] = MappingProxyType(
+    {
+        AssertionKind.PROCESS_COMPLETED: frozenset({AssertionInputSource.PROCESS}),
+        AssertionKind.EXIT_CODE_EQUALS: frozenset({AssertionInputSource.PROCESS}),
+        AssertionKind.NOT_TIMED_OUT: frozenset({AssertionInputSource.PROCESS}),
+        AssertionKind.NOT_CANCELLED: frozenset({AssertionInputSource.PROCESS}),
+        AssertionKind.OUTPUT_LIMIT_NOT_EXCEEDED: frozenset({AssertionInputSource.PROCESS}),
+        AssertionKind.CAPTURE_COMPLETED: frozenset({AssertionInputSource.PROCESS}),
+        AssertionKind.SECTION_EXISTS: frozenset({AssertionInputSource.SECTIONS}),
+        AssertionKind.SECTION_COMPLETED: frozenset({AssertionInputSource.SECTIONS}),
+        AssertionKind.SECTION_NON_EMPTY: frozenset(
+            {
+                AssertionInputSource.SECTIONS,
+                AssertionInputSource.NORMALIZED_SECTION,
+            }
+        ),
+        AssertionKind.DIAGNOSTIC_PRESENT: frozenset({AssertionInputSource.DIAGNOSTICS}),
+        AssertionKind.DIAGNOSTIC_ABSENT: frozenset({AssertionInputSource.DIAGNOSTICS}),
+        AssertionKind.TEXT_CONTAINS: frozenset(
+            {
+                AssertionInputSource.RAW_STDOUT,
+                AssertionInputSource.RAW_STDERR,
+                AssertionInputSource.NORMALIZED_OUTPUT,
+                AssertionInputSource.NORMALIZED_SECTION,
+            }
+        ),
+        AssertionKind.TEXT_EXCLUDES: frozenset(
+            {
+                AssertionInputSource.RAW_STDOUT,
+                AssertionInputSource.RAW_STDERR,
+                AssertionInputSource.NORMALIZED_OUTPUT,
+                AssertionInputSource.NORMALIZED_SECTION,
+            }
+        ),
+        AssertionKind.TEXT_EQUALS: frozenset(
+            {
+                AssertionInputSource.RAW_STDOUT,
+                AssertionInputSource.RAW_STDERR,
+                AssertionInputSource.NORMALIZED_OUTPUT,
+                AssertionInputSource.NORMALIZED_SECTION,
+            }
+        ),
+        AssertionKind.TEXT_MATCHES: frozenset(
+            {
+                AssertionInputSource.RAW_STDOUT,
+                AssertionInputSource.RAW_STDERR,
+                AssertionInputSource.NORMALIZED_OUTPUT,
+                AssertionInputSource.NORMALIZED_SECTION,
+            }
+        ),
+        AssertionKind.COUNT_COMPARE: frozenset({AssertionInputSource.COUNTS}),
+        AssertionKind.ARTIFACT_EXISTS: frozenset({AssertionInputSource.ARTIFACTS}),
+        AssertionKind.ARTIFACT_NON_EMPTY: frozenset({AssertionInputSource.ARTIFACTS}),
+        AssertionKind.ARTIFACT_CONTAINED: frozenset({AssertionInputSource.ARTIFACTS}),
+        AssertionKind.ARTIFACT_CURRENT: frozenset({AssertionInputSource.ARTIFACTS}),
+        AssertionKind.GOLD_MATCHES: frozenset({AssertionInputSource.GOLD}),
+    }
 )
 
 
@@ -248,7 +223,8 @@ class ScenarioAssertionSpec:
             raise TypeError("source must be an AssertionInputSource")
         if self.source not in _ALLOWED_SOURCES[self.kind]:
             allowed = ", ".join(
-                source.value for source in sorted(
+                source.value
+                for source in sorted(
                     _ALLOWED_SOURCES[self.kind],
                     key=lambda item: item.value,
                 )
@@ -312,9 +288,7 @@ class ProcessAssertionEvidence:
         if self.exit_code is not None and type(self.exit_code) is not int:
             raise TypeError("exit_code must be an integer or None")
         if self.completed and (self.timed_out or self.cancelled):
-            raise ValueError(
-                "completed cannot be true when timed_out or cancelled is true"
-            )
+            raise ValueError("completed cannot be true when timed_out or cancelled is true")
         object.__setattr__(
             self,
             "evidence_path",
@@ -669,10 +643,7 @@ class ScenarioAssertionEvaluator:
         except Exception as exc:
             outcome = _Outcome(
                 status=AssertionStatus.ERROR,
-                message=(
-                    f"Assertion could not be evaluated reliably: "
-                    f"{_safe_exception_text(exc)}"
-                ),
+                message=(f"Assertion could not be evaluated reliably: {_safe_exception_text(exc)}"),
                 evidence_path=_default_evidence_path(spec, context),
             )
         return ScenarioAssertionResult(
@@ -740,14 +711,14 @@ def aggregate_assertion_results(
     if len(ordered_specs) != len(ordered_results):
         raise ValueError("specs and results must have identical lengths")
     result_by_id: dict[str, ScenarioAssertionResult] = {}
-    for result in ordered_results:
-        if not isinstance(result, ScenarioAssertionResult):
+    for assertion_result in ordered_results:
+        if not isinstance(assertion_result, ScenarioAssertionResult):
             raise TypeError("results must contain ScenarioAssertionResult objects")
-        if result.assertion_id in result_by_id:
+        if assertion_result.assertion_id in result_by_id:
             raise ValueError(
-                f"duplicate assertion result ID {result.assertion_id!r}"
+                f"duplicate assertion result ID {assertion_result.assertion_id!r}"
             )
-        result_by_id[result.assertion_id] = result
+        result_by_id[assertion_result.assertion_id] = assertion_result
     warning_ids: list[str] = []
     required_statuses: list[AssertionStatus] = []
     for spec in ordered_specs:
@@ -755,21 +726,16 @@ def aggregate_assertion_results(
             raise TypeError("specs must contain ScenarioAssertionSpec objects")
         result = result_by_id.get(spec.assertion_id)
         if result is None:
-            raise ValueError(
-                f"missing result for assertion {spec.assertion_id!r}"
-            )
+            raise ValueError(f"missing result for assertion {spec.assertion_id!r}")
         if result.assertion_kind != spec.kind.value:
             raise ValueError(
-                f"result kind for assertion {spec.assertion_id!r} does not "
-                "match its specification"
+                f"result kind for assertion {spec.assertion_id!r} does not match its specification"
             )
         if spec.required:
             required_statuses.append(result.status)
         elif result.status in (AssertionStatus.FAILED, AssertionStatus.ERROR):
             warning_ids.append(spec.assertion_id)
-    unexpected = set(result_by_id).difference(
-        spec.assertion_id for spec in ordered_specs
-    )
+    unexpected = set(result_by_id).difference(spec.assertion_id for spec in ordered_specs)
     if unexpected:
         rendered = ", ".join(sorted(unexpected))
         raise ValueError(f"results contain unknown assertion IDs: {rendered}")
@@ -894,9 +860,7 @@ def _evaluate_builtin(
                 else "Prohibited diagnostic evidence is absent."
             ),
             evidence_path=(
-                matched[0].evidence_path
-                if matched
-                else _default_evidence_path(spec, context)
+                matched[0].evidence_path if matched else _default_evidence_path(spec, context)
             ),
         )
     if kind in (
@@ -944,11 +908,15 @@ def _evaluate_text(
             ignore_case=ignore_case,
             full_match=_parameter_bool(spec, "full_match", default=False),
         )
-        passed = pattern.fullmatch(text) is not None if _parameter_bool(
-            spec,
-            "full_match",
-            default=False,
-        ) else pattern.search(text) is not None
+        passed = (
+            pattern.fullmatch(text) is not None
+            if _parameter_bool(
+                spec,
+                "full_match",
+                default=False,
+            )
+            else pattern.search(text) is not None
+        )
         success_message = "Text matches the reviewed pattern."
     else:
         raise AssertionError("unreachable text assertion kind")
@@ -974,9 +942,7 @@ def _evaluate_count(
     try:
         comparison = CountComparison(operator_value)
     except ValueError as exc:
-        raise ValueError(
-            f"unsupported count comparison operator {operator_value!r}"
-        ) from exc
+        raise ValueError(f"unsupported count comparison operator {operator_value!r}") from exc
     if name not in context.counts:
         return _error_outcome(
             spec,
@@ -989,8 +955,7 @@ def _evaluate_count(
         spec,
         passed=passed,
         success_message=(
-            f"Count {name!r} satisfies {comparison.value} {expected}; "
-            f"actual value is {actual}."
+            f"Count {name!r} satisfies {comparison.value} {expected}; actual value is {actual}."
         ),
         evidence_path=_default_evidence_path(spec, context),
     )
@@ -1116,6 +1081,24 @@ def _error_outcome(
     )
 
 
+@overload
+def _section_for(
+    spec: ScenarioAssertionSpec,
+    context: AssertionEvaluationContext,
+    *,
+    allow_missing: Literal[False],
+) -> SectionAssertionEvidence: ...
+
+
+@overload
+def _section_for(
+    spec: ScenarioAssertionSpec,
+    context: AssertionEvaluationContext,
+    *,
+    allow_missing: Literal[True],
+) -> SectionAssertionEvidence | None: ...
+
+
 def _section_for(
     spec: ScenarioAssertionSpec,
     context: AssertionEvaluationContext,
@@ -1142,9 +1125,7 @@ def _section_text_for(
     if spec.source is AssertionInputSource.NORMALIZED_SECTION:
         text = context.normalized_sections.get(section_id)
         if text is None:
-            raise ValueError(
-                f"normalized section {section_id!r} is unavailable"
-            )
+            raise ValueError(f"normalized section {section_id!r} is unavailable")
         return text, None if section is None else section.evidence_path
     if section is None:
         raise ValueError(f"section {section_id!r} is unavailable")
@@ -1195,9 +1176,7 @@ def _matching_diagnostics(
             continue
         if section_id is not None and diagnostic.section_id != section_id:
             continue
-        if compiled_pattern is not None and compiled_pattern.search(
-            diagnostic.message
-        ) is None:
+        if compiled_pattern is not None and compiled_pattern.search(diagnostic.message) is None:
             continue
         matches.append(diagnostic)
     return tuple(matches)
@@ -1235,9 +1214,9 @@ def _compare_count(
 
 
 def _prepare_specs(
-    specs: Iterable[ScenarioAssertionSpec],
+    specs: object,
 ) -> tuple[ScenarioAssertionSpec, ...]:
-    if isinstance(specs, (str, bytes)):
+    if isinstance(specs, (str, bytes)) or not isinstance(specs, Iterable):
         raise TypeError("specs must be an iterable of ScenarioAssertionSpec")
     ordered = tuple(specs)
     if len(ordered) > _MAX_COLLECTION_ITEMS:
@@ -1281,10 +1260,12 @@ def _validate_spec_parameters(
             "fatal",
             "ignore_case",
         }
-        if not any(
-            name in parameters
-            for name in ("diagnostic_id", "kind", "message_pattern", "fatal")
-        ) and section_id is None:
+        if (
+            not any(
+                name in parameters for name in ("diagnostic_id", "kind", "message_pattern", "fatal")
+            )
+            and section_id is None
+        ):
             raise ValueError(
                 f"assertion kind {kind.value!r} requires at least one "
                 "diagnostic filter or section_id"
@@ -1311,15 +1292,11 @@ def _validate_spec_parameters(
     missing = required.difference(parameters)
     if missing:
         rendered = ", ".join(sorted(missing))
-        raise ValueError(
-            f"assertion kind {kind.value!r} is missing parameters: {rendered}"
-        )
+        raise ValueError(f"assertion kind {kind.value!r} is missing parameters: {rendered}")
     unexpected = set(parameters).difference(required | optional)
     if unexpected:
         rendered = ", ".join(sorted(unexpected))
-        raise ValueError(
-            f"assertion kind {kind.value!r} has unsupported parameters: {rendered}"
-        )
+        raise ValueError(f"assertion kind {kind.value!r} has unsupported parameters: {rendered}")
     if source is AssertionInputSource.NORMALIZED_SECTION and section_id is None:
         raise ValueError("normalized-section assertions require section_id")
     if kind is AssertionKind.TEXT_MATCHES:
@@ -1341,9 +1318,7 @@ def _validate_spec_parameters(
         try:
             CountComparison(operator_value)
         except ValueError as exc:
-            raise ValueError(
-                f"unsupported count comparison operator {operator_value!r}"
-            ) from exc
+            raise ValueError(f"unsupported count comparison operator {operator_value!r}") from exc
         expected = parameters["expected"]
         if type(expected) is not int:
             raise TypeError("count comparison expected must be an integer")
@@ -1362,9 +1337,7 @@ def _freeze_parameters(values: AssertionParameters) -> AssertionParameters:
             pattern=_COUNT_NAME_RE,
         )
         if type(value) not in (str, int, bool, type(None), tuple):
-            raise TypeError(
-                f"parameter {key!r} has unsupported type {type(value).__name__}"
-            )
+            raise TypeError(f"parameter {key!r} has unsupported type {type(value).__name__}")
         if isinstance(value, str):
             value = _require_text(
                 value,
@@ -1408,8 +1381,7 @@ def _freeze_sections(
             raise TypeError("sections values must be SectionAssertionEvidence")
         if value.section_id != key:
             raise ValueError(
-                f"section mapping key {key!r} does not match value identity "
-                f"{value.section_id!r}"
+                f"section mapping key {key!r} does not match value identity {value.section_id!r}"
             )
         copied[key] = value
     return MappingProxyType(copied)
@@ -1479,27 +1451,29 @@ def _freeze_artifacts(
             raise TypeError("artifacts values must be ArtifactAssertionEvidence")
         if value.artifact_id != key:
             raise ValueError(
-                f"artifact mapping key {key!r} does not match value identity "
-                f"{value.artifact_id!r}"
+                f"artifact mapping key {key!r} does not match value identity {value.artifact_id!r}"
             )
         copied[key] = value
     return MappingProxyType(copied)
 
 
 def _freeze_typed_tuple(
-    values: Iterable[object],
+    values: object,
     *,
-    item_type: type,
+    item_type: type[_TypedItemT],
     field_name: str,
-) -> tuple:
-    if isinstance(values, (str, bytes)):
+) -> tuple[_TypedItemT, ...]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
         raise TypeError(f"{field_name} must be an iterable of {item_type.__name__}")
     copied = tuple(values)
     if len(copied) > _MAX_COLLECTION_ITEMS:
         raise ValueError(f"{field_name} exceeds the supported item limit")
-    if not all(isinstance(item, item_type) for item in copied):
-        raise TypeError(f"{field_name} must contain {item_type.__name__} objects")
-    return copied
+    prepared: list[_TypedItemT] = []
+    for item in copied:
+        if not isinstance(item, item_type):
+            raise TypeError(f"{field_name} must contain {item_type.__name__} objects")
+        prepared.append(item)
+    return tuple(prepared)
 
 
 def _validate_evidence_containment(
@@ -1515,9 +1489,7 @@ def _validate_evidence_containment(
     if process.evidence_path is not None:
         evidence_paths.append(process.evidence_path)
     evidence_paths.extend(
-        section.evidence_path
-        for section in sections.values()
-        if section.evidence_path is not None
+        section.evidence_path for section in sections.values() if section.evidence_path is not None
     )
     evidence_paths.extend(
         diagnostic.evidence_path
@@ -1535,9 +1507,7 @@ def _validate_evidence_containment(
         if not path.is_absolute():
             raise ValueError(f"evidence path must be absolute: {path!s}")
         if not _is_relative_to(path, run_root):
-            raise ValueError(
-                f"evidence path escapes run_root: {path!s}"
-            )
+            raise ValueError(f"evidence path escapes run_root: {path!s}")
 
 
 def _compile_safe_pattern(

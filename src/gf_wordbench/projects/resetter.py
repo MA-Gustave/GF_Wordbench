@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import re
+from collections.abc import Iterable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from enum import StrEnum
+import hashlib
+import json
+import os
 from pathlib import Path
+import re
 from typing import Protocol
 
 from gf_wordbench.kernel.ids import ProjectId, validate_project_id
@@ -118,9 +119,7 @@ class ResetRequest:
         if archive is not None:
             archive = _absolute_path(archive, "archive_destination")
             if archive == Path(archive.anchor):
-                raise ValueError(
-                    "archive_destination cannot be a filesystem root"
-                )
+                raise ValueError("archive_destination cannot be a filesystem root")
             object.__setattr__(self, "archive_destination", archive)
 
         if self.confirmation_token is not None:
@@ -141,24 +140,14 @@ class ResetRequest:
         object.__setattr__(self, "expected_project_id", expected)
         object.__setattr__(self, "current_project_id", current)
 
-        if (
-            expected is not None
-            and current is not None
-            and expected != current
-        ):
-            raise ValueError(
-                "current_project_id does not match expected_project_id"
-            )
+        if expected is not None and current is not None and expected != current:
+            raise ValueError("current_project_id does not match expected_project_id")
 
         runs = _paths(self.run_paths, "run_paths")
         for path in runs:
-            if (
-                path.parent != root
-                or _RUN_NAME.fullmatch(path.name) is None
-            ):
+            if path.parent != root or _RUN_NAME.fullmatch(path.name) is None:
                 raise ValueError(
-                    "run_paths must be canonical run_<run-id> "
-                    "children of workspace_root"
+                    "run_paths must be canonical run_<run-id> children of workspace_root"
                 )
         object.__setattr__(self, "run_paths", runs)
 
@@ -178,17 +167,12 @@ class ResetRequest:
 
         if self.preservation is PreservationMode.ARCHIVE:
             if archive is None:
-                raise ValueError(
-                    "archive mode requires archive_destination"
-                )
+                raise ValueError("archive mode requires archive_destination")
             if self.discard_authorized:
-                raise ValueError(
-                    "archive mode forbids discard_authorized"
-                )
+                raise ValueError("archive mode forbids discard_authorized")
         elif archive is not None or not self.discard_authorized:
             raise ValueError(
-                "discard mode requires explicit authorization "
-                "and no archive destination"
+                "discard mode requires explicit authorization and no archive destination"
             )
 
 
@@ -213,9 +197,7 @@ class ResetPlan:
     def __post_init__(self) -> None:
         operation_id = _text(self.operation_id, "operation_id")
         if _OPERATION_ID.fullmatch(operation_id) is None:
-            raise ValueError(
-                "operation_id must use reset-<20 lowercase hex>"
-            )
+            raise ValueError("operation_id must use reset-<20 lowercase hex>")
         if not isinstance(self.request, ResetRequest):
             raise TypeError("request must be ResetRequest")
 
@@ -234,40 +216,24 @@ class ResetPlan:
                 raise ValueError(f"{field} is not canonical")
 
         if self.run_paths != self.request.run_paths:
-            raise ValueError(
-                "run_paths must match request.run_paths"
-            )
-        if (
-            self.external_source_roots
-            != self.request.external_source_roots
-        ):
-            raise ValueError(
-                "external_source_roots must match "
-                "request.external_source_roots"
-            )
+            raise ValueError("run_paths must match request.run_paths")
+        if self.external_source_roots != self.request.external_source_roots:
+            raise ValueError("external_source_roots must match request.external_source_roots")
         if self.replace_paths != (expected["project_path"],):
-            raise ValueError(
-                "replace_paths must contain only project_path"
-            )
+            raise ValueError("replace_paths must contain only project_path")
         if self.removal_paths != _removal_paths(
             self.request,
             expected["state_path"],
         ):
-            raise ValueError(
-                "removal_paths do not match the reset scope"
-            )
+            raise ValueError("removal_paths do not match the reset scope")
         if self.preserve_paths != _preserve_paths(
             self.request,
             expected["template_path"],
             expected["state_path"],
         ):
-            raise ValueError(
-                "preserve_paths do not match the reset scope"
-            )
+            raise ValueError("preserve_paths do not match the reset scope")
         if self.current_project_id != self.request.current_project_id:
-            raise ValueError(
-                "current_project_id must match the request"
-            )
+            raise ValueError("current_project_id must match the request")
 
         object.__setattr__(
             self,
@@ -371,11 +337,7 @@ class ProjectResetError(RuntimeError):
         phase: ResetPhase | None = None,
     ) -> None:
         self.category = LifecycleErrorCategory(category)
-        self.phase = (
-            ResetPhase(phase)
-            if phase is not None
-            else None
-        )
+        self.phase = ResetPhase(phase) if phase is not None else None
         self.public_message = _text(message, "message")
         super().__init__(self.public_message)
 
@@ -406,33 +368,21 @@ def plan_project_reset(request: ResetRequest) -> ResetPlan:
 
     if request.scope is ResetScope.PROJECT_ONLY:
         warnings.append(
-            "Project-only reset retains runs and state that may "
-            "refer to the old project."
+            "Project-only reset retains runs and state that may refer to the old project."
         )
 
     if request.external_source_roots:
         warnings.append(
-            "External source roots are preserved and excluded "
-            "from the project archive."
+            "External source roots are preserved and excluded from the project archive."
         )
 
-    if (
-        request.archive_destination is not None
-        and _within(request.archive_destination, root)
-    ):
+    if request.archive_destination is not None and _within(request.archive_destination, root):
         warnings.append(
-            "The archive destination is inside the workspace and "
-            "must remain outside reset scope."
+            "The archive destination is inside the workspace and must remain outside reset scope."
         )
 
-    if (
-        request.expected_project_id is not None
-        and request.current_project_id is None
-    ):
-        warnings.append(
-            "Preflight must verify expected_project_id "
-            "before mutation."
-        )
+    if request.expected_project_id is not None and request.current_project_id is None:
+        warnings.append("Preflight must verify expected_project_id before mutation.")
 
     return ResetPlan(
         operation_id=operation_id,
@@ -549,7 +499,7 @@ class _Progress:
 class ProjectResetter:
     """Coordinate a staged, validated, reversible project reset."""
 
-    __slots__ = ("_planner", "_operations")
+    __slots__ = ("_operations", "_planner")
 
     def __init__(
         self,
@@ -571,14 +521,8 @@ class ProjectResetter:
 
         plan = self._planner(request)
 
-        if (
-            not isinstance(plan, ResetPlan)
-            or plan.request != request
-        ):
-            raise TypeError(
-                "planner must return ResetPlan "
-                "for the exact request"
-            )
+        if not isinstance(plan, ResetPlan) or plan.request != request:
+            raise TypeError("planner must return ResetPlan for the exact request")
 
         return plan
 
@@ -674,9 +618,7 @@ class ProjectResetter:
             ResetOutcome.DRY_RUN,
             plan,
             tuple(records),
-            remaining_actions=(
-                plan.remaining_initialization_actions
-            ),
+            remaining_actions=(plan.remaining_initialization_actions),
         )
 
     def _reset_locked(
@@ -685,10 +627,7 @@ class ProjectResetter:
         records: list[PhaseRecord],
     ) -> ResetResult:
         progress = _Progress()
-        archive_mode = (
-            plan.request.preservation
-            is PreservationMode.ARCHIVE
-        )
+        archive_mode = plan.request.preservation is PreservationMode.ARCHIVE
 
         steps = (
             (
@@ -754,15 +693,8 @@ class ProjectResetter:
 
             records.append(_done(phase, message))
 
-            if (
-                phase
-                is ResetPhase.ARCHIVE_OR_AUTHORIZE_DISCARD
-            ):
-                progress.archive = (
-                    True
-                    if archive_mode
-                    else None
-                )
+            if phase is ResetPhase.ARCHIVE_OR_AUTHORIZE_DISCARD:
+                progress.archive = True if archive_mode else None
             elif phase is ResetPhase.STAGE:
                 progress.staged = True
             elif phase is ResetPhase.SWAP:
@@ -780,8 +712,7 @@ class ProjectResetter:
                 PhaseRecord(
                     ResetPhase.CLEAN_GENERATED_STATE,
                     PhaseStatus.SKIPPED,
-                    "Project-only reset retains runs "
-                    "and application state.",
+                    "Project-only reset retains runs and application state.",
                 )
             )
         elif cleanup_failure is None:
@@ -824,8 +755,7 @@ class ProjectResetter:
                 failure=failure,
                 remaining_actions=(
                     "Preserve the validated active project.",
-                    "Resolve temporary or rollback artifacts "
-                    "before another lifecycle operation.",
+                    "Resolve temporary or rollback artifacts before another lifecycle operation.",
                 ),
             )
 
@@ -841,9 +771,7 @@ class ProjectResetter:
             plan,
             records,
             progress,
-            remaining_actions=(
-                plan.remaining_initialization_actions
-            ),
+            remaining_actions=(plan.remaining_initialization_actions),
         )
 
     def _clean(
@@ -887,12 +815,8 @@ class ProjectResetter:
         progress: _Progress,
         failure: ResetFailure,
     ) -> ResetResult:
-        must_rollback = (
-            failure.phase is ResetPhase.SWAP
-            or (
-                progress.swapped
-                and not progress.validated
-            )
+        must_rollback = failure.phase is ResetPhase.SWAP or (
+            progress.swapped and not progress.validated
         )
 
         if must_rollback:
@@ -924,8 +848,7 @@ class ProjectResetter:
                     remaining_actions=(
                         f"Do not delete {plan.project_path!s}.",
                         f"Do not delete {plan.rollback_path!s}.",
-                        "Stop lifecycle operations and perform "
-                        "explicit manual recovery.",
+                        "Stop lifecycle operations and perform explicit manual recovery.",
                     ),
                 )
         elif progress.staged:
@@ -941,10 +864,8 @@ class ProjectResetter:
             progress,
             failure=failure,
             remaining_actions=(
-                "Preserve the authoritative project "
-                "and recovery material.",
-                "Resolve the lifecycle failure "
-                "before retrying reset.",
+                "Preserve the authoritative project and recovery material.",
+                "Resolve the lifecycle failure before retrying reset.",
             ),
         )
 
@@ -965,9 +886,7 @@ class ProjectResetter:
             archive_completed=progress.archive,
             project_staged=progress.staged,
             project_replacement_completed=progress.swapped,
-            active_project_validation_completed=(
-                progress.validated
-            ),
+            active_project_validation_completed=(progress.validated),
             rollback_completed=progress.rollback,
             run_cleanup_completed=progress.runs,
             state_reset_completed=progress.state,
@@ -1003,9 +922,7 @@ def _operation_id(
     request: ResetRequest,
 ) -> str:
     payload = {
-        "workspace_root": os.fspath(
-            request.workspace_root
-        ),
+        "workspace_root": os.fspath(request.workspace_root),
         "scope": request.scope.value,
         "preservation": request.preservation.value,
         "archive_destination": (
@@ -1014,23 +931,13 @@ def _operation_id(
             else None
         ),
         "expected_project_id": (
-            str(request.expected_project_id)
-            if request.expected_project_id is not None
-            else None
+            str(request.expected_project_id) if request.expected_project_id is not None else None
         ),
         "current_project_id": (
-            str(request.current_project_id)
-            if request.current_project_id is not None
-            else None
+            str(request.current_project_id) if request.current_project_id is not None else None
         ),
-        "run_paths": [
-            os.fspath(path)
-            for path in request.run_paths
-        ],
-        "external_source_roots": [
-            os.fspath(path)
-            for path in request.external_source_roots
-        ],
+        "run_paths": [os.fspath(path) for path in request.run_paths],
+        "external_source_roots": [os.fspath(path) for path in request.external_source_roots],
     }
 
     encoded = json.dumps(
@@ -1108,25 +1015,13 @@ def _validate_boundaries(
 
     for path in controlled:
         if path == root or not _within(path, root):
-            raise ValueError(
-                "reset-controlled paths must remain "
-                "inside workspace_root"
-            )
+            raise ValueError("reset-controlled paths must remain inside workspace_root")
 
-    if (
-        project.parent != root
-        or staging.parent != root
-        or rollback.parent != root
-    ):
-        raise ValueError(
-            "project, staging, and rollback paths "
-            "must be direct workspace children"
-        )
+    if project.parent != root or staging.parent != root or rollback.parent != root:
+        raise ValueError("project, staging, and rollback paths must be direct workspace children")
 
     if state.parent != root:
-        raise ValueError(
-            "state_path must be a direct workspace child"
-        )
+        raise ValueError("state_path must be a direct workspace child")
 
     _reject_overlaps(
         controlled,
@@ -1138,21 +1033,13 @@ def _validate_boundaries(
     )
 
     for source in request.external_source_roots:
-        if any(
-            _overlap(source, path)
-            for path in controlled
-        ):
-            raise ValueError(
-                "external source roots must not overlap "
-                "reset-controlled paths"
-            )
+        if any(_overlap(source, path) for path in controlled):
+            raise ValueError("external source roots must not overlap reset-controlled paths")
 
     archive = request.archive_destination
     if archive is not None:
         if archive == root:
-            raise ValueError(
-                "archive_destination cannot be workspace_root"
-            )
+            raise ValueError("archive_destination cannot be workspace_root")
 
         if any(
             _overlap(archive, path)
@@ -1161,10 +1048,7 @@ def _validate_boundaries(
                 *request.external_source_roots,
             )
         ):
-            raise ValueError(
-                "archive_destination overlaps "
-                "a protected reset path"
-            )
+            raise ValueError("archive_destination overlaps a protected reset path")
 
 
 def _absolute_path(
@@ -1172,21 +1056,15 @@ def _absolute_path(
     field: str,
 ) -> Path:
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field} must be pathlib.Path"
-        )
+        raise TypeError(f"{field} must be pathlib.Path")
 
     raw = os.fspath(value)
 
     if "\x00" in raw:
-        raise ValueError(
-            f"{field} cannot contain NUL"
-        )
+        raise ValueError(f"{field} cannot contain NUL")
 
     if not value.is_absolute():
-        raise ValueError(
-            f"{field} must be absolute"
-        )
+        raise ValueError(f"{field} must be absolute")
 
     return Path(os.path.normpath(raw))
 
@@ -1196,30 +1074,21 @@ def _paths(
     field: str,
 ) -> tuple[Path, ...]:
     if not isinstance(values, tuple):
-        raise TypeError(
-            f"{field} must be a tuple"
-        )
+        raise TypeError(f"{field} must be a tuple")
 
-    return _unique_paths(
-        _absolute_path(value, field)
-        for value in values
-    )
+    return _unique_paths(_absolute_path(value, field) for value in values)
 
 
 def _unique_paths(
-    values: object,
+    values: Iterable[Path],
 ) -> tuple[Path, ...]:
     unique: dict[str, Path] = {}
 
     for path in values:
-        key = os.path.normcase(
-            os.fspath(path)
-        )
+        key = os.path.normcase(os.fspath(path))
 
         if key in unique:
-            raise ValueError(
-                f"duplicate path: {path!s}"
-            )
+            raise ValueError(f"duplicate path: {path!s}")
 
         unique[key] = path
 
@@ -1227,9 +1096,7 @@ def _unique_paths(
         sorted(
             unique.values(),
             key=lambda path: (
-                os.path.normcase(
-                    os.fspath(path)
-                ),
+                os.path.normcase(os.fspath(path)),
                 os.fspath(path),
             ),
         )
@@ -1252,10 +1119,7 @@ def _overlap(
     left: Path,
     right: Path,
 ) -> bool:
-    return (
-        _within(left, right)
-        or _within(right, left)
-    )
+    return _within(left, right) or _within(right, left)
 
 
 def _reject_overlaps(
@@ -1265,10 +1129,7 @@ def _reject_overlaps(
     for index, left in enumerate(paths):
         for right in paths[index + 1 :]:
             if _overlap(left, right):
-                raise ValueError(
-                    f"{field} overlap: "
-                    f"{left!s} and {right!s}"
-                )
+                raise ValueError(f"{field} overlap: {left!s} and {right!s}")
 
 
 def _project_id(
@@ -1330,10 +1191,7 @@ def _category(
     phase: ResetPhase,
     preservation: PreservationMode,
 ) -> LifecycleErrorCategory:
-    if (
-        phase
-        is ResetPhase.ARCHIVE_OR_AUTHORIZE_DISCARD
-    ):
+    if phase is ResetPhase.ARCHIVE_OR_AUTHORIZE_DISCARD:
         return (
             LifecycleErrorCategory.ARCHIVE
             if preservation is PreservationMode.ARCHIVE
@@ -1341,21 +1199,11 @@ def _category(
         )
 
     return {
-        ResetPhase.PREFLIGHT: (
-            LifecycleErrorCategory.PATH_SAFETY
-        ),
-        ResetPhase.STAGE: (
-            LifecycleErrorCategory.STAGING
-        ),
-        ResetPhase.VALIDATE_STAGE: (
-            LifecycleErrorCategory.VALIDATION
-        ),
-        ResetPhase.SWAP: (
-            LifecycleErrorCategory.SWAP
-        ),
-        ResetPhase.VALIDATE_ACTIVE_PROJECT: (
-            LifecycleErrorCategory.VALIDATION
-        ),
+        ResetPhase.PREFLIGHT: (LifecycleErrorCategory.PATH_SAFETY),
+        ResetPhase.STAGE: (LifecycleErrorCategory.STAGING),
+        ResetPhase.VALIDATE_STAGE: (LifecycleErrorCategory.VALIDATION),
+        ResetPhase.SWAP: (LifecycleErrorCategory.SWAP),
+        ResetPhase.VALIDATE_ACTIVE_PROJECT: (LifecycleErrorCategory.VALIDATION),
     }[phase]
 
 
@@ -1363,26 +1211,15 @@ def _cleanup_actions(
     plan: ResetPlan,
     progress: _Progress,
 ) -> tuple[str, ...]:
-    actions = [
-        "Keep the validated new active project."
-    ]
+    actions = ["Keep the validated new active project."]
 
     if progress.runs is False:
-        actions.append(
-            "Retry cleanup through "
-            "the run-lifecycle service."
-        )
+        actions.append("Retry cleanup through the run-lifecycle service.")
 
     if progress.state is False:
-        actions.append(
-            "Retry application-state cleanup for "
-            f"{plan.state_path!s}."
-        )
+        actions.append(f"Retry application-state cleanup for {plan.state_path!s}.")
 
-    actions.append(
-        "Resolve retained recovery artifacts "
-        "before another lifecycle operation."
-    )
+    actions.append("Resolve retained recovery artifacts before another lifecycle operation.")
 
     return tuple(actions)
 
@@ -1392,22 +1229,10 @@ def _text(
     field: str,
 ) -> str:
     if not isinstance(value, str):
-        raise TypeError(
-            f"{field} must be a string"
-        )
+        raise TypeError(f"{field} must be a string")
 
-    if (
-        not value
-        or value != value.strip()
-        or any(
-            char in value
-            for char in "\x00\r\n"
-        )
-    ):
-        raise ValueError(
-            f"{field} must be a non-empty "
-            "single-line string"
-        )
+    if not value or value != value.strip() or any(char in value for char in "\x00\r\n"):
+        raise ValueError(f"{field} must be a non-empty single-line string")
 
     return value
 
@@ -1417,9 +1242,7 @@ def _texts(
     field: str,
 ) -> tuple[str, ...]:
     if not isinstance(values, (tuple, list)):
-        raise TypeError(
-            f"{field} must be a tuple or list"
-        )
+        raise TypeError(f"{field} must be a tuple or list")
 
     output: list[str] = []
     seen: set[str] = set()

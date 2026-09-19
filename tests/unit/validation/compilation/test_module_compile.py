@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
-import inspect
-import os
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+import inspect
+import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from tests.helpers.fake_processes import (
+    make_cancelled_process_result,
+    make_launch_failed_process_result,
+    make_process_result,
+    make_timed_out_process_result,
+)
 
 from gf_wordbench.infrastructure.process.models import (
     ArtifactExpectation,
@@ -22,26 +28,22 @@ from gf_wordbench.infrastructure.process.models import (
 from gf_wordbench.kernel.errors import ContractViolationError
 from gf_wordbench.kernel.statuses import (
     ErrorKind,
-    ExecutionState,
     ValidationStatus,
 )
 from gf_wordbench.validation.compilation.models import (
     CompileRequest,
+    CompileSummary,
     CompileTarget,
     CompileTargetKind,
 )
 from gf_wordbench.validation.compilation.module_compile import (
+    ArtifactVerifier,
+    DiagnosticInterpreter,
     compile_checkpoint,
     compile_entrypoint,
     compile_module,
     compile_source,
     skipped_compile_summary,
-)
-from tests.helpers.fake_processes import (
-    make_cancelled_process_result,
-    make_launch_failed_process_result,
-    make_process_result,
-    make_timed_out_process_result,
 )
 
 
@@ -78,20 +80,18 @@ class _Services:
         self.execute_calls: list[ProcessRequest] = []
         self.interpret_calls: list[tuple[CompileRequest, ProcessResult]] = []
         self.verify_calls: list[tuple[CompileRequest, ProcessResult]] = []
-        self.result_factory: Callable[[ProcessRequest], object] = (
-            self._completed_result
-        )
+        self.result_factory: Callable[[ProcessRequest], object] = self._completed_result
         self.diagnostics = _DiagnosticFacts()
         self.artifacts: _ArtifactFacts | None = None
         self.execute_error: Exception | None = None
         self.interpret_error: Exception | None = None
         self.verify_error: Exception | None = None
 
-    def execute(self, request: ProcessRequest) -> object:
+    def execute(self, request: ProcessRequest) -> ProcessResult:
         self.execute_calls.append(request)
         if self.execute_error is not None:
             raise self.execute_error
-        return self.result_factory(request)
+        return cast(ProcessResult, self.result_factory(request))
 
     def interpret(
         self,
@@ -113,9 +113,7 @@ class _Services:
             raise self.verify_error
         if self.artifacts is not None:
             return self.artifacts
-        expected = tuple(
-            item.path for item in request.process_request.expected_artifacts
-        )
+        expected = tuple(item.path for item in request.process_request.expected_artifacts)
         return _ArtifactFacts(
             expected_artifacts=expected,
             produced_artifacts=expected,
@@ -163,6 +161,7 @@ def _bind_process_request(
 
     class _ProcessBackedCompileRequest(CompileRequest):
         __slots__ = ("_bound_process_request",)
+        _bound_process_request: ProcessRequest
 
         def __init__(self) -> None:
             super().__init__(
@@ -174,9 +173,7 @@ def _bind_process_request(
                 timeout_sec=process_request.timeout_sec,
                 stdout_path=process_request.stdout_path,
                 stderr_path=process_request.stderr_path,
-                expected_artifacts=tuple(
-                    item.path for item in process_request.expected_artifacts
-                ),
+                expected_artifacts=tuple(item.path for item in process_request.expected_artifacts),
             )
             object.__setattr__(
                 self,
@@ -236,9 +233,7 @@ def _case(
         executable=_make_executable(root),
         args=(
             "-batch",
-            terminal_argument
-            if terminal_argument is not None
-            else source_path.as_posix(),
+            terminal_argument if terminal_argument is not None else source_path.as_posix(),
         ),
         cwd=working_directory,
         stdout_path=evidence_root / "example.stdout.txt",
@@ -281,11 +276,11 @@ def _case(
 def _compile(
     case: _CompileCase,
     services: _Services,
-):
+) -> CompileSummary:
     return compile_module(
         case.request,
-        interpret_diagnostics=services.interpret,
-        verify_artifacts=services.verify,
+        interpret_diagnostics=cast(DiagnosticInterpreter, services.interpret),
+        verify_artifacts=cast(ArtifactVerifier, services.verify),
         execute_process=services.execute,
     )
 
@@ -620,10 +615,7 @@ def test_verifier_cannot_change_declared_expectation_identity(
 
     assert summary.status is ValidationStatus.ERROR
     assert summary.error_kind is ErrorKind.INTERNAL
-    assert (
-        summary.first_error
-        == "artifact verifier changed the declared expectation set"
-    )
+    assert summary.first_error == "artifact verifier changed the declared expectation set"
     assert "identities do not match" in summary.error_detail
 
 
@@ -685,6 +677,24 @@ def test_executor_must_return_process_result(tmp_path: Path) -> None:
     assert services.verify_calls == []
 
 
+def _replace_process_result_field(
+    result: ProcessResult,
+    field: str,
+    replacement: object,
+) -> ProcessResult:
+    if field == "operation_id":
+        return replace(result, operation_id=cast(str, replacement))
+    if field == "args":
+        return replace(result, args=cast(tuple[str, ...], replacement))
+    if field == "cwd":
+        return replace(result, cwd=cast(Path, replacement))
+    if field == "stdout_path":
+        return replace(result, stdout_path=cast(Path, replacement))
+    if field == "stderr_path":
+        return replace(result, stderr_path=cast(Path, replacement))
+    raise AssertionError(f"unsupported test field: {field}")
+
+
 @pytest.mark.parametrize(
     ("field", "replacement"),
     (
@@ -705,7 +715,7 @@ def test_contradictory_process_result_is_internal_error(
 
     def inconsistent(request: ProcessRequest) -> ProcessResult:
         result = make_process_result(request)
-        return replace(result, **{field: replacement})
+        return _replace_process_result_field(result, field, replacement)
 
     services.result_factory = inconsistent
 
@@ -800,8 +810,8 @@ def test_kind_specific_compilers_delegate_for_matching_target(
 
     summary = compiler(
         case.request,
-        interpret_diagnostics=services.interpret,
-        verify_artifacts=services.verify,
+        interpret_diagnostics=cast(DiagnosticInterpreter, services.interpret),
+        verify_artifacts=cast(ArtifactVerifier, services.verify),
         execute_process=services.execute,
     )
 
@@ -829,8 +839,8 @@ def test_kind_specific_compilers_reject_wrong_target(
     with pytest.raises(ContractViolationError, match="expected"):
         compiler(
             case.request,
-            interpret_diagnostics=services.interpret,
-            verify_artifacts=services.verify,
+            interpret_diagnostics=cast(DiagnosticInterpreter, services.interpret),
+            verify_artifacts=cast(ArtifactVerifier, services.verify),
             execute_process=services.execute,
         )
 
@@ -932,7 +942,7 @@ def test_compile_request_type_is_enforced() -> None:
     with pytest.raises(TypeError, match="request must be a CompileRequest"):
         compile_module(
             object(),  # type: ignore[arg-type]
-            interpret_diagnostics=services.interpret,
-            verify_artifacts=services.verify,
+            interpret_diagnostics=cast(DiagnosticInterpreter, services.interpret),
+            verify_artifacts=cast(ArtifactVerifier, services.verify),
             execute_process=services.execute,
         )

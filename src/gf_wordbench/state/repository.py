@@ -7,11 +7,11 @@ never treats remembered paths as portable language identity, a validated
 
 from __future__ import annotations
 
-import json
-import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import json
+import logging
 from pathlib import Path
 from typing import Final, Never, TypeAlias, cast
 
@@ -29,7 +29,7 @@ from gf_wordbench.kernel.errors import (
     StateWriteError,
     UnsupportedVersionError,
 )
-from gf_wordbench.kernel.serialization import dumps_canonical_json
+from gf_wordbench.kernel.serialization import dumps_canonical_json, to_json_value
 from gf_wordbench.version import __version__
 
 from .migrations import LegacyStateMigration, migrate_legacy_state
@@ -110,9 +110,7 @@ class StateRepository:
         if self.state_path is not None:
             return resolve_for_output(self.state_path)
 
-        return resolve_for_output(
-            self.workspace_root / CANONICAL_STATE_FILENAME
-        )
+        return resolve_for_output(self.workspace_root / CANONICAL_STATE_FILENAME)
 
     @property
     def legacy_state_path(self) -> Path:
@@ -255,8 +253,7 @@ class StateRepository:
             return self._fallback_from_invalid_file(
                 state_path,
                 StateDiagnosticCode.MALFORMED,
-                "application state is unreadable or malformed: "
-                f"{type(exc).__name__}",
+                f"application state is unreadable or malformed: {type(exc).__name__}",
                 quarantine=True,
             )
 
@@ -338,8 +335,31 @@ class StateRepository:
                 legacy_document,
                 canonical_defaults=default_app_state_document(),
             )
+            migration_payload = dict(migration.payload)
+            migrated_environment = migration_payload.get("environment")
+            environment = (
+                dict(migrated_environment) if isinstance(migrated_environment, Mapping) else {}
+            )
+            # Explicit path-resolved selections are stronger legacy evidence
+            # than retired project/scan fields.  Preserve them for the one-time
+            # migration and let the tolerant schema parser normalize or reject
+            # unsafe values.
+            explicit_environment_fields = (
+                ("selected_language_path", "last_selected_language_path"),
+                (
+                    "selected_validation_profile",
+                    "last_selected_validation_profile",
+                ),
+                ("selected_rgl_root", "last_rgl_root"),
+            )
+            for legacy_name, canonical_name in explicit_environment_fields:
+                if legacy_name in legacy_document:
+                    environment[canonical_name] = to_json_value(
+                        legacy_document[legacy_name]
+                    )
+            migration_payload["environment"] = environment
             state, schema_warnings = parse_app_state(
-                migration.payload,
+                migration_payload,
                 strict=False,
                 source=legacy_path,
             )
@@ -348,15 +368,12 @@ class StateRepository:
 
             verified = self._load_canonical(state_path)
             if not _is_successful_load(verified):
-                raise ValueError(
-                    "migrated canonical state failed verification"
-                )
+                raise ValueError("migrated canonical state failed verification")
         except Exception as exc:
-            diagnostics = (
+            diagnostics: tuple[StateDiagnostic, ...] = (
                 StateDiagnostic(
                     StateDiagnosticCode.MALFORMED,
-                    "legacy state migration failed; defaults were used: "
-                    f"{type(exc).__name__}",
+                    f"legacy state migration failed; defaults were used: {type(exc).__name__}",
                     legacy_path,
                 ),
             )
@@ -407,9 +424,7 @@ class StateRepository:
         *,
         quarantine: bool,
     ) -> StateLoadResult:
-        diagnostics: list[StateDiagnostic] = [
-            StateDiagnostic(code, message, state_path)
-        ]
+        diagnostics: list[StateDiagnostic] = [StateDiagnostic(code, message, state_path)]
 
         if quarantine and self.quarantine_invalid:
             quarantined = self._quarantine(state_path)
@@ -440,9 +455,7 @@ class StateRepository:
         state_path: Path,
     ) -> Path | None:
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-        quarantine_path = state_path.with_name(
-            f".gf_wordbench_state.invalid-{stamp}.json"
-        )
+        quarantine_path = state_path.with_name(f".gf_wordbench_state.invalid-{stamp}.json")
 
         try:
             return copy_file(
@@ -500,8 +513,7 @@ class StateRepository:
 
         if not self.create_alternate_parent:
             raise FileNotFoundError(
-                "alternate application-state parent does not exist: "
-                f"{state_path.parent}"
+                f"alternate application-state parent does not exist: {state_path.parent}"
             )
 
         return _nearest_existing_directory(state_path.parent)
@@ -564,15 +576,11 @@ def _read_json_object(path: Path) -> JsonObject:
         object_pairs_hook=_object_without_duplicates,
     )
     if not isinstance(value, dict):
-        raise TypeError(
-            "application state root must be a JSON object"
-        )
+        raise TypeError("application state root must be a JSON object")
     if not all(isinstance(key, str) for key in value):
-        raise TypeError(
-            "application state object keys must be strings"
-        )
+        raise TypeError("application state object keys must be strings")
 
-    return cast(JsonObject, value)
+    return cast("JsonObject", value)
 
 
 def _canonical_json_bytes(
@@ -587,18 +595,14 @@ def _object_without_duplicates(
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError(
-                f"duplicate JSON object key is prohibited: {key!r}"
-            )
+            raise ValueError(f"duplicate JSON object key is prohibited: {key!r}")
         result[key] = value
 
     return result
 
 
 def _reject_non_json_number(value: str) -> Never:
-    raise ValueError(
-        f"non-JSON numeric constant is prohibited: {value}"
-    )
+    raise ValueError(f"non-JSON numeric constant is prohibited: {value}")
 
 
 def _schema_major(value: object) -> int | None:
@@ -638,9 +642,7 @@ def _nearest_existing_directory(path: Path) -> Path:
     while not candidate.exists():
         parent = candidate.parent
         if parent == candidate:
-            raise FileNotFoundError(
-                f"no existing ancestor for alternate state path: {path}"
-            )
+            raise FileNotFoundError(f"no existing ancestor for alternate state path: {path}")
         candidate = parent
 
     return require_directory(
@@ -656,9 +658,7 @@ def _reject_run_owned_path(
     runs_root = resolve_for_output(workspace_root / "runs")
     candidate = resolve_for_output(state_path)
     if candidate == runs_root or candidate.is_relative_to(runs_root):
-        raise ValueError(
-            "application state must not be stored inside runs/"
-        )
+        raise ValueError("application state must not be stored inside runs/")
 
 
 def _loaded_diagnostics(
@@ -699,10 +699,7 @@ def _partial_diagnostics(
 def _migration_warning_messages(
     migration: LegacyStateMigration,
 ) -> tuple[str, ...]:
-    return tuple(
-        f"{warning.field}: {warning.message}"
-        for warning in migration.warnings
-    )
+    return tuple(f"{warning.field}: {warning.message}" for warning in migration.warnings)
 
 
 def _is_successful_load(result: StateLoadResult) -> bool:
@@ -710,10 +707,7 @@ def _is_successful_load(result: StateLoadResult) -> bool:
         StateDiagnosticCode.LOADED,
         StateDiagnosticCode.PARTIALLY_DEFAULTED,
     }
-    return any(
-        diagnostic.code in successful_codes
-        for diagnostic in result.diagnostics
-    )
+    return any(diagnostic.code in successful_codes for diagnostic in result.diagnostics)
 
 
 def _state_write_error(

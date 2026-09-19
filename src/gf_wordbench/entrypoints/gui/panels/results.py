@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Final
 
 from PySide6.QtCore import (
     QAbstractTableModel,
@@ -30,8 +30,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSplitter,
-    QTabWidget,
     QTableView,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -204,7 +204,11 @@ class _DiagnosticTableModel(QAbstractTableModel):
     ) -> int:
         return 0 if parent.isValid() else len(self._HEADERS)
 
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> object:
         if not index.isValid() or not 0 <= index.row() < len(self._rows):
             return None
         row = self._rows[index.row()]
@@ -292,7 +296,11 @@ class _TopErrorsTableModel(QAbstractTableModel):
     ) -> int:
         return 0 if parent.isValid() else len(self._HEADERS)
 
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> object:
         if not index.isValid() or not 0 <= index.row() < len(self._rows):
             return None
         row = self._rows[index.row()]
@@ -364,9 +372,7 @@ class ResultsPanel(QWidget):
         status_font.setBold(True)
         status_font.setPointSize(status_font.pointSize() + 2)
         self._status_label.setFont(status_font)
-        self._status_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self._status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         root.addWidget(self._status_label)
 
         splitter = QSplitter(Qt.Orientation.Vertical, self)
@@ -461,9 +467,7 @@ class ResultsPanel(QWidget):
         self._artifact_status = QLabel(group)
         self._artifact_status.setObjectName("artifact_status_label")
         self._artifact_status.setWordWrap(True)
-        self._artifact_status.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self._artifact_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(
             self._artifact_status,
             (len(_ARTIFACT_ACTIONS) + 1) // 2,
@@ -495,12 +499,8 @@ class ResultsPanel(QWidget):
             "Open Selected Evidence",
             tab,
         )
-        self._open_selected_evidence_button.setObjectName(
-            "open_selected_evidence_button"
-        )
-        self._open_selected_evidence_button.clicked.connect(
-            self._open_selected_evidence
-        )
+        self._open_selected_evidence_button.setObjectName("open_selected_evidence_button")
+        self._open_selected_evidence_button.clicked.connect(self._open_selected_evidence)
         controls.addWidget(self._open_selected_evidence_button)
         layout.addLayout(controls)
         return tab
@@ -525,12 +525,8 @@ class ResultsPanel(QWidget):
         self._warnings_label.setObjectName("results_warnings_label")
         self._warnings_label.setAccessibleName("Run warnings")
         self._warnings_label.setWordWrap(True)
-        self._warnings_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        self._warnings_label.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
-        )
+        self._warnings_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._warnings_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         layout.addWidget(self._warnings_label, 1)
         return tab
 
@@ -595,7 +591,7 @@ class ResultsPanel(QWidget):
             self._artifact_status.setText("No run artifacts are available.")
             return
 
-        run_paths = getattr(result, "run_paths")
+        run_paths = result.run_paths
         available = 0
         missing: list[str] = []
         for action in _ARTIFACT_ACTIONS:
@@ -617,8 +613,7 @@ class ResultsPanel(QWidget):
 
         if missing:
             self._artifact_status.setText(
-                f"{available} artifact action(s) available; "
-                f"{len(missing)} unavailable."
+                f"{available} artifact action(s) available; {len(missing)} unavailable."
             )
         else:
             self._artifact_status.setText(
@@ -626,7 +621,7 @@ class ResultsPanel(QWidget):
             )
 
     def _render_status(self, result: RunResult) -> None:
-        status = getattr(result, "overall_status")
+        status = result.overall_status
         if not isinstance(status, OverallStatus):
             raise TypeError("result.overall_status must be OverallStatus")
         wording = _STATUS_WORDING[status]
@@ -634,40 +629,59 @@ class ResultsPanel(QWidget):
         if cancelled:
             wording = "Run cancelled"
         self._status_label.setText(f"{wording} — {status.value}")
-        self._status_label.setAccessibleDescription(
-            f"Overall status {status.value}: {wording}"
-        )
+        self._status_label.setAccessibleDescription(f"Overall status {status.value}: {wording}")
 
     def _render_summary(self, result: RunResult) -> None:
-        config = getattr(result, "run_config")
-        paths = getattr(result, "run_paths")
-        project = getattr(config, "project")
-        identity = getattr(project, "identity")
-        mode = getattr(config, "mode")
+        config = result.run_config
+        paths = result.run_paths
+        project = config.project
+        mode = config.mode
 
         mode_text = _enum_text(mode).replace("_", " ").title()
-        project_name = _safe_text(getattr(identity, "name"), fallback="Unknown project")
-        language_code = _safe_text(getattr(identity, "language_code", ""), fallback="")
-        if language_code:
-            project_name = f"{project_name} ({language_code})"
+        if project is not None:
+            identity = project.identity
+            project_name = _safe_text(identity.name, fallback="Unknown project")
+            language_code = _safe_text(
+                getattr(identity, "language_code", ""),
+                fallback="",
+            )
+            if language_code:
+                project_name = f"{project_name} ({language_code})"
+        else:
+            # ADR-0015 path-resolved runs intentionally do not require a
+            # validation profile / ProjectConfig.  The resolved language context
+            # is the identity authority for these runs, so the results UI must
+            # not dereference the compatibility ``project`` alias unconditionally.
+            context = getattr(config, "language_context", None)
+            if context is None:
+                project_name = "Resolved language"
+            else:
+                project_name = _safe_text(
+                    getattr(context, "language_key", None),
+                    fallback="Resolved language",
+                )
+                module_suffix = _safe_text(
+                    getattr(context, "module_suffix", None),
+                    fallback="",
+                )
+                if module_suffix:
+                    project_name = f"{project_name} ({module_suffix})"
 
         self._summary_labels["mode"].setText(mode_text)
         self._summary_labels["project"].setText(project_name)
-        self._summary_labels["run_id"].setText(
-            _safe_text(getattr(paths, "run_id"), fallback="—")
-        )
+        self._summary_labels["run_id"].setText(_safe_text(paths.run_id, fallback="—"))
         self._summary_labels["gf_version"].setText(
             _safe_text(getattr(result, "gf_version", ""), fallback="Unknown")
         )
         self._summary_labels["duration"].setText(
-            _format_duration_ms(getattr(result, "duration_ms"))
+            _format_duration_ms(result.duration_ms)
         )
-        run_dir = getattr(paths, "run_dir")
+        run_dir = paths.run_dir
         self._summary_labels["run_directory"].setText(str(run_dir))
         self._summary_labels["run_directory"].setToolTip(str(run_dir))
 
     def _render_counts(self, result: RunResult) -> None:
-        totals = getattr(result, "totals")
+        totals = result.totals
         self._count_labels["files"].setText(
             " / ".join(
                 str(_non_negative_count(getattr(totals, field)))
@@ -701,12 +715,11 @@ class ResultsPanel(QWidget):
             )
         )
         self._count_labels["required_scenarios"].setText(
-            str(_non_negative_count(getattr(totals, "required_scenario_fail")))
+            str(_non_negative_count(totals.required_scenario_fail))
         )
 
         changes = Counter(
-            _enum_text(getattr(entry, "change_kind"))
-            for entry in getattr(result, "diff_entries")
+            _enum_text(entry.change_kind) for entry in result.diff_entries
         )
         self._count_labels["regressions"].setText(
             " / ".join(
@@ -722,14 +735,14 @@ class ResultsPanel(QWidget):
 
     def _render_diagnostics(self, result: RunResult) -> None:
         rows: list[_DiagnosticRow] = []
-        run_root = cast(Path, getattr(getattr(result, "run_paths"), "run_dir"))
+        run_root = result.run_paths.run_dir
 
-        for file_result in getattr(result, "file_results"):
-            status = getattr(file_result, "status")
-            diagnostic_class = getattr(file_result, "diagnostic_class")
+        for file_result in result.file_results:
+            status = file_result.status
+            diagnostic_class = file_result.diagnostic_class
             if status is ValidationStatus.OK and diagnostic_class is DiagnosticClass.OK:
                 continue
-            subject = str(getattr(file_result, "file_path"))
+            subject = str(file_result.file_path)
             compile_summary = getattr(file_result, "compile_summary", None)
             message = _safe_text(
                 getattr(file_result, "primary_message", "")
@@ -761,9 +774,9 @@ class ResultsPanel(QWidget):
                 )
             )
 
-        for scenario in getattr(result, "scenario_results"):
-            status = getattr(scenario, "status")
-            diagnostic_class = getattr(scenario, "diagnostic_class")
+        for scenario in result.scenario_results:
+            status = scenario.status
+            diagnostic_class = scenario.diagnostic_class
             gold_mismatch = getattr(scenario, "gold_match", None) is False
             if status is ValidationStatus.OK and not gold_mismatch:
                 continue
@@ -787,7 +800,7 @@ class ResultsPanel(QWidget):
                     status=_enum_text(status),
                     subject_kind="scenario",
                     subject=_safe_text(
-                        getattr(scenario, "scenario_id"),
+                        scenario.scenario_id,
                         fallback="unknown-scenario",
                     ),
                     message=_safe_text(
@@ -799,17 +812,17 @@ class ResultsPanel(QWidget):
                 )
             )
 
-        for entry in getattr(result, "diff_entries"):
-            change_kind = getattr(entry, "change_kind")
+        for entry in result.diff_entries:
+            change_kind = entry.change_kind
             if change_kind not in {ChangeKind.REGRESSED, ChangeKind.NEW}:
                 continue
             rows.append(
                 _DiagnosticRow(
                     category="Regressions",
                     status=_enum_text(change_kind),
-                    subject_kind=_enum_text(getattr(entry, "subject_kind")),
+                    subject_kind=_enum_text(entry.subject_kind),
                     subject=_safe_text(
-                        getattr(entry, "subject_id"),
+                        entry.subject_id,
                         fallback="unknown-subject",
                     ),
                     message=_safe_text(
@@ -827,17 +840,17 @@ class ResultsPanel(QWidget):
 
     def _render_top_errors(self, result: RunResult) -> None:
         rows: list[_TopErrorRow] = []
-        for record in getattr(result, "top_errors"):
-            count = getattr(record, "count")
+        for record in result.top_errors:
+            count = record.count
             if isinstance(count, bool) or not isinstance(count, int) or count < 1:
                 raise ValueError("top error count must be a positive integer")
             subject_kinds = getattr(record, "subject_kinds", ())
             rows.append(
                 _TopErrorRow(
                     count=count,
-                    error_kind=_enum_text(getattr(record, "error_kind")),
+                    error_kind=_enum_text(record.error_kind),
                     message=_safe_text(
-                        getattr(record, "message"),
+                        record.message,
                         fallback="Unknown diagnostic",
                     ),
                     subject_kinds=_join_text(subject_kinds),
@@ -846,16 +859,14 @@ class ResultsPanel(QWidget):
         self._top_errors_model.set_rows(rows)
 
     def _render_warnings(self, result: RunResult) -> None:
-        config = getattr(result, "run_config")
+        config = result.run_config
         warnings = tuple(
             _safe_text(value, fallback="")
             for value in getattr(config, "compatibility_warnings", ())
         )
         warnings = tuple(value for value in warnings if value)
         if warnings:
-            self._warnings_label.setText(
-                "\n".join(f"• {warning}" for warning in warnings)
-            )
+            self._warnings_label.setText("\n".join(f"• {warning}" for warning in warnings))
         else:
             self._warnings_label.setText("No warnings")
 
@@ -871,13 +882,12 @@ class ResultsPanel(QWidget):
             expected = None
             if self._result is not None and action is not None:
                 expected = getattr(
-                    getattr(self._result, "run_paths"),
+                    self._result.run_paths,
                     action.path_attribute,
                     None,
                 )
             self._artifact_status.setText(
-                f"{label} is unavailable. Open the run directory to inspect "
-                "the available evidence."
+                f"{label} is unavailable. Open the run directory to inspect the available evidence."
             )
             self.unavailable_path_requested.emit(label, expected)
             return
@@ -892,8 +902,6 @@ class ResultsPanel(QWidget):
     @Slot()
     def _open_selected_evidence(self) -> None:
         selection_model = self._diagnostic_table.selectionModel()
-        if selection_model is None:
-            return
         rows = selection_model.selectedRows()
         if not rows:
             return
@@ -905,11 +913,10 @@ class ResultsPanel(QWidget):
     def _update_selected_evidence_button(self, *_: object) -> None:
         selection_model = self._diagnostic_table.selectionModel()
         enabled = False
-        if selection_model is not None:
-            rows = selection_model.selectedRows()
-            if rows:
-                row = self._diagnostic_model.row_at(rows[0].row())
-                enabled = row is not None and row.evidence_path is not None
+        rows = selection_model.selectedRows()
+        if rows:
+            row = self._diagnostic_model.row_at(rows[0].row())
+            enabled = row is not None and row.evidence_path is not None
         self._open_selected_evidence_button.setEnabled(enabled)
 
     def _first_safe_evidence(
@@ -932,9 +939,7 @@ class ResultsPanel(QWidget):
     ) -> Path | None:
         if path is None or self._result is None:
             return None
-        run_root = getattr(getattr(self._result, "run_paths"), "run_dir")
-        if not isinstance(run_root, Path):
-            return None
+        run_root = self._result.run_paths.run_dir
         return _safe_existing_path(path, run_root, kind)
 
     @staticmethod
@@ -956,8 +961,7 @@ class ResultsPanel(QWidget):
         missing = tuple(name for name in required if not hasattr(result, name))
         if missing:
             raise TypeError(
-                "result does not satisfy the RunResult contract; missing: "
-                + ", ".join(missing)
+                "result does not satisfy the RunResult contract; missing: " + ", ".join(missing)
             )
 
 

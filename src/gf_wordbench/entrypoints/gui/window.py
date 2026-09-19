@@ -50,9 +50,9 @@ _READY_LABEL: Final[str] = "Ready"
 _RUNNING_LABEL: Final[str] = "Running"
 _CANCELLING_LABEL: Final[str] = "Cancelling"
 _MINIMUM_WIDTH: Final[int] = 960
-_MINIMUM_HEIGHT: Final[int] = 680
+_MINIMUM_HEIGHT: Final[int] = 620
 _DEFAULT_WIDTH: Final[int] = 1220
-_DEFAULT_HEIGHT: Final[int] = 840
+_DEFAULT_HEIGHT: Final[int] = 780
 
 
 @unique
@@ -119,6 +119,7 @@ class MainWindow(QMainWindow):
     run_requested = Signal()
     cancel_requested = Signal()
     open_project_requested = Signal()
+    language_switch_requested = Signal()
     test_environment_requested = Signal()
     open_last_run_requested = Signal()
     open_reports_requested = Signal()
@@ -234,13 +235,18 @@ class MainWindow(QMainWindow):
         self,
         text: str,
         *,
-        shortcut: QKeySequence | None = None,
+        shortcut: QKeySequence | QKeySequence.StandardKey | None = None,
         object_name: str,
     ) -> QAction:
         action = QAction(text, self)
         action.setObjectName(object_name)
         if shortcut is not None:
-            action.setShortcut(shortcut)
+            sequence = (
+                QKeySequence(shortcut)
+                if isinstance(shortcut, QKeySequence.StandardKey)
+                else shortcut
+            )
+            action.setShortcut(sequence)
             action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         return action
 
@@ -250,8 +256,8 @@ class MainWindow(QMainWindow):
         central = QWidget(self)
         central.setObjectName("mainWindowCentralWidget")
         root = QVBoxLayout(central)
-        root.setContentsMargins(12, 10, 12, 10)
-        root.setSpacing(8)
+        root.setContentsMargins(8, 6, 8, 6)
+        root.setSpacing(6)
 
         root.addWidget(self._build_header())
 
@@ -260,8 +266,12 @@ class MainWindow(QMainWindow):
         self._splitter.setChildrenCollapsible(False)
         self._splitter.addWidget(self._build_configuration_area())
         self._splitter.addWidget(self._build_results_area())
-        self._splitter.setStretchFactor(0, 3)
-        self._splitter.setStretchFactor(1, 4)
+        # Keep validation controls visible on ordinary laptop/desktop heights.
+        # The lower results workspace gets the larger share and the user can
+        # still resize both areas interactively.
+        self._splitter.setStretchFactor(0, 2)
+        self._splitter.setStretchFactor(1, 3)
+        self._splitter.setSizes([390, 450])
         root.addWidget(self._splitter, 1)
 
         self.setCentralWidget(central)
@@ -305,9 +315,7 @@ class MainWindow(QMainWindow):
 
         self._title_label = QLabel(frame)
         self._title_label.setObjectName("applicationTitleLabel")
-        self._title_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self._title_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._title_label.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
@@ -317,9 +325,7 @@ class MainWindow(QMainWindow):
         version_label = QLabel(self._app_version, frame)
         version_label.setObjectName("applicationVersionLabel")
         version_label.setAccessibleName("GF Wordbench version")
-        version_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        version_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(version_label)
         return frame
 
@@ -337,16 +343,16 @@ class MainWindow(QMainWindow):
         content = QWidget(scroll)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 4, 0)
-        content_layout.setSpacing(8)
-        content_layout.addWidget(self._section("Project", self._panels.project))
-        content_layout.addWidget(
-            self._section("Validation", self._panels.validation)
-        )
+        content_layout.setSpacing(6)
+
+        # Validation is the primary task surface.  Language context is
+        # secondary/reference information and is compact by default.
+        content_layout.addWidget(self._panels.validation)
+        content_layout.addWidget(self._panels.project)
         content_layout.addStretch(1)
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
         layout.addWidget(self._build_action_bar())
-        layout.addWidget(self._section("Progress", self._panels.progress))
         return container
 
     def _build_action_bar(self) -> QWidget:
@@ -382,10 +388,12 @@ class MainWindow(QMainWindow):
         self._results_tabs = QTabWidget(self._splitter)
         self._results_tabs.setObjectName("resultsTabs")
         self._results_tabs.setDocumentMode(True)
+        self._results_tabs.addTab(self._panels.progress, "Progress")
         self._results_tabs.addTab(self._panels.results, "Results")
         self._results_tabs.addTab(self._panels.diagnostics, "Diagnostics")
         self._results_tabs.addTab(self._panels.artifacts, "Artifacts")
-        self._results_tabs.setAccessibleName("Results and activity")
+        self._results_tabs.setCurrentWidget(self._panels.results)
+        self._results_tabs.setAccessibleName("Progress, results and artifacts")
         return self._results_tabs
 
     @staticmethod
@@ -401,9 +409,7 @@ class MainWindow(QMainWindow):
         self.open_project_action.triggered.connect(
             lambda _checked=False: self.open_project_requested.emit()
         )
-        self.run_action.triggered.connect(
-            lambda _checked=False: self.run_requested.emit()
-        )
+        self.run_action.triggered.connect(lambda _checked=False: self.run_requested.emit())
         self.cancel_action.triggered.connect(self._request_cancel)
         self.test_environment_action.triggered.connect(
             lambda _checked=False: self.test_environment_requested.emit()
@@ -418,14 +424,10 @@ class MainWindow(QMainWindow):
         self.settings_action.triggered.connect(
             lambda _checked=False: self.settings_requested.emit()
         )
-        self.help_action.triggered.connect(
-            lambda _checked=False: self.help_requested.emit()
-        )
+        self.help_action.triggered.connect(lambda _checked=False: self.help_requested.emit())
         self.exit_action.triggered.connect(self.close)
 
-        self.run_button.clicked.connect(
-            lambda _checked=False: self.run_requested.emit()
-        )
+        self.run_button.clicked.connect(lambda _checked=False: self.run_requested.emit())
         self.cancel_button.clicked.connect(self._request_cancel)
         self.open_last_run_button.clicked.connect(
             lambda _checked=False: self.open_last_run_requested.emit()
@@ -489,6 +491,9 @@ class MainWindow(QMainWindow):
         self._panels.project.setEnabled(not running)
         self._panels.validation.setEnabled(not running)
 
+        if self._run_state is WindowRunState.RUNNING:
+            self._results_tabs.setCurrentWidget(self._panels.progress)
+
         default_status = {
             WindowRunState.READY: _READY_LABEL,
             WindowRunState.RUNNING: _RUNNING_LABEL,
@@ -532,6 +537,7 @@ class MainWindow(QMainWindow):
         """Return to ready state and complete a pending close-after-cancel flow."""
 
         self.set_run_state(WindowRunState.READY)
+        self._results_tabs.setCurrentWidget(self._panels.results)
         if self._close_after_run:
             self._allow_close = True
             self.close()
@@ -573,11 +579,7 @@ class MainWindow(QMainWindow):
         if self._confirm_active_close is not None:
             return bool(self._confirm_active_close(self))
 
-        try:
-            from .dialogs import confirm_cancel_and_close
-        except (ImportError, AttributeError):
-            return self._fallback_close_confirmation()
-        return bool(confirm_cancel_and_close(self))
+        return self._fallback_close_confirmation()
 
     def _fallback_close_confirmation(self) -> bool:
         box = QMessageBox(self)

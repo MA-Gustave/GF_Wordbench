@@ -13,7 +13,7 @@ budget, retain immutable summaries, and never overwrite existing evidence.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import math
 import os
 from pathlib import Path
@@ -165,9 +165,7 @@ class CaptureSession:
                 self._open_sink(self._stderr_state)
             except OSError as exc:
                 self._rollback_open_failure()
-                raise EvidenceIOError(
-                    "Could not open process stream capture files."
-                ) from exc
+                raise EvidenceIOError("Could not open process stream capture files.") from exc
             self._lifecycle = "open"
         return self
 
@@ -216,9 +214,7 @@ class CaptureSession:
             observed_stdout, observed_stderr = self._observe_file_sizes()
             observed_total = observed_stdout + observed_stderr
             exceeded = observed_total > self._output_limit_bytes
-            self._output_limit_exceeded = (
-                self._output_limit_exceeded or exceeded
-            )
+            self._output_limit_exceeded = self._output_limit_exceeded or exceeded
 
             keep_stdout, keep_stderr = _bounded_stream_sizes(
                 stdout_size=observed_stdout,
@@ -423,10 +419,7 @@ class _OutputBudget:
                 amount,
                 max(0, self._limit_bytes - previous),
             )
-            crossed = (
-                not self._exceeded
-                and self._observed_bytes > self._limit_bytes
-            )
+            crossed = not self._exceeded and self._observed_bytes > self._limit_bytes
             if crossed:
                 self._exceeded = True
             return writable, crossed
@@ -483,9 +476,7 @@ class ProcessStreamCapture:
     def open(self) -> None:
         with self._lifecycle_lock:
             if self._lifecycle != "new":
-                raise ContractViolationError(
-                    "Process stream capture can be opened only once."
-                )
+                raise ContractViolationError("Process stream capture can be opened only once.")
             self._reservation_keys = _reserve_capture_paths(
                 self._stdout.path,
                 self._stderr.path,
@@ -495,9 +486,7 @@ class ProcessStreamCapture:
                 self._open_sink(self._stderr)
             except OSError as exc:
                 self._rollback_open_failure()
-                raise EvidenceIOError(
-                    "Could not open process stream capture files."
-                ) from exc
+                raise EvidenceIOError("Could not open process stream capture files.") from exc
             self._lifecycle = "open"
 
     def start(
@@ -511,9 +500,7 @@ class ProcessStreamCapture:
                     "Process stream pumps require an open, unused capture session."
                 )
             if stdout_source is stderr_source:
-                raise ContractViolationError(
-                    "stdout and stderr sources must be distinct."
-                )
+                raise ContractViolationError("stdout and stderr sources must be distinct.")
             _validate_source(stdout_source, "stdout")
             _validate_source(stderr_source, "stderr")
             self._stdout.source = stdout_source
@@ -553,9 +540,7 @@ class ProcessStreamCapture:
                 self._summary = summary
                 self._lifecycle = "finalized"
             self._release_paths()
-            raise EvidenceIOError(
-                "Could not start process stream capture threads."
-            ) from exc
+            raise EvidenceIOError("Could not start process stream capture threads.") from exc
 
     def finalize(self, *, drain_timeout_sec: float) -> ProcessCapture:
         _validate_non_negative_finite(
@@ -567,9 +552,7 @@ class ProcessStreamCapture:
                 assert self._summary is not None
                 return self._summary
             if self._lifecycle == "new":
-                raise ContractViolationError(
-                    "Process stream capture was not opened."
-                )
+                raise ContractViolationError("Process stream capture was not opened.")
             lifecycle = self._lifecycle
 
         if lifecycle == "running":
@@ -627,15 +610,15 @@ class ProcessStreamCapture:
         try:
             while True:
                 try:
-                    data = source.read(self._chunk_size)
+                    raw_data: object = source.read(self._chunk_size)
                 except (OSError, ValueError) as exc:
                     state.truncated = True
                     self._record_failure(state.stream, "read", exc)
                     break
-                if data == b"":
+                if raw_data == b"":
                     state.reached_eof = True
                     break
-                if not isinstance(data, bytes):
+                if not isinstance(raw_data, bytes):
                     state.truncated = True
                     self._record_failure(
                         state.stream,
@@ -643,6 +626,7 @@ class ProcessStreamCapture:
                         TypeError("Process stream returned non-byte data."),
                     )
                     break
+                data = raw_data
 
                 state.observed_size_bytes += len(data)
                 writable, crossed = self._budget.account(len(data))
@@ -680,10 +664,7 @@ class ProcessStreamCapture:
         stdout = self._stream_summary(self._stdout)
         stderr = self._stream_summary(self._stderr)
         failures = self._failure_snapshot()
-        threads_stopped = all(
-            not thread.is_alive()
-            for thread in self._threads
-        )
+        threads_stopped = all(not thread.is_alive() for thread in self._threads)
         complete = (
             threads_stopped
             and stdout.reached_eof
@@ -740,9 +721,7 @@ class ProcessStreamCapture:
                 exc,
             )
         finally:
-            state.source_closed = bool(
-                getattr(source, "closed", False)
-            )
+            state.source_closed = bool(getattr(source, "closed", False))
 
     def _close_sink(self, state: _MutableStreamState) -> None:
         sink = state.sink
@@ -762,9 +741,7 @@ class ProcessStreamCapture:
                 exc,
             )
         finally:
-            state.sink_closed = bool(
-                getattr(sink, "closed", False)
-            )
+            state.sink_closed = bool(getattr(sink, "closed", False))
 
     def _record_failure(
         self,
@@ -861,9 +838,7 @@ def _write_all(sink: BinaryIO, data: memoryview) -> None:
     while written < len(data):
         count = sink.write(data[written:])
         if count is None or count <= 0:
-            raise OSError(
-                "Process stream capture made no forward write progress."
-            )
+            raise OSError("Process stream capture made no forward write progress.")
         written += count
 
 
@@ -872,9 +847,7 @@ def _capture_failure(
     operation: CaptureOperation,
     exc: BaseException,
 ) -> CaptureFailure:
-    message = " ".join(
-        str(exc).replace("\x00", "\N{REPLACEMENT CHARACTER}").split()
-    )
+    message = " ".join(str(exc).replace("\x00", "\N{REPLACEMENT CHARACTER}").split())
     return CaptureFailure(
         stream=stream,
         operation=operation,
@@ -892,9 +865,7 @@ def _validate_capture_contract(
     _validate_path(stdout_path, "stdout_path")
     _validate_path(stderr_path, "stderr_path")
     if _path_key(stdout_path) == _path_key(stderr_path):
-        raise ContractViolationError(
-            "stdout_path and stderr_path must be distinct."
-        )
+        raise ContractViolationError("stdout_path and stderr_path must be distinct.")
     _validate_positive_integer(
         output_limit_bytes,
         "output_limit_bytes",
@@ -903,50 +874,29 @@ def _validate_capture_contract(
 
 def _validate_source(value: object, stream: StreamName) -> None:
     if not callable(getattr(value, "read", None)):
-        raise ContractViolationError(
-            f"{stream} source must be a readable binary stream."
-        )
+        raise ContractViolationError(f"{stream} source must be a readable binary stream.")
 
 
 def _validate_path(value: object, field: str) -> None:
     if not isinstance(value, Path):
-        raise ContractViolationError(
-            f"{field} must be a pathlib.Path instance."
-        )
+        raise ContractViolationError(f"{field} must be a pathlib.Path instance.")
     if not value.is_absolute():
-        raise ContractViolationError(
-            f"{field} must be an absolute path."
-        )
+        raise ContractViolationError(f"{field} must be an absolute path.")
     if "\x00" in str(value):
-        raise ContractViolationError(
-            f"{field} must not contain a NUL character."
-        )
+        raise ContractViolationError(f"{field} must not contain a NUL character.")
 
 
 def _validate_positive_integer(value: object, field: str) -> None:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int)
-        or value <= 0
-    ):
-        raise ContractViolationError(
-            f"{field} must be a positive integer."
-        )
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ContractViolationError(f"{field} must be a positive integer.")
 
 
 def _validate_non_negative_finite(value: object, field: str) -> None:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-    ):
-        raise ContractViolationError(
-            f"{field} must be a finite non-negative number."
-        )
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ContractViolationError(f"{field} must be a finite non-negative number.")
     number = float(value)
     if not math.isfinite(number) or number < 0:
-        raise ContractViolationError(
-            f"{field} must be a finite non-negative number."
-        )
+        raise ContractViolationError(f"{field} must be a finite non-negative number.")
 
 
 def _reserve_capture_paths(
@@ -957,8 +907,7 @@ def _reserve_capture_paths(
     with _RESERVATION_LOCK:
         if any(key in _RESERVED_CAPTURE_PATHS for key in keys):
             raise ContractViolationError(
-                "A process stream capture path is already reserved "
-                "by an active request."
+                "A process stream capture path is already reserved by an active request."
             )
         _RESERVED_CAPTURE_PATHS.update(keys)
     return keys

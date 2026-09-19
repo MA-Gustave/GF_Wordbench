@@ -1,13 +1,15 @@
-"""Public artifact-manifest construction and model contracts.
+"""Public artifact-manifest declaration and model contracts.
 
-Concrete hashing, media-type, requiredness, persistence, and verification
-implementations remain in their owning modules. This initializer re-exports
-only implemented, stable symbols.
+Concrete construction, hashing, media-type, requiredness, persistence, and
+verification implementations remain in their owning modules. Import manifest
+construction from :mod:`gf_wordbench.reporting.manifest.builder` or from the
+broad :mod:`gf_wordbench.reporting.public` façade.
+
+This package initializer re-exports only stable, side-effect-free contracts.
 """
 
 from __future__ import annotations
 
-from .builder import build_manifest
 from .declarations import ArtifactDeclaration
 from .models import (
     ArtifactManifest,
@@ -24,5 +26,4 @@ __all__ = (
     "ManifestVerificationMode",
     "ManifestVerificationResult",
     "ManifestWriteResult",
-    "build_manifest",
 )

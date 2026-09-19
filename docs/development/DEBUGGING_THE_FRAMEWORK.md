@@ -2042,12 +2042,8 @@ when:
 Use independent assertions:
 
 ```python
-assert files_included == (
-    files_ok + files_fail + files_error + files_skipped
-)
-assert scenarios_seen == (
-    scenarios_ok + scenarios_fail + scenarios_error + scenarios_skipped
-)
+assert files_included == (files_ok + files_fail + files_error + files_skipped)
+assert scenarios_seen == (scenarios_ok + scenarios_fail + scenarios_error + scenarios_skipped)
 ```
 
 ### 35.2 Aggregation priority
@@ -2505,6 +2501,7 @@ Temporarily log:
 
 ```python
 from PySide6.QtCore import QThread
+
 print(QThread.currentThread())
 ```
 

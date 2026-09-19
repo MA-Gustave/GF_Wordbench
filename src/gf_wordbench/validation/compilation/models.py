@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import math
-import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum, unique
+import math
+import os
 from pathlib import Path
+import re
 from types import MappingProxyType
-from typing import Final, TypeAlias
+from typing import Final, TypeAlias, TypeVar
 
 from gf_wordbench.infrastructure.process.models import ProcessResult
 from gf_wordbench.kernel.statuses import (
@@ -21,8 +23,46 @@ from gf_wordbench.kernel.statuses import (
 
 StringMap: TypeAlias = Mapping[str, str]
 
+_MapKeyT = TypeVar("_MapKeyT")
+_MapValueT = TypeVar("_MapValueT")
+
 _SHA256_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
 _EMPTY_STRING_MAP: Final[StringMap] = MappingProxyType({})
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFingerprint:
+    """Identity of the exact source bytes observed for one file result."""
+
+    size_bytes: int
+    hash_algorithm: str
+    hash: str
+    last_modified_utc: datetime
+
+    def __post_init__(self) -> None:
+        size_bytes = _require_non_negative_int(
+            self.size_bytes,
+            field_name="size_bytes",
+        )
+        hash_algorithm = _require_text(
+            self.hash_algorithm,
+            field_name="hash_algorithm",
+        )
+        if hash_algorithm != "sha256":
+            raise ValueError("hash_algorithm must be sha256")
+        digest = _require_text(self.hash, field_name="hash")
+        if _SHA256_RE.fullmatch(digest) is None:
+            raise ValueError("hash must be a full lowercase hexadecimal SHA-256")
+        timestamp = self.last_modified_utc
+        if not isinstance(timestamp, datetime):
+            raise TypeError("last_modified_utc must be a datetime")
+        if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+            raise ValueError("last_modified_utc must be timezone-aware")
+
+        object.__setattr__(self, "size_bytes", size_bytes)
+        object.__setattr__(self, "hash_algorithm", hash_algorithm)
+        object.__setattr__(self, "hash", digest)
+        object.__setattr__(self, "last_modified_utc", timestamp.astimezone(UTC))
 
 
 @unique
@@ -84,12 +124,15 @@ def _normalize_path(
     *,
     field_name: str,
 ) -> Path:
-    if isinstance(value, bytes):
-        raise TypeError(f"{field_name} must be path-like text")
-    try:
+    if isinstance(value, str):
         path = Path(value)
-    except TypeError as exc:
-        raise TypeError(f"{field_name} must be path-like") from exc
+    elif isinstance(value, os.PathLike):
+        raw_path = value.__fspath__()
+        if not isinstance(raw_path, str):
+            raise TypeError(f"{field_name} must be path-like text")
+        path = Path(raw_path)
+    else:
+        raise TypeError(f"{field_name} must be path-like")
     if "\x00" in str(path):
         raise ValueError(f"{field_name} must not contain NUL")
     return path
@@ -121,9 +164,7 @@ def _normalize_paths(
         )
         key = path.as_posix()
         if key in seen:
-            raise ValueError(
-                f"{field_name} contains duplicate path {key!r}"
-            )
+            raise ValueError(f"{field_name} contains duplicate path {key!r}")
         seen.add(key)
         normalized.append(path)
     return tuple(normalized)
@@ -147,16 +188,14 @@ def _normalize_strings(
             allow_empty=allow_empty_items,
         )
         if unique and item in seen:
-            raise ValueError(
-                f"{field_name} contains duplicate value {item!r}"
-            )
+            raise ValueError(f"{field_name} contains duplicate value {item!r}")
         seen.add(item)
         normalized.append(item)
     return tuple(normalized)
 
 
 def _freeze_string_map(
-    values: Mapping[object, object],
+    values: Mapping[_MapKeyT, _MapValueT],
     *,
     field_name: str,
 ) -> StringMap:
@@ -188,6 +227,47 @@ def _is_project_relative(path: Path) -> bool:
     return all(part not in {"", ".", ".."} for part in path.parts)
 
 
+def _coerce_compile_target_kind(
+    value: object,
+    *,
+    field_name: str,
+) -> CompileTargetKind:
+    if isinstance(value, CompileTargetKind):
+        return value
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be CompileTargetKind or string")
+    try:
+        return CompileTargetKind(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{field_name} must be source, checkpoint, entrypoint, or pgf"
+        ) from exc
+
+
+def _coerce_optional_error_kind(value: object) -> ErrorKind | None:
+    if value is None:
+        return None
+    if isinstance(value, ErrorKind):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("error_kind must be ErrorKind, string, or None")
+    try:
+        return ErrorKind(value)
+    except ValueError as exc:
+        raise ValueError("error_kind must be a canonical ErrorKind or None") from exc
+
+
+def _normalize_compile_targets(value: object) -> tuple[CompileTarget, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
+        raise TypeError("targets must be an iterable of CompileTarget values")
+    normalized: list[CompileTarget] = []
+    for index, target in enumerate(value):
+        if not isinstance(target, CompileTarget):
+            raise TypeError(f"targets[{index}] must be a CompileTarget")
+        normalized.append(target)
+    return tuple(normalized)
+
+
 @dataclass(frozen=True, slots=True)
 class CompileTarget:
     target_id: str
@@ -208,24 +288,18 @@ class CompileTarget:
             field_name="declared_order",
         )
 
-        kind = self.kind
-        if not isinstance(kind, CompileTargetKind):
-            try:
-                kind = CompileTargetKind(kind)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    "kind must be source, checkpoint, entrypoint, or pgf"
-                ) from exc
-            object.__setattr__(self, "kind", kind)
+        kind = _coerce_compile_target_kind(
+            self.kind,
+            field_name="kind",
+        )
+        object.__setattr__(self, "kind", kind)
 
         source_path = _normalize_path(
             self.source_path,
             field_name="source_path",
         )
         if not _is_project_relative(source_path):
-            raise ValueError(
-                "source_path must be a contained project-relative path"
-            )
+            raise ValueError("source_path must be a contained project-relative path")
         if source_path.suffix.casefold() != ".gf":
             raise ValueError("source_path must identify a .gf source")
         object.__setattr__(self, "source_path", source_path)
@@ -259,9 +333,7 @@ class CompileTarget:
                     (self.module_name,),
                 )
         elif entrypoints:
-            raise ValueError(
-                "entrypoint_modules is reserved for pgf targets"
-            )
+            raise ValueError("entrypoint_modules is reserved for pgf targets")
 
     @property
     def sort_key(self) -> tuple[int, str, str]:
@@ -290,36 +362,16 @@ class CompilePlan:
         mode = _require_text(self.mode, field_name="mode")
         object.__setattr__(self, "mode", str(mode))
 
-        if isinstance(self.targets, (str, bytes)):
-            raise TypeError("targets must be an iterable of CompileTarget values")
-
+        raw_targets = _normalize_compile_targets(self.targets)
         normalized_targets: list[CompileTarget] = []
         seen_target_ids: set[str] = set()
         previous_order: int | None = None
 
-        try:
-            raw_targets = iter(self.targets)
-        except TypeError as exc:
-            raise TypeError(
-                "targets must be an iterable of CompileTarget values"
-            ) from exc
-
-        for index, target in enumerate(raw_targets):
-            if not isinstance(target, CompileTarget):
-                raise TypeError(
-                    f"targets[{index}] must be a CompileTarget"
-                )
+        for target in raw_targets:
             if target.target_id in seen_target_ids:
-                raise ValueError(
-                    f"duplicate compile target ID: {target.target_id}"
-                )
-            if (
-                previous_order is not None
-                and target.declared_order < previous_order
-            ):
-                raise ValueError(
-                    "compile targets must preserve deterministic declared order"
-                )
+                raise ValueError(f"duplicate compile target ID: {target.target_id}")
+            if previous_order is not None and target.declared_order < previous_order:
+                raise ValueError("compile targets must preserve deterministic declared order")
             seen_target_ids.add(target.target_id)
             previous_order = target.declared_order
             normalized_targets.append(target)
@@ -382,9 +434,7 @@ class CompileRequest:
         )
 
         if stdout_path == stderr_path:
-            raise ValueError(
-                "stdout_path and stderr_path must be distinct"
-            )
+            raise ValueError("stdout_path and stderr_path must be distinct")
 
         args = _normalize_strings(
             self.args,
@@ -507,9 +557,7 @@ class ArtifactCheckItem:
                 field_name="sha256",
             ).casefold()
             if _SHA256_RE.fullmatch(digest) is None:
-                raise ValueError(
-                    "sha256 must contain exactly 64 lowercase hexadecimal characters"
-                )
+                raise ValueError("sha256 must contain exactly 64 lowercase hexadecimal characters")
             object.__setattr__(self, "sha256", digest)
 
         if not self.exists:
@@ -535,9 +583,7 @@ class ArtifactCheckItem:
         if self.fresh and not self.exists:
             raise ValueError("fresh requires exists")
         if self.associated_with_request and not self.fresh:
-            raise ValueError(
-                "associated_with_request requires fresh evidence"
-            )
+            raise ValueError("associated_with_request requires fresh evidence")
         if self.sha256 is not None and not self.regular_file:
             raise ValueError("sha256 requires a regular file")
         if self.manifest_registered and not self.exists:
@@ -574,21 +620,14 @@ class ArtifactCheck:
 
     def __post_init__(self) -> None:
         items = tuple(self.items)
-        if not all(
-            isinstance(item, ArtifactCheckItem)
-            for item in items
-        ):
-            raise TypeError(
-                "items must contain ArtifactCheckItem values"
-            )
+        if not all(isinstance(item, ArtifactCheckItem) for item in items):
+            raise TypeError("items must contain ArtifactCheckItem values")
 
         seen: set[str] = set()
         for item in items:
             key = item.path.as_posix()
             if key in seen:
-                raise ValueError(
-                    f"items contains duplicate artifact path {key!r}"
-                )
+                raise ValueError(f"items contains duplicate artifact path {key!r}")
             seen.add(key)
 
         unexpected_artifacts = _normalize_paths(
@@ -621,11 +660,7 @@ class ArtifactCheck:
     def failed_required_items(
         self,
     ) -> tuple[ArtifactCheckItem, ...]:
-        return tuple(
-            item
-            for item in self.items
-            if item.required and not item.satisfies_contract
-        )
+        return tuple(item for item in self.items if item.required and not item.satisfies_contract)
 
     @property
     def passed(self) -> bool:
@@ -666,21 +701,15 @@ class GFVersionResult:
             allow_empty_items=True,
         )
         if command and command[0] != str(executable):
-            raise ValueError(
-                "command must begin with the recorded executable"
-            )
+            raise ValueError("command must begin with the recorded executable")
 
-        if (
-            self.execution_state is not None
-            and not isinstance(self.execution_state, ExecutionState)
+        if self.execution_state is not None and not isinstance(
+            self.execution_state, ExecutionState
         ):
-            raise TypeError(
-                "execution_state must be an ExecutionState or None"
-            )
+            raise TypeError("execution_state must be an ExecutionState or None")
 
         if self.exit_code is not None and (
-            isinstance(self.exit_code, bool)
-            or not isinstance(self.exit_code, int)
+            isinstance(self.exit_code, bool) or not isinstance(self.exit_code, int)
         ):
             raise TypeError("exit_code must be an integer or None")
 
@@ -696,14 +725,8 @@ class GFVersionResult:
             self.stderr_path,
             field_name="stderr_path",
         )
-        if (
-            stdout_path is not None
-            and stderr_path is not None
-            and stdout_path == stderr_path
-        ):
-            raise ValueError(
-                "stdout_path and stderr_path must be distinct"
-            )
+        if stdout_path is not None and stderr_path is not None and stdout_path == stderr_path:
+            raise ValueError("stdout_path and stderr_path must be distinct")
 
         version = self.version
         if version is not None:
@@ -741,75 +764,49 @@ class GFVersionResult:
 
         if self.status is ValidationStatus.SKIPPED:
             if self.execution_state is not None:
-                raise ValueError(
-                    "a skipped version probe has no execution_state"
-                )
+                raise ValueError("a skipped version probe has no execution_state")
             if self.exit_code is not None:
-                raise ValueError(
-                    "a skipped version probe has no exit_code"
-                )
+                raise ValueError("a skipped version probe has no exit_code")
             if self.duration_ms != 0:
-                raise ValueError(
-                    "a skipped version probe has zero duration"
-                )
+                raise ValueError("a skipped version probe has zero duration")
             if command:
-                raise ValueError(
-                    "a skipped version probe has no executed command"
-                )
+                raise ValueError("a skipped version probe has no executed command")
             if version is not None:
-                raise ValueError(
-                    "a skipped version probe has no parsed version"
-                )
+                raise ValueError("a skipped version probe has no parsed version")
             if not self.skipped_reason:
-                raise ValueError(
-                    "a skipped version probe requires skipped_reason"
-                )
+                raise ValueError("a skipped version probe requires skipped_reason")
             return
 
         if self.execution_state is None:
-            raise ValueError(
-                "an attempted version probe requires execution_state"
-            )
+            raise ValueError("an attempted version probe requires execution_state")
         if not command:
-            raise ValueError(
-                "an attempted version probe requires command"
-            )
+            raise ValueError("an attempted version probe requires command")
         if self.skipped_reason:
-            raise ValueError(
-                "skipped_reason is reserved for skipped probes"
-            )
+            raise ValueError("skipped_reason is reserved for skipped probes")
 
         if self.status is ValidationStatus.OK:
             if self.execution_state is not ExecutionState.COMPLETED:
-                raise ValueError(
-                    "an OK version probe must complete normally"
-                )
+                raise ValueError("an OK version probe must complete normally")
             if self.exit_code != 0:
-                raise ValueError(
-                    "an OK version probe requires exit_code zero"
-                )
+                raise ValueError("an OK version probe requires exit_code zero")
             if version is None:
-                raise ValueError(
-                    "an OK version probe requires a parsed version"
-                )
+                raise ValueError("an OK version probe requires a parsed version")
 
         if self.execution_state is ExecutionState.LAUNCH_FAILED:
             if self.exit_code is not None:
-                raise ValueError(
-                    "a launch failure must not fabricate an exit code"
-                )
+                raise ValueError("a launch failure must not fabricate an exit code")
             if self.status is not ValidationStatus.ERROR:
-                raise ValueError(
-                    "a launch failure must produce ERROR"
-                )
+                raise ValueError("a launch failure must produce ERROR")
 
-        if self.execution_state in {
-            ExecutionState.TIMED_OUT,
-            ExecutionState.CANCELLED,
-        } and self.status is not ValidationStatus.ERROR:
-            raise ValueError(
-                "timeout or cancellation must produce ERROR"
-            )
+        if (
+            self.execution_state
+            in {
+                ExecutionState.TIMED_OUT,
+                ExecutionState.CANCELLED,
+            }
+            and self.status is not ValidationStatus.ERROR
+        ):
+            raise ValueError("timeout or cancellation must produce ERROR")
 
 
 @dataclass(frozen=True, slots=True)
@@ -839,14 +836,11 @@ class CompileSummary:
     def __post_init__(self) -> None:
         _require_text(self.target_id, field_name="target_id")
 
-        target_kind = self.target_kind
-        if not isinstance(target_kind, CompileTargetKind):
-            try:
-                target_kind = CompileTargetKind(target_kind)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    "target_kind must be source, checkpoint, entrypoint, or pgf"
-                ) from exc
+        target_kind = _coerce_compile_target_kind(
+            self.target_kind,
+            field_name="target_kind",
+        )
+        object.__setattr__(self, "target_kind", target_kind)
 
         if not isinstance(self.status, ValidationStatus):
             raise TypeError("status must be a ValidationStatus")
@@ -862,8 +856,7 @@ class CompileSummary:
         )
 
         if self.exit_code is not None and (
-            isinstance(self.exit_code, bool)
-            or not isinstance(self.exit_code, int)
+            isinstance(self.exit_code, bool) or not isinstance(self.exit_code, int)
         ):
             raise TypeError("exit_code must be an integer or None")
 
@@ -910,14 +903,8 @@ class CompileSummary:
             self.stderr_path,
             field_name="stderr_path",
         )
-        if (
-            stdout_path is not None
-            and stderr_path is not None
-            and stdout_path == stderr_path
-        ):
-            raise ValueError(
-                "stdout_path and stderr_path must be distinct"
-            )
+        if stdout_path is not None and stderr_path is not None and stdout_path == stderr_path:
+            raise ValueError("stdout_path and stderr_path must be distinct")
 
         expected_artifacts = _normalize_paths(
             self.expected_artifacts,
@@ -929,17 +916,11 @@ class CompileSummary:
         )
 
         if self.timed_out and self.cancelled:
-            raise ValueError(
-                "a compile summary cannot be both timed out and cancelled"
-            )
+            raise ValueError("a compile summary cannot be both timed out and cancelled")
         if (self.timed_out or self.cancelled) and not self.launched:
-            raise ValueError(
-                "timeout or cancellation requires a launched process"
-            )
+            raise ValueError("timeout or cancellation requires a launched process")
         if not self.launched and self.exit_code is not None:
-            raise ValueError(
-                "an unlaunched compile cannot have an exit code"
-            )
+            raise ValueError("an unlaunched compile cannot have an exit code")
 
         object.__setattr__(self, "target_kind", target_kind)
         object.__setattr__(self, "command", command)
@@ -1024,17 +1005,12 @@ class PgfBuildRequest:
         artifact_root = normalized_paths["artifact_root"]
         if expected_pgf_path.suffix.casefold() != ".pgf":
             raise ValueError("expected_pgf_path must identify a .pgf artifact")
-        if (
-            expected_pgf_path == artifact_root
-            or not expected_pgf_path.is_relative_to(artifact_root)
+        if expected_pgf_path == artifact_root or not expected_pgf_path.is_relative_to(
+            artifact_root
         ):
-            raise ValueError(
-                "expected_pgf_path must be strictly inside artifact_root"
-            )
+            raise ValueError("expected_pgf_path must be strictly inside artifact_root")
         if normalized_paths["stdout_path"] == normalized_paths["stderr_path"]:
-            raise ValueError(
-                "stdout_path and stderr_path must be distinct"
-            )
+            raise ValueError("stdout_path and stderr_path must be distinct")
 
         for field_name, value in normalized_paths.items():
             object.__setattr__(self, field_name, value)
@@ -1090,19 +1066,12 @@ class PgfArtifactEvidence:
                 field_name="sha256",
             ).casefold()
             if _SHA256_RE.fullmatch(digest) is None:
-                raise ValueError(
-                    "sha256 must contain exactly 64 lowercase hexadecimal characters"
-                )
+                raise ValueError("sha256 must contain exactly 64 lowercase hexadecimal characters")
 
         if not self.exists and (
-            self.is_file
-            or self.readable
-            or self.size_bytes is not None
-            or digest is not None
+            self.is_file or self.readable or self.size_bytes is not None or digest is not None
         ):
-            raise ValueError(
-                "a missing PGF artifact cannot have file, size, or hash evidence"
-            )
+            raise ValueError("a missing PGF artifact cannot have file, size, or hash evidence")
         if self.is_file and not self.exists:
             raise ValueError("is_file requires exists")
         if self.readable and not self.is_file:
@@ -1193,27 +1162,14 @@ class PgfBuildResult:
         _require_bool(self.required, field_name="required")
         if not isinstance(self.status, ValidationStatus):
             raise TypeError("status must be a ValidationStatus")
-        if (
-            self.execution_state is not None
-            and not isinstance(self.execution_state, ExecutionState)
+        if self.execution_state is not None and not isinstance(
+            self.execution_state, ExecutionState
         ):
-            raise TypeError(
-                "execution_state must be an ExecutionState or None"
-            )
-        if (
-            self.process_result is not None
-            and not isinstance(self.process_result, ProcessResult)
-        ):
-            raise TypeError(
-                "process_result must be a ProcessResult or None"
-            )
-        if (
-            self.artifact is not None
-            and not isinstance(self.artifact, PgfArtifactEvidence)
-        ):
-            raise TypeError(
-                "artifact must be PgfArtifactEvidence or None"
-            )
+            raise TypeError("execution_state must be an ExecutionState or None")
+        if self.process_result is not None and not isinstance(self.process_result, ProcessResult):
+            raise TypeError("process_result must be a ProcessResult or None")
+        if self.artifact is not None and not isinstance(self.artifact, PgfArtifactEvidence):
+            raise TypeError("artifact must be PgfArtifactEvidence or None")
         if not isinstance(self.error_kind, ErrorKind):
             raise TypeError("error_kind must be an ErrorKind")
 
@@ -1245,19 +1201,13 @@ class PgfBuildResult:
 
         if self.process_result is None:
             if self.execution_state is not None:
-                raise ValueError(
-                    "execution_state requires process_result evidence"
-                )
+                raise ValueError("execution_state requires process_result evidence")
         elif self.execution_state is not self.process_result.execution_state:
-            raise ValueError(
-                "execution_state must agree with process_result"
-            )
+            raise ValueError("execution_state must agree with process_result")
 
         if self.status is ValidationStatus.SKIPPED:
             if self.process_result is not None or self.artifact is not None:
-                raise ValueError(
-                    "a skipped PGF build cannot contain process or artifact evidence"
-                )
+                raise ValueError("a skipped PGF build cannot contain process or artifact evidence")
             if self.error_kind is not ErrorKind.OK:
                 raise ValueError("a skipped PGF build must use ErrorKind.OK")
             if not self.first_error:
@@ -1266,17 +1216,11 @@ class PgfBuildResult:
             if self.error_kind is not ErrorKind.OK:
                 raise ValueError("an OK PGF build must use ErrorKind.OK")
             if self.process_result is None or self.artifact is None:
-                raise ValueError(
-                    "an OK PGF build requires process and artifact evidence"
-                )
+                raise ValueError("an OK PGF build requires process and artifact evidence")
             if self.execution_state is not ExecutionState.COMPLETED:
-                raise ValueError(
-                    "an OK PGF build must complete normally"
-                )
+                raise ValueError("an OK PGF build must complete normally")
         elif self.error_kind is ErrorKind.OK:
-            raise ValueError(
-                "a failed PGF build requires a non-OK error kind"
-            )
+            raise ValueError("a failed PGF build requires a non-OK error kind")
 
         if self.release_evidence_eligible:
             if (
@@ -1286,8 +1230,7 @@ class PgfBuildResult:
                 or self.artifact is None
             ):
                 raise ValueError(
-                    "release evidence eligibility requires a successful "
-                    "required release build"
+                    "release evidence eligibility requires a successful required release build"
                 )
 
         object.__setattr__(self, "gf_version", gf_version)
@@ -1319,16 +1262,12 @@ class CompileResult:
             raise TypeError("target must be a CompileTarget")
         if not isinstance(self.status, ValidationStatus):
             raise TypeError("status must be a ValidationStatus")
-        if (
-            self.execution_state is not None
-            and not isinstance(self.execution_state, ExecutionState)
+        if self.execution_state is not None and not isinstance(
+            self.execution_state, ExecutionState
         ):
-            raise TypeError(
-                "execution_state must be an ExecutionState or None"
-            )
+            raise TypeError("execution_state must be an ExecutionState or None")
         if self.exit_code is not None and (
-            isinstance(self.exit_code, bool)
-            or not isinstance(self.exit_code, int)
+            isinstance(self.exit_code, bool) or not isinstance(self.exit_code, int)
         ):
             raise TypeError("exit_code must be an integer or None")
         _require_non_negative_int(
@@ -1336,22 +1275,8 @@ class CompileResult:
             field_name="duration_ms",
         )
 
-        error_kind = self.error_kind
-        if error_kind is not None and not isinstance(
-            error_kind,
-            ErrorKind,
-        ):
-            try:
-                error_kind = ErrorKind(error_kind)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    "error_kind must be a canonical ErrorKind or None"
-                ) from exc
-            object.__setattr__(
-                self,
-                "error_kind",
-                error_kind,
-            )
+        error_kind = _coerce_optional_error_kind(self.error_kind)
+        object.__setattr__(self, "error_kind", error_kind)
 
         _require_text(
             self.first_error,
@@ -1372,19 +1297,11 @@ class CompileResult:
             self.stderr_path,
             field_name="stderr_path",
         )
-        if (
-            stdout_path is not None
-            and stderr_path is not None
-            and stdout_path == stderr_path
-        ):
-            raise ValueError(
-                "stdout_path and stderr_path must be distinct"
-            )
+        if stdout_path is not None and stderr_path is not None and stdout_path == stderr_path:
+            raise ValueError("stdout_path and stderr_path must be distinct")
 
         if not isinstance(self.artifact_check, ArtifactCheck):
-            raise TypeError(
-                "artifact_check must be an ArtifactCheck"
-            )
+            raise TypeError("artifact_check must be an ArtifactCheck")
 
         executable = _normalize_optional_path(
             self.executable,
@@ -1402,9 +1319,7 @@ class CompileResult:
 
         if executable is not None and command:
             if command[0] != str(executable):
-                raise ValueError(
-                    "command must begin with the recorded executable"
-                )
+                raise ValueError("command must begin with the recorded executable")
 
         gf_version = self.gf_version
         if gf_version is not None:
@@ -1440,111 +1355,69 @@ class CompileResult:
     def _validate_status_coherence(self) -> None:
         if self.status is ValidationStatus.SKIPPED:
             if self.execution_state is not None:
-                raise ValueError(
-                    "a skipped compile has no execution_state"
-                )
+                raise ValueError("a skipped compile has no execution_state")
             if self.exit_code is not None:
-                raise ValueError(
-                    "a skipped compile has no exit_code"
-                )
+                raise ValueError("a skipped compile has no exit_code")
             if self.duration_ms != 0:
-                raise ValueError(
-                    "a skipped compile has zero duration"
-                )
+                raise ValueError("a skipped compile has zero duration")
             if self.error_kind is not None:
-                raise ValueError(
-                    "a skipped compile has no error_kind"
-                )
+                raise ValueError("a skipped compile has no error_kind")
             if self.command:
-                raise ValueError(
-                    "a skipped compile has no executed command"
-                )
+                raise ValueError("a skipped compile has no executed command")
             if not self.skipped_reason:
-                raise ValueError(
-                    "a skipped compile requires skipped_reason"
-                )
+                raise ValueError("a skipped compile requires skipped_reason")
             if self.artifact_check.items:
-                raise ValueError(
-                    "a skipped compile cannot claim artifact checks"
-                )
+                raise ValueError("a skipped compile cannot claim artifact checks")
             return
 
         if self.execution_state is None:
-            raise ValueError(
-                "an attempted compile requires execution_state"
-            )
+            raise ValueError("an attempted compile requires execution_state")
         if self.error_kind is None:
-            raise ValueError(
-                "an attempted compile requires error_kind"
-            )
+            raise ValueError("an attempted compile requires error_kind")
         if self.skipped_reason:
-            raise ValueError(
-                "skipped_reason is reserved for skipped results"
-            )
+            raise ValueError("skipped_reason is reserved for skipped results")
         if not self.command:
-            raise ValueError(
-                "an attempted compile requires command evidence"
-            )
+            raise ValueError("an attempted compile requires command evidence")
         if self.executable is None:
-            raise ValueError(
-                "an attempted compile requires executable evidence"
-            )
+            raise ValueError("an attempted compile requires executable evidence")
         if self.working_directory is None:
-            raise ValueError(
-                "an attempted compile requires working_directory"
-            )
+            raise ValueError("an attempted compile requires working_directory")
 
         if self.execution_state is ExecutionState.LAUNCH_FAILED:
             if self.exit_code is not None:
-                raise ValueError(
-                    "a launch failure must not fabricate an exit code"
-                )
+                raise ValueError("a launch failure must not fabricate an exit code")
             if self.status is not ValidationStatus.ERROR:
-                raise ValueError(
-                    "a launch failure must produce ERROR"
-                )
+                raise ValueError("a launch failure must produce ERROR")
 
-        if self.execution_state in {
-            ExecutionState.TIMED_OUT,
-            ExecutionState.CANCELLED,
-        } and self.status is not ValidationStatus.ERROR:
-            raise ValueError(
-                "timeout or cancellation must produce ERROR"
-            )
+        if (
+            self.execution_state
+            in {
+                ExecutionState.TIMED_OUT,
+                ExecutionState.CANCELLED,
+            }
+            and self.status is not ValidationStatus.ERROR
+        ):
+            raise ValueError("timeout or cancellation must produce ERROR")
 
         if self.status is ValidationStatus.OK:
             if self.execution_state is not ExecutionState.COMPLETED:
-                raise ValueError(
-                    "an OK compile must complete normally"
-                )
+                raise ValueError("an OK compile must complete normally")
             if self.exit_code != 0:
-                raise ValueError(
-                    "an OK compile requires exit_code zero"
-                )
+                raise ValueError("an OK compile requires exit_code zero")
             if self.error_kind is not ErrorKind.OK:
-                raise ValueError(
-                    "an OK compile requires error_kind OK"
-                )
+                raise ValueError("an OK compile requires error_kind OK")
             if self.first_error or self.error_detail:
-                raise ValueError(
-                    "an OK compile cannot contain error text"
-                )
+                raise ValueError("an OK compile cannot contain error text")
             if not self.artifact_check.passed:
-                raise ValueError(
-                    "an OK compile requires all required artifacts"
-                )
+                raise ValueError("an OK compile requires all required artifacts")
             return
 
         if self.error_kind is ErrorKind.OK:
-            raise ValueError(
-                "FAIL or ERROR cannot use error_kind OK"
-            )
+            raise ValueError("FAIL or ERROR cannot use error_kind OK")
 
         if self.status is ValidationStatus.FAIL:
             if self.execution_state is not ExecutionState.COMPLETED:
-                raise ValueError(
-                    "FAIL requires a completed interpretable GF execution"
-                )
+                raise ValueError("FAIL requires a completed interpretable GF execution")
 
     @property
     def timed_out(self) -> bool:
@@ -1566,6 +1439,14 @@ class CompileResult:
         return self.artifact_check.produced_artifacts
 
 
+def __getattr__(name: str) -> object:
+    if name in {"GfOperationKind", "GfOperationRequest", "GfOperationResult"}:
+        from gf_wordbench.validation import ports as validation_ports
+
+        return getattr(validation_ports, name)
+    raise AttributeError(name)
+
+
 __all__ = (
     "ArtifactCheck",
     "ArtifactCheckItem",
@@ -1580,5 +1461,6 @@ __all__ = (
     "PgfBuildExecution",
     "PgfBuildRequest",
     "PgfBuildResult",
+    "SourceFingerprint",
     "StringMap",
 )

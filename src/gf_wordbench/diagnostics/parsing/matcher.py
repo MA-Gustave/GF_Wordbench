@@ -5,19 +5,14 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
-from types import MappingProxyType
 from typing import Final, Generic, Protocol, TypeVar, runtime_checkable
 
 _MAX_PATTERNS: Final[int] = 4_096
 _MAX_MATCHES: Final[int] = 10_000
 _MAX_WARNINGS: Final[int] = 256
 _MAX_TEXT_FIELD: Final[int] = 8_192
-_UNSCOPED_VALUES: Final[frozenset[str]] = frozenset(
-    {"*", "all", "any", "either"}
-)
-_ACTIVE_LIFECYCLES: Final[frozenset[str]] = frozenset(
-    {"active", "deprecated", "experimental"}
-)
+_UNSCOPED_VALUES: Final[frozenset[str]] = frozenset({"*", "all", "any", "either"})
+_ACTIVE_LIFECYCLES: Final[frozenset[str]] = frozenset({"active", "deprecated", "experimental"})
 _RETIRED_LIFECYCLES: Final[frozenset[str]] = frozenset({"retired"})
 _STREAM_VALUES: Final[frozenset[str]] = frozenset(
     {
@@ -168,9 +163,7 @@ def match_diagnostic_patterns(
             raise
         except Exception as exc:
             if mode is MatchStrictness.STRICT:
-                raise PatternExecutionError(
-                    f"pattern {pattern_id!r} failed"
-                ) from exc
+                raise PatternExecutionError(f"pattern {pattern_id!r} failed") from exc
             complete = False
             _append_warning(
                 warnings,
@@ -190,9 +183,7 @@ def match_diagnostic_patterns(
                     MatcherWarning(
                         code=MatcherWarningCode.MATCH_LIMIT_REACHED,
                         pattern_id=pattern_id,
-                        message=(
-                            f"diagnostic match limit {limit} was reached"
-                        ),
+                        message=(f"diagnostic match limit {limit} was reached"),
                     ),
                 )
                 return PatternMatchBatch(
@@ -258,16 +249,13 @@ def match_one_pattern(
     pattern_id = _pattern_id(pattern)
     matcher = getattr(pattern, "matcher", None)
     if not callable(matcher):
-        raise PatternContractError(
-            f"pattern {pattern_id!r} matcher must be callable"
-        )
+        raise PatternContractError(f"pattern {pattern_id!r} matcher must be callable")
 
     try:
         value = matcher(evidence)
     except Exception as exc:
         raise PatternExecutionError(
-            f"pattern {pattern_id!r} matcher raised "
-            f"{type(exc).__name__}: {_safe_text(str(exc))}"
+            f"pattern {pattern_id!r} matcher raised {type(exc).__name__}: {_safe_text(str(exc))}"
         ) from exc
 
     if value is None:
@@ -277,16 +265,12 @@ def match_one_pattern(
         return (value,)
 
     if isinstance(value, (str, bytes, bytearray, Mapping)):
-        raise PatternContractError(
-            f"pattern {pattern_id!r} returned an unsupported match value"
-        )
+        raise PatternContractError(f"pattern {pattern_id!r} returned an unsupported match value")
 
     if isinstance(value, Iterable):
         result = tuple(value)
         if len(result) > _MAX_MATCHES:
-            raise PatternContractError(
-                f"pattern {pattern_id!r} returned too many matches"
-            )
+            raise PatternContractError(f"pattern {pattern_id!r} returned too many matches")
         if any(item is None for item in result):
             raise PatternContractError(
                 f"pattern {pattern_id!r} returned None inside a match sequence"
@@ -295,8 +279,7 @@ def match_one_pattern(
 
     if mode is MatchStrictness.STRICT:
         raise PatternContractError(
-            f"pattern {pattern_id!r} returned an unsupported type "
-            f"{type(value).__name__}"
+            f"pattern {pattern_id!r} returned an unsupported type {type(value).__name__}"
         )
     return (value,)
 
@@ -346,9 +329,7 @@ def pattern_applicability(
             warning=MatcherWarning(
                 code=MatcherWarningCode.PATTERN_SKIPPED,
                 pattern_id=pattern_id,
-                message=(
-                    f"unsupported pattern lifecycle {lifecycle!r} was skipped"
-                ),
+                message=(f"unsupported pattern lifecycle {lifecycle!r} was skipped"),
             ),
         )
 
@@ -439,9 +420,7 @@ def prepare_pattern_order(
     if not prepared:
         return ()
     if len(prepared) > _MAX_PATTERNS:
-        raise PatternContractError(
-            f"pattern registry exceeds {_MAX_PATTERNS} entries"
-        )
+        raise PatternContractError(f"pattern registry exceeds {_MAX_PATTERNS} entries")
 
     seen_ids: set[str] = set()
     indexed: list[tuple[int, int, object]] = []
@@ -449,9 +428,7 @@ def prepare_pattern_order(
     for registry_index, pattern in enumerate(prepared):
         pattern_id = _pattern_id(pattern)
         if pattern_id in seen_ids:
-            raise PatternContractError(
-                f"duplicate diagnostic pattern ID {pattern_id!r}"
-            )
+            raise PatternContractError(f"duplicate diagnostic pattern ID {pattern_id!r}")
         seen_ids.add(pattern_id)
         priority = _pattern_priority(pattern)
         indexed.append((priority, registry_index, pattern))
@@ -501,9 +478,7 @@ def diagnostic_match_key(match: object) -> tuple[object, ...]:
         _first_attribute(match, "end_line", default=start_line),
         field="end_line",
     )
-    pattern_id = _normalized_optional_text(
-        _first_attribute(match, "pattern_id", default=None)
-    )
+    pattern_id = _normalized_optional_text(_first_attribute(match, "pattern_id", default=None))
     signature = _normalized_optional_text(
         _first_attribute(
             match,
@@ -512,9 +487,7 @@ def diagnostic_match_key(match: object) -> tuple[object, ...]:
             default=None,
         )
     )
-    message = _normalized_optional_text(
-        _first_attribute(match, "message", default=None)
-    )
+    message = _normalized_optional_text(_first_attribute(match, "message", default=None))
 
     identity = signature if signature is not None else message
     return (
@@ -546,9 +519,7 @@ def _validate_match(pattern: object, match: object) -> None:
         )
     )
     if stream is not None and stream not in {"stdout", "stderr"}:
-        raise PatternContractError(
-            f"match stream must be stdout or stderr, got {stream!r}"
-        )
+        raise PatternContractError(f"match stream must be stdout or stderr, got {stream!r}")
 
     start_line = _optional_int(
         _first_attribute(match, "start_line", default=None),
@@ -562,14 +533,8 @@ def _validate_match(pattern: object, match: object) -> None:
         raise PatternContractError("match start_line must be positive")
     if end_line is not None and end_line < 1:
         raise PatternContractError("match end_line must be positive")
-    if (
-        start_line is not None
-        and end_line is not None
-        and end_line < start_line
-    ):
-        raise PatternContractError(
-            "match end_line must not precede start_line"
-        )
+    if start_line is not None and end_line is not None and end_line < start_line:
+        raise PatternContractError("match end_line must not precede start_line")
 
     for field in (
         "message",
@@ -581,24 +546,16 @@ def _validate_match(pattern: object, match: object) -> None:
         if value is None:
             continue
         if not isinstance(value, str):
-            raise PatternContractError(
-                f"match {field} must be a string"
-            )
+            raise PatternContractError(f"match {field} must be a string")
         if "\x00" in value:
-            raise PatternContractError(
-                f"match {field} must not contain NUL"
-            )
+            raise PatternContractError(f"match {field} must not contain NUL")
         if len(value) > _MAX_TEXT_FIELD * 16:
-            raise PatternContractError(
-                f"match {field} exceeds the matcher safety bound"
-            )
+            raise PatternContractError(f"match {field} exceeds the matcher safety bound")
 
     for forbidden in ("diagnostic_class", "causal_class", "blocked_by"):
         value = _first_attribute(match, forbidden, default=None)
         if value not in (None, "", (), [], {}, frozenset()):
-            raise PatternContractError(
-                f"matcher output must not assign causal field {forbidden!r}"
-            )
+            raise PatternContractError(f"matcher output must not assign causal field {forbidden!r}")
 
 
 def _version_applicability(
@@ -630,10 +587,7 @@ def _version_applicability(
                 warning=MatcherWarning(
                     code=MatcherWarningCode.COMPATIBILITY_UNKNOWN,
                     pattern_id=pattern_id,
-                    message=(
-                        "pattern version predicate failed: "
-                        f"{_exception_message(exc)}"
-                    ),
+                    message=(f"pattern version predicate failed: {_exception_message(exc)}"),
                 ),
             )
         if type(result) is not bool:
@@ -669,9 +623,7 @@ def _version_applicability(
                 ),
             ),
         )
-    return PatternApplicability(
-        applicable=_scope_contains(versions, gf_version)
-    )
+    return PatternApplicability(applicable=_scope_contains(versions, gf_version))
 
 
 def _pattern_stream_scope(pattern: object) -> frozenset[str]:
@@ -687,8 +639,7 @@ def _pattern_stream_scope(pattern: object) -> frozenset[str]:
     unknown = values.difference(_STREAM_VALUES)
     if unknown:
         raise PatternContractError(
-            f"pattern {_pattern_id(pattern)!r} has unsupported stream scope: "
-            f"{sorted(unknown)!r}"
+            f"pattern {_pattern_id(pattern)!r} has unsupported stream scope: {sorted(unknown)!r}"
         )
     return values
 
@@ -699,9 +650,7 @@ def _stream_scope_accepts(
 ) -> bool:
     if scope.intersection({"either", "both-structure"}):
         return stream in {"stdout", "stderr"}
-    if scope.intersection(
-        {"process-state", "filesystem", "framework-state"}
-    ):
+    if scope.intersection({"process-state", "filesystem", "framework-state"}):
         return False
     return stream in scope
 
@@ -714,9 +663,7 @@ def _pattern_priority(pattern: object) -> int:
         default=None,
     )
     if type(value) is not int:
-        raise PatternContractError(
-            f"pattern {_pattern_id(pattern)!r} priority must be an integer"
-        )
+        raise PatternContractError(f"pattern {_pattern_id(pattern)!r} priority must be an integer")
     if value < 0:
         raise PatternContractError(
             f"pattern {_pattern_id(pattern)!r} priority must be non-negative"
@@ -889,9 +836,7 @@ def _positive_int(
     if type(value) is not int:
         raise TypeError(f"{field} must be an integer")
     if value < 1 or value > maximum:
-        raise ValueError(
-            f"{field} must be between 1 and {maximum}"
-        )
+        raise ValueError(f"{field} must be between 1 and {maximum}")
     return value
 
 

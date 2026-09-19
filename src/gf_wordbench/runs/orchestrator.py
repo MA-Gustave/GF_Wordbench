@@ -436,16 +436,8 @@ def _emit_failure(
         sink,
         LifecycleEvent(
             timestamp=failure.occurred_at,
-            event=(
-                "run_cancelled"
-                if failure.cancelled
-                else "run_orchestration_failed"
-            ),
-            level=(
-                EventLevel.WARN
-                if failure.cancelled
-                else EventLevel.FATAL
-            ),
+            event=("run_cancelled" if failure.cancelled else "run_orchestration_failed"),
+            level=(EventLevel.WARN if failure.cancelled else EventLevel.FATAL),
             run_id=run_id,
             stage=failure.phase,
             operation="orchestrate_run",

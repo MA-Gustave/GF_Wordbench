@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 from typing import Final
 
@@ -100,10 +99,7 @@ def build_run_paths(
     )
     expected_name = f"{_RUN_PREFIX}{validated_id}"
     if resolved_run_dir.name != expected_name:
-        raise ValueError(
-            f"run_dir must be named {expected_name!r}, got "
-            f"{resolved_run_dir.name!r}"
-        )
+        raise ValueError(f"run_dir must be named {expected_name!r}, got {resolved_run_dir.name!r}")
 
     paths = RunPaths(
         run_id=validated_id,
@@ -196,9 +192,7 @@ def validate_run_paths(
     )
     expected_name = f"{_RUN_PREFIX}{run_id}"
     if run_dir.name != expected_name:
-        raise ValueError(
-            f"run_dir must be named {expected_name!r}, got {run_dir.name!r}"
-        )
+        raise ValueError(f"run_dir must be named {expected_name!r}, got {run_dir.name!r}")
 
     expected = build_expected_path_map(run_dir)
     identities: set[str] = set()
@@ -209,9 +203,7 @@ def validate_run_paths(
             field_name=field_name,
         )
         if actual != expected[field_name]:
-            raise ValueError(
-                f"{field_name} must be {expected[field_name]!s}, got {actual!s}"
-            )
+            raise ValueError(f"{field_name} must be {expected[field_name]!s}, got {actual!s}")
 
         identity = _path_identity(actual)
         if identity in identities:
@@ -243,10 +235,7 @@ def owned_run_paths(paths: RunPaths) -> tuple[tuple[str, Path], ...]:
     """Return every canonical run-owned path in stable field order."""
 
     validate_run_paths(paths)
-    return tuple(
-        (field_name, Path(getattr(paths, field_name)))
-        for field_name in _PATH_FIELD_NAMES
-    )
+    return tuple((field_name, Path(getattr(paths, field_name))) for field_name in _PATH_FIELD_NAMES)
 
 
 def standard_run_directories(
@@ -256,8 +245,7 @@ def standard_run_directories(
 
     validate_run_paths(paths)
     return tuple(
-        (field_name, Path(getattr(paths, field_name)))
-        for field_name in _DIRECTORY_FIELD_NAMES
+        (field_name, Path(getattr(paths, field_name))) for field_name in _DIRECTORY_FIELD_NAMES
     )
 
 
@@ -279,7 +267,7 @@ def run_relative_path(
     )
     relative = contained.relative_to(paths.run_dir)
     return normalize_portable_path(
-        relative,
+        relative.as_posix(),
         role="run-relative path",
         allow_root=False,
         accept_backslash=False,

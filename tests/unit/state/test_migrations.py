@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from copy import deepcopy
 from dataclasses import FrozenInstanceError
+import json
 from typing import Any, cast
 
 import pytest
@@ -18,6 +18,7 @@ from gf_wordbench.state.migrations import (
 )
 from gf_wordbench.state.schema import (
     APP_STATE_SCHEMA_ID,
+    AppStateDocument,
     APP_STATE_SCHEMA_VERSION,
     default_app_state_document,
     parse_app_state,
@@ -25,7 +26,7 @@ from gf_wordbench.state.schema import (
 )
 
 
-def _defaults() -> dict[str, object]:
+def _defaults() -> AppStateDocument:
     return deepcopy(default_app_state_document())
 
 
@@ -35,16 +36,13 @@ def _group(
 ) -> dict[str, Any]:
     value = migration.payload[name]
     assert isinstance(value, dict)
-    return cast(dict[str, Any], value)
+    return cast("dict[str, Any]", value)
 
 
 def _warning_pairs(
     migration: LegacyStateMigration,
 ) -> set[tuple[str, str]]:
-    return {
-        (warning.code, warning.field)
-        for warning in migration.warnings
-    }
+    return {(warning.code, warning.field) for warning in migration.warnings}
 
 
 def test_complete_legacy_document_maps_to_canonical_state() -> None:
@@ -73,13 +71,13 @@ def test_complete_legacy_document_maps_to_canonical_state() -> None:
     )
 
     assert migration.payload["schema_id"] == APP_STATE_SCHEMA_ID
-    assert (
-        migration.payload["schema_version"]
-        == APP_STATE_SCHEMA_VERSION
-    )
+    assert migration.payload["schema_version"] == APP_STATE_SCHEMA_VERSION
     assert _group(migration, "environment") == {
-        "project_root": "C:/work/GF Wordbench",
-        "rgl_root": "C:/gf/rgl",
+        "last_selected_language_path": None,
+        "last_selected_validation_profile": (
+            "C:/work/GF Wordbench/project/project.toml"
+        ),
+        "last_rgl_root": "C:/gf/rgl",
         "gf_executable": "C:/gf/bin/gf.exe",
         "output_root": "C:/work/runs",
     }
@@ -99,7 +97,10 @@ def test_complete_legacy_document_maps_to_canonical_state() -> None:
         "summary_path": "C:/work/runs/run_001/summary.json",
         "status_message": "release validation completed",
     }
-    assert migration.warnings == ()
+    assert _warning_pairs(migration) == {
+        ("legacy_project_root_mapped_to_profile_candidate", "selected_project_root"),
+        ("legacy_rgl_root_mapped_to_hint", "selected_rgl_root"),
+    }
     assert migration.consumed_fields == tuple(sorted(legacy))
     assert migration.discarded_fields == ()
     assert migration.unknown_fields == ()
@@ -156,9 +157,7 @@ def test_invalid_mode_falls_back_to_diagnostic(
     )
 
     assert _group(migration, "selection")["mode"] == "diagnostic"
-    assert _warning_pairs(migration) == {
-        (warning_code, "selected_mode")
-    }
+    assert _warning_pairs(migration) == {(warning_code, "selected_mode")}
 
 
 def test_integer_and_boolean_aliases_are_coerced() -> None:
@@ -216,9 +215,7 @@ def test_invalid_integer_retains_default(
     )
 
     assert migration.payload == defaults
-    assert _warning_pairs(migration) == {
-        ("invalid_legacy_integer", field)
-    }
+    assert _warning_pairs(migration) == {("invalid_legacy_integer", field)}
     assert migration.consumed_fields == (field,)
 
 
@@ -243,9 +240,7 @@ def test_invalid_boolean_retains_default(
     )
 
     assert migration.payload == defaults
-    assert _warning_pairs(migration) == {
-        ("invalid_legacy_boolean", field)
-    }
+    assert _warning_pairs(migration) == {("invalid_legacy_boolean", field)}
 
 
 def test_paths_are_normalized_without_filesystem_resolution() -> None:
@@ -263,8 +258,9 @@ def test_paths_are_normalized_without_filesystem_resolution() -> None:
     )
 
     assert _group(migration, "environment") == {
-        "project_root": None,
-        "rgl_root": None,
+        "last_selected_language_path": None,
+        "last_selected_validation_profile": None,
+        "last_rgl_root": None,
         "gf_executable": "relative/gf.exe",
         "output_root": "out/runs",
     }
@@ -299,9 +295,12 @@ def test_control_characters_make_legacy_paths_invalid(
     )
 
     assert migration.payload == defaults
-    assert _warning_pairs(migration) == {
-        ("invalid_legacy_path", field)
-    }
+    warning_code = (
+        "invalid_legacy_project_root"
+        if field == "selected_project_root"
+        else "invalid_legacy_path"
+    )
+    assert _warning_pairs(migration) == {(warning_code, field)}
 
 
 def test_status_message_is_whitespace_normalized_and_bounded() -> None:
@@ -311,13 +310,8 @@ def test_status_message_is_whitespace_normalized_and_bounded() -> None:
         status_message_limit=16,
     )
 
-    assert (
-        _group(migration, "last_run")["status_message"]
-        == "alpha beta gamma"
-    )
-    assert _warning_pairs(migration) == {
-        ("truncated_legacy_status_message", "status_message")
-    }
+    assert _group(migration, "last_run")["status_message"] == "alpha beta gamma"
+    assert _warning_pairs(migration) == {("truncated_legacy_status_message", "status_message")}
 
 
 def test_non_text_status_message_is_ignored() -> None:
@@ -328,14 +322,11 @@ def test_non_text_status_message_is_ignored() -> None:
     )
 
     assert migration.payload == defaults
-    assert _warning_pairs(migration) == {
-        ("invalid_legacy_status_message", "status_message")
-    }
+    assert _warning_pairs(migration) == {("invalid_legacy_status_message", "status_message")}
 
 
 def test_runtime_project_and_evidence_fields_are_discarded() -> None:
     discarded = {
-        "selected_scan_dir": "src",
         "selected_scan_glob": "*.gf",
         "selected_gf_path": ["src"],
         "selected_include_regex": ".*",
@@ -355,6 +346,7 @@ def test_runtime_project_and_evidence_fields_are_discarded() -> None:
     }
     legacy = {
         **discarded,
+        "selected_scan_dir": "src",
         "selected_mode": "quick",
         "future_extension": {"enabled": True},
     }
@@ -364,18 +356,24 @@ def test_runtime_project_and_evidence_fields_are_discarded() -> None:
         canonical_defaults=_defaults(),
     )
 
-    assert migration.consumed_fields == ("selected_mode",)
+    assert migration.consumed_fields == ("selected_mode", "selected_scan_dir")
     assert migration.discarded_fields == tuple(sorted(discarded))
     assert migration.unknown_fields == ("future_extension",)
     assert {
-        warning.field
-        for warning in migration.warnings
-        if warning.code == "discarded_legacy_field"
+        warning.field for warning in migration.warnings if warning.code == "discarded_legacy_field"
     } == set(discarded)
+    assert (
+        "legacy_scan_dir_mapped_to_language_candidate",
+        "selected_scan_dir",
+    ) in _warning_pairs(migration)
+    assert _group(migration, "environment")["last_selected_language_path"] == "src"
 
-    serialized = json.dumps(migration.payload, sort_keys=True)
-    for field in (*discarded, "future_extension"):
-        assert field not in serialized
+    persisted_keys = set(migration.payload)
+    for value in migration.payload.values():
+        if isinstance(value, dict):
+            persisted_keys.update(value)
+    for field in (*discarded, "selected_scan_dir", "future_extension"):
+        assert field not in persisted_keys
 
 
 def test_field_summaries_are_sorted_and_deterministic() -> None:
@@ -444,9 +442,9 @@ def test_result_and_warning_records_are_frozen() -> None:
     assert isinstance(migration, LegacyStateMigration)
     assert isinstance(migration.warnings[0], StateMigrationWarning)
     with pytest.raises(FrozenInstanceError):
-        migration.consumed_fields = ()
+        setattr(migration, "consumed_fields", ())
     with pytest.raises(FrozenInstanceError):
-        migration.warnings[0].code = "changed"
+        setattr(migration.warnings[0], "code", "changed")
 
 
 @pytest.mark.parametrize(
@@ -480,7 +478,7 @@ def test_legacy_state_must_be_a_mapping(legacy: object) -> None:
         match="must be a JSON object",
     ):
         migrate_legacy_state(
-            cast(Any, legacy),
+            cast("Any", legacy),
             canonical_defaults=_defaults(),
         )
 
@@ -544,7 +542,7 @@ def test_canonical_defaults_must_be_a_mapping() -> None:
     ):
         migrate_legacy_state(
             {},
-            canonical_defaults=cast(Any, []),
+            canonical_defaults=cast("Any", []),
         )
 
 
@@ -554,7 +552,7 @@ def test_status_message_limit_requires_integer(limit: object) -> None:
         migrate_legacy_state(
             {},
             canonical_defaults=_defaults(),
-            status_message_limit=cast(int, limit),
+            status_message_limit=cast("int", limit),
         )
 
 

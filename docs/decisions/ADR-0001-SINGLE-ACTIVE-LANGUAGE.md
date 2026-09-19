@@ -1,16 +1,16 @@
 # ADR-0001 — Single Active Language Context
 
-**ADR ID:** `ADR-0001`  
-**Title:** Single Active Language  
-**Status:** Accepted — superseded in part by `ADR-0015`  
-**Decision date:** 2026-07-22  
-**Last reviewed:** 2026-07-30  
-**Decision owners:** GF Wordbench maintainers  
-**Applies to:** language identity, resolved runtime context, CLI, GUI, validation, automation, application state, reports, artifacts and portfolio boundaries  
-**Alignment authority:** `../DOCUMENTATION_ALIGNMENT_LOCK.md`  
-**Related decisions:** `ADR-0002-GF-AS-EXECUTION-ENGINE.md`, `ADR-0003-SEPARATE-SCAN-AND-COMPILE.md`, `ADR-0004-NATIVE-GFS-SCENARIOS.md`, `ADR-0011-SEPARATE-PORTFOLIO.md`, `ADR-0012-INDEPENDENT-PRODUCTS.md`, `ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md`, `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`  
-**Related contracts:** `../INTERFILE_CONTRACT_LOCK.md`, `../PERSISTED_SCHEMA_LOCK.md`, `../../project/docs/INTERFILE_CONTRACT_LOCK.md`, `../../templates/project/docs/INTERFILE_CONTRACT_LOCK.md`  
-**Superseded by:** `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md` for workspace-coupled startup, mandatory `project/project.toml`, catalog-driven selection, mandatory language bundles and the prohibition on remembering a last selected language path  
+**ADR ID:** `ADR-0001`
+**Title:** Single Active Language
+**Status:** Accepted — superseded in part by `ADR-0015`
+**Decision date:** 2026-07-22
+**Last reviewed:** 2026-07-30
+**Decision owners:** GF Wordbench maintainers
+**Applies to:** language identity, resolved runtime context, CLI, GUI, validation, automation, application state, reports, artifacts and portfolio boundaries
+**Alignment authority:** `../DOCUMENTATION_ALIGNMENT_LOCK.md`
+**Related decisions:** `ADR-0002-GF-AS-EXECUTION-ENGINE.md`, `ADR-0003-SEPARATE-SCAN-AND-COMPILE.md`, `ADR-0004-NATIVE-GFS-SCENARIOS.md`, `ADR-0011-SEPARATE-PORTFOLIO.md`, `ADR-0012-INDEPENDENT-PRODUCTS.md`, `ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md`, `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`
+**Related contracts:** `../INTERFILE_CONTRACT_LOCK.md`, `../PERSISTED_SCHEMA_LOCK.md`, `../../project/docs/INTERFILE_CONTRACT_LOCK.md`, `../../templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md`
+**Superseded by:** `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md` for workspace-coupled startup, mandatory `project/project.toml`, catalog-driven selection, mandatory language bundles and the prohibition on remembering a last selected language path
 **Preserved authority:** exactly one resolved language context per running session, exactly one language identity per ordinary run, no cross-language evidence mixing and no GF Wordbench dependency on `gf-portfolio`
 
 ---
@@ -619,7 +619,7 @@ Cleanup MAY operate on the current workspace's run scope or on an explicitly sel
 
 ### 9.1 Template
 
-`templates/project/` is the reusable blank structure for one active project. It MUST contain placeholders rather than an active language identity or a Portfolio registry.
+`templates/validation-profile/` is the reusable blank structure for one active project. It MUST contain placeholders rather than an active language identity or a Portfolio registry.
 
 ### 9.2 Initialization
 

@@ -14,10 +14,25 @@
 - `docs/decisions/ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md`
 
 **Document version:** `1.1.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines how GF Wordbench constructs, validates, records, and supplies the GF module search path.
@@ -26,7 +41,7 @@ The GF search path determines where GF resolves imported modules, compiled modul
 
 GF Wordbench therefore uses one centralized path-resolution process inside the GF anti-corruption boundary.
 
-The resolver operates for exactly one active project in one run. Validation use cases request GF operations through `GfToolPort`; the GF adapter resolves and supplies the effective path together with its provenance.
+The resolver operates for exactly one selected language context in one run. Validation use cases request GF operations through `GfToolPort`; the GF adapter resolves and supplies the effective path together with its provenance.
 
 > Every GF operation in one run MUST consume the same resolved GF path unless the operation declares and records an explicit contract-specific extension.
 
@@ -38,9 +53,9 @@ This document does not define GF module-resolution semantics. GF remains authori
 
 This specification governs:
 
-- project path entries declared in `project/project.toml`;
+- project path entries declared in `<validation-profile-root>/project.toml`;
 - explicit run-level GF path overrides;
-- project-relative source paths;
+- source-relative source paths;
 - RGL-root resolution;
 - documented RGL aliases;
 - optional inherited-environment fallback;
@@ -70,16 +85,16 @@ This specification does not govern:
 ## 3. Terminology
 
 - **PROJECT ROOT**: resolved root of the active GF Wordbench project.
-- **SOURCE ROOT**: primary project-relative directory containing active-language GF sources.
+- **SOURCE ROOT**: primary source-relative directory containing active-language GF sources.
 - **RGL ROOT**: local filesystem directory containing the installed or checked-out GF Resource Grammar Library.
 - **PATH PART**: one directory supplied to GF as part of its module search path.
-- **PROJECT PATH PART**: project-relative path declared by the active project.
+- **PROJECT PATH PART**: source-relative path declared by the selected language context.
 - **RGL ALIAS**: documented short name that resolves beneath the configured RGL root.
 - **EXPLICIT PATH**: complete GF path supplied directly for one run.
 - **DERIVED PATH**: path constructed from project configuration and the environment.
 - **EFFECTIVE PATH**: ordered, normalized, validated, deduplicated path used by GF.
 - **PATH SOURCE**: origin of a path part, such as explicit override, project configuration, RGL alias, or environment fallback.
-- **PORTABLE PATH**: path stored relative to the project root and using `/`.
+- **PORTABLE PATH**: path stored relative to the resolved source root and using `/`.
 - **ENVIRONMENT PATH**: machine-local absolute path such as the RGL root.
 - **STRICT MODE**: mode that treats unsupported, missing, or ambiguous path configuration as an error.
 
@@ -87,12 +102,12 @@ This specification does not govern:
 
 ## 4. Authority and ownership
 
-### 4.1 Active project authority
+### 4.1 Resolved language-context authority
 
-The active project owns its portable GF path declaration:
+The selected language context owns its portable GF path declaration:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 The authoritative field is:
@@ -108,7 +123,7 @@ This ordered list defines project requirements, not machine-local installation p
 
 Machine-local values are supplied through resolved application configuration:
 
-- project root;
+- resolved source root;
 - RGL root;
 - GF executable;
 - output root;
@@ -166,7 +181,7 @@ It MUST NOT:
 
 ## 5. Configuration model
 
-### 5.1 Project configuration
+### 5.1 Resolved language context and optional profile
 
 Canonical example:
 
@@ -191,7 +206,7 @@ path_parts = [
 
 Each item is one of:
 
-1. a project-relative path;
+1. a source-relative path;
 2. a documented RGL alias;
 3. an explicitly prefixed RGL-relative path.
 
@@ -236,7 +251,7 @@ An explicit path is a complete override, not an extra suffix.
 
 When present, it becomes the primary source of path parts.
 
-The active project configuration remains loaded for validation and evidence, but its `path_parts` are not appended automatically.
+The selected language context configuration remains loaded for validation and evidence, but its `path_parts` are not appended automatically.
 
 ### 5.5 Prohibited configuration
 
@@ -342,7 +357,7 @@ project:lib/src/french
 project:project/generated/interfaces
 ```
 
-The relative portion resolves beneath the project root.
+The relative portion resolves beneath the resolved source root.
 
 ---
 
@@ -370,11 +385,11 @@ When `explicit_gf_path` is non-empty:
 - record source as `explicit`;
 - do not append project `path_parts`;
 - do not append inherited environment entries;
-- MAY ensure the project source root is present only when an explicit policy requests it;
+- MAY ensure the selected source root is present only when an explicit policy requests it;
 - warn when the active source directory is absent;
 - fail in strict mode when a required project path is absent.
 
-### 7.3 Project-derived behavior
+### 7.3 Context-derived behavior
 
 When no explicit path exists:
 
@@ -435,7 +450,7 @@ INPUT:
      project-prefixed
      RGL-prefixed
      documented bare RGL alias
-     project-relative path
+     source-relative path
      absolute explicit path
 8. Reject traversal or forbidden roots.
 9. Normalize each resolved directory.
@@ -463,13 +478,13 @@ Canonical project configuration MUST reject it.
 
 A legacy explicit path parser MAY discard empty entries produced by repeated separators, but MUST emit a migration warning.
 
-### 9.2 `project:` prefix
+### 9.2 `project:` compatibility prefix
 
 ```text
 project:<path>
 ```
 
-Resolves beneath the project root.
+Resolves beneath the resolved source root.
 
 ### 9.3 `rgl:` prefix
 
@@ -495,7 +510,7 @@ They are prohibited in canonical `project.toml`.
 
 ### 9.6 Unprefixed relative path
 
-Any remaining relative item resolves beneath the project root.
+Any remaining relative item resolves beneath the resolved source root.
 
 Example:
 
@@ -540,7 +555,7 @@ result: covered
 
 ### 10.2 Automatic inclusion
 
-In project-derived mode, when no declared path covers the source directory, the resolver SHOULD append the source directory after existing project-owned path entries and before RGL/environment fallback entries.
+In project-derived mode, when no declared path covers the source directory, the resolver SHOULD append the source directory after existing profile-owned path entries and before RGL/environment fallback entries.
 
 This automatic inclusion MUST be recorded as:
 
@@ -620,7 +635,7 @@ They SHOULD be canonicalized with behavior equivalent to:
 path.expanduser().resolve(strict=False)
 ```
 
-Environment-variable expansion is not permitted for project-owned paths.
+Environment-variable expansion is not permitted for profile-owned paths.
 
 ### 12.2 Persisted representation
 
@@ -927,13 +942,13 @@ The GF path and working directory are independent inputs.
 Canonical working directory:
 
 ```text
-resolved project root
+resolved resolved source root
 ```
 
 Rules:
 
-- relative project source arguments resolve consistently from the project root;
-- project-relative GF path parts are converted to absolute resolved paths before command execution;
+- relative selected source arguments resolve consistently from the resolved source root;
+- source-relative GF path parts are converted to absolute resolved paths before command execution;
 - changing the working directory MUST NOT change the effective path meaning;
 - scenario and compile stages SHOULD use the same working directory;
 - a stage using another working directory MUST record it explicitly.
@@ -1004,7 +1019,7 @@ It MUST NOT include unrelated environment values.
 
 ### 20.1 Allowed roots
 
-Project-relative entries MUST remain beneath the project root.
+Project-relative entries MUST remain beneath the resolved source root.
 
 RGL-relative entries MUST remain beneath the RGL root.
 
@@ -1149,14 +1164,14 @@ It joins those entries into one GF path string.
 GF Wordbench moves this behavior to one resolver and replaces language-specific defaults with:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 ### 23.3 Required migration changes
 
 1. create the centralized resolver;
 2. introduce typed request and resolution models;
-3. load `gf.path_parts` from the active project;
+3. load `gf.path_parts` from the selected language context;
 4. remove `lib/src/albanian` from framework defaults;
 5. remove compiler-local path fallback;
 6. remove GUI-specific blank-path assumptions;
@@ -1260,10 +1275,10 @@ Diagnostics MUST NOT suggest creating missing source or RGL directories automati
 
 The following invariants are normative.
 
-1. One resolver owns effective GF path construction for one active project in one run.
+1. One resolver owns effective GF path construction for one selected language context in one run.
 2. CLI and GUI produce equivalent path requests from equivalent inputs.
 3. Compilation, scenarios, introspection, and PGF build share one base resolution.
-4. Project-owned paths are portable and project-relative.
+4. Project-owned paths are portable and source-relative.
 5. Machine-local roots remain environment configuration.
 6. Explicit configuration takes precedence over inherited environment.
 7. Environment fallback is never silent.
@@ -1324,7 +1339,7 @@ tests/migrations/test_legacy_gf_path.py
 
 Required cases:
 
-- project-relative path;
+- source-relative path;
 - `project:` prefix;
 - `rgl:` prefix;
 - documented bare alias;
@@ -1332,7 +1347,7 @@ Required cases:
 - empty path part;
 - missing directory;
 - file instead of directory;
-- traversal outside project root;
+- traversal outside resolved source root;
 - traversal outside RGL root;
 - duplicate lexical entries;
 - duplicate resolved entries;
@@ -1432,7 +1447,7 @@ These commands MUST remain synchronized with `docs/usage/CLI_REFERENCE.md` and `
 
 ## 30. Example resolutions
 
-### 30.1 Standard project-derived path
+### 30.1 Standard context-derived path
 
 Configuration:
 

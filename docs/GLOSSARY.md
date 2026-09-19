@@ -7,9 +7,37 @@
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
 **Terminology version:** `1.1.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
+
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
+
+## Resolved language context
+
+The immutable per-session result of resolving one selected GF file or RGL language directory. It owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts.
+
+## Validation profile
+
+An optional, explicitly loaded policy bundle. It may add selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, artifact requirements and release gates. It does not own the selected source path, language identity, GF executable or output root.
+
+## Selected source root
+
+The existing directory containing the selected GF language sources. Wordbench reads it in place and does not copy it into the framework repository.
 
 ## 1. Purpose
 
@@ -131,7 +159,7 @@ The single GF language project currently configured and validated by one GF Word
 
 An active language project includes:
 
-- `project/project.toml`;
+- `<validation-profile-root>/project.toml`;
 - GF source modules;
 - project documentation;
 - validation scenarios;
@@ -250,11 +278,11 @@ Evidence may include:
 
 The reusable Python application, tests, documentation, templates, and runtime conventions that make up GF Wordbench.
 
-The framework excludes the language-specific content of the active project.
+The framework excludes the selected language sources and any optional validation-profile content.
 
 ## GF Wordbench
 
-A clonable validation and development framework for one active Grammatical Framework language project.
+A clonable validation and development framework for one selected Grammatical Framework language context.
 
 GF Wordbench orchestrates GF tools, preserves evidence, classifies failures, compares runs, and produces reports. It does not reimplement the GF compiler, parser, type checker, runtime, or module resolver.
 
@@ -292,7 +320,7 @@ See **active language project**.
 
 The generic, language-neutral structure copied when initializing a new active language project.
 
-Template placeholders are valid in `templates/project/` but MUST be replaced in the active `project/` directory.
+Template placeholders are valid in `templates/validation-profile/` but MUST be replaced in the active `project/` directory.
 
 ## Reset
 
@@ -402,7 +430,7 @@ Canonical persisted project-owned and run-owned paths use `/`.
 
 ## Project-owned path
 
-A path to a file or directory belonging to the active project.
+Legacy term for a path belonging to an old root `project/` layout. Current source paths are source-relative; profile assets are profile-relative.
 
 Canonical persisted project-owned paths are relative to the project root.
 
@@ -412,7 +440,7 @@ The authoritative base directory of the active language project, as resolved fro
 
 ## RGL root
 
-The local root of the Grammatical Framework Resource Grammar Library used by the active project.
+The local root of the Grammatical Framework Resource Grammar Library containing or supporting the selected language.
 
 ## Run directory
 
@@ -430,9 +458,7 @@ The base directory of one specific run. Paths in `manifest.json` and canonical a
 
 ## Source root
 
-The directory containing the active language GF source files.
-
-The source root is configured by `project/project.toml`.
+The directory containing the selected GF source files. It is resolved from the user-selected path.
 
 ## Working directory
 
@@ -921,7 +947,7 @@ Reviewed input data consumed by a scenario.
 Input fixtures belong under:
 
 ```text
-project/validation/inputs/
+<validation-profile-root>/validation/inputs/
 ```
 
 ## Marker
@@ -1677,7 +1703,7 @@ Machine-specific settings such as:
 The authoritative language-project definition stored in:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 ## Run configuration
@@ -1688,7 +1714,7 @@ It contains every value needed to execute the run non-interactively.
 
 ## `project.toml`
 
-The canonical persisted configuration for one active language project.
+Legacy filename accepted as an explicitly loaded validation profile. It is not mandatory and does not own language identity or source location.
 
 It defines project identity, source location, GF path parts, entrypoints, checkpoints, scenarios, and release policy.
 
@@ -1933,7 +1959,7 @@ Detailed rules belong to these documents:
 | Python file boundaries | `docs/INTERFILE_CONTRACT_LOCK.md` |
 | External executables and GF invocation | `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md` |
 | Persisted fields, schemas, paths, and migrations | `docs/PERSISTED_SCHEMA_LOCK.md` |
-| Active-project GF module boundaries | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
+| Active-project GF module boundaries | `<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md` |
 | Architecture | `docs/architecture/ARCHITECTURE_OVERVIEW.md` |
 | Validation stages and modes | `docs/validation/VALIDATION_PIPELINE.md`, `VALIDATION_MODES.md` |
 | Scenario syntax and markers | `docs/scenarios/SCENARIO_FORMAT.md` |
@@ -1941,7 +1967,7 @@ Detailed rules belong to these documents:
 | Diagnostics | `docs/diagnostics/DIAGNOSTIC_OVERVIEW.md` |
 | Configuration | `docs/configuration/CONFIGURATION_OVERVIEW.md` |
 | Reports | `docs/reports/REPORTING_OVERVIEW.md` |
-| Project acceptance | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`, `RELEASE_CRITERIA.md` |
+| Project acceptance | `<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md`, `RELEASE_CRITERIA.md` |
 
 When two documents appear to define the same term differently, this glossary controls the term’s general meaning, while the more specialized normative document controls its detailed operational rules.
 

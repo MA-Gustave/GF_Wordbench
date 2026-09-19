@@ -6,7 +6,7 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass, replace
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, cast, runtime_checkable
+from typing import TYPE_CHECKING, Callable, Collection as TypingCollection, Generic, Protocol, TypeVar, cast, runtime_checkable
 
 from gf_wordbench.kernel.errors import ContractViolationError
 from gf_wordbench.kernel.statuses import (
@@ -44,17 +44,20 @@ _ResultT = TypeVar("_ResultT", bound="DiagnosticResult")
 
 @runtime_checkable
 class DiagnosticResult(Protocol):
-    status: ValidationStatus
-    diagnostic_class: DiagnosticClass
-    blocked_by: list[str]
+    @property
+    def status(self) -> ValidationStatus: ...
 
     @property
-    def error_kind(self) -> object:
-        ...
+    def diagnostic_class(self) -> DiagnosticClass: ...
 
     @property
-    def primary_message(self) -> str:
-        ...
+    def blocked_by(self) -> TypingCollection[str]: ...
+
+    @property
+    def error_kind(self) -> object: ...
+
+    @property
+    def primary_message(self) -> str: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,23 +225,22 @@ def resolve_blocked_by(
         file_result,
         references_by_subject=references_by_subject,
     )
-    resolution = _resolve_references(
+    reference_resolution = _resolve_references(
         file_result,
         references,
         indexes,
     )
     blockers = _failed_blocker_identities(
         target_identity,
-        resolution.resolved_subjects,
+        reference_resolution.resolved_subjects,
         indexes,
     )
     if not blockers:
         return []
     classifications = {
-        _result_identity(result): _diagnostic_class(result)
-        for result in all_results
+        _result_identity(result): _diagnostic_class(result) for result in all_results
     }
-    initial_edges = {target_identity: blockers}
+    initial_edges: dict[object, Iterable[object]] = {target_identity: blockers}
     graph = build_blocker_graph(
         initial_edges,
         known_subjects=classifications,
@@ -272,12 +274,10 @@ def classify_diagnostic_results(
         return ClassificationBatch(())
 
     indexes = _build_result_indexes(combined, strict=strict)
-    normalized_noise = frozenset(
-        _normalize_subject_identity(value) for value in noise_subjects
-    )
+    normalized_noise = frozenset(_normalize_subject_identity(value) for value in noise_subjects)
     issues: list[ClassificationIssue] = []
     initial_classes: dict[str, DiagnosticClass] = {}
-    initial_blockers: dict[str, tuple[str, ...]] = {}
+    initial_blockers: dict[object, Iterable[object]] = {}
 
     for result in combined:
         identity = _result_identity(result)
@@ -299,9 +299,7 @@ def classify_diagnostic_results(
             )
             status = _validation_status(result)
             error_kind = _error_kind(result)
-            retained_noise = (
-                _normalize_subject_identity(identity) in normalized_noise
-            )
+            retained_noise = _normalize_subject_identity(identity) in normalized_noise
             decision = classify_causality(
                 subject_id=identity,
                 status=status,
@@ -377,7 +375,7 @@ def classify_diagnostic_results(
                 )
             )
             updated = _best_effort_ambiguous(result)
-        classified.append(cast(_ResultT, updated))
+        classified.append(updated)
 
     return ClassificationBatch(tuple(classified), tuple(issues))
 
@@ -404,9 +402,7 @@ def enforce_classification_coherence(result: DiagnosticResult) -> None:
                 DiagnosticClass.AMBIGUOUS,
             }
         ),
-        ValidationStatus.SKIPPED: frozenset(
-            {DiagnosticClass.SKIPPED, DiagnosticClass.NOISE}
-        ),
+        ValidationStatus.SKIPPED: frozenset({DiagnosticClass.SKIPPED, DiagnosticClass.NOISE}),
     }
 
     if diagnostic_class not in allowed[status]:
@@ -506,12 +502,8 @@ def _resolve_references(
         resolved.setdefault(canonical_key, canonical)
 
     return _ReferenceResolution(
-        resolved_subjects=tuple(
-            resolved[key] for key in sorted(resolved)
-        ),
-        unresolved_references=tuple(
-            unresolved[key] for key in sorted(unresolved)
-        ),
+        resolved_subjects=tuple(resolved[key] for key in sorted(resolved)),
+        unresolved_references=tuple(unresolved[key] for key in sorted(unresolved)),
         self_referenced=self_referenced,
         has_subject_local_evidence=_has_subject_local_evidence(result),
     )
@@ -541,22 +533,15 @@ def _causality_facts(
         local_artifact_failure=_local_artifact_failure(result),
         unknown_external_reference=bool(resolved.unresolved_references),
         successful_external_reference=successful_reference,
-        timeout=(
-            error_kind is ErrorKind.TIMEOUT
-            or _bool_attribute(result, "timed_out")
-        ),
+        timeout=(error_kind is ErrorKind.TIMEOUT or _bool_attribute(result, "timed_out")),
         parser_failure=_bool_attribute(result, "parser_failure"),
         output_truncated=any(
             _bool_attribute(result, name)
             for name in ("output_truncated", "stdout_truncated", "stderr_truncated")
         ),
         combined_inputs=_bool_attribute(result, "combined_inputs"),
-        policy_skip=(
-            status is ValidationStatus.SKIPPED and not retained_noise
-        ),
-        excluded_noise=(
-            retained_noise and status is ValidationStatus.SKIPPED
-        ),
+        policy_skip=(status is ValidationStatus.SKIPPED and not retained_noise),
+        excluded_noise=(retained_noise and status is ValidationStatus.SKIPPED),
     )
 
 
@@ -716,7 +701,8 @@ def _with_classification(
             {
                 _normalize_subject_identity(value): value
                 for value in blocked_by
-                if value and _normalize_subject_identity(value)
+                if value
+                and _normalize_subject_identity(value)
                 != _normalize_subject_identity(_result_identity(result))
             }.values(),
             key=_normalize_subject_identity,
@@ -737,10 +723,8 @@ def _with_classification(
         normalized_blockers,
     )
 
-    dataclass_field_names = (
-        {item.name for item in fields(result)}
-        if is_dataclass(result) and not isinstance(result, type)
-        else set()
+    dataclass_field_names: set[str] = (
+        {item.name for item in fields(result)} if is_dataclass(result) else set()
     )
     replacement_values: dict[str, object] = {}
 
@@ -752,8 +736,9 @@ def _with_classification(
         replacement_values["is_direct"] = direct
 
     dataclass_parameters = getattr(type(result), "__dataclass_params__", None)
+    replace_result = cast("Callable[..., _ResultT]", replace)
     if dataclass_parameters is not None and dataclass_parameters.frozen:
-        return cast(_ResultT, replace(result, **replacement_values))
+        return replace_result(result, **replacement_values)
 
     try:
         setattr(result, "blocked_by", blocker_value)
@@ -766,7 +751,7 @@ def _with_classification(
         return result
     except (AttributeError, TypeError):
         if replacement_values:
-            return cast(_ResultT, replace(result, **replacement_values))
+            return replace_result(result, **replacement_values)
         raise _contract_error(
             "result does not expose writable classification-owned fields",
             subject=_result_identity(result),
@@ -895,10 +880,7 @@ def _unique_strings(values: Iterable[object]) -> tuple[str, ...]:
         if not text:
             continue
         normalized.setdefault(_normalize_subject_identity(text), text)
-    return tuple(
-        normalized[key]
-        for key in sorted(normalized)
-    )
+    return tuple(normalized[key] for key in sorted(normalized))
 
 
 def _contract_error(

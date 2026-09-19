@@ -223,16 +223,17 @@ def test_registry_contains_exact_canonical_schema_set() -> None:
     assert len(SCHEMA_REGISTRY) == 6
     assert set(SCHEMA_REGISTRY.schema_ids) == set(_EXPECTED_DEFINITIONS)
     assert SCHEMA_REGISTRY.definitions == tuple(SCHEMA_REGISTRY)
-    assert tuple(
-        sorted(
-            CANONICAL_SCHEMA_DEFINITIONS,
-            key=lambda definition: (definition.schema_id, definition.version),
+    assert (
+        tuple(
+            sorted(
+                CANONICAL_SCHEMA_DEFINITIONS,
+                key=lambda definition: (definition.schema_id, definition.version),
+            )
         )
-    ) == SCHEMA_REGISTRY.definitions
-    assert CANONICAL_SCHEMA_IDS == SCHEMA_REGISTRY.schema_ids
-    assert CANONICAL_SCHEMA_KEYS == tuple(
-        definition.key for definition in SCHEMA_REGISTRY
+        == SCHEMA_REGISTRY.definitions
     )
+    assert SCHEMA_REGISTRY.schema_ids == CANONICAL_SCHEMA_IDS
+    assert tuple(definition.key for definition in SCHEMA_REGISTRY) == CANONICAL_SCHEMA_KEYS
     assert SCHEMA_REGISTRY.qualified_ids == tuple(
         f"{schema_id}/1.0" for schema_id in sorted(_EXPECTED_DEFINITIONS)
     )
@@ -260,24 +261,24 @@ def test_canonical_schema_constants_and_aliases_are_locked() -> None:
     assert SUMMARY_SCHEMA_ID == RUN_SUMMARY_SCHEMA_ID
     assert SUMMARY_SCHEMA_VERSION == RUN_SUMMARY_SCHEMA_VERSION
 
-    assert PROJECT_SCHEMA_KEY == SchemaKey(PROJECT_SCHEMA_ID, SchemaVersion(1, 0))
-    assert APP_STATE_SCHEMA_KEY == SchemaKey(APP_STATE_SCHEMA_ID, SchemaVersion(1, 0))
-    assert RUN_SUMMARY_SCHEMA_KEY == SchemaKey(
+    assert SchemaKey(PROJECT_SCHEMA_ID, SchemaVersion(1, 0)) == PROJECT_SCHEMA_KEY
+    assert SchemaKey(APP_STATE_SCHEMA_ID, SchemaVersion(1, 0)) == APP_STATE_SCHEMA_KEY
+    assert SchemaKey(
         RUN_SUMMARY_SCHEMA_ID,
         SchemaVersion(1, 0),
-    )
-    assert ARTIFACT_MANIFEST_SCHEMA_KEY == SchemaKey(
+    ) == RUN_SUMMARY_SCHEMA_KEY
+    assert SchemaKey(
         ARTIFACT_MANIFEST_SCHEMA_ID,
         SchemaVersion(1, 0),
-    )
-    assert SCENARIO_OUTPUT_SCHEMA_KEY == SchemaKey(
+    ) == ARTIFACT_MANIFEST_SCHEMA_KEY
+    assert SchemaKey(
         SCENARIO_OUTPUT_SCHEMA_ID,
         SchemaVersion(1, 0),
-    )
-    assert SCENARIO_GOLD_SCHEMA_KEY == SchemaKey(
+    ) == SCENARIO_OUTPUT_SCHEMA_KEY
+    assert SchemaKey(
         SCENARIO_GOLD_SCHEMA_ID,
         SchemaVersion(1, 0),
-    )
+    ) == SCENARIO_GOLD_SCHEMA_KEY
 
 
 @pytest.mark.parametrize("schema_id", sorted(_EXPECTED_DEFINITIONS))
@@ -356,8 +357,7 @@ def test_legacy_registry_is_exact_and_read_only() -> None:
     }
     assert observed == _EXPECTED_LEGACY
     assert all(
-        entry.writer_policy == "never_write"
-        and entry.support is SchemaSupportClass.LEGACY_READABLE
+        entry.writer_policy == "never_write" and entry.support is SchemaSupportClass.LEGACY_READABLE
         for entry in LEGACY_SCHEMA_DEFINITIONS
     )
 
@@ -385,9 +385,7 @@ def test_legacy_resolution_is_readable_but_never_writable(legacy_id: str) -> Non
 
 def test_legacy_path_lookup_can_return_multiple_historical_shapes() -> None:
     state_matches = SCHEMA_REGISTRY.find_legacy_by_path(".gf_audit_state.json")
-    summary_matches = SCHEMA_REGISTRY.find_legacy_by_path(
-        "run_20260725_120000/summary.json"
-    )
+    summary_matches = SCHEMA_REGISTRY.find_legacy_by_path("run_20260725_120000/summary.json")
 
     assert {entry.legacy_id for entry in state_matches} == {
         "gf-audit.state-legacy",
@@ -517,9 +515,10 @@ def test_schema_path_normalization_is_portable_and_relative() -> None:
     assert normalize_schema_path("project//validation/gold/basic.gold") == (
         "project/validation/gold/basic.gold"
     )
-    assert normalize_schema_path_pattern(
-        r"run_<run-id>\raw\scenarios\<scenario-id>.out"
-    ) == "run_<run-id>/raw/scenarios/<scenario-id>.out"
+    assert (
+        normalize_schema_path_pattern(r"run_<run-id>\raw\scenarios\<scenario-id>.out")
+        == "run_<run-id>/raw/scenarios/<scenario-id>.out"
+    )
 
 
 @pytest.mark.parametrize(
@@ -731,9 +730,7 @@ def test_registry_snapshot_is_read_only_and_stable() -> None:
 
     assert isinstance(snapshot, MappingProxyType)
     assert tuple(snapshot) == SCHEMA_REGISTRY.qualified_ids
-    assert snapshot[str(PROJECT_SCHEMA_KEY)] is SCHEMA_REGISTRY.get(
-        PROJECT_SCHEMA_ID
-    )
+    assert snapshot[str(PROJECT_SCHEMA_KEY)] is SCHEMA_REGISTRY.get(PROJECT_SCHEMA_ID)
 
     with pytest.raises(TypeError):
         snapshot["gf-wordbench.extra/1.0"] = _definition()  # type: ignore[index]
@@ -877,16 +874,12 @@ def test_registry_rejects_invalid_legacy_entries() -> None:
     with pytest.raises(ValueError, match="must not collide"):
         SchemaRegistry(
             (definition,),
-            (
-                replace(valid, legacy_id=definition.schema_id),
-            ),
+            (replace(valid, legacy_id=definition.schema_id),),
         )
     with pytest.raises(ValueError, match="replacement is not present"):
         SchemaRegistry(
             (definition,),
-            (
-                replace(valid, replacement=PROJECT_SCHEMA_KEY),
-            ),
+            (replace(valid, replacement=PROJECT_SCHEMA_KEY),),
         )
 
 

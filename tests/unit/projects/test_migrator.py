@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Final
+from typing import Any, Final, cast
 
 import pytest
 
@@ -25,7 +27,7 @@ from gf_wordbench.projects.migrator import (
     migrate_project,
     plan_project_migration,
 )
-from gf_wordbench.projects.schema import PROJECT_SCHEMA_ID, PROJECT_SCHEMA_VERSION
+from gf_wordbench.projects.models import PROJECT_SCHEMA_ID, PROJECT_SCHEMA_VERSION
 
 _FIXED_TIME: Final = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
 
@@ -66,9 +68,12 @@ class _Workspace:
     destination_requests: list[dict[str, object]] = field(default_factory=list)
     applied_plans: list[ProjectMigrationPlan] = field(default_factory=list)
     verified_plans: list[ProjectMigrationPlan] = field(default_factory=list)
-    rollback_receipts: list[ProjectMigrationWriteReceipt] = field(
-        default_factory=list
-    )
+    rollback_receipts: list[ProjectMigrationWriteReceipt] = field(default_factory=list)
+
+    @contextmanager
+    def open(self, workspace_root: Path) -> Iterator[Path]:
+        self.calls.append("open")
+        yield workspace_root
 
     def inspect_source(
         self,
@@ -167,7 +172,7 @@ def _request(
         optional_scenarios=("regression",),
         release_requires_pgf=True,
     )
-    return replace(request, **overrides)
+    return cast("Any", replace)(request, **overrides)
 
 
 def _source_inspection(
@@ -292,9 +297,7 @@ def test_issue_factories_and_plan_projections_preserve_classification(
 
     assert plan.blocker_messages == ("Unsafe source layout.",)
     assert plan.warning_messages == ("Review the entrypoints.",)
-    assert plan.loss_messages == (
-        "One legacy fact could not be preserved.",
-    )
+    assert plan.loss_messages == ("One legacy fact could not be preserved.",)
 
 
 @pytest.mark.parametrize(
@@ -369,19 +372,13 @@ def test_copy_plan_is_read_only_complete_and_deterministic(
         ProjectMigrationActionKind.WRITE_PROJECT_CONFIG,
         ProjectMigrationActionKind.VERIFY_PROJECT,
     )
-    assert [
-        action.asset.relative_path
-        for action in plan.actions
-        if action.asset is not None
-    ] == [
+    assert [action.asset.relative_path for action in plan.actions if action.asset is not None] == [
         Path("GrammarEx.gf"),
         Path("sub/ConcreteEx.gf"),
     ]
     assert plan.actions[1].source == request.source_root / "GrammarEx.gf"
     assert plan.actions[1].destination == (
-        request.project_root
-        / request.source_directory
-        / "GrammarEx.gf"
+        request.project_root / request.source_directory / "GrammarEx.gf"
     )
     assert workspace.calls == ["inspect_source", "inspect_destination"]
     assert workspace.applied_plans == []
@@ -461,8 +458,7 @@ def test_external_strategy_rejects_source_outside_project_root(
     )
 
     assert any(
-        issue.code == "migration.external_source_not_project_relative"
-        for issue in plan.issues
+        issue.code == "migration.external_source_not_project_relative" for issue in plan.issues
     )
     assert plan.blocker_messages
 
@@ -486,9 +482,7 @@ def test_external_strategy_rejects_mismatched_source_directory(
     )
 
     mismatch = next(
-        issue
-        for issue in plan.issues
-        if issue.code == "migration.external_source_mismatch"
+        issue for issue in plan.issues if issue.code == "migration.external_source_mismatch"
     )
     assert mismatch.severity == "blocker"
     assert "expected 'actual/source'" in mismatch.message
@@ -510,8 +504,7 @@ def test_history_import_has_explicit_action_warning_and_manual_evidence(
 
     assert ProjectMigrationActionKind.IMPORT_WITH_HISTORY in _kinds(plan)
     assert any(
-        issue.code == "migration.history_import_requires_adapter"
-        and issue.severity == "warning"
+        issue.code == "migration.history_import_requires_adapter" and issue.severity == "warning"
         for issue in plan.issues
     )
     assert plan.manual_actions[0].startswith("Record the source repository")
@@ -534,10 +527,7 @@ def test_copy_strategy_blocks_destination_nested_inside_source(
         clock=_Clock(),
     )
 
-    assert any(
-        issue.code == "migration.destination_inside_source"
-        for issue in plan.issues
-    )
+    assert any(issue.code == "migration.destination_inside_source" for issue in plan.issues)
 
 
 def test_missing_entrypoints_and_required_scenarios_are_visible_tasks(
@@ -746,9 +736,7 @@ def test_invalid_verification_preserves_losses_and_rolls_back(
     assert result.status is ProjectMigrationStatus.FAILED
     assert result.changed is False
     assert result.written is False
-    assert result.losses == (
-        "One legacy ownership fact was not recoverable.",
-    )
+    assert result.losses == ("One legacy ownership fact was not recoverable.",)
     assert "Canonical project validation failed." in result.warnings
     assert workspace.rollback_receipts == [workspace.receipt]
 
@@ -810,8 +798,7 @@ def test_cancellation_after_successful_verification_retains_destination(
     assert result.changed is True
     assert result.written is True
     assert any(
-        "Cancellation was observed after publication" in warning
-        for warning in result.warnings
+        "Cancellation was observed after publication" in warning for warning in result.warnings
     )
     assert workspace.rollback_receipts == []
 

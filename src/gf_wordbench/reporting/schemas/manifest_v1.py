@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from enum import Enum
+from importlib import import_module
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Final, NotRequired, TypedDict, cast
+import re
+from typing import Final, Never, NotRequired, Protocol, TypedDict, cast
 from urllib.parse import urlsplit
 
 from gf_wordbench.kernel.errors import (
@@ -16,11 +17,6 @@ from gf_wordbench.kernel.errors import (
 )
 from gf_wordbench.kernel.ids import validate_run_id
 from gf_wordbench.kernel.serialization import ProducerInfo
-from gf_wordbench.reporting.manifest import models as _manifest_models
-from gf_wordbench.reporting.manifest.models import (
-    ArtifactManifest,
-    ArtifactManifestEntry,
-)
 
 ARTIFACT_MANIFEST_SCHEMA_ID: Final[str] = "gf-wordbench.artifact-manifest"
 ARTIFACT_MANIFEST_SCHEMA_VERSION: Final[str] = "1.0"
@@ -105,17 +101,13 @@ _RECOMMENDED_CREATED_BY: Final[frozenset[str]] = frozenset(
     }
 )
 
-_SCHEMA_VERSION_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
-)
+_SCHEMA_VERSION_RE: Final[re.Pattern[str]] = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _SHA256_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
 _MEDIA_TYPE_RE: Final[re.Pattern[str]] = re.compile(
     r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+"
     r"(?:; [A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+-]+)*$"
 )
-_CREATED_BY_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
+_CREATED_BY_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 _RFC3339_UTC_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})T"
     r"(?P<time>[0-9]{2}:[0-9]{2}:[0-9]{2})"
@@ -189,35 +181,65 @@ class CompatibleArtifactManifestDocument(TypedDict):
     extensions: NotRequired[dict[str, object]]
 
 
+class _ArtifactManifestEntryModel(Protocol):
+    path: str
+    role: object
+    media_type: str
+    required: bool
+    size_bytes: int
+    sha256: str
+    created_by: str
+
+
+class _ArtifactManifestModel(Protocol):
+    schema_id: str
+    schema_version: str
+    producer_name: str
+    producer_version: str
+    run_id: str
+    generated_at: str
+    hash_algorithm: str
+    artifacts: tuple[_ArtifactManifestEntryModel, ...]
+
+
 def parse_artifact_manifest(
     document: object,
     *,
     strict: bool = False,
-) -> ArtifactManifest:
+) -> _ArtifactManifestModel:
     """Parse an untrusted decoded JSON value into the canonical typed model."""
 
     canonical = canonicalize_artifact_manifest_document(
         document,
         strict=strict,
     )
+    manifest_type, entry_type, role_type = _manifest_model_types()
     entries = tuple(
-        _entry_model(entry)
+        _entry_model(
+            entry,
+            entry_type=entry_type,
+            role_type=role_type,
+        )
         for entry in canonical["artifacts"]
     )
-    return ArtifactManifest(
-        schema_id=canonical["schema_id"],
-        schema_version=canonical["schema_version"],
-        producer_name=canonical["producer"]["name"],
-        producer_version=canonical["producer"]["version"],
-        run_id=canonical["run_id"],
-        generated_at=canonical["generated_at"],
-        hash_algorithm=canonical["hash_algorithm"],
-        artifacts=entries,
+    manifest_factory = cast("Callable[..., object]", manifest_type)
+    return cast(
+        "_ArtifactManifestModel",
+        manifest_factory(
+            schema_id=canonical["schema_id"],
+            schema_version=canonical["schema_version"],
+            producer_name=canonical["producer"]["name"],
+            producer_version=canonical["producer"]["version"],
+            run_id=canonical["run_id"],
+            generated_at=canonical["generated_at"],
+            hash_algorithm=canonical["hash_algorithm"],
+            artifacts=entries,
+        ),
     )
 
 
 def serialize_artifact_manifest(
-    manifest: ArtifactManifest,
+    manifest: _ArtifactManifestModel,
 ) -> ArtifactManifestDocument:
     """Return the exact canonical JSON object for a validated manifest model."""
 
@@ -231,22 +253,20 @@ def serialize_artifact_manifest(
         ),
         run_id=_model_text(manifest, "run_id"),
         generated_at=_canonical_timestamp(
-            getattr(manifest, "generated_at"),
+            manifest.generated_at,
             field="$.generated_at",
         ),
         hash_algorithm=_model_text(manifest, "hash_algorithm"),
-        artifacts=[
-            _entry_to_document(entry)
-            for entry in tuple(getattr(manifest, "artifacts"))
-        ],
+        artifacts=[_entry_to_document(entry) for entry in tuple(manifest.artifacts)],
     )
     return canonicalize_artifact_manifest_document(document, strict=True)
 
 
-def validate_artifact_manifest(manifest: ArtifactManifest) -> None:
+def validate_artifact_manifest(manifest: _ArtifactManifestModel) -> None:
     """Validate a typed manifest before persistence or verification."""
 
-    if not isinstance(manifest, ArtifactManifest):
+    manifest_type, _, _ = _manifest_model_types()
+    if not isinstance(manifest, manifest_type):
         raise TypeError("manifest must be an ArtifactManifest")
     canonicalize_artifact_manifest_document(
         ArtifactManifestDocument(
@@ -258,13 +278,12 @@ def validate_artifact_manifest(manifest: ArtifactManifest) -> None:
             ),
             run_id=_model_text(manifest, "run_id"),
             generated_at=_canonical_timestamp(
-                getattr(manifest, "generated_at"),
+                manifest.generated_at,
                 field="$.generated_at",
             ),
             hash_algorithm=_model_text(manifest, "hash_algorithm"),
             artifacts=[
-                _entry_to_document(entry)
-                for entry in tuple(getattr(manifest, "artifacts"))
+                _entry_to_document(entry) for entry in tuple(manifest.artifacts)
             ],
         ),
         strict=True,
@@ -349,9 +368,7 @@ def canonicalize_artifact_manifest_document(
 
     return ArtifactManifestDocument(
         schema_id=ARTIFACT_MANIFEST_SCHEMA_ID,
-        schema_version=(
-            ARTIFACT_MANIFEST_SCHEMA_VERSION if strict else schema_version
-        ),
+        schema_version=(ARTIFACT_MANIFEST_SCHEMA_VERSION if strict else schema_version),
         producer=ProducerDocument(
             name=producer.name,
             version=producer.version,
@@ -511,34 +528,62 @@ def _canonical_entry(
     )
 
 
-def _entry_to_document(entry: ArtifactManifestEntry) -> ArtifactManifestEntryDocument:
-    if not isinstance(entry, ArtifactManifestEntry):
+def _entry_to_document(
+    entry: _ArtifactManifestEntryModel,
+) -> ArtifactManifestEntryDocument:
+    _, entry_type, _ = _manifest_model_types()
+    if not isinstance(entry, entry_type):
         raise TypeError("manifest artifacts must contain ArtifactManifestEntry")
     return artifact_manifest_entry_document(
         path=_model_text(entry, "path"),
-        role=getattr(entry, "role"),
+        role=_enum_text(entry.role),
         media_type=_model_text(entry, "media_type"),
-        required=getattr(entry, "required"),
-        size_bytes=getattr(entry, "size_bytes"),
+        required=entry.required,
+        size_bytes=entry.size_bytes,
         sha256=_model_text(entry, "sha256"),
         created_by=_model_text(entry, "created_by"),
     )
 
 
-def _entry_model(document: ArtifactManifestEntryDocument) -> ArtifactManifestEntry:
+def _entry_model(
+    document: ArtifactManifestEntryDocument,
+    *,
+    entry_type: type[object],
+    role_type: type[Enum] | None,
+) -> _ArtifactManifestEntryModel:
     role_value: object = document["role"]
-    role_type = getattr(_manifest_models, "ArtifactRole", None)
-    if isinstance(role_type, type) and issubclass(role_type, Enum):
+    if role_type is not None:
         role_value = role_type(document["role"])
-    return ArtifactManifestEntry(
-        path=document["path"],
-        role=role_value,
-        media_type=document["media_type"],
-        required=document["required"],
-        size_bytes=document["size_bytes"],
-        sha256=document["sha256"],
-        created_by=document["created_by"],
+    entry_factory = cast("Callable[..., object]", entry_type)
+    return cast(
+        "_ArtifactManifestEntryModel",
+        entry_factory(
+            path=document["path"],
+            role=role_value,
+            media_type=document["media_type"],
+            required=document["required"],
+            size_bytes=document["size_bytes"],
+            sha256=document["sha256"],
+            created_by=document["created_by"],
+        ),
     )
+
+
+def _manifest_model_types() -> tuple[type[object], type[object], type[Enum] | None]:
+    module = import_module("gf_wordbench.reporting.manifest.models")
+
+    manifest_type = getattr(module, "ArtifactManifest", None)
+    entry_type = getattr(module, "ArtifactManifestEntry", None)
+    if not isinstance(manifest_type, type):
+        raise RuntimeError("ArtifactManifest model is unavailable")
+    if not isinstance(entry_type, type):
+        raise RuntimeError("ArtifactManifestEntry model is unavailable")
+
+    role_type_value = getattr(module, "ArtifactRole", None)
+    role_type: type[Enum] | None = None
+    if isinstance(role_type_value, type) and issubclass(role_type_value, Enum):
+        role_type = role_type_value
+    return manifest_type, entry_type, role_type
 
 
 def _validate_schema_version(value: str, *, strict: bool) -> None:
@@ -602,7 +647,7 @@ def _mapping(value: object, field: str, *, strict: bool) -> Mapping[str, object]
     for key in value:
         if not isinstance(key, str):
             _fail(field, "must contain string keys only")
-    return cast(Mapping[str, object], value)
+    return cast("Mapping[str, object]", value)
 
 
 def _require_fields(
@@ -650,7 +695,7 @@ def _enum_text(value: object) -> str:
     return _text(value, "enum value")
 
 
-def _fail(field: str, message: str) -> None:
+def _fail(field: str, message: str) -> Never:
     raise SchemaValidationError(
         f"{field}: {message}",
         code="GF-WB-SCHEMA-004",

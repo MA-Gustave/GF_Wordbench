@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 import errno
 import hashlib
 import json
 import math
 import os
-import time
-from collections.abc import Iterable, Mapping
 from pathlib import Path, PurePosixPath
+import time
 from typing import Protocol, TypeAlias, cast
 
 PathLike: TypeAlias = str | os.PathLike[str]
 JsonObject: TypeAlias = Mapping[str, object]
+
+
 class _Pollable(Protocol):
     def poll(self) -> int | None: ...
 
@@ -60,12 +62,10 @@ def assert_valid_summary(
 
     if issues:
         rendered = "\n".join(
-            f"  - {issue.path} [{issue.code}]: {issue.message}"
-            for issue in issues
+            f"  - {issue.path} [{issue.code}]: {issue.message}" for issue in issues
         )
         raise AssertionError(
-            f"summary violates the canonical schema ({len(issues)} issue(s)):\n"
-            f"{rendered}"
+            f"summary violates the canonical schema ({len(issues)} issue(s)):\n{rendered}"
         )
     return document
 
@@ -107,21 +107,17 @@ def assert_manifest_complete(
     missing_expected = tuple(path for path in expected if path not in entries)
     if missing_expected:
         raise AssertionError(
-            "manifest is missing expected artifact entries:\n"
-            + _render_lines(missing_expected)
+            "manifest is missing expected artifact entries:\n" + _render_lines(missing_expected)
         )
 
     missing_required = tuple(path for path in required if path not in entries)
     if missing_required:
         raise AssertionError(
-            "manifest is missing required artifact entries:\n"
-            + _render_lines(missing_required)
+            "manifest is missing required artifact entries:\n" + _render_lines(missing_required)
         )
 
     not_marked_required = tuple(
-        path
-        for path in required
-        if path in entries and not entries[path].required
+        path for path in required if path in entries and not entries[path].required
     )
     if not_marked_required:
         raise AssertionError(
@@ -165,9 +161,7 @@ def assert_manifest_complete(
                 continue
 
             if size != entry.size_bytes:
-                failures.append(
-                    f"{entry.path}: size is {size}, expected {entry.size_bytes}"
-                )
+                failures.append(f"{entry.path}: size is {size}, expected {entry.size_bytes}")
                 continue
 
             if verify_hashes:
@@ -177,14 +171,11 @@ def assert_manifest_complete(
                     failures.append(f"{entry.path}: hashing failed: {exc}")
                     continue
                 if digest != entry.sha256:
-                    failures.append(
-                        f"{entry.path}: sha256 is {digest}, expected {entry.sha256}"
-                    )
+                    failures.append(f"{entry.path}: sha256 is {digest}, expected {entry.sha256}")
 
         if failures:
             raise AssertionError(
-                "manifest entries do not match finalized artifacts:\n"
-                + _render_lines(failures)
+                "manifest entries do not match finalized artifacts:\n" + _render_lines(failures)
             )
 
     return model
@@ -224,10 +215,7 @@ def assert_gold_unchanged(
     *,
     ignore: Iterable[str | PurePosixPath] = (),
 ) -> None:
-    ignored = frozenset(
-        _normalized_relative_path(value, role="ignore")
-        for value in ignore
-    )
+    ignored = frozenset(_normalized_relative_path(value, role="ignore") for value in ignore)
     before_root = _absolute_path(before, role="before")
     after_root = _absolute_path(after, role="after")
 
@@ -287,8 +275,7 @@ def assert_no_process_leaks(
     if remaining:
         rendered = "\n".join(f"  - {_process_label(item)}" for item in remaining)
         raise AssertionError(
-            f"owned process leak detected ({len(remaining)} process(es)):\n"
-            f"{rendered}"
+            f"owned process leak detected ({len(remaining)} process(es)):\n{rendered}"
         )
 
 
@@ -315,7 +302,7 @@ def _json_object(source: object | Path, *, role: str) -> JsonObject:
         raise AssertionError(f"{role} root must be a JSON object")
     if any(not isinstance(key, str) for key in value):
         raise AssertionError(f"{role} contains a non-string object key")
-    return cast(JsonObject, value)
+    return cast("JsonObject", value)
 
 
 def _reject_json_constant(value: str) -> object:
@@ -327,10 +314,7 @@ def _normalized_manifest_paths(
     *,
     role: str,
 ) -> tuple[str, ...]:
-    prepared = tuple(
-        _normalized_relative_path(value, role=role)
-        for value in values
-    )
+    prepared = tuple(_normalized_relative_path(value, role=role) for value in values)
     if len(prepared) != len(set(prepared)):
         raise ValueError(f"{role} must not contain duplicate paths")
     return tuple(sorted(prepared, key=_stable_text_key))
@@ -423,22 +407,16 @@ def _process_is_alive(process: int | _Pollable | _AliveCheck) -> bool:
         try:
             return poll() is None
         except Exception as exc:
-            raise AssertionError(
-                f"could not poll {_process_label(process)}: {exc}"
-            ) from exc
+            raise AssertionError(f"could not poll {_process_label(process)}: {exc}") from exc
 
     is_alive = getattr(process, "is_alive", None)
     if callable(is_alive):
         try:
             return bool(is_alive())
         except Exception as exc:
-            raise AssertionError(
-                f"could not inspect {_process_label(process)}: {exc}"
-            ) from exc
+            raise AssertionError(f"could not inspect {_process_label(process)}: {exc}") from exc
 
-    raise TypeError(
-        "process entries must be integer PIDs or expose poll() or is_alive()"
-    )
+    raise TypeError("process entries must be integer PIDs or expose poll() or is_alive()")
 
 
 def _pid_is_alive(pid: int) -> bool:

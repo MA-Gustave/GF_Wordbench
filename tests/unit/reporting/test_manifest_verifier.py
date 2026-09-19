@@ -10,17 +10,19 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from gf_wordbench.kernel.statuses import ValidationStatus
 from gf_wordbench.reporting.manifest import verifier as verifier_module
+from gf_wordbench.reporting.manifest.models import (
+    ManifestVerificationMode,
+    ManifestVerificationPolicy,
+    ManifestVerificationResult,
+)
 from gf_wordbench.reporting.manifest.verifier import verify_manifest
-
 
 _SCHEMA_ID = "gf-wordbench.artifact-manifest"
 _SCHEMA_VERSION = "1.0"
@@ -75,9 +77,7 @@ def _document(
         "schema_id": schema_id,
         "schema_version": schema_version,
         "producer": (
-            {"name": "gf-wordbench", "version": "1.0.0"}
-            if producer is None
-            else producer
+            {"name": "gf-wordbench", "version": "1.0.0"} if producer is None else producer
         ),
         "run_id": run_id,
         "generated_at": generated_at,
@@ -86,13 +86,34 @@ def _document(
     }
 
 
-def _policy(**overrides: object) -> SimpleNamespace:
+_DEFAULT_ALLOWED_ROLES = (
+    "machine_summary",
+    "human_summary",
+    "ai_handoff",
+    "top_errors",
+    "master_log",
+    "aggregate_log",
+    "scan_log",
+    "compile_stdout",
+    "compile_stderr",
+    "scenario_stdout",
+    "scenario_stderr",
+    "scenario_output",
+    "detail",
+    "gfo",
+    "pgf",
+    "other",
+)
+
+
+def _policy(**overrides: object) -> ManifestVerificationPolicy:
     values: dict[str, object] = {
-        "mode": "standard",
+        "mode": ManifestVerificationMode.STANDARD,
         "expected_run_id": "run-001",
+        "allowed_roles": _DEFAULT_ALLOWED_ROLES,
     }
     values.update(overrides)
-    return SimpleNamespace(**values)
+    return cast(ManifestVerificationPolicy, cast(Any, ManifestVerificationPolicy)(**values))
 
 
 def _write_manifest(
@@ -121,11 +142,11 @@ def _verify_document(
     run_root: Path,
     document: object,
     *,
-    policy: object | None = None,
+    policy: ManifestVerificationPolicy | None = None,
     name: str = "manifest.json",
     final_lf: bool = True,
     bom: bool = False,
-):
+) -> ManifestVerificationResult:
     manifest_path = _write_manifest(
         run_root,
         document,
@@ -195,7 +216,7 @@ def test_string_paths_are_coerced_at_public_boundary(tmp_path: Path) -> None:
         _document(artifacts=[_entry("detail.bin", payload)]),
     )
 
-    result = verify_manifest(str(manifest_path), str(run_root), _policy())
+    result = verify_manifest(cast(Path, str(manifest_path)), cast(Path, str(run_root)), _policy())
 
     assert result.status is ValidationStatus.OK
     assert result.manifest_path == manifest_path.resolve()
@@ -549,11 +570,7 @@ def test_uppercase_recorded_sha256_is_compared_case_insensitively(
 
     result = _verify_document(
         run_root,
-        _document(
-            artifacts=[
-                _entry("digest.bin", payload, sha256=_sha256(payload).upper())
-            ]
-        ),
+        _document(artifacts=[_entry("digest.bin", payload, sha256=_sha256(payload).upper())]),
     )
 
     assert result.status is ValidationStatus.OK
@@ -872,10 +889,13 @@ def test_summary_verification_requires_declared_machine_summary(
 def test_summary_run_id_must_match_manifest(tmp_path: Path) -> None:
     run_root = tmp_path / "run_run-001"
     run_root.mkdir()
-    summary_payload = json.dumps(
-        {"metadata": {"run_id": "different"}},
-        ensure_ascii=False,
-    ).encode() + b"\n"
+    summary_payload = (
+        json.dumps(
+            {"metadata": {"run_id": "different"}},
+            ensure_ascii=False,
+        ).encode()
+        + b"\n"
+    )
     _write(run_root, "summary.json", summary_payload)
 
     result = _verify_document(
@@ -903,16 +923,19 @@ def test_summary_declared_existing_artifact_must_be_manifested(
     run_root = tmp_path / "run_run-001"
     run_root.mkdir()
     _write(run_root, "details/extra.txt", b"extra")
-    summary_payload = json.dumps(
-        {
-            "metadata": {"run_id": "run-001"},
-            "artifacts": {
-                "manifest": "manifest.json",
-                "details": ["details/extra.txt"],
+    summary_payload = (
+        json.dumps(
+            {
+                "metadata": {"run_id": "run-001"},
+                "artifacts": {
+                    "manifest": "manifest.json",
+                    "details": ["details/extra.txt"],
+                },
             },
-        },
-        ensure_ascii=False,
-    ).encode() + b"\n"
+            ensure_ascii=False,
+        ).encode()
+        + b"\n"
+    )
     _write(run_root, "summary.json", summary_payload)
 
     result = _verify_document(
@@ -973,18 +996,21 @@ def test_release_mode_requires_pgf_when_configured(tmp_path: Path) -> None:
 
 
 def _release_document(run_root: Path) -> dict[str, object]:
-    summary_payload = json.dumps(
-        {
-            "metadata": {
-                "run_id": "run-001",
-                "project_id": "demo",
-                "project_name": "Demo",
+    summary_payload = (
+        json.dumps(
+            {
+                "metadata": {
+                    "run_id": "run-001",
+                    "project_id": "demo",
+                    "project_name": "Demo",
+                },
+                "artifacts": {"manifest": "manifest.json"},
             },
-            "artifacts": {"manifest": "manifest.json"},
-        },
-        ensure_ascii=False,
-        indent=2,
-    ).encode() + b"\n"
+            ensure_ascii=False,
+            indent=2,
+        ).encode()
+        + b"\n"
+    )
     payloads: dict[str, tuple[bytes, str, str]] = {
         "AI_READY.md": (
             b"# AI handoff\n",
@@ -1052,16 +1078,22 @@ def test_release_summary_requires_active_project_identity(tmp_path: Path) -> Non
     run_root.mkdir()
     document = _release_document(run_root)
     summary_path = run_root / "summary.json"
-    summary_payload = json.dumps(
-        {
-            "metadata": {"run_id": "run-001"},
-            "artifacts": {"manifest": "manifest.json"},
-        },
-        indent=2,
-    ).encode() + b"\n"
+    summary_payload = (
+        json.dumps(
+            {
+                "metadata": {"run_id": "run-001"},
+                "artifacts": {"manifest": "manifest.json"},
+            },
+            indent=2,
+        ).encode()
+        + b"\n"
+    )
     summary_path.write_bytes(summary_payload)
-    for entry in document["artifacts"]:  # type: ignore[index]
-        if entry["path"] == "summary.json":
+    artifacts = document.get("artifacts")
+    assert isinstance(artifacts, list)
+    for entry in artifacts:
+        assert isinstance(entry, dict)
+        if entry.get("path") == "summary.json":
             entry["size_bytes"] = len(summary_payload)
             entry["sha256"] = _sha256(summary_payload)
 

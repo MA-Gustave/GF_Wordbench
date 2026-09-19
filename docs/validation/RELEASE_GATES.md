@@ -7,11 +7,11 @@
 **Owner:** GF Wordbench maintainers  
 **Gate policy version:** `1.1.0`  
 **Primary project authorities:**
-- `project/project.toml`
-- `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md`
-- `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`
-- `project/docs/KNOWN_ISSUES.md`
-- `project/docs/INTERFILE_CONTRACT_LOCK.md`
+- `<validation-profile-root>/project.toml`
+- `<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md`
+- `<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md`
+- `<validation-profile-root>/docs/KNOWN_ISSUES.md`
+- `<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md`
 
 **Framework authorities:**
 - `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
@@ -22,13 +22,28 @@
 - `docs/validation/VALIDATION_MODES.md`
 
 **Document version:** `1.1.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
-This document defines the conditions under which GF Wordbench may declare an active GF language project ready for release.
+This document defines the conditions under which GF Wordbench may declare an selected GF language context ready for release.
 
 A release decision must not depend on:
 
@@ -346,15 +361,15 @@ release invocation metadata
 
 ## 7.1 Purpose
 
-Prove that one coherent active language project is defined.
+Prove that one coherent selected language context is defined.
 
 ## 7.2 Required criteria
 
-`project/project.toml` MUST:
+`<validation-profile-root>/project.toml` MUST:
 
 - exist;
 - use a supported schema;
-- contain one active project;
+- contain one selected language context;
 - define a stable project ID;
 - define a display name and language code;
 - resolve its project root;
@@ -396,7 +411,7 @@ The following MUST agree with `project.toml`:
 
 ```text
 validated project configuration
-project identity report
+resolved language identity report
 configuration warnings and blockers
 ```
 
@@ -513,15 +528,15 @@ Verify that the files and relationships intended for release are completely decl
 At minimum:
 
 ```text
-project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/LANGUAGE_ARCHITECTURE.md
-project/docs/MODULE_DEPENDENCY_MAP.md
-project/docs/CATEGORY_AND_LINCAT_CONTRACT.md
-project/docs/MORPHOLOGY_SPEC.md
-project/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
-project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
-project/docs/KNOWN_ISSUES.md
-project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/LANGUAGE_ARCHITECTURE.md
+<validation-profile-root>/docs/MODULE_DEPENDENCY_MAP.md
+<validation-profile-root>/docs/CATEGORY_AND_LINCAT_CONTRACT.md
+<validation-profile-root>/docs/MORPHOLOGY_SPEC.md
+<validation-profile-root>/docs/SYNTAX_AND_CONSTRUCTOR_RULES.md
+<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+<validation-profile-root>/docs/KNOWN_ISSUES.md
+<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 A project may declare additional required documents.
@@ -582,7 +597,7 @@ warning
 informational
 ```
 
-The active project or framework policy MUST define which rules block release.
+The selected language context or framework policy MUST define which rules block release.
 
 A heuristic finding does not replace GF compilation evidence.
 
@@ -733,7 +748,7 @@ Prove that the release grammar behaves through GF, not only that individual file
 
 ## 13.2 Required scenario classes
 
-The active project defines exact required scenarios.
+The selected language context defines exact required scenarios.
 
 A complete project normally includes evidence for:
 
@@ -1173,7 +1188,7 @@ Must:
 
 - use the current supported schema;
 - identify release mode;
-- record project identity;
+- record resolved language identity;
 - record toolchain identity;
 - record source fingerprints;
 - contain all file and scenario results;
@@ -1301,7 +1316,7 @@ GF Wordbench release gates passed.
 The following cannot be waived for a certified release:
 
 - valid release request;
-- valid project identity;
+- valid resolved language identity;
 - executable GF toolchain;
 - supported schemas;
 - release entrypoint compilation;
@@ -1313,7 +1328,7 @@ The following cannot be waived for a certified release:
 - valid manifest;
 - successful release-decision computation.
 
-### 21.2 Project-configurable gates
+### 21.2 Profile-configurable gates
 
 The project may configure:
 
@@ -1714,7 +1729,7 @@ tests/integration/test_release_fixture_project.py
 - blocked downstream gate;
 - unknown gate status rejected.
 
-### 31.2 Project gate tests
+### 31.2 Profile gate tests
 
 - missing project configuration;
 - unresolved template placeholder;

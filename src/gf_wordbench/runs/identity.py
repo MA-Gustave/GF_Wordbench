@@ -72,19 +72,13 @@ def parse_run_directory_name(value: object) -> RunId:
     """Parse an exact canonical run-directory basename."""
 
     if not isinstance(value, str):
-        raise TypeError(
-            "run directory name must be a string, "
-            f"got {type(value).__name__}"
-        )
+        raise TypeError(f"run directory name must be a string, got {type(value).__name__}")
     if not value:
         raise ValueError("run directory name must not be empty")
     if "/" in value or "\\" in value:
         raise ValueError("run directory name must be a basename")
     if not value.startswith(RUN_DIRECTORY_PREFIX):
-        raise ValueError(
-            "run directory name must begin with "
-            f"{RUN_DIRECTORY_PREFIX!r}"
-        )
+        raise ValueError(f"run directory name must begin with {RUN_DIRECTORY_PREFIX!r}")
 
     run_id_text = value[len(RUN_DIRECTORY_PREFIX) :]
     if not run_id_text:
@@ -132,10 +126,7 @@ def is_run_directory_name(value: object) -> bool:
 
 def _require_aware_datetime(value: object) -> datetime:
     if not isinstance(value, datetime):
-        raise TypeError(
-            "timestamp must be a datetime, "
-            f"got {type(value).__name__}"
-        )
+        raise TypeError(f"timestamp must be a datetime, got {type(value).__name__}")
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("timestamp must be timezone-aware")
     return value

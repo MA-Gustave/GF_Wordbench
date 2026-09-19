@@ -28,9 +28,7 @@ from gf_wordbench.kernel.statuses import ValidationMode
 _UNSET: Final[object] = object()
 _LANGUAGE_DIRECTORY: Final[Path] = Path("C:/work/gf-rgl/src/french")
 _LANGUAGE_FILE: Final[Path] = _LANGUAGE_DIRECTORY / "NounFre.gf"
-_VALIDATION_PROFILE: Final[Path] = Path(
-    "C:/work/GF Wordbench Profiles/french/project.toml"
-)
+_VALIDATION_PROFILE: Final[Path] = Path("C:/work/GF Wordbench Profiles/french/project.toml")
 _GF_EXECUTABLE: Final[Path] = Path("C:/Program Files/GF/bin/gf.exe")
 _RGL_ROOT: Final[Path] = Path("C:/work/gf-rgl")
 _OUTPUT_ROOT: Final[Path] = Path("C:/work/GF Wordbench Runs")
@@ -66,17 +64,13 @@ def _request_value(
     if not found:
         if default is _UNSET:
             joined = ", ".join(names)
-            raise AssertionError(
-                f"CLI request does not expose any of: {joined}"
-            )
+            raise AssertionError(f"CLI request does not expose any of: {joined}")
         return default
 
     first = found[0]
     if any(value != first for value in found[1:]):
         joined = ", ".join(names)
-        raise AssertionError(
-            f"CLI request exposes conflicting values for: {joined}"
-        )
+        raise AssertionError(f"CLI request exposes conflicting values for: {joined}")
     return first
 
 
@@ -87,10 +81,7 @@ def _optional_path(value: object) -> Path | None:
         return value
     if isinstance(value, str):
         return Path(value)
-    raise AssertionError(
-        "expected a path-like value, "
-        f"received {type(value).__name__}"
-    )
+    raise AssertionError(f"expected a path-like value, received {type(value).__name__}")
 
 
 def _text(value: object) -> str:
@@ -100,9 +91,7 @@ def _text(value: object) -> str:
         return value.as_posix()
     if isinstance(value, str):
         return value
-    raise AssertionError(
-        f"expected a text value, received {type(value).__name__}"
-    )
+    raise AssertionError(f"expected a text value, received {type(value).__name__}")
 
 
 def _mode(value: object) -> ValidationMode:
@@ -110,9 +99,7 @@ def _mode(value: object) -> ValidationMode:
         return value
     if isinstance(value, str):
         return ValidationMode(value)
-    raise AssertionError(
-        f"expected a validation mode, received {type(value).__name__}"
-    )
+    raise AssertionError(f"expected a validation mode, received {type(value).__name__}")
 
 
 def _strings(value: object) -> tuple[str, ...]:
@@ -120,9 +107,7 @@ def _strings(value: object) -> tuple[str, ...]:
         return ()
     if isinstance(value, str):
         return (value,)
-    if isinstance(value, (list, tuple)) and all(
-        isinstance(item, str) for item in value
-    ):
+    if isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
         return tuple(value)
     raise AssertionError("expected a string or sequence of strings")
 
@@ -132,9 +117,7 @@ def _integer_or_none(value: object) -> int | None:
         return None
     if type(value) is int:
         return value
-    raise AssertionError(
-        f"expected an integer or None, received {type(value).__name__}"
-    )
+    raise AssertionError(f"expected an integer or None, received {type(value).__name__}")
 
 
 def _plain_int(value: object, *, default: int = 0) -> int:
@@ -142,9 +125,7 @@ def _plain_int(value: object, *, default: int = 0) -> int:
         return default
     if type(value) is int:
         return value
-    raise AssertionError(
-        f"expected an integer, received {type(value).__name__}"
-    )
+    raise AssertionError(f"expected an integer, received {type(value).__name__}")
 
 
 def _plain_bool(value: object, *, default: bool = False) -> bool:
@@ -152,9 +133,7 @@ def _plain_bool(value: object, *, default: bool = False) -> bool:
         return default
     if type(value) is bool:
         return value
-    raise AssertionError(
-        f"expected a boolean, received {type(value).__name__}"
-    )
+    raise AssertionError(f"expected a boolean, received {type(value).__name__}")
 
 
 def _cli_projection(request: CliRequest) -> _CanonicalInterfaceRequest:
@@ -184,9 +163,7 @@ def _cli_projection(request: CliRequest) -> _CanonicalInterfaceRequest:
                 default=None,
             )
         ),
-        rgl_root=_optional_path(
-            _request_value(request, "rgl_root", default=None)
-        ),
+        rgl_root=_optional_path(_request_value(request, "rgl_root", default=None)),
         output_root=_optional_path(
             _request_value(
                 request,
@@ -231,12 +208,8 @@ def _cli_projection(request: CliRequest) -> _CanonicalInterfaceRequest:
                 default=None,
             )
         ),
-        max_files=_plain_int(
-            _request_value(request, "max_files", default=0)
-        ),
-        keep_ok_details=_plain_bool(
-            _request_value(request, "keep_ok_details", default=False)
-        ),
+        max_files=_plain_int(_request_value(request, "max_files", default=0)),
+        keep_ok_details=_plain_bool(_request_value(request, "keep_ok_details", default=False)),
         diff_previous=_plain_bool(
             _request_value(
                 request,
@@ -253,9 +226,7 @@ def _cli_projection(request: CliRequest) -> _CanonicalInterfaceRequest:
                 default=False,
             )
         ),
-        no_compile=_plain_bool(
-            _request_value(request, "no_compile", default=False)
-        ),
+        no_compile=_plain_bool(_request_value(request, "no_compile", default=False)),
         emit_cpu_stats=_plain_bool(
             _request_value(
                 request,
@@ -264,9 +235,7 @@ def _cli_projection(request: CliRequest) -> _CanonicalInterfaceRequest:
                 default=False,
             )
         ),
-        strict=_plain_bool(
-            _request_value(request, "strict", default=False)
-        ),
+        strict=_plain_bool(_request_value(request, "strict", default=False)),
     )
 
 
@@ -295,9 +264,7 @@ def _gui_projection(request: GuiRunRequest) -> _CanonicalInterfaceRequest:
 def _parse_validate(*arguments: str) -> CliRequest:
     request = parse_cli_request(["validate", *arguments])
     if request.command is not CliCommand.VALIDATE:
-        raise AssertionError(
-            f"expected validate command, received {request.command!r}"
-        )
+        raise AssertionError(f"expected validate command, received {request.command!r}")
     return request
 
 

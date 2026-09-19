@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 import json
 import math
 import os
+from pathlib import Path
 import re
 import stat
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
-from pathlib import Path
 from threading import RLock
 from typing import Final, TypeAlias
 
@@ -51,9 +51,7 @@ _RESERVED_FIELDS: Final[frozenset[str]] = frozenset(
         "evidence_path",
     }
 )
-_SYNC_LEVELS: Final[frozenset[EventLevel]] = frozenset(
-    {EventLevel.ERROR, EventLevel.FATAL}
-)
+_SYNC_LEVELS: Final[frozenset[EventLevel]] = frozenset({EventLevel.ERROR, EventLevel.FATAL})
 _SYNC_EVENTS: Final[frozenset[str]] = frozenset(
     {
         "stage_completed",
@@ -130,13 +128,13 @@ class LifecycleLogReceipt:
 
 class LifecycleLogWriter:
     __slots__ = (
-        "_run_root",
+        "_finalized",
+        "_initialized",
+        "_lock",
         "_path",
         "_policy",
         "_redactor",
-        "_lock",
-        "_finalized",
-        "_initialized",
+        "_run_root",
     )
 
     def __init__(
@@ -232,11 +230,7 @@ class LifecycleLogWriter:
                 maximum_line_bytes=self._policy.maximum_line_bytes,
             )
             payload = line.encode(MASTER_LOG_ENCODING)
-            should_sync = (
-                self._policy.should_sync(event)
-                if synchronize is None
-                else synchronize
-            )
+            should_sync = self._policy.should_sync(event) if synchronize is None else synchronize
             _append_bytes(
                 self._path,
                 payload,
@@ -282,7 +276,6 @@ class LifecycleLogWriter:
         self.append(event)
 
 
-
 def format_lifecycle_event(
     event: LifecycleEvent,
     *,
@@ -305,11 +298,8 @@ def format_lifecycle_event(
         rendered.append(f"{key}={_render_value(effective)}")
     line = " ".join(rendered) + MASTER_LOG_NEWLINE
     if len(line.encode(MASTER_LOG_ENCODING)) > limit:
-        raise ValueError(
-            f"lifecycle event exceeds the {limit}-byte line limit"
-        )
+        raise ValueError(f"lifecycle event exceeds the {limit}-byte line limit")
     return line
-
 
 
 def create_lifecycle_log(
@@ -349,7 +339,6 @@ def create_lifecycle_log(
     return destination
 
 
-
 def append_lifecycle_event(
     path: Path,
     event: LifecycleEvent,
@@ -387,7 +376,6 @@ def append_lifecycle_event(
     )
 
 
-
 def write_master_event(
     writer: LifecycleLogWriter,
     event: LifecycleEvent,
@@ -399,12 +387,10 @@ def write_master_event(
     return writer.append(event, synchronize=synchronize)
 
 
-
 def finalize_lifecycle_log(writer: LifecycleLogWriter) -> Path:
     if not isinstance(writer, LifecycleLogWriter):
         raise TypeError("writer must be LifecycleLogWriter")
     return writer.finalize()
-
 
 
 def _event_field_values(
@@ -427,9 +413,7 @@ def _event_field_values(
         if not isinstance(field, EventField):
             raise TypeError("event fields must contain EventField values")
         if field.key in _RESERVED_FIELDS:
-            raise ValueError(
-                f"event field {field.key!r} duplicates a canonical field"
-            )
+            raise ValueError(f"event field {field.key!r} duplicates a canonical field")
         if field.key in seen:
             raise ValueError(f"duplicate event field {field.key!r}")
         seen.add(field.key)
@@ -440,12 +424,10 @@ def _event_field_values(
     return head + tail
 
 
-
 def _format_timestamp(event: LifecycleEvent) -> str:
     timestamp = event.timestamp
     milliseconds = timestamp.microsecond // 1000
     return timestamp.strftime("%Y-%m-%dT%H:%M:%S") + f".{milliseconds:03d}Z"
-
 
 
 def _redact_value(
@@ -461,7 +443,6 @@ def _redact_value(
     redacted = redactor(key, value)
     _validate_scalar(redacted, f"redacted value for {key!r}")
     return redacted
-
 
 
 def _render_value(value: EventScalar) -> str:
@@ -485,7 +466,6 @@ def _render_value(value: EventScalar) -> str:
         allow_nan=False,
         separators=(",", ":"),
     )
-
 
 
 def _append_bytes(
@@ -536,7 +516,6 @@ def _append_bytes(
     )
 
 
-
 def _synchronize_file(path: Path, *, root: Path) -> None:
     destination = _contained_existing_file(path, root=root)
     descriptor = os.open(destination, os.O_RDONLY)
@@ -544,7 +523,6 @@ def _synchronize_file(path: Path, *, root: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
-
 
 
 def _normalize_final_newline(path: Path, *, root: Path) -> None:
@@ -568,7 +546,6 @@ def _normalize_final_newline(path: Path, *, root: Path) -> None:
     )
 
 
-
 def _create_empty_log(path: Path, *, root: Path) -> None:
     destination = _contained_output_path(
         path,
@@ -588,7 +565,6 @@ def _create_empty_log(path: Path, *, root: Path) -> None:
     finally:
         if descriptor >= 0:
             os.close(descriptor)
-
 
 
 def _contained_output_path(
@@ -613,7 +589,6 @@ def _contained_output_path(
     )
 
 
-
 def _contained_existing_file(path: Path, *, root: Path) -> Path:
     destination = _contained_output_path(
         path,
@@ -629,7 +604,6 @@ def _contained_existing_file(path: Path, *, root: Path) -> Path:
     )
 
 
-
 def _require_regular_non_link(path: Path) -> Path:
     try:
         metadata = path.lstat()
@@ -638,7 +612,6 @@ def _require_regular_non_link(path: Path) -> Path:
     if path.is_symlink() or not stat.S_ISREG(metadata.st_mode):
         raise OSError("master lifecycle log must be a non-link regular file")
     return path
-
 
 
 def _existing_absolute_directory(value: object, field_name: str) -> Path:
@@ -651,13 +624,11 @@ def _existing_absolute_directory(value: object, field_name: str) -> Path:
     return require_directory(value, role=field_name)
 
 
-
 def _validate_field_name(value: object, field_name: str) -> str:
     text = _required_text(value, field_name)
     if _FIELD_KEY.fullmatch(text) is None:
         raise ValueError(f"{field_name} must use lower_snake_case")
     return text
-
 
 
 def _required_text(value: object, field_name: str) -> str:
@@ -668,7 +639,6 @@ def _required_text(value: object, field_name: str) -> str:
     if "\x00" in value:
         raise ValueError(f"{field_name} must not contain NUL")
     return value
-
 
 
 def _validate_scalar(value: object, field_name: str) -> None:
@@ -682,12 +652,9 @@ def _validate_scalar(value: object, field_name: str) -> None:
         if "\x00" in value:
             raise ValueError(f"{field_name} must not contain NUL")
         if len(value) > _MAX_STRING_CHARS:
-            raise ValueError(
-                f"{field_name} exceeds {_MAX_STRING_CHARS} characters"
-            )
+            raise ValueError(f"{field_name} exceeds {_MAX_STRING_CHARS} characters")
         return
     raise TypeError(f"{field_name} must be a scalar event value")
-
 
 
 def _positive_int(value: object, field_name: str) -> int:
@@ -696,7 +663,6 @@ def _positive_int(value: object, field_name: str) -> int:
     if value <= 0:
         raise ValueError(f"{field_name} must be positive")
     return value
-
 
 
 def _non_negative_int(value: object, field_name: str) -> int:
@@ -708,15 +674,15 @@ def _non_negative_int(value: object, field_name: str) -> int:
 
 
 __all__ = (
-    "LifecycleLogPolicy",
-    "LifecycleLogReceipt",
-    "LifecycleLogWriter",
-    "LifecycleValueRedactor",
     "MASTER_LOG_ENCODING",
     "MASTER_LOG_NEWLINE",
     "MASTER_LOG_RELATIVE_PATH",
     "MASTER_LOG_ROLE",
     "REDACTED_VALUE",
+    "LifecycleLogPolicy",
+    "LifecycleLogReceipt",
+    "LifecycleLogWriter",
+    "LifecycleValueRedactor",
     "append_lifecycle_event",
     "create_lifecycle_log",
     "finalize_lifecycle_log",

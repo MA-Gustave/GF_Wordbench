@@ -26,21 +26,13 @@ _FUNCTIONAL_MODULES: Final[frozenset[str]] = frozenset(
 )
 _ALLOWED_FUNCTIONAL_DEPENDENCIES: Final[Mapping[str, frozenset[str]]] = {
     "projects": frozenset(),
-    "runs": frozenset(
-        {"projects", "validation", "diagnostics", "reporting"}
-    ),
+    "runs": frozenset({"projects", "validation", "diagnostics", "reporting"}),
     "validation": frozenset({"projects", "runs", "diagnostics"}),
     "diagnostics": frozenset({"runs", "validation"}),
-    "reporting": frozenset(
-        {"projects", "runs", "validation", "diagnostics"}
-    ),
+    "reporting": frozenset({"projects", "runs", "validation", "diagnostics"}),
 }
-_APPROVED_PROCESS_CREATION_MODULE: Final[str] = (
-    "gf_wordbench.infrastructure.process.launcher"
-)
-_LANGUAGE_PROBE_PREFIX: Final[str] = (
-    "gf_wordbench.projects.languages.probe"
-)
+_APPROVED_PROCESS_CREATION_MODULE: Final[str] = "gf_wordbench.infrastructure.process.launcher"
+_LANGUAGE_PROBE_PREFIX: Final[str] = "gf_wordbench.projects.languages.probe"
 _RUNTIME_STARTUP_PREFIXES: Final[tuple[str, ...]] = (
     "gf_wordbench.bootstrap",
     "gf_wordbench.config.environment",
@@ -192,15 +184,8 @@ class ImportEdge:
     imported_names: tuple[str, ...]
 
     def render(self) -> str:
-        names = (
-            f" ({', '.join(self.imported_names)})"
-            if self.imported_names
-            else ""
-        )
-        return (
-            f"{self.path}:{self.line}: {self.importer} -> "
-            f"{self.imported}{names}"
-        )
+        names = f" ({', '.join(self.imported_names)})" if self.imported_names else ""
+        return f"{self.path}:{self.line}: {self.importer} -> {self.imported}{names}"
 
 
 def _package_root() -> Path:
@@ -209,9 +194,7 @@ def _package_root() -> Path:
     locations = specification.submodule_search_locations
     assert locations is not None, "gf_wordbench must be a package"
     roots = tuple(Path(location).resolve() for location in locations)
-    assert len(roots) == 1, (
-        "tests require one unambiguous gf_wordbench package root"
-    )
+    assert len(roots) == 1, "tests require one unambiguous gf_wordbench package root"
     root = roots[0]
     assert root.is_dir()
     return root
@@ -259,11 +242,7 @@ def _resolve_from_import(
         return node.module or ""
 
     current_parts = module.name.split(".")
-    package_parts = (
-        current_parts
-        if module.is_package
-        else current_parts[:-1]
-    )
+    package_parts = current_parts if module.is_package else current_parts[:-1]
     ascents = node.level - 1
     if ascents > len(package_parts):
         return ""
@@ -335,9 +314,7 @@ def _internal_edges(
 ) -> Iterator[ImportEdge]:
     prefix = f"{_PACKAGE_NAME}."
     for edge in edges:
-        if edge.imported == _PACKAGE_NAME or edge.imported.startswith(
-            prefix
-        ):
+        if edge.imported == _PACKAGE_NAME or edge.imported.startswith(prefix):
             yield edge
 
 
@@ -350,10 +327,7 @@ def _functional_owner(module_name: str) -> str | None:
 
 
 def _starts_with_any(value: str, prefixes: tuple[str, ...]) -> bool:
-    return any(
-        value == prefix or value.startswith(f"{prefix}.")
-        for prefix in prefixes
-    )
+    return any(value == prefix or value.startswith(f"{prefix}.") for prefix in prefixes)
 
 
 def _format_edges(edges: Iterable[ImportEdge]) -> str:
@@ -366,18 +340,12 @@ def _module_matches(module_name: str, prefix: str) -> bool:
 
 
 def _is_runtime_startup_module(module_name: str) -> bool:
-    return any(
-        _module_matches(module_name, prefix)
-        for prefix in _RUNTIME_STARTUP_PREFIXES
-    )
+    return any(_module_matches(module_name, prefix) for prefix in _RUNTIME_STARTUP_PREFIXES)
 
 
 def _contains_catalog_token(value: str) -> bool:
     normalized = value.replace("-", "_").casefold()
-    return any(
-        token.replace("-", "_") in normalized
-        for token in _RUNTIME_CATALOG_TOKENS
-    )
+    return any(token.replace("-", "_") in normalized for token in _RUNTIME_CATALOG_TOKENS)
 
 
 def _string_constants(module: SourceModule) -> Iterator[tuple[int, str]]:
@@ -479,8 +447,7 @@ def test_path_resolved_startup_contract_modules_exist() -> None:
     available = {module.name for module in _source_modules()}
     missing = sorted(_REQUIRED_PATH_RESOLVED_MODULES - available)
     assert not missing, (
-        "ADR-0015 path-resolved startup requires these production modules: "
-        + ", ".join(missing)
+        "ADR-0015 path-resolved startup requires these production modules: " + ", ".join(missing)
     )
 
 
@@ -496,10 +463,7 @@ def test_functional_module_dependencies_follow_the_normative_matrix() -> None:
         if provider not in _ALLOWED_FUNCTIONAL_DEPENDENCIES[caller]:
             violations.append(edge)
 
-    assert not violations, (
-        "Forbidden functional-module dependencies:\n"
-        f"{_format_edges(violations)}"
-    )
+    assert not violations, f"Forbidden functional-module dependencies:\n{_format_edges(violations)}"
 
 
 def test_functional_module_import_graph_is_acyclic() -> None:
@@ -511,22 +475,15 @@ def test_functional_module_import_graph_is_acyclic() -> None:
             continue
         graph[caller].add(provider)
 
-    frozen_graph = {
-        node: frozenset(neighbours)
-        for node, neighbours in graph.items()
-    }
+    frozen_graph = {node: frozenset(neighbours) for node, neighbours in graph.items()}
     cycles = tuple(
         component
         for component in _strongly_connected_components(frozen_graph)
         if len(component) > 1
     )
 
-    assert not cycles, (
-        "Functional-module import cycles are prohibited: "
-        + "; ".join(
-            " -> ".join(sorted(component))
-            for component in cycles
-        )
+    assert not cycles, "Functional-module import cycles are prohibited: " + "; ".join(
+        " -> ".join(sorted(component)) for component in cycles
     )
 
 
@@ -544,8 +501,7 @@ def test_kernel_remains_independent_of_outer_modules() -> None:
         )
     ]
     assert not violations, (
-        "Kernel dependencies must remain inward and mechanism-free:\n"
-        f"{_format_edges(violations)}"
+        f"Kernel dependencies must remain inward and mechanism-free:\n{_format_edges(violations)}"
     )
 
 
@@ -618,14 +574,12 @@ def test_language_probe_does_not_reimplement_recursive_source_inventory() -> Non
             operation = _recursive_inventory_call(node)
             if operation is not None:
                 violations.append(
-                    f"{module.path}:{node.lineno}: "
-                    f"language probe performs {operation}"
+                    f"{module.path}:{node.lineno}: language probe performs {operation}"
                 )
 
     assert not violations, (
         "The language probe must delegate recursive source inventory to "
-        "the existing selection service through an injected port:\n"
-        + "\n".join(sorted(violations))
+        "the existing selection service through an injected port:\n" + "\n".join(sorted(violations))
     )
 
 
@@ -651,8 +605,7 @@ def test_runtime_startup_does_not_import_catalog_authority() -> None:
 
     assert not violations, (
         "ADR-0015 normal startup must not import or reference the retired "
-        "catalog/bundle authority:\n"
-        + "\n".join(sorted(set(violations)))
+        "catalog/bundle authority:\n" + "\n".join(sorted(set(violations)))
     )
 
 
@@ -663,15 +616,12 @@ def test_generic_production_code_has_no_hard_coded_language_defaults() -> None:
         for line, value in _string_constants(module):
             for literal in _LANGUAGE_SPECIFIC_LITERALS:
                 if literal in value:
-                    violations.append(
-                        f"{module.path}:{line}: {literal!r} in {value!r}"
-                    )
+                    violations.append(f"{module.path}:{line}: {literal!r} in {value!r}")
 
     assert not violations, (
         "Generic production code must derive language identity, directories, "
         "suffixes, and entrypoint candidates from the selected source "
-        "context rather than English defaults:\n"
-        + "\n".join(sorted(set(violations)))
+        "context rather than English defaults:\n" + "\n".join(sorted(set(violations)))
     )
 
 
@@ -681,25 +631,16 @@ def test_scanning_and_compilation_do_not_invoke_each_other() -> None:
         edge
         for edge in edges
         if (
-            edge.importer.startswith(
-                "gf_wordbench.validation.scanning."
-            )
-            and edge.imported.startswith(
-                "gf_wordbench.validation.compilation."
-            )
+            edge.importer.startswith("gf_wordbench.validation.scanning.")
+            and edge.imported.startswith("gf_wordbench.validation.compilation.")
         )
         or (
-            edge.importer.startswith(
-                "gf_wordbench.validation.compilation."
-            )
-            and edge.imported.startswith(
-                "gf_wordbench.validation.scanning."
-            )
+            edge.importer.startswith("gf_wordbench.validation.compilation.")
+            and edge.imported.startswith("gf_wordbench.validation.scanning.")
         )
     ]
     assert not violations, (
-        "Static scanning and GF compilation are separate stages:\n"
-        f"{_format_edges(violations)}"
+        f"Static scanning and GF compilation are separate stages:\n{_format_edges(violations)}"
     )
 
 
@@ -711,21 +652,18 @@ def test_process_creation_is_confined_to_launcher() -> None:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 imported_names: tuple[str, ...]
                 if isinstance(node, ast.Import):
-                    imported_names = tuple(
-                        alias.name for alias in node.names
-                    )
+                    imported_names = tuple(alias.name for alias in node.names)
                 else:
-                    imported_names = (
-                        (node.module,) if node.module else ()
+                    imported_names = (node.module,) if node.module else ()
+                if (
+                    any(
+                        name == "subprocess" or name.startswith("subprocess.")
+                        for name in imported_names
                     )
-                if any(
-                    name == "subprocess"
-                    or name.startswith("subprocess.")
-                    for name in imported_names
-                ) and module.name != _APPROVED_PROCESS_CREATION_MODULE:
+                    and module.name != _APPROVED_PROCESS_CREATION_MODULE
+                ):
                     violations.append(
-                        f"{module.path}:{node.lineno}: "
-                        f"{module.name} imports subprocess"
+                        f"{module.path}:{node.lineno}: {module.name} imports subprocess"
                     )
 
             if not isinstance(node, ast.Call):
@@ -747,15 +685,11 @@ def test_process_creation_is_confined_to_launcher() -> None:
                     and isinstance(keyword.value, ast.Constant)
                     and keyword.value.value is True
                 ):
-                    violations.append(
-                        f"{module.path}:{node.lineno}: shell=True is "
-                        "prohibited"
-                    )
+                    violations.append(f"{module.path}:{node.lineno}: shell=True is prohibited")
 
     assert not violations, (
         "Process creation must be shell-free and owned only by "
-        "infrastructure.process.launcher:\n"
-        + "\n".join(sorted(set(violations)))
+        "infrastructure.process.launcher:\n" + "\n".join(sorted(set(violations)))
     )
 
 
@@ -795,8 +729,7 @@ def test_production_code_does_not_import_tests_or_portfolio() -> None:
         )
     ]
     assert not violations, (
-        "Production code must not depend on tests or gf-portfolio:\n"
-        f"{_format_edges(violations)}"
+        f"Production code must not depend on tests or gf-portfolio:\n{_format_edges(violations)}"
     )
 
 
@@ -805,10 +738,7 @@ def test_cross_module_private_and_wildcard_imports_are_prohibited() -> None:
 
     for edge in _internal_edges(_import_edges(_source_modules())):
         if "*" in edge.imported_names:
-            violations.append(
-                f"{edge.path}:{edge.line}: wildcard import from "
-                f"{edge.imported}"
-            )
+            violations.append(f"{edge.path}:{edge.line}: wildcard import from {edge.imported}")
 
         importer_owner = ".".join(edge.importer.split(".")[:2])
         imported_owner = ".".join(edge.imported.split(".")[:2])
@@ -817,10 +747,7 @@ def test_cross_module_private_and_wildcard_imports_are_prohibited() -> None:
 
         for name in edge.imported_names:
             if name.startswith("_") and name != "__version__":
-                violations.append(
-                    f"{edge.path}:{edge.line}: private symbol "
-                    f"{edge.imported}.{name}"
-                )
+                violations.append(f"{edge.path}:{edge.line}: private symbol {edge.imported}.{name}")
 
     assert not violations, (
         "Cross-module consumers must use explicit public contracts:\n"

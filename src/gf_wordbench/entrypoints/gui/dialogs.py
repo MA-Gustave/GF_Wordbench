@@ -491,9 +491,7 @@ def confirm_action(
 
     box = QMessageBox(parent)
     box.setWindowTitle(title)
-    box.setIcon(
-        QMessageBox.Icon.Warning if destructive else QMessageBox.Icon.Question
-    )
+    box.setIcon(QMessageBox.Icon.Warning if destructive else QMessageBox.Icon.Question)
     box.setText(message)
     box.setTextFormat(Qt.TextFormat.PlainText)
     if details:
@@ -616,7 +614,6 @@ def select_existing_file(
         show_warning(parent, "Invalid file", rejection_message)
         return PathSelection(value=_optional_path(current), cancelled=True)
     return PathSelection(value=candidate, cancelled=False)
-
 
 
 def select_language_path(
@@ -774,7 +771,6 @@ def _copy_to_clipboard(text: str) -> None:
     if application is None:
         return
     QApplication.clipboard().setText(text)
-
 
 
 def _is_gf_source_file(path: Path) -> bool:

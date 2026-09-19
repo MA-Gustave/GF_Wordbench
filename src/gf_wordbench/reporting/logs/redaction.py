@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
 from pathlib import PurePosixPath
+import re
 from typing import Final
 
-REDACTION_MARKER_TEMPLATE: Final = '<REDACTED reason="{reason}">' 
+REDACTION_MARKER_TEMPLATE: Final = '<REDACTED reason="{reason}">'
 DEFAULT_REDACTION_POLICY_ID: Final = "gf-wordbench.log-redaction-v1"
 DEFAULT_MAX_INPUT_CHARS: Final = 64 * 1024 * 1024
 
 _IDENTIFIER_RE: Final = re.compile(r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*$")
 _REASON_RE: Final = re.compile(r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$")
-_MARKER_RE: Final = re.compile(
-    r'<REDACTED reason="(?P<reason>[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*)">'
-)
+_MARKER_RE: Final = re.compile(r'<REDACTED reason="(?P<reason>[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*)">')
 _PRIVATE_KEY_BLOCK_RE: Final = re.compile(
     r"-----BEGIN (?P<label>[A-Z0-9][A-Z0-9 -]*PRIVATE KEY)-----"
     r".*?"
@@ -96,9 +94,7 @@ class ConfiguredRedactionRule:
 class LogRedactionPolicy:
     policy_id: str = DEFAULT_REDACTION_POLICY_ID
     protected_values: tuple[str, ...] = ()
-    protected_keys: frozenset[str] = field(
-        default_factory=lambda: _DEFAULT_PROTECTED_KEYS
-    )
+    protected_keys: frozenset[str] = field(default_factory=lambda: _DEFAULT_PROTECTED_KEYS)
     sensitive_path_prefixes: tuple[str, ...] = ()
     configured_rules: tuple[ConfiguredRedactionRule, ...] = ()
     redact_private_key_blocks: bool = True
@@ -257,13 +253,29 @@ def redact_log_text(
             make_redaction_marker(RedactionReason.PRIVATE_KEY),
             rendered,
         )
-        _effect(effects, labels, "private-key-block", RedactionReason.PRIVATE_KEY, count, "pattern:private-key-block")
+        _effect(
+            effects,
+            labels,
+            "private-key-block",
+            RedactionReason.PRIVATE_KEY,
+            count,
+            "pattern:private-key-block",
+        )
 
     for index, secret in enumerate(effective.protected_values, 1):
         count = rendered.count(secret)
         if count:
-            rendered = rendered.replace(secret, make_redaction_marker(RedactionReason.PROTECTED_VALUE))
-        _effect(effects, labels, f"protected-value-{index}", RedactionReason.PROTECTED_VALUE, count, f"pattern:protected-value-{index}")
+            rendered = rendered.replace(
+                secret, make_redaction_marker(RedactionReason.PROTECTED_VALUE)
+            )
+        _effect(
+            effects,
+            labels,
+            f"protected-value-{index}",
+            RedactionReason.PROTECTED_VALUE,
+            count,
+            f"pattern:protected-value-{index}",
+        )
 
     for key in sorted(effective.protected_keys):
         reason = _key_reason(key)
@@ -272,7 +284,14 @@ def redact_log_text(
 
     for index, prefix in enumerate(effective.sensitive_path_prefixes, 1):
         rendered, count = _redact_path(rendered, prefix)
-        _effect(effects, labels, f"sensitive-path-{index}", RedactionReason.SENSITIVE_PATH, count, f"pattern:sensitive-path-{index}")
+        _effect(
+            effects,
+            labels,
+            f"sensitive-path-{index}",
+            RedactionReason.SENSITIVE_PATH,
+            count,
+            f"pattern:sensitive-path-{index}",
+        )
 
     for rule in effective.configured_rules:
         marker = make_redaction_marker(rule.reason)
@@ -319,19 +338,22 @@ def redact_log_lines(
 
 
 def merge_redaction_records(
-    records: Iterable[LogRedactionRecord],
+    records: object,
     *,
     artifact_path: str | PurePosixPath,
     policy_id: str = DEFAULT_REDACTION_POLICY_ID,
     local_unredacted_evidence_exists: bool,
 ) -> LogRedactionRecord | None:
-    if isinstance(records, (str, bytes)):
+    if isinstance(records, (str, bytes)) or not isinstance(records, Iterable):
         raise TypeError("records must be an iterable of LogRedactionRecord")
-    prepared = tuple(records)
+    prepared_items: list[LogRedactionRecord] = []
+    for record in records:
+        if not isinstance(record, LogRedactionRecord):
+            raise TypeError("records must contain LogRedactionRecord values")
+        prepared_items.append(record)
+    prepared = tuple(prepared_items)
     if not prepared:
         return None
-    if any(not isinstance(record, LogRedactionRecord) for record in prepared):
-        raise TypeError("records must contain LogRedactionRecord values")
     counts: dict[tuple[str, RedactionReason], int] = {}
     labels: list[str] = []
     for record in prepared:
@@ -341,10 +363,12 @@ def merge_redaction_records(
             counts[key] = counts.get(key, 0) + effect.replacements
     effects = tuple(
         RedactionEffect(rule_id, reason, count)
-        for (rule_id, reason), count in sorted(counts.items(), key=lambda item: (item[0][0], item[0][1].value))
+        for (rule_id, reason), count in sorted(
+            counts.items(), key=lambda item: (item[0][0], item[0][1].value)
+        )
     )
     return LogRedactionRecord(
-        artifact_path=artifact_path,
+        artifact_path=normalize_artifact_path(artifact_path),
         policy_id=policy_id,
         affected_fields_or_patterns=tuple(labels),
         local_unredacted_evidence_exists=local_unredacted_evidence_exists,
@@ -462,13 +486,13 @@ def _text(value: object, field_name: str, *, empty: bool) -> str:
 
 
 __all__ = (
-    "ConfiguredRedactionRule",
     "DEFAULT_MAX_INPUT_CHARS",
     "DEFAULT_REDACTION_POLICY_ID",
+    "REDACTION_MARKER_TEMPLATE",
+    "ConfiguredRedactionRule",
     "LogRedactionPolicy",
     "LogRedactionRecord",
     "LogRedactionResult",
-    "REDACTION_MARKER_TEMPLATE",
     "RedactionEffect",
     "RedactionReason",
     "RedactionRuleMode",

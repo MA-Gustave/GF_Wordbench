@@ -24,6 +24,7 @@ from gf_wordbench.validation.pipeline import (
     PipelineStageResult,
     StageParticipation,
     ValidationPipelinePlan,
+    ValidationPipelineResult,
     ValidationStageClass,
     ValidationStageId,
     aggregate_pipeline_status,
@@ -32,39 +33,21 @@ from gf_wordbench.validation.pipeline import (
 
 _NOW: Final[datetime] = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
 
-_STAGE_CLASSES: Final[Mapping[ValidationStageId, ValidationStageClass]] = (
-    MappingProxyType(
-        {
-            ValidationStageId.SELECT: ValidationStageClass.INVENTORY,
-            ValidationStageId.INVENTORY: ValidationStageClass.INVENTORY,
-            ValidationStageId.STATIC_SCAN: ValidationStageClass.ANALYSIS,
-            ValidationStageId.COMPILE: ValidationStageClass.ANALYSIS,
-            ValidationStageId.NORMALIZE_DIAGNOSTICS: (
-                ValidationStageClass.ANALYSIS
-            ),
-            ValidationStageId.CLASSIFY_FAILURES: (
-                ValidationStageClass.ANALYSIS
-            ),
-            ValidationStageId.EXECUTE_SCENARIOS: (
-                ValidationStageClass.SCENARIO
-            ),
-            ValidationStageId.NORMALIZE_SCENARIOS: (
-                ValidationStageClass.SCENARIO
-            ),
-            ValidationStageId.COMPARE_GOLD: (
-                ValidationStageClass.SCENARIO
-            ),
-            ValidationStageId.BUILD_RELEASE_ARTIFACTS: (
-                ValidationStageClass.RELEASE
-            ),
-            ValidationStageId.EVALUATE_RELEASE: (
-                ValidationStageClass.RELEASE
-            ),
-            ValidationStageId.COMPARE_PREVIOUS: (
-                ValidationStageClass.FINALIZATION
-            ),
-        }
-    )
+_STAGE_CLASSES: Final[Mapping[ValidationStageId, ValidationStageClass]] = MappingProxyType(
+    {
+        ValidationStageId.SELECT: ValidationStageClass.INVENTORY,
+        ValidationStageId.INVENTORY: ValidationStageClass.INVENTORY,
+        ValidationStageId.STATIC_SCAN: ValidationStageClass.ANALYSIS,
+        ValidationStageId.COMPILE: ValidationStageClass.ANALYSIS,
+        ValidationStageId.NORMALIZE_DIAGNOSTICS: (ValidationStageClass.ANALYSIS),
+        ValidationStageId.CLASSIFY_FAILURES: (ValidationStageClass.ANALYSIS),
+        ValidationStageId.EXECUTE_SCENARIOS: (ValidationStageClass.SCENARIO),
+        ValidationStageId.NORMALIZE_SCENARIOS: (ValidationStageClass.SCENARIO),
+        ValidationStageId.COMPARE_GOLD: (ValidationStageClass.SCENARIO),
+        ValidationStageId.BUILD_RELEASE_ARTIFACTS: (ValidationStageClass.RELEASE),
+        ValidationStageId.EVALUATE_RELEASE: (ValidationStageClass.RELEASE),
+        ValidationStageId.COMPARE_PREVIOUS: (ValidationStageClass.FINALIZATION),
+    }
 )
 
 _QUICK_REQUIRED_STAGES: Final[tuple[ValidationStageId, ...]] = (
@@ -113,9 +96,7 @@ def _result(
         stage_id=context.stage_id,
         stage_name=context.stage_id.name.replace("_", " ").title(),
         stage_class=_STAGE_CLASSES[context.stage_id],
-        required=(
-            context.participation is StageParticipation.REQUIRED
-        ),
+        required=(context.participation is StageParticipation.REQUIRED),
         started_at=_NOW,
         finished_at=_NOW,
         duration_ms=0,
@@ -163,31 +144,14 @@ def _focused_plan(
     guards: Mapping[
         ValidationStageId,
         Callable[[PipelineStageContext], tuple[ValidationStageId, ...]],
-    ] | None = None,
+    ]
+    | None = None,
     metadata: Mapping[str, str] | None = None,
 ) -> ValidationPipelinePlan:
-    overrides = {
-        stage_id: StageParticipation.SKIPPED
-        for stage_id in CANONICAL_STAGE_ORDER
-    }
-    overrides.update(
-        {
-            stage_id: StageParticipation.REQUIRED
-            for stage_id in required
-        }
-    )
-    overrides.update(
-        {
-            stage_id: StageParticipation.OPTIONAL
-            for stage_id in optional
-        }
-    )
-    overrides.update(
-        {
-            stage_id: StageParticipation.CONDITIONAL
-            for stage_id in conditional
-        }
-    )
+    overrides = dict.fromkeys(CANONICAL_STAGE_ORDER, StageParticipation.SKIPPED)
+    overrides.update(dict.fromkeys(required, StageParticipation.REQUIRED))
+    overrides.update(dict.fromkeys(optional, StageParticipation.OPTIONAL))
+    overrides.update(dict.fromkeys(conditional, StageParticipation.CONDITIONAL))
 
     return ValidationPipelinePlan(
         mode=ValidationMode.DIAGNOSTIC,
@@ -204,7 +168,7 @@ def _run(
     plan: ValidationPipelinePlan,
     *,
     cancellation_source: _CancellationSequence | None = None,
-):
+) -> ValidationPipelineResult:
     return execute_validation_pipeline(
         plan,
         cancellation_source=cancellation_source,
@@ -214,16 +178,11 @@ def _run(
 
 
 def test_canonical_stage_order_is_stable_and_unique() -> None:
-    assert CANONICAL_STAGE_ORDER == tuple(ValidationStageId)
+    assert tuple(ValidationStageId) == CANONICAL_STAGE_ORDER
     assert len(CANONICAL_STAGE_ORDER) == 12
-    assert len(set(CANONICAL_STAGE_ORDER)) == len(
-        CANONICAL_STAGE_ORDER
-    )
+    assert len(set(CANONICAL_STAGE_ORDER)) == len(CANONICAL_STAGE_ORDER)
     assert CANONICAL_STAGE_ORDER[0] is ValidationStageId.SELECT
-    assert (
-        CANONICAL_STAGE_ORDER[-1]
-        is ValidationStageId.COMPARE_PREVIOUS
-    )
+    assert CANONICAL_STAGE_ORDER[-1] is ValidationStageId.COMPARE_PREVIOUS
 
 
 def test_quick_mode_requires_executors_for_every_required_stage() -> None:
@@ -249,19 +208,14 @@ def test_quick_mode_executes_required_stages_in_canonical_order() -> None:
         context: PipelineStageContext,
     ) -> PipelineStageResult:
         calls.append(context.stage_id)
-        observed_previous[context.stage_id] = tuple(
-            context.previous_results
-        )
+        observed_previous[context.stage_id] = tuple(context.previous_results)
         assert context.metadata == {"run_id": "run-test"}
         return _result(context)
 
     plan = ValidationPipelinePlan(
         mode=ValidationMode.QUICK,
         request={"target": "Main.gf"},
-        executors={
-            stage_id: executor
-            for stage_id in _QUICK_REQUIRED_STAGES
-        },
+        executors=dict.fromkeys(_QUICK_REQUIRED_STAGES, executor),
         metadata={"run_id": "run-test"},
     )
 
@@ -269,20 +223,14 @@ def test_quick_mode_executes_required_stages_in_canonical_order() -> None:
 
     assert calls == list(_QUICK_REQUIRED_STAGES)
     assert observed_previous[ValidationStageId.SELECT] == ()
-    assert observed_previous[ValidationStageId.INVENTORY] == (
-        ValidationStageId.SELECT,
-    )
-    assert tuple(item.stage_id for item in result.stage_results) == (
-        CANONICAL_STAGE_ORDER
-    )
+    assert observed_previous[ValidationStageId.INVENTORY] == (ValidationStageId.SELECT,)
+    assert tuple(item.stage_id for item in result.stage_results) == (CANONICAL_STAGE_ORDER)
     assert all(
-        result.result_for(stage_id).validation_status
-        is ValidationStatus.OK
+        result.result_for(stage_id).validation_status is ValidationStatus.OK
         for stage_id in _QUICK_REQUIRED_STAGES
     )
     assert all(
-        result.result_for(stage_id).validation_status
-        is ValidationStatus.SKIPPED
+        result.result_for(stage_id).validation_status is ValidationStatus.SKIPPED
         for stage_id in CANONICAL_STAGE_ORDER
         if stage_id not in _QUICK_REQUIRED_STAGES
     )
@@ -322,10 +270,7 @@ def test_enabled_conditional_stage_executes() -> None:
     result = _run(plan)
 
     assert calls == [stage_id]
-    assert (
-        result.result_for(stage_id).validation_status
-        is ValidationStatus.OK
-    )
+    assert result.result_for(stage_id).validation_status is ValidationStatus.OK
     assert result.overall_status is OverallStatus.OK
 
 
@@ -404,9 +349,7 @@ def test_required_validation_failure_remains_available_to_later_analysis() -> No
         ValidationStageId.NORMALIZE_DIAGNOSTICS,
     ]
     assert (
-        result.result_for(
-            ValidationStageId.NORMALIZE_DIAGNOSTICS
-        ).validation_status
+        result.result_for(ValidationStageId.NORMALIZE_DIAGNOSTICS).validation_status
         is ValidationStatus.OK
     )
     assert result.overall_status is OverallStatus.FAIL
@@ -460,10 +403,7 @@ def test_abort_flag_skips_all_later_stages() -> None:
 
     assert calls == [first]
     assert result.result_for(first).abort_pipeline is True
-    assert (
-        result.result_for(second).validation_status
-        is ValidationStatus.SKIPPED
-    )
+    assert result.result_for(second).validation_status is ValidationStatus.SKIPPED
     assert result.result_for(second).required is True
     assert result.overall_status is OverallStatus.FAIL
 
@@ -510,14 +450,8 @@ def test_cancellation_between_stages_preserves_completed_result() -> None:
     result = _run(plan, cancellation_source=source)
 
     assert calls == [first]
-    assert (
-        result.result_for(first).validation_status
-        is ValidationStatus.OK
-    )
-    assert (
-        result.result_for(second).validation_status
-        is ValidationStatus.SKIPPED
-    )
+    assert result.result_for(first).validation_status is ValidationStatus.OK
+    assert result.result_for(second).validation_status is ValidationStatus.SKIPPED
     assert result.cancelled is True
     assert result.cancellation_reason == "Cancellation requested."
     assert result.overall_status is OverallStatus.FAIL
@@ -564,9 +498,7 @@ def test_aggregate_pipeline_status_obeys_error_and_requiredness_precedence(
         PipelineStageResult(
             stage_id=CANONICAL_STAGE_ORDER[index],
             stage_name=f"Stage {index}",
-            stage_class=_STAGE_CLASSES[
-                CANONICAL_STAGE_ORDER[index]
-            ],
+            stage_class=_STAGE_CLASSES[CANONICAL_STAGE_ORDER[index]],
             required=required,
             started_at=_NOW,
             finished_at=_NOW,

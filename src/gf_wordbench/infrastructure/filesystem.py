@@ -6,7 +6,7 @@ import errno
 import os
 from pathlib import Path
 import shutil
-from typing import Final, TypeAlias
+from typing import BinaryIO, Final, TypeAlias
 
 PathInput: TypeAlias = str | os.PathLike[str]
 
@@ -304,17 +304,16 @@ def copy_file(
     if _same_existing_file(resolved_source, resolved_destination):
         raise shutil.SameFileError(resolved_source, resolved_destination)
 
-    with resolved_source.open("rb") as source_stream:
-        with _open_output_binary(
-            resolved_destination,
-            overwrite=overwrite,
-        ) as destination_stream:
-            shutil.copyfileobj(
-                source_stream,
-                destination_stream,
-                length=_COPY_BUFFER_SIZE,
-            )
-            destination_stream.flush()
+    with resolved_source.open("rb") as source_stream, _open_output_binary(
+        resolved_destination,
+        overwrite=overwrite,
+    ) as destination_stream:
+        shutil.copyfileobj(
+            source_stream,
+            destination_stream,
+            length=_COPY_BUFFER_SIZE,
+        )
+        destination_stream.flush()
 
     if preserve_metadata:
         shutil.copystat(resolved_source, resolved_destination, follow_symlinks=False)
@@ -499,7 +498,8 @@ def _nearest_existing_ancestor(path: Path) -> tuple[Path, tuple[str, ...]]:
 
 def _absolute_path(path: PathInput) -> Path:
     raw = os.fspath(path)
-    if isinstance(raw, bytes):
+    raw_value: object = raw
+    if isinstance(raw_value, bytes):
         raise TypeError("filesystem paths must be text, not bytes")
     if "\x00" in raw:
         raise ValueError("filesystem path contains NUL")
@@ -527,7 +527,7 @@ def _is_relative_to(candidate: Path, root: Path) -> bool:
     return True
 
 
-def _open_output_binary(path: Path, *, overwrite: bool):
+def _open_output_binary(path: Path, *, overwrite: bool) -> BinaryIO:
     flags = os.O_WRONLY | os.O_CREAT
     flags |= os.O_TRUNC if overwrite else os.O_EXCL
     flags |= getattr(os, "O_BINARY", 0)
@@ -553,9 +553,9 @@ def _same_existing_file(source: Path, destination: Path) -> bool:
 
 
 __all__ = [
+    "UTF8",
     "PathContainmentError",
     "PathInput",
-    "UTF8",
     "copy_file",
     "create_directory",
     "create_directory_exclusive",

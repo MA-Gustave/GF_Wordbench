@@ -317,13 +317,13 @@ class BaseResult:
     primary_message: str
     blocked_by: list[str]
 
-@dataclass
-class FileResult(BaseResult):
-    ...
 
 @dataclass
-class ScenarioResult(BaseResult):
-    ...
+class FileResult(BaseResult): ...
+
+
+@dataclass
+class ScenarioResult(BaseResult): ...
 ```
 
 #### Advantages
@@ -490,18 +490,17 @@ Conceptual form:
 ```python
 from typing import Protocol
 
+
 class DiagnosticResult(Protocol):
     status: Status
     diagnostic_class: DiagnosticClass
     blocked_by: list[str]
 
     @property
-    def error_kind(self) -> ErrorKind:
-        ...
+    def error_kind(self) -> ErrorKind: ...
 
     @property
-    def primary_message(self) -> str:
-        ...
+    def primary_message(self) -> str: ...
 ```
 
 This protocol:

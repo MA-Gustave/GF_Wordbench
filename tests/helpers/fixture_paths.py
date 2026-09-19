@@ -8,12 +8,12 @@ to modify a fixture must first copy it into a temporary directory.
 
 from __future__ import annotations
 
-import os
-import shutil
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import os
 from pathlib import Path, PurePath
+import shutil
 from typing import Final, TypeAlias
 
 __all__ = (
@@ -126,9 +126,7 @@ def _validated_relative_parts(parts: Sequence[PathInput]) -> tuple[str, ...]:
             raise TypeError("fixture path parts must be path-like") from exc
 
         if path.is_absolute() or path.anchor:
-            raise FixturePathError(
-                f"fixture path part must be relative: {os.fspath(raw_part)!r}"
-            )
+            raise FixturePathError(f"fixture path part must be relative: {os.fspath(raw_part)!r}")
 
         for component in path.parts:
             if component in ("", "."):
@@ -160,9 +158,7 @@ def _resolve_beneath(root: Path, parts: Sequence[PathInput]) -> Path:
     resolved_root = root.resolve(strict=False)
     resolved_candidate = candidate.resolve(strict=False)
     if not _is_within(resolved_candidate, resolved_root):
-        raise FixturePathError(
-            f"fixture path escapes {resolved_root}: {candidate}"
-        )
+        raise FixturePathError(f"fixture path escapes {resolved_root}: {candidate}")
     return resolved_candidate
 
 
@@ -197,15 +193,12 @@ def discover_repository_root(start: PathInput | None = None) -> Path:
     current = origin.parent if origin.suffix or origin.is_file() else origin
 
     for candidate in (current, *current.parents):
-        if (
-            (candidate / "pyproject.toml").is_file()
-            and (candidate / "src" / "gf_wordbench").is_dir()
-        ):
+        if (candidate / "pyproject.toml").is_file() and (
+            candidate / "src" / "gf_wordbench"
+        ).is_dir():
             return candidate
 
-    raise FileNotFoundError(
-        f"could not locate GF Wordbench repository above {current}"
-    )
+    raise FileNotFoundError(f"could not locate GF Wordbench repository above {current}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,16 +219,14 @@ class FixturePaths:
                 "tests_root must be the repository's canonical 'tests' directory"
             )
         if root != tests_root / "fixtures":
-            raise FixturePathError(
-                "root must be the canonical 'tests/fixtures' directory"
-            )
+            raise FixturePathError("root must be the canonical 'tests/fixtures' directory")
 
         object.__setattr__(self, "repository_root", repository_root)
         object.__setattr__(self, "tests_root", tests_root)
         object.__setattr__(self, "root", root)
 
     @classmethod
-    def from_repository_root(cls, root: PathInput) -> "FixturePaths":
+    def from_repository_root(cls, root: PathInput) -> FixturePaths:
         repository_root = Path(root).resolve(strict=False)
         tests_root = repository_root / "tests"
         return cls(
@@ -245,7 +236,7 @@ class FixturePaths:
         )
 
     @classmethod
-    def discover(cls, start: PathInput | None = None) -> "FixturePaths":
+    def discover(cls, start: PathInput | None = None) -> FixturePaths:
         return cls.from_repository_root(discover_repository_root(start))
 
     def area(self, area: FixtureArea | str) -> Path:
@@ -329,8 +320,7 @@ class FixturePaths:
         files = (
             path
             for path in iterator
-            if path.is_file()
-            and (not suffixes or path.suffix.casefold() in suffixes)
+            if path.is_file() and (not suffixes or path.suffix.casefold() in suffixes)
         )
         yield from sorted(
             files,

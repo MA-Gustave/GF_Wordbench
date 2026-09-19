@@ -49,9 +49,7 @@ _SECTION_BEGIN_RE: Final[re.Pattern[str]] = re.compile(
 _SECTION_END_RE: Final[re.Pattern[str]] = re.compile(
     r"^--- END (?P<section>[a-z][a-z0-9]*(?:-[a-z0-9]+)*) ---$"
 )
-_VERSION_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[0-9]+(?:\.[0-9]+){1,3}$"
-)
+_VERSION_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9]+(?:\.[0-9]+){1,3}$")
 
 
 @unique
@@ -119,9 +117,7 @@ class GoldUpdateRefusal:
 
     def __post_init__(self) -> None:
         if not isinstance(self.code, GoldUpdateRefusalCode):
-            raise TypeError(
-                "code must be a GoldUpdateRefusalCode"
-            )
+            raise TypeError("code must be a GoldUpdateRefusalCode")
         message = _required_text(
             self.message,
             field_name="message",
@@ -292,28 +288,17 @@ class GoldUpdatePlan:
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, GoldUpdateRequest):
-            raise TypeError(
-                "request must be a GoldUpdateRequest"
-            )
+            raise TypeError("request must be a GoldUpdateRequest")
         if not isinstance(self.status, GoldUpdateStatus):
-            raise TypeError(
-                "status must be a GoldUpdateStatus"
-            )
+            raise TypeError("status must be a GoldUpdateStatus")
         gold_path = _absolute_path(
             self.gold_path,
             field_name="gold_path",
         )
-        if (
-            self.candidate is not None
-            and not isinstance(self.candidate, GoldDocument)
-        ):
-            raise TypeError(
-                "candidate must be a GoldDocument or None"
-            )
+        if self.candidate is not None and not isinstance(self.candidate, GoldDocument):
+            raise TypeError("candidate must be a GoldDocument or None")
         if not isinstance(self.previous_exists, bool):
-            raise TypeError(
-                "previous_exists must be a bool"
-            )
+            raise TypeError("previous_exists must be a bool")
         previous_sha256 = _optional_sha256(
             self.previous_sha256,
             field_name="previous_sha256",
@@ -325,22 +310,13 @@ class GoldUpdatePlan:
         if not isinstance(self.diff_text, str):
             raise TypeError("diff_text must be a string")
         refusals = tuple(self.refusals)
-        if not all(
-            isinstance(item, GoldUpdateRefusal)
-            for item in refusals
-        ):
-            raise TypeError(
-                "refusals must contain GoldUpdateRefusal values"
-            )
+        if not all(isinstance(item, GoldUpdateRefusal) for item in refusals):
+            raise TypeError("refusals must contain GoldUpdateRefusal values")
 
         if self.status is GoldUpdateStatus.REFUSED and not refusals:
-            raise ValueError(
-                "refused plan requires at least one refusal"
-            )
+            raise ValueError("refused plan requires at least one refusal")
         if self.status is not GoldUpdateStatus.REFUSED and refusals:
-            raise ValueError(
-                "non-refused plan cannot contain refusals"
-            )
+            raise ValueError("non-refused plan cannot contain refusals")
         if (
             self.status
             in {
@@ -349,9 +325,7 @@ class GoldUpdatePlan:
             }
             and self.candidate is None
         ):
-            raise ValueError(
-                "ready or unchanged plan requires a candidate"
-            )
+            raise ValueError("ready or unchanged plan requires a candidate")
 
         object.__setattr__(self, "gold_path", gold_path)
         object.__setattr__(
@@ -511,13 +485,9 @@ class GoldUpdateRecord:
                 "decision_reference": self.decision_reference,
                 "raw_stdout_path": str(self.raw_stdout_path),
                 "raw_stderr_path": str(self.raw_stderr_path),
-                "normalized_output_path": str(
-                    self.normalized_output_path
-                ),
+                "normalized_output_path": str(self.normalized_output_path),
                 "diff_evidence_path": (
-                    str(self.diff_evidence_path)
-                    if self.diff_evidence_path is not None
-                    else None
+                    str(self.diff_evidence_path) if self.diff_evidence_path is not None else None
                 ),
                 "updated_at": self.updated_at.isoformat().replace(
                     "+00:00",
@@ -547,32 +517,15 @@ class GoldUpdateResult:
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, GoldUpdateStatus):
-            raise TypeError(
-                "status must be a GoldUpdateStatus"
-            )
+            raise TypeError("status must be a GoldUpdateStatus")
         if not isinstance(self.plan, GoldUpdatePlan):
             raise TypeError("plan must be a GoldUpdatePlan")
-        if (
-            self.record is not None
-            and not isinstance(self.record, GoldUpdateRecord)
-        ):
-            raise TypeError(
-                "record must be a GoldUpdateRecord or None"
-            )
-        if (
-            self.status is GoldUpdateStatus.UPDATED
-            and self.record is None
-        ):
-            raise ValueError(
-                "updated result requires an update record"
-            )
-        if (
-            self.status is not GoldUpdateStatus.UPDATED
-            and self.record is not None
-        ):
-            raise ValueError(
-                "only an updated result may contain a record"
-            )
+        if self.record is not None and not isinstance(self.record, GoldUpdateRecord):
+            raise TypeError("record must be a GoldUpdateRecord or None")
+        if self.status is GoldUpdateStatus.UPDATED and self.record is None:
+            raise ValueError("updated result requires an update record")
+        if self.status is not GoldUpdateStatus.UPDATED and self.record is not None:
+            raise ValueError("only an updated result may contain a record")
 
 
 class GoldUpdateError(RuntimeError):
@@ -629,14 +582,9 @@ def parse_normalized_output_document(
     lines = canonical.splitlines()
 
     if len(lines) < 3:
-        raise ValueError(
-            "normalized output is missing the canonical header"
-        )
+        raise ValueError("normalized output is missing the canonical header")
     if lines[0] != OUTPUT_SCHEMA_HEADER:
-        raise ValueError(
-            "normalized output must begin with "
-            f"{OUTPUT_SCHEMA_HEADER!r}"
-        )
+        raise ValueError(f"normalized output must begin with {OUTPUT_SCHEMA_HEADER!r}")
 
     actual_scenario = _header_value(
         lines[1],
@@ -675,10 +623,7 @@ def parse_normalized_output_document(
         (
             GOLD_SCHEMA_HEADER,
             f"{SCENARIO_HEADER_PREFIX}{scenario_id}",
-            (
-                f"{NORMALIZATION_HEADER_PREFIX}"
-                f"{normalization_version}"
-            ),
+            (f"{NORMALIZATION_HEADER_PREFIX}{normalization_version}"),
             *lines[3:],
         )
     )
@@ -705,13 +650,9 @@ def parse_gold_document(
     lines = canonical.splitlines()
 
     if len(lines) < 3:
-        raise ValueError(
-            "gold document is missing the canonical header"
-        )
+        raise ValueError("gold document is missing the canonical header")
     if lines[0] != GOLD_SCHEMA_HEADER:
-        raise ValueError(
-            f"gold document must begin with {GOLD_SCHEMA_HEADER!r}"
-        )
+        raise ValueError(f"gold document must begin with {GOLD_SCHEMA_HEADER!r}")
 
     scenario_text = _header_value(
         lines[1],
@@ -769,9 +710,7 @@ def prepare_gold_update(
     read_bytes: BytesReader = Path.read_bytes,
 ) -> GoldUpdatePlan:
     if not isinstance(request, GoldUpdateRequest):
-        raise TypeError(
-            "request must be a GoldUpdateRequest"
-        )
+        raise TypeError("request must be a GoldUpdateRequest")
     if not callable(read_bytes):
         raise TypeError("read_bytes must be callable")
 
@@ -783,9 +722,7 @@ def prepare_gold_update(
         candidate = parse_normalized_output_document(
             request.normalized_output_text,
             expected_scenario_id=request.scenario_id,
-            expected_normalization_version=(
-                request.normalization_version
-            ),
+            expected_normalization_version=(request.normalization_version),
         )
     except (TypeError, ValueError) as exc:
         refusals.append(
@@ -801,60 +738,34 @@ def prepare_gold_update(
     except FileNotFoundError:
         previous_bytes = None
     except OSError as exc:
-        raise GoldUpdateError(
-            f"unable to read existing gold file: {exc}"
-        ) from exc
+        raise GoldUpdateError(f"unable to read existing gold file: {exc}") from exc
 
     previous_exists = previous_bytes is not None
-    previous_sha256 = (
-        _sha256(previous_bytes)
-        if previous_bytes is not None
-        else None
-    )
+    previous_sha256 = _sha256(previous_bytes) if previous_bytes is not None else None
 
     if (
         request.expected_previous_sha256 is not None
-        and previous_sha256
-        != request.expected_previous_sha256
+        and previous_sha256 != request.expected_previous_sha256
     ):
         refusals.append(
             GoldUpdateRefusal(
-                code=(
-                    GoldUpdateRefusalCode
-                    .PREVIOUS_HASH_MISMATCH
-                ),
-                message=(
-                    "existing gold SHA-256 does not match the "
-                    "reviewed previous hash"
-                ),
+                code=(GoldUpdateRefusalCode.PREVIOUS_HASH_MISMATCH),
+                message=("existing gold SHA-256 does not match the reviewed previous hash"),
             )
         )
 
-    candidate_bytes = (
-        candidate.text.encode(UTF8_ENCODING)
-        if candidate is not None
-        else None
-    )
-    candidate_sha256 = (
-        _sha256(candidate_bytes)
-        if candidate_bytes is not None
-        else None
-    )
+    candidate_bytes = candidate.text.encode(UTF8_ENCODING) if candidate is not None else None
+    candidate_sha256 = _sha256(candidate_bytes) if candidate_bytes is not None else None
 
     old_text = ""
     if previous_bytes is not None:
         try:
             old_text = previous_bytes.decode(UTF8_ENCODING)
-        except UnicodeDecodeError as exc:
+        except UnicodeDecodeError:
             refusals.append(
                 GoldUpdateRefusal(
-                    code=(
-                        GoldUpdateRefusalCode
-                        .INVALID_OUTPUT_SCHEMA
-                    ),
-                    message=(
-                        "existing gold file is not valid UTF-8"
-                    ),
+                    code=(GoldUpdateRefusalCode.INVALID_OUTPUT_SCHEMA),
+                    message=("existing gold file is not valid UTF-8"),
                 )
             )
             old_text = previous_bytes.decode(
@@ -939,8 +850,7 @@ def apply_gold_update(
             GoldUpdateRefusal(
                 code=GoldUpdateRefusalCode.DIFF_NOT_REVIEWED,
                 message=(
-                    "gold update requires explicit review of the "
-                    "normalized diff before writing"
+                    "gold update requires explicit review of the normalized diff before writing"
                 ),
             ),
         )
@@ -949,9 +859,7 @@ def apply_gold_update(
             plan=refusal_plan,
         )
     if plan.candidate is None:
-        raise GoldUpdateIntegrityError(
-            "ready gold update plan has no candidate"
-        )
+        raise GoldUpdateIntegrityError("ready gold update plan has no candidate")
 
     _ensure_no_concurrent_change(
         plan,
@@ -964,9 +872,7 @@ def apply_gold_update(
     except FileNotFoundError:
         previous_bytes = None
     except OSError as exc:
-        raise GoldUpdateError(
-            f"unable to read gold before update: {exc}"
-        ) from exc
+        raise GoldUpdateError(f"unable to read gold before update: {exc}") from exc
 
     try:
         write_text(
@@ -984,17 +890,13 @@ def apply_gold_update(
         written_sha256 = _sha256(written_bytes)
 
         if written_sha256 != plan.candidate_sha256:
-            raise GoldUpdateIntegrityError(
-                "written gold SHA-256 does not match the candidate"
-            )
+            raise GoldUpdateIntegrityError("written gold SHA-256 does not match the candidate")
 
         written_text = written_bytes.decode(UTF8_ENCODING)
         parsed_written = parse_gold_document(
             written_text,
             expected_scenario_id=plan.request.scenario_id,
-            expected_normalization_version=(
-                plan.request.normalization_version
-            ),
+            expected_normalization_version=(plan.request.normalization_version),
         )
         if parsed_written.text != plan.candidate.text:
             raise GoldUpdateIntegrityError(
@@ -1008,9 +910,7 @@ def apply_gold_update(
         )
         if isinstance(exc, GoldUpdateError):
             raise
-        raise GoldUpdateError(
-            f"gold update failed: {type(exc).__name__}: {exc}"
-        ) from exc
+        raise GoldUpdateError(f"gold update failed: {type(exc).__name__}: {exc}") from exc
 
     record = GoldUpdateRecord(
         scenario_id=plan.request.scenario_id,
@@ -1018,17 +918,13 @@ def apply_gold_update(
         gold_path=plan.gold_path,
         previous_sha256=plan.previous_sha256,
         new_sha256=written_sha256,
-        normalization_version=(
-            plan.request.normalization_version
-        ),
+        normalization_version=(plan.request.normalization_version),
         reviewer=plan.request.reviewer,
         rationale=plan.request.rationale,
         decision_reference=plan.request.decision_reference,
         raw_stdout_path=plan.request.raw_stdout_path,
         raw_stderr_path=plan.request.raw_stderr_path,
-        normalized_output_path=(
-            plan.request.normalized_output_path
-        ),
+        normalized_output_path=(plan.request.normalized_output_path),
         diff_evidence_path=plan.request.diff_evidence_path,
         updated_at=clock(),
         metadata=plan.request.metadata,
@@ -1078,11 +974,7 @@ def build_gold_diff(
     )
     scenario_id = validate_scenario_id(scenario_id)
 
-    before_name = (
-        f"{gold_path.as_posix()}@previous"
-        if previous_text
-        else "/dev/null"
-    )
+    before_name = f"{gold_path.as_posix()}@previous" if previous_text else "/dev/null"
     after_name = f"{gold_path.as_posix()}@candidate"
 
     diff = "".join(
@@ -1094,16 +986,11 @@ def build_gold_diff(
             lineterm="\n",
         )
     )
-    header = (
-        f"# scenario_id: {scenario_id}\n"
-        f"# gold_path: {gold_path.as_posix()}\n"
-    )
+    header = f"# scenario_id: {scenario_id}\n# gold_path: {gold_path.as_posix()}\n"
     rendered = header + diff
 
     if len(rendered) > MAX_DIFF_CHARS:
-        raise ValueError(
-            "gold diff exceeds the configured bounded size"
-        )
+        raise ValueError("gold diff exceeds the configured bounded size")
     return rendered
 
 
@@ -1111,9 +998,7 @@ def serialize_gold_update_record(
     record: GoldUpdateRecord,
 ) -> str:
     if not isinstance(record, GoldUpdateRecord):
-        raise TypeError(
-            "record must be a GoldUpdateRecord"
-        )
+        raise TypeError("record must be a GoldUpdateRecord")
     return record.to_json()
 
 
@@ -1126,86 +1011,57 @@ def _request_refusals(
         refusals.append(
             GoldUpdateRefusal(
                 code=GoldUpdateRefusalCode.MARKERS_INVALID,
-                message=(
-                    "required scenario markers were not verified"
-                ),
+                message=("required scenario markers were not verified"),
             )
         )
     if not request.normalization_succeeded:
         refusals.append(
             GoldUpdateRefusal(
-                code=(
-                    GoldUpdateRefusalCode
-                    .NORMALIZATION_FAILED
-                ),
-                message=(
-                    "scenario normalization did not complete "
-                    "successfully"
-                ),
+                code=(GoldUpdateRefusalCode.NORMALIZATION_FAILED),
+                message=("scenario normalization did not complete successfully"),
             )
         )
     if request.output_truncated:
         refusals.append(
             GoldUpdateRefusal(
                 code=GoldUpdateRefusalCode.OUTPUT_TRUNCATED,
-                message=(
-                    "truncated scenario output cannot become gold"
-                ),
+                message=("truncated scenario output cannot become gold"),
             )
         )
     if not request.output_complete:
         refusals.append(
             GoldUpdateRefusal(
                 code=GoldUpdateRefusalCode.OUTPUT_INCOMPLETE,
-                message=(
-                    "incomplete scenario output cannot become gold"
-                ),
+                message=("incomplete scenario output cannot become gold"),
             )
         )
     if not request.compatibility_verified:
         refusals.append(
             GoldUpdateRefusal(
-                code=(
-                    GoldUpdateRefusalCode
-                    .COMPATIBILITY_UNKNOWN
-                ),
-                message=(
-                    "GF/RGL compatibility must be verified before "
-                    "updating gold"
-                ),
+                code=(GoldUpdateRefusalCode.COMPATIBILITY_UNKNOWN),
+                message=("GF/RGL compatibility must be verified before updating gold"),
             )
         )
     if not request.deterministic:
         refusals.append(
             GoldUpdateRefusal(
                 code=GoldUpdateRefusalCode.NONDETERMINISTIC,
-                message=(
-                    "nondeterministic scenario output cannot become "
-                    "exact gold"
-                ),
+                message=("nondeterministic scenario output cannot become exact gold"),
             )
         )
     if not request.diff_reviewed:
         refusals.append(
             GoldUpdateRefusal(
                 code=GoldUpdateRefusalCode.DIFF_NOT_REVIEWED,
-                message=(
-                    "normalized gold diff has not been explicitly "
-                    "reviewed"
-                ),
+                message=("normalized gold diff has not been explicitly reviewed"),
             )
         )
 
-    meaningful = _has_meaningful_section_output(
-        request.normalized_output_text
-    )
+    meaningful = _has_meaningful_section_output(request.normalized_output_text)
     if not meaningful and not request.allow_empty:
         refusals.append(
             GoldUpdateRefusal(
-                code=(
-                    GoldUpdateRefusalCode
-                    .OUTPUT_NOT_MEANINGFUL
-                ),
+                code=(GoldUpdateRefusalCode.OUTPUT_NOT_MEANINGFUL),
                 message=(
                     "normalized output has no meaningful section "
                     "content and empty gold was not explicitly allowed"
@@ -1230,20 +1086,14 @@ def _validated_gold_path(
             mode=ContainmentMode.STRICTLY_INSIDE,
         )
     except Exception as exc:
-        raise GoldUpdateError(
-            f"unsafe scenario gold path: {exc}"
-        ) from exc
+        raise GoldUpdateError(f"unsafe scenario gold path: {exc}") from exc
 
     expected_name = f"{request.scenario_id}{GOLD_SUFFIX}"
     if contained.name != expected_name:
-        raise GoldUpdateError(
-            "gold filename must match the selected scenario ID"
-        )
+        raise GoldUpdateError("gold filename must match the selected scenario ID")
 
     if contained.exists() and contained.is_symlink():
-        raise GoldUpdateError(
-            "scenario gold path must not be a symbolic link"
-        )
+        raise GoldUpdateError("scenario gold path must not be a symbolic link")
 
     try:
         resolved_root = gold_root.resolve(strict=False)
@@ -1251,9 +1101,7 @@ def _validated_gold_path(
         resolved_candidate = resolved_parent / contained.name
         resolved_candidate.relative_to(resolved_root)
     except (OSError, RuntimeError, ValueError) as exc:
-        raise GoldUpdateError(
-            "scenario gold path escapes the resolved gold root"
-        ) from exc
+        raise GoldUpdateError("scenario gold path escapes the resolved gold root") from exc
 
     return contained
 
@@ -1268,15 +1116,9 @@ def _ensure_no_concurrent_change(
     except FileNotFoundError:
         current_bytes = None
     except OSError as exc:
-        raise GoldUpdateError(
-            f"unable to verify current gold before writing: {exc}"
-        ) from exc
+        raise GoldUpdateError(f"unable to verify current gold before writing: {exc}") from exc
 
-    current_sha256 = (
-        _sha256(current_bytes)
-        if current_bytes is not None
-        else None
-    )
+    current_sha256 = _sha256(current_bytes) if current_bytes is not None else None
     if current_sha256 != plan.previous_sha256:
         raise GoldUpdateConcurrentChangeError(
             "gold file changed after diff preparation; regenerate "
@@ -1305,8 +1147,7 @@ def _restore_previous_gold(
             )
     except OSError as rollback_error:
         raise GoldUpdateIntegrityError(
-            "gold update failed and rollback could not restore the "
-            f"previous file: {rollback_error}"
+            f"gold update failed and rollback could not restore the previous file: {rollback_error}"
         ) from rollback_error
 
 
@@ -1342,47 +1183,33 @@ def _validate_sections(
 
         begin = _SECTION_BEGIN_RE.fullmatch(line)
         if begin is None:
-            raise ValueError(
-                "gold/output body must contain only canonical "
-                "BEGIN/END sections"
-            )
+            raise ValueError("gold/output body must contain only canonical BEGIN/END sections")
 
         section = begin.group("section")
         if section in seen:
-            raise ValueError(
-                f"duplicate section ID {section!r}"
-            )
+            raise ValueError(f"duplicate section ID {section!r}")
 
         end_index = index + 1
         while end_index < len(lines):
             end = _SECTION_END_RE.fullmatch(lines[end_index])
             if end is not None:
                 if end.group("section") != section:
-                    raise ValueError(
-                        "section END marker does not match BEGIN "
-                        f"marker {section!r}"
-                    )
+                    raise ValueError(f"section END marker does not match BEGIN marker {section!r}")
                 break
             nested = _SECTION_BEGIN_RE.fullmatch(lines[end_index])
             if nested is not None:
-                raise ValueError(
-                    "nested scenario sections are prohibited"
-                )
+                raise ValueError("nested scenario sections are prohibited")
             end_index += 1
 
         if end_index >= len(lines):
-            raise ValueError(
-                f"section {section!r} has no matching END marker"
-            )
+            raise ValueError(f"section {section!r} has no matching END marker")
 
         seen.add(section)
         sections.append(section)
         index = end_index + 1
 
     if not sections:
-        raise ValueError(
-            "gold/output document must contain at least one section"
-        )
+        raise ValueError("gold/output document must contain at least one section")
 
     return tuple(sections)
 
@@ -1428,16 +1255,12 @@ def _section_tuple(
         )
         text = str(section)
         if text in seen:
-            raise ValueError(
-                f"duplicate section ID {text!r}"
-            )
+            raise ValueError(f"duplicate section ID {text!r}")
         seen.add(text)
         result.append(text)
 
     if not result:
-        raise ValueError(
-            "sections must not be empty"
-        )
+        raise ValueError("sections must not be empty")
     return tuple(result)
 
 
@@ -1448,9 +1271,7 @@ def _header_value(
     field_name: str,
 ) -> str:
     if not line.startswith(prefix):
-        raise ValueError(
-            f"missing canonical {field_name} header"
-        )
+        raise ValueError(f"missing canonical {field_name} header")
     return _required_text(
         line[len(prefix) :],
         field_name=field_name,
@@ -1465,9 +1286,7 @@ def _canonical_text(
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a string")
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if value.startswith("\ufeff"):
         value = value.removeprefix("\ufeff")
     value = value.replace("\r\n", "\n").replace("\r", "\n")
@@ -1483,9 +1302,7 @@ def _validate_version(
 ) -> str:
     text = _required_text(value, field_name=field_name)
     if _VERSION_RE.fullmatch(text) is None:
-        raise ValueError(
-            f"{field_name} must be a dotted numeric version"
-        )
+        raise ValueError(f"{field_name} must be a dotted numeric version")
     return text
 
 
@@ -1503,9 +1320,7 @@ def _required_sha256(
         field_name=field_name,
     )
     if result is None:
-        raise ValueError(
-            f"{field_name} must not be None"
-        )
+        raise ValueError(f"{field_name} must not be None")
     return result
 
 
@@ -1517,25 +1332,15 @@ def _optional_sha256(
     if value is None:
         return None
     if not isinstance(value, str):
-        raise TypeError(
-            f"{field_name} must be a string or None"
-        )
+        raise TypeError(f"{field_name} must be a string or None")
     if len(value) != SHA256_HEX_LENGTH:
         raise ValueError(
-            f"{field_name} must contain exactly "
-            f"{SHA256_HEX_LENGTH} hexadecimal digits"
+            f"{field_name} must contain exactly {SHA256_HEX_LENGTH} hexadecimal digits"
         )
     if value.lower() != value:
-        raise ValueError(
-            f"{field_name} must use lowercase hexadecimal digits"
-        )
-    if any(
-        character not in "0123456789abcdef"
-        for character in value
-    ):
-        raise ValueError(
-            f"{field_name} must contain only hexadecimal digits"
-        )
+        raise ValueError(f"{field_name} must use lowercase hexadecimal digits")
+    if any(character not in "0123456789abcdef" for character in value):
+        raise ValueError(f"{field_name} must contain only hexadecimal digits")
     return value
 
 
@@ -1545,9 +1350,7 @@ def _string_mapping(
     field_name: str,
 ) -> Mapping[str, str]:
     if not isinstance(value, Mapping):
-        raise TypeError(
-            f"{field_name} must be a mapping"
-        )
+        raise TypeError(f"{field_name} must be a mapping")
 
     normalized: dict[str, str] = {}
     for key, item in value.items():
@@ -1561,9 +1364,7 @@ def _string_mapping(
         )
         normalized[normalized_key] = normalized_value
 
-    return MappingProxyType(
-        dict(sorted(normalized.items()))
-    )
+    return MappingProxyType(dict(sorted(normalized.items())))
 
 
 def _bounded_text(
@@ -1573,9 +1374,7 @@ def _bounded_text(
 ) -> str:
     text = _required_text(value, field_name=field_name)
     if len(text) > MAX_RECORD_TEXT_CHARS:
-        raise ValueError(
-            f"{field_name} exceeds the bounded text limit"
-        )
+        raise ValueError(f"{field_name} exceeds the bounded text limit")
     return text
 
 
@@ -1585,21 +1384,13 @@ def _required_text(
     field_name: str,
 ) -> str:
     if not isinstance(value, str):
-        raise TypeError(
-            f"{field_name} must be a string"
-        )
+        raise TypeError(f"{field_name} must be a string")
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if not value.strip():
-        raise ValueError(
-            f"{field_name} must not be empty"
-        )
+        raise ValueError(f"{field_name} must not be empty")
     if value != value.strip():
-        raise ValueError(
-            f"{field_name} must not have outer whitespace"
-        )
+        raise ValueError(f"{field_name} must not have outer whitespace")
     return value
 
 
@@ -1609,17 +1400,11 @@ def _absolute_path(
     field_name: str,
 ) -> Path:
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field_name} must be a pathlib.Path"
-        )
+        raise TypeError(f"{field_name} must be a pathlib.Path")
     if "\x00" in str(value):
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if not value.is_absolute():
-        raise ValueError(
-            f"{field_name} must be absolute"
-        )
+        raise ValueError(f"{field_name} must be absolute")
     return value
 
 
@@ -1642,13 +1427,9 @@ def _utc_datetime(
     field_name: str,
 ) -> datetime:
     if not isinstance(value, datetime):
-        raise TypeError(
-            f"{field_name} must be a datetime"
-        )
+        raise TypeError(f"{field_name} must be a datetime")
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(
-            f"{field_name} must be timezone-aware"
-        )
+        raise ValueError(f"{field_name} must be timezone-aware")
     return value.astimezone(UTC)
 
 
@@ -1656,6 +1437,7 @@ __all__ = (
     "GOLD_DIRECTORY_PARTS",
     "GOLD_SCHEMA_HEADER",
     "GOLD_SUFFIX",
+    "OUTPUT_SCHEMA_HEADER",
     "GoldDocument",
     "GoldUpdateConcurrentChangeError",
     "GoldUpdateError",
@@ -1667,7 +1449,6 @@ __all__ = (
     "GoldUpdateRequest",
     "GoldUpdateResult",
     "GoldUpdateStatus",
-    "OUTPUT_SCHEMA_HEADER",
     "apply_gold_update",
     "build_gold_diff",
     "parse_gold_document",

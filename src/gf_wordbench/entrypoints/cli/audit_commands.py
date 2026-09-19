@@ -27,12 +27,11 @@ class CliRequestLike(Protocol):
     """Minimal canonical parser request accepted by this adapter."""
 
     @property
-    def arguments(self) -> Mapping[str, object]:
-        ...
+    def arguments(self) -> Mapping[str, object]: ...
 
     @property
-    def compatibility_warnings(self) -> tuple[str, ...]:
-        ...
+    def compatibility_warnings(self) -> tuple[str, ...]: ...
+
 
 _MODE_ALIASES: Final[Mapping[str, ValidationMode]] = MappingProxyType(
     {
@@ -109,10 +108,7 @@ class ValidateCommandRequest:
             if type(getattr(self, name)) is not bool:
                 raise TypeError(f"{name} must be bool")
 
-        if (
-            self.compare_previous is not None
-            and type(self.compare_previous) is not bool
-        ):
+        if self.compare_previous is not None and type(self.compare_previous) is not bool:
             raise TypeError("compare_previous must be bool or None")
 
         for name in (
@@ -300,9 +296,7 @@ class ValidateCommandRequest:
         warnings = list(inherited_warnings)
 
         raw_mode = values.get("mode")
-        mode = normalize_validation_mode(
-            DEFAULT_VALIDATION_MODE if raw_mode is None else raw_mode
-        )
+        mode = normalize_validation_mode(DEFAULT_VALIDATION_MODE if raw_mode is None else raw_mode)
         if isinstance(raw_mode, str) and raw_mode.strip().lower() in {
             "file",
             "all",
@@ -350,8 +344,7 @@ class ValidateCommandRequest:
         if legacy_timeout is not None:
             _append_warning(
                 warnings,
-                "legacy --timeout-sec supplied operation-specific "
-                "timeout fallbacks",
+                "legacy --timeout-sec supplied operation-specific timeout fallbacks",
             )
 
         compile_timeout = _timeout_value(
@@ -490,7 +483,6 @@ class ValidateCommandRequest:
         )
 
 
-
 @runtime_checkable
 class AuditApplication(Protocol):
     """Shared application boundary invoked by the CLI adapter."""
@@ -516,30 +508,17 @@ class AuditCommandServices:
 
     def __post_init__(self) -> None:
         if self.run_validation is None and self.application is None:
-            raise TypeError(
-                "run_validation or application must be provided"
-            )
+            raise TypeError("run_validation or application must be provided")
         if self.run_validation is not None and self.application is not None:
-            raise TypeError(
-                "run_validation and application are mutually exclusive"
-            )
-        if self.run_validation is not None and not callable(
-            self.run_validation
-        ):
+            raise TypeError("run_validation and application are mutually exclusive")
+        if self.run_validation is not None and not callable(self.run_validation):
             raise TypeError("run_validation must be callable or None")
         if self.application is not None:
             runner = getattr(self.application, "run_validation", None)
             if not callable(runner):
-                raise TypeError(
-                    "application must expose callable run_validation"
-                )
-        if (
-            self.cancellation_check is not None
-            and not callable(self.cancellation_check)
-        ):
-            raise TypeError(
-                "cancellation_check must be callable or None"
-            )
+                raise TypeError("application must expose callable run_validation")
+        if self.cancellation_check is not None and not callable(self.cancellation_check):
+            raise TypeError("cancellation_check must be callable or None")
         if self.event_sink is not None and not callable(self.event_sink):
             raise TypeError("event_sink must be callable or None")
 
@@ -549,7 +528,7 @@ class AuditCommandServices:
         if self.run_validation is not None:
             return self.run_validation
         assert self.application is not None
-        runner = getattr(self.application, "run_validation")
+        runner = self.application.run_validation
         return runner
 
 
@@ -567,9 +546,7 @@ def execute_validate_cli_command(request: CliRequest) -> RunResult:
     if not isinstance(request, CliRequest):
         raise TypeError("request must be CliRequest")
     if request.command is not CliCommand.VALIDATE:
-        raise CliAuditCommandError(
-            "request does not identify the validate command"
-        )
+        raise CliAuditCommandError("request does not identify the validate command")
 
     normalized = validate_command_request(request)
 
@@ -579,9 +556,7 @@ def execute_validate_cli_command(request: CliRequest) -> RunResult:
 
     application = build_audit_application()
     if not isinstance(application, AuditApplication):
-        raise TypeError(
-            "build_audit_application() must return an AuditApplication"
-        )
+        raise TypeError("build_audit_application() must return an AuditApplication")
 
     return execute_validate_command(
         normalized,
@@ -590,12 +565,7 @@ def execute_validate_cli_command(request: CliRequest) -> RunResult:
 
 
 def execute_validate_command(
-    request: (
-        ValidateCommandRequest
-        | Namespace
-        | Mapping[str, object]
-        | CliRequestLike
-    ),
+    request: (ValidateCommandRequest | Namespace | Mapping[str, object] | CliRequestLike),
     application: AuditApplicationLike | None = None,
     *,
     services: AuditCommandServices | None = None,
@@ -609,43 +579,30 @@ def execute_validate_command(
     """
 
     if application is not None and services is not None:
-        raise TypeError(
-            "application and services cannot both be provided"
-        )
+        raise TypeError("application and services cannot both be provided")
 
     dependency = services if services is not None else application
     if dependency is None:
-        raise TypeError(
-            "an audit application or AuditCommandServices is required"
-        )
+        raise TypeError("an audit application or AuditCommandServices is required")
 
     normalized = validate_command_request(request)
 
     if cancellation_check is not None and not callable(cancellation_check):
-        raise TypeError(
-            "cancellation_check must be callable or None"
-        )
+        raise TypeError("cancellation_check must be callable or None")
     if event_sink is not None and not callable(event_sink):
         raise TypeError("event_sink must be callable or None")
 
+    runner: Callable[..., RunResult]
     if isinstance(dependency, AuditCommandServices):
         runner = dependency.runner()
         effective_cancellation = (
-            cancellation_check
-            if cancellation_check is not None
-            else dependency.cancellation_check
+            cancellation_check if cancellation_check is not None else dependency.cancellation_check
         )
-        effective_sink = (
-            event_sink
-            if event_sink is not None
-            else dependency.event_sink
-        )
+        effective_sink = event_sink if event_sink is not None else dependency.event_sink
     else:
-        runner = getattr(dependency, "run_validation", None)
-        if not callable(runner):
-            raise TypeError(
-                "application must expose callable run_validation"
-            )
+        if not isinstance(dependency, AuditApplication):
+            raise TypeError("application must satisfy AuditApplication")
+        runner = dependency.run_validation
         effective_cancellation = cancellation_check
         effective_sink = event_sink
 
@@ -685,12 +642,7 @@ def normalize_validation_mode(value: object) -> ValidationMode:
 
 
 def validate_command_request(
-    request: (
-        ValidateCommandRequest
-        | Namespace
-        | Mapping[str, object]
-        | CliRequestLike
-    ),
+    request: (ValidateCommandRequest | Namespace | Mapping[str, object] | CliRequestLike),
 ) -> ValidateCommandRequest:
     """Return a normalized request after all CLI-owned validation succeeds."""
 
@@ -702,83 +654,52 @@ def validate_command_request(
 
 def _validate_mode_options(request: ValidateCommandRequest) -> None:
     if request.language_path is not None and request.use_last_language:
-        raise CliAuditCommandError(
-            "--language-path and --last-language cannot be used together"
-        )
+        raise CliAuditCommandError("--language-path and --last-language cannot be used together")
     if request.language_path is None and not request.use_last_language:
         raise CliAuditCommandError(
             "an explicit --language-path or --last-language selection is required"
         )
 
     if request.quiet and request.verbose:
-        raise CliAuditCommandError(
-            "--quiet and --verbose cannot be used together"
-        )
+        raise CliAuditCommandError("--quiet and --verbose cannot be used together")
 
     if request.baseline is not None and request.compare_previous is False:
-        raise CliAuditCommandError(
-            "--baseline cannot be combined with "
-            "--no-compare-previous"
-        )
+        raise CliAuditCommandError("--baseline cannot be combined with --no-compare-previous")
 
     mode = request.mode
     if mode is ValidationMode.QUICK:
         if request.target is None:
-            raise CliAuditCommandError(
-                "quick mode requires --target"
-            )
+            raise CliAuditCommandError("quick mode requires --target")
         if request.checkpoint is not None:
-            raise CliAuditCommandError(
-                "--checkpoint is invalid in quick mode"
-            )
+            raise CliAuditCommandError("--checkpoint is invalid in quick mode")
         if request.max_files != 0:
-            raise CliAuditCommandError(
-                "--max-files is invalid in quick mode"
-            )
+            raise CliAuditCommandError("--max-files is invalid in quick mode")
         return
 
     if request.target is not None:
-        raise CliAuditCommandError(
-            "--target is valid only in quick mode"
-        )
+        raise CliAuditCommandError("--target is valid only in quick mode")
 
     if mode is ValidationMode.CHECKPOINT:
         if request.validation_profile is None:
-            raise CliAuditCommandError(
-                "checkpoint mode requires --profile"
-            )
+            raise CliAuditCommandError("checkpoint mode requires --profile")
         if request.max_files != 0:
-            raise CliAuditCommandError(
-                "--max-files is invalid in checkpoint mode"
-            )
+            raise CliAuditCommandError("--max-files is invalid in checkpoint mode")
         if request.checkpoint is None and not request.scenarios:
-            raise CliAuditCommandError(
-                "checkpoint mode requires --checkpoint or --scenario"
-            )
+            raise CliAuditCommandError("checkpoint mode requires --checkpoint or --scenario")
         return
 
     if request.checkpoint is not None:
-        raise CliAuditCommandError(
-            "--checkpoint is valid only in checkpoint mode"
-        )
+        raise CliAuditCommandError("--checkpoint is valid only in checkpoint mode")
 
     if mode is ValidationMode.RELEASE:
         if request.validation_profile is None:
-            raise CliAuditCommandError(
-                "release mode requires --profile"
-            )
+            raise CliAuditCommandError("release mode requires --profile")
         if request.no_compile:
-            raise CliAuditCommandError(
-                "release mode rejects --no-compile"
-            )
+            raise CliAuditCommandError("release mode rejects --no-compile")
         if request.max_files != 0:
-            raise CliAuditCommandError(
-                "release mode rejects --max-files"
-            )
+            raise CliAuditCommandError("release mode rejects --max-files")
         if request.strict and request.no_version_probe:
-            raise CliAuditCommandError(
-                "strict release mode rejects --no-version-probe"
-            )
+            raise CliAuditCommandError("strict release mode rejects --no-version-probe")
 
 
 def _request_values(
@@ -786,9 +707,7 @@ def _request_values(
 ) -> tuple[Mapping[str, object], tuple[str, ...]]:
     if isinstance(request, Namespace):
         raw = dict(vars(request))
-        warnings = _warnings_from_object(
-            raw.pop("_compatibility_warnings", ())
-        )
+        warnings = _warnings_from_object(raw.pop("_compatibility_warnings", ()))
         return MappingProxyType(raw), warnings
 
     if isinstance(request, Mapping):
@@ -797,9 +716,7 @@ def _request_values(
             if not isinstance(key, str):
                 raise TypeError("request keys must be strings")
             normalized[key] = value
-        warnings = _warnings_from_object(
-            normalized.pop("_compatibility_warnings", ())
-        )
+        warnings = _warnings_from_object(normalized.pop("_compatibility_warnings", ()))
         return MappingProxyType(normalized), warnings
 
     arguments = getattr(request, "arguments", None)
@@ -809,14 +726,11 @@ def _request_values(
             if not isinstance(key, str):
                 raise TypeError("request argument names must be strings")
             normalized[key] = value
-        warnings = _warnings_from_object(
-            getattr(request, "compatibility_warnings", ())
-        )
+        warnings = _warnings_from_object(getattr(request, "compatibility_warnings", ()))
         return MappingProxyType(normalized), warnings
 
     raise TypeError(
-        "request must be ValidateCommandRequest, Namespace, "
-        "mapping, or canonical CliRequest"
+        "request must be ValidateCommandRequest, Namespace, mapping, or canonical CliRequest"
     )
 
 
@@ -824,13 +738,9 @@ def _warnings_from_object(value: object) -> tuple[str, ...]:
     if value is None:
         return ()
     if isinstance(value, (str, bytes, bytearray, Mapping)):
-        raise TypeError(
-            "compatibility warnings must be an iterable of strings"
-        )
+        raise TypeError("compatibility warnings must be an iterable of strings")
     if not isinstance(value, Iterable):
-        raise TypeError(
-            "compatibility warnings must be an iterable of strings"
-        )
+        raise TypeError("compatibility warnings must be an iterable of strings")
     return _text_tuple(
         value,
         field_name="compatibility_warnings",
@@ -864,22 +774,12 @@ def _invoke_validation_runner(
             if parameter.kind is inspect.Parameter.VAR_KEYWORD:
                 supports_kwargs = True
 
-    if (
-        cancellation_check is not None
-        and (
-            signature is None
-            or supports_kwargs
-            or "cancellation_check" in parameter_names
-        )
+    if cancellation_check is not None and (
+        signature is None or supports_kwargs or "cancellation_check" in parameter_names
     ):
         kwargs["cancellation_check"] = cancellation_check
-    if (
-        event_sink is not None
-        and (
-            signature is None
-            or supports_kwargs
-            or "event_sink" in parameter_names
-        )
+    if event_sink is not None and (
+        signature is None or supports_kwargs or "event_sink" in parameter_names
     ):
         kwargs["event_sink"] = event_sink
 
@@ -890,13 +790,21 @@ def _comparison_setting(values: Mapping[str, object]) -> bool | None:
     positive = values.get("compare_previous")
     negative = values.get("no_compare_previous")
 
-    positive_value = None if positive is None else _bool_value(
-        positive,
-        "compare_previous",
+    positive_value = (
+        None
+        if positive is None
+        else _bool_value(
+            positive,
+            "compare_previous",
+        )
     )
-    negative_value = None if negative is None else _bool_value(
-        negative,
-        "no_compare_previous",
+    negative_value = (
+        None
+        if negative is None
+        else _bool_value(
+            negative,
+            "no_compare_previous",
+        )
     )
 
     if positive_value is True and negative_value is True:
@@ -934,14 +842,10 @@ def _scenario_ids(values: Iterable[object]) -> tuple[ScenarioId, ...]:
     seen: set[str] = set()
     for index, value in enumerate(values):
         if index >= _MAX_SCENARIOS:
-            raise CliAuditCommandError(
-                f"scenario selection exceeds {_MAX_SCENARIOS} IDs"
-            )
+            raise CliAuditCommandError(f"scenario selection exceeds {_MAX_SCENARIOS} IDs")
         scenario_id = validate_scenario_id(value)
         if scenario_id in seen:
-            raise CliAuditCommandError(
-                f"duplicate scenario ID {scenario_id!r}"
-            )
+            raise CliAuditCommandError(f"duplicate scenario ID {scenario_id!r}")
         seen.add(scenario_id)
         result.append(scenario_id)
     return tuple(result)
@@ -968,9 +872,7 @@ def _coalesce_alias(
 ) -> object | None:
     canonical_value = values.get(canonical)
     alias_values = [
-        (alias, values.get(alias))
-        for alias in aliases
-        if values.get(alias) is not None
+        (alias, values.get(alias)) for alias in aliases if values.get(alias) is not None
     ]
     if canonical_value is not None and alias_values:
         raise CliAuditCommandError(
@@ -985,8 +887,7 @@ def _coalesce_alias(
         raise CliAuditCommandError("multiple legacy aliases supplied for one option")
     _append_warning(
         warnings,
-        f"legacy --{alias.replace('_', '-')} was normalized to "
-        f"--{canonical.replace('_', '-')}",
+        f"legacy --{alias.replace('_', '-')} was normalized to --{canonical.replace('_', '-')}",
     )
     return value
 
@@ -1002,11 +903,7 @@ def _coalesce_bool_alias(
         values.get(canonical),
         canonical,
     )
-    active_aliases = [
-        alias
-        for alias in aliases
-        if _optional_bool_value(values.get(alias), alias)
-    ]
+    active_aliases = [alias for alias in aliases if _optional_bool_value(values.get(alias), alias)]
     if canonical_value and active_aliases:
         raise CliAuditCommandError(
             f"--{canonical.replace('_', '-')} cannot be combined with its legacy alias"
@@ -1016,8 +913,7 @@ def _coalesce_bool_alias(
     if active_aliases:
         alias = active_aliases[0]
         warnings.append(
-            f"legacy --{alias.replace('_', '-')} was normalized to "
-            f"--{canonical.replace('_', '-')}"
+            f"legacy --{alias.replace('_', '-')} was normalized to --{canonical.replace('_', '-')}"
         )
         return True
     return canonical_value
@@ -1046,9 +942,7 @@ def _object_mapping(
             raise TypeError(f"{field_name} keys must be strings")
         name = key.strip()
         if not name or "\x00" in name:
-            raise CliAuditCommandError(
-                f"{field_name} keys must be non-empty strings without NUL"
-            )
+            raise CliAuditCommandError(f"{field_name} keys must be non-empty strings without NUL")
         normalized[name] = item
     return MappingProxyType(normalized)
 
@@ -1138,9 +1032,7 @@ def _text_tuple(values: Iterable[object], *, field_name: str) -> tuple[str, ...]
             raise TypeError(f"{field_name} must contain strings")
         text = value.strip()
         if not text or "\x00" in text:
-            raise CliAuditCommandError(
-                f"{field_name} must contain non-empty strings without NUL"
-            )
+            raise CliAuditCommandError(f"{field_name} must contain non-empty strings without NUL")
         if text not in seen:
             result.append(text)
             seen.add(text)

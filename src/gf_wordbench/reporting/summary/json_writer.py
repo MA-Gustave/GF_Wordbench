@@ -25,7 +25,7 @@ SUMMARY_FILENAME: Final[str] = "summary.json"
 def _as_json_object(document: Mapping[str, Any]) -> JsonObject:
     if not isinstance(document, dict):
         document = dict(document)
-    return cast(JsonObject, document)
+    return cast("JsonObject", document)
 
 
 def _summary_path(run_result: RunResult) -> Path:

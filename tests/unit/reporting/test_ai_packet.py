@@ -121,15 +121,11 @@ def _packet(
             files_fail=len(failing_files),
             files_error=0,
             files_skipped=0,
-            direct_failures=sum(
-                item.diagnostic_class == "direct" for item in failing_files
-            ),
+            direct_failures=sum(item.diagnostic_class == "direct" for item in failing_files),
             downstream_failures=sum(
                 item.diagnostic_class == "downstream" for item in failing_files
             ),
-            ambiguous_failures=sum(
-                item.diagnostic_class == "ambiguous" for item in failing_files
-            ),
+            ambiguous_failures=sum(item.diagnostic_class == "ambiguous" for item in failing_files),
             scenario_total=len(failing_scenarios),
             scenario_ok=0,
             scenario_fail=sum(item.status == "FAIL" for item in failing_scenarios),
@@ -143,9 +139,7 @@ def _packet(
                 if failing_files or failing_scenarios
                 else "No failing file or scenario was recorded."
             ),
-            diagnostic_class=(
-                "direct" if failing_files or failing_scenarios else "ok"
-            ),
+            diagnostic_class=("direct" if failing_files or failing_scenarios else "ok"),
             candidate_focus=(
                 "Inspect the first supported diagnostic."
                 if failing_files or failing_scenarios
@@ -209,9 +203,7 @@ def test_evidence_catalog_is_deterministic_and_budgeted() -> None:
     assert [item.line_limit for item in catalog.items] == [4, 2]
     assert catalog.omitted_count == 1
     assert catalog.omitted[0].reason == "duplicate evidence identity"
-    assert evidence_ids_for_subject(catalog, "src/Grammar.gf") == (
-        "EV-FILE-001",
-    )
+    assert evidence_ids_for_subject(catalog, "src/Grammar.gf") == ("EV-FILE-001",)
     assert tuple(catalog.by_id()) == ("EV-PROCESS-001", "EV-FILE-001")
 
 
@@ -238,9 +230,7 @@ def test_unsafe_optional_evidence_is_omitted_but_required_evidence_is_disclosed(
     retained = catalog.items[0]
     assert retained.subject_id == "required"
     assert retained.availability is EvidenceAvailability.UNREADABLE
-    assert retained.metadata["path_error"] == (
-        "absolute evidence path is outside approved roots"
-    )
+    assert retained.metadata["path_error"] == ("absolute evidence path is outside approved roots")
     assert catalog.omitted[0].candidate.subject_id == "optional"
     assert any("unsafe or invalid path" in warning for warning in catalog.warnings)
 
@@ -267,8 +257,7 @@ def test_release_significant_omission_is_never_silent() -> None:
     assert [item.subject_id for item in catalog.items] == ["src/A.gf"]
     assert catalog.release_significant_omissions
     assert any(
-        "release-significant evidence items were omitted" in warning
-        for warning in catalog.warnings
+        "release-significant evidence items were omitted" in warning for warning in catalog.warnings
     )
 
 
@@ -276,14 +265,20 @@ def test_evidence_paths_are_portable_and_contained(tmp_path: Path) -> None:
     run_root = tmp_path / "run"
     evidence_path = run_root / "raw" / "compile" / "Grammar.stderr.log"
 
-    assert ensure_evidence_path(
-        evidence_path,
-        allowed_roots=(run_root,),
-    ) == evidence_path
-    assert portable_evidence_path(
-        evidence_path,
-        root=run_root,
-    ).as_posix() == "raw/compile/Grammar.stderr.log"
+    assert (
+        ensure_evidence_path(
+            evidence_path,
+            allowed_roots=(run_root,),
+        )
+        == evidence_path
+    )
+    assert (
+        portable_evidence_path(
+            evidence_path,
+            root=run_root,
+        ).as_posix()
+        == "raw/compile/Grammar.stderr.log"
+    )
 
     catalog = build_evidence_catalog(
         (_candidate("src/Grammar.gf", evidence_path),),
@@ -424,9 +419,7 @@ def test_excerpt_budget_clips_available_evidence_without_hiding_unavailable() ->
 
 
 def test_renderer_always_emits_required_soft_schema_in_order() -> None:
-    rendered = render_ai_ready_packet(
-        _packet(mode="file", include_analysis_request=False)
-    )
+    rendered = render_ai_ready_packet(_packet(mode="file", include_analysis_request=False))
 
     assert rendered.startswith(f"{FIRST_HEADING}\n\n")
     assert _heading_positions(rendered) == sorted(_heading_positions(rendered))
@@ -510,20 +503,18 @@ def test_renderer_orders_failures_and_artifacts_deterministically() -> None:
             failing_scenarios=failing_scenarios,
             evidence=evidence,
             artifacts=artifacts,
-            top_errors=(
-                PacketTopError(count=2, error_kind="TYPE", message="Type mismatch"),
-            ),
+            top_errors=(PacketTopError(count=2, error_kind="TYPE", message="Type mismatch"),),
             diagnosis_evidence_ids=("EV-FILE-001",),
         )
     )
 
     assert rendered.index("### src/A.gf") < rendered.index("### src/Z.gf")
-    assert rendered.index("### required-scenario") < rendered.index(
-        "### optional-scenario"
+    assert rendered.index("### required-scenario") < rendered.index("### optional-scenario")
+    assert (
+        rendered.index("`summary_json`: `summary.json`")
+        < rendered.index("`manifest`: unavailable")
+        < rendered.index("`pgf`: `artifacts/pgf/Lang.pgf`")
     )
-    assert rendered.index("`summary_json`: `summary.json`") < rendered.index(
-        "`manifest`: unavailable"
-    ) < rendered.index("`pgf`: `artifacts/pgf/Lang.pgf`")
     assert UNTRUSTED_EVIDENCE_LABEL in rendered
     assert "Evidence unavailable: referenced file is missing" in rendered
     assert "2 × [TYPE] Type mismatch" in rendered

@@ -1,15 +1,15 @@
 # GF Wordbench — Configuration Overview
 
-**Document ID:** `GF-WB-CONFIGURATION-OVERVIEW`  
-**Status:** Normative overview  
-**Implementation status:** Not established by this documentation update  
-**Verification status:** Requires current code and reproducible test evidence  
-**Applies to:** framework defaults, path-resolved language startup, optional validation profiles, application state, environment resolution, CLI, GUI, bootstrap, validation runs, reports, migrations and tests  
-**Owner:** GF Wordbench maintainers  
-**Canonical path:** `docs/configuration/CONFIGURATION_OVERVIEW.md`  
-**Configuration contract:** `2.0.0`  
-**Governing decision:** `docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`  
-**Superseded configuration model:** catalog-driven startup and mandatory `project/project.toml` startup authority  
+**Document ID:** `GF-WB-CONFIGURATION-OVERVIEW`
+**Status:** Normative overview
+**Implementation status:** Not established by this documentation update
+**Verification status:** Requires current code and reproducible test evidence
+**Applies to:** framework defaults, path-resolved language startup, optional validation profiles, application state, environment resolution, CLI, GUI, bootstrap, validation runs, reports, migrations and tests
+**Owner:** GF Wordbench maintainers
+**Canonical path:** `docs/configuration/CONFIGURATION_OVERVIEW.md`
+**Configuration contract:** `2.0.0`
+**Governing decision:** `docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`
+**Superseded configuration model:** catalog-driven startup and mandatory `project/project.toml` startup authority
 **Last reviewed:** `2026-07-30`
 
 ---

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import math
-import tomllib
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from enum import Enum
+import math
 from pathlib import Path, PureWindowsPath
+import tomllib
 from typing import cast
 
 import pytest
@@ -56,8 +56,7 @@ def test_json_public_format_constants_are_canonical() -> None:
 
 def test_parse_json_preserves_order_unicode_and_nested_values() -> None:
     document = parse_json(
-        '{"schema_id":"gf-wordbench.test","label":"élève",'
-        '"values":[1,true,null,{"z":2,"a":3}]}',
+        '{"schema_id":"gf-wordbench.test","label":"élève","values":[1,true,null,{"z":2,"a":3}]}',
         source="memory.json",
     )
 
@@ -69,7 +68,7 @@ def test_parse_json_preserves_order_unicode_and_nested_values() -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        '[1, 2, 3]',
+        "[1, 2, 3]",
         '"text"',
         "42",
         "true",
@@ -154,9 +153,9 @@ def test_parse_json_rejects_decoded_surrogate_code_points() -> None:
 @pytest.mark.parametrize(
     ("text", "source", "exception", "match"),
     [
-        (cast(str, 1), "source", TypeError, "text must be a string"),
+        (cast("str", 1), "source", TypeError, "text must be a string"),
         ("{}", "", ValueError, "source must be a non-empty string"),
-        ("{}", cast(str, 1), ValueError, "source must be a non-empty string"),
+        ("{}", cast("str", 1), ValueError, "source must be a non-empty string"),
     ],
 )
 def test_parse_json_validates_public_arguments(
@@ -171,7 +170,7 @@ def test_parse_json_validates_public_arguments(
 
 def test_read_json_accepts_utf8_bom_and_crlf(tmp_path: Path) -> None:
     source = tmp_path / "legacy.json"
-    source.write_bytes(b"\xef\xbb\xbf{\r\n  \"label\": \"caf\xc3\xa9\"\r\n}\r\n")
+    source.write_bytes(b'\xef\xbb\xbf{\r\n  "label": "caf\xc3\xa9"\r\n}\r\n')
 
     assert read_json(source) == {"label": "café"}
 
@@ -248,14 +247,14 @@ def test_format_json_is_utf8_ready_ordered_and_newline_terminated() -> None:
     rendered = format_json(document)
 
     assert rendered == (
-        '{\n'
+        "{\n"
         '  "schema_id": "gf-wordbench.test",\n'
         '  "label": "élève",\n'
         '  "nested": {\n'
         '    "z": 2,\n'
         '    "a": 1\n'
-        '  }\n'
-        '}\n'
+        "  }\n"
+        "}\n"
     )
     assert rendered.encode(JSON_ENCODING).decode(JSON_ENCODING) == rendered
 
@@ -263,11 +262,11 @@ def test_format_json_is_utf8_ready_ordered_and_newline_terminated() -> None:
 @pytest.mark.parametrize(
     ("document", "message"),
     [
-        (cast(JsonObject, []), "one object at the root"),
-        (cast(JsonObject, {1: "value"}), "keys must be strings"),
-        (cast(JsonObject, {"value": object()}), "non-JSON value"),
-        (cast(JsonObject, {"value": math.inf}), "non-finite number"),
-        (cast(JsonObject, {"value": "\ud800"}), "cannot be encoded as UTF-8"),
+        (cast("JsonObject", []), "one object at the root"),
+        (cast("JsonObject", {1: "value"}), "keys must be strings"),
+        (cast("JsonObject", {"value": object()}), "non-JSON value"),
+        (cast("JsonObject", {"value": math.inf}), "non-finite number"),
+        (cast("JsonObject", {"value": "\ud800"}), "cannot be encoded as UTF-8"),
     ],
 )
 def test_format_json_rejects_noncanonical_values(
@@ -284,7 +283,7 @@ def test_format_json_rejects_noncanonical_values(
 def test_format_json_rejects_circular_containers() -> None:
     values: list[object] = []
     values.append(values)
-    document = cast(JsonObject, {"values": values})
+    document = cast("JsonObject", {"values": values})
 
     with pytest.raises(ContractViolationError, match="circular reference"):
         format_json(document)
@@ -311,13 +310,13 @@ def test_write_json_does_not_replace_existing_file_when_formatting_fails(
     destination.write_bytes(original)
 
     with pytest.raises(ContractViolationError):
-        write_json(destination, cast(JsonObject, {"value": math.nan}))
+        write_json(destination, cast("JsonObject", {"value": math.nan}))
 
     assert destination.read_bytes() == original
 
 
 def test_loads_toml_accepts_a_single_leading_bom() -> None:
-    document = loads_toml("\ufeffname = \"café\"\n[tool]\nenabled = true\n")
+    document = loads_toml('\ufeffname = "café"\n[tool]\nenabled = true\n')
 
     assert document == {"name": "café", "tool": {"enabled": True}}
 
@@ -329,9 +328,7 @@ def test_loads_toml_preserves_standard_library_syntax_failures() -> None:
 
 def test_read_toml_accepts_utf8_bom_and_crlf(tmp_path: Path) -> None:
     source = tmp_path / "project.toml"
-    source.write_bytes(
-        b"\xef\xbb\xbfproject_id = \"demo\"\r\n[validation]\r\nstrict = true\r\n"
-    )
+    source.write_bytes(b'\xef\xbb\xbfproject_id = "demo"\r\n[validation]\r\nstrict = true\r\n')
 
     assert read_toml(source) == {
         "project_id": "demo",
@@ -381,12 +378,7 @@ def test_dumps_canonical_toml_preserves_scalar_order_before_child_tables() -> No
     }
 
     assert dumps_canonical_toml(document) == (
-        'schema_version = "1.0"\n'
-        'enabled = true\n'
-        '\n'
-        '[project]\n'
-        'z = 2\n'
-        'a = "first"\n'
+        'schema_version = "1.0"\nenabled = true\n\n[project]\nz = 2\na = "first"\n'
     )
 
 
@@ -399,8 +391,7 @@ def test_dumps_canonical_toml_quotes_keys_and_escapes_strings() -> None:
     )
 
     assert rendered == (
-        '"key with spaces" = "line1\\nline2\\t\\"quoted\\"\\\\end\\u007F"\n'
-        'bare_key-1 = "ok"\n'
+        '"key with spaces" = "line1\\nline2\\t\\"quoted\\"\\\\end\\u007F"\nbare_key-1 = "ok"\n'
     )
 
 
@@ -413,14 +404,7 @@ def test_dumps_canonical_toml_renders_arrays_and_inline_tables() -> None:
     )
 
     assert rendered == (
-        "values = [\n"
-        "  1,\n"
-        '  "two",\n'
-        "  true,\n"
-        "]\n"
-        "records = [\n"
-        '  { name = "alpha", count = 2 },\n'
-        "]\n"
+        'values = [\n  1,\n  "two",\n  true,\n]\nrecords = [\n  { name = "alpha", count = 2 },\n]\n'
     )
 
 
@@ -484,7 +468,7 @@ def test_dumps_canonical_toml_round_trips_supported_document() -> None:
         ({"value": math.inf}, ValueError, "non-finite floats"),
         ({"value": datetime(2026, 7, 25, 12, 0)}, ValueError, "timezone-aware"),
         (
-            {"value": time(12, 0, tzinfo=timezone.utc)},
+            {"value": time(12, 0, tzinfo=UTC)},
             ValueError,
             "must not carry a timezone",
         ),
@@ -504,10 +488,10 @@ def test_dumps_canonical_toml_rejects_unsupported_values(
 @pytest.mark.parametrize(
     "document",
     [
-        cast(dict[str, object], {1: "value"}),
-        cast(dict[str, object], {_TextMode.QUICK: "value"}),
-        {"table": cast(dict[str, object], {1: "value"})},
-        {"items": [cast(dict[str, object], {1: "value"})]},
+        cast("dict[str, object]", {1: "value"}),
+        cast("dict[str, object]", {_TextMode.QUICK: "value"}),
+        {"table": cast("dict[str, object]", {1: "value"})},
+        {"items": [cast("dict[str, object]", {1: "value"})]},
     ],
 )
 def test_dumps_canonical_toml_requires_plain_string_keys(

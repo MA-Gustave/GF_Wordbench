@@ -122,7 +122,7 @@ def test_stream_bundle_keeps_stdout_and_stderr_separate_and_freezes_metadata(
     assert bundle.stderr.stream is DiagnosticStream.STDERR
     assert bundle.stdout.evidence_path == stdout_path
     assert bundle.stderr.evidence_path == stderr_path
-    assert bundle.stdout.byte_length == len("compiler banner\n".encode("utf-8"))
+    assert bundle.stdout.byte_length == len(b"compiler banner\n")
     assert bundle.stderr.truncated
     assert bundle.truncated
     assert bundle.has_text
@@ -186,11 +186,14 @@ def test_line_lookup_and_excerpt_remain_bound_to_stream_identity() -> None:
         ("stderr", 1),
         ("stderr", 2),
     )
-    assert find_line_index(
-        lines,
-        stream=DiagnosticStream.STDERR,
-        line_number=9,
-    ) is None
+    assert (
+        find_line_index(
+            lines,
+            stream=DiagnosticStream.STDERR,
+            line_number=9,
+        )
+        is None
+    )
 
 
 def test_strict_utf8_decode_rejects_invalid_evidence() -> None:
@@ -216,15 +219,12 @@ def test_lossy_utf8_decode_records_exact_invalid_byte_spans(
     )
 
     assert document.stream is DiagnosticStream.STDERR
-    assert document.text == "ok\uFFFDbad\uFFFD"
+    assert document.text == "ok\ufffdbad\ufffd"
     assert document.encoding == "utf-8"
     assert document.byte_length == 8
     assert document.truncated
     assert document.evidence_path == evidence_path
-    assert tuple(
-        (issue.stream, issue.start, issue.end)
-        for issue in document.decode_issues
-    ) == (
+    assert tuple((issue.stream, issue.start, issue.end) for issue in document.decode_issues) == (
         (DiagnosticStream.STDERR, 2, 3),
         (DiagnosticStream.STDERR, 6, 8),
     )
@@ -397,9 +397,7 @@ def test_windows_paths_with_spaces_and_unicode_are_supported() -> None:
     )
 
     assert location is not None
-    assert location.source_path_raw == (
-        r"C:\workspace with spaces\project\lib\src\GrammaireÉ.gf"
-    )
+    assert location.source_path_raw == (r"C:\workspace with spaces\project\lib\src\GrammaireÉ.gf")
     assert location.source_path_normalized == "lib/src/GrammaireÉ.gf"
     assert location.line == 12
     assert location.column == 4
@@ -411,12 +409,8 @@ def test_quoted_paths_with_spaces_are_supported() -> None:
     )
 
     assert location is not None
-    assert location.source_path_raw == (
-        r"C:\workspace with spaces\GrammarEx.gf"
-    )
-    assert location.source_path_normalized == (
-        "C:/workspace with spaces/GrammarEx.gf"
-    )
+    assert location.source_path_raw == (r"C:\workspace with spaces\GrammarEx.gf")
+    assert location.source_path_normalized == ("C:/workspace with spaces/GrammarEx.gf")
     assert (location.line, location.column) == (9, 2)
 
 
@@ -446,22 +440,19 @@ def test_embedded_location_extraction_reports_the_exact_source_span() -> None:
     )
 
     assert matched is not None
-    assert matched.matched_text == (
-        r"C:\workspace\project\lib\src\GrammarEx.gf:23:5"
-    )
+    assert matched.matched_text == (r"C:\workspace\project\lib\src\GrammarEx.gf:23:5")
     assert text[matched.start : matched.end] == matched.matched_text
-    assert matched.location.source_path_raw == (
-        r"C:\workspace\project\lib\src\GrammarEx.gf"
-    )
-    assert matched.location.source_path_normalized == (
-        "lib/src/GrammarEx.gf"
-    )
+    assert matched.location.source_path_raw == (r"C:\workspace\project\lib\src\GrammarEx.gf")
+    assert matched.location.source_path_normalized == ("lib/src/GrammarEx.gf")
 
 
 def test_prefix_match_does_not_accept_command_echo_without_coordinates() -> None:
-    assert match_source_location_prefix(
-        "gf -make lib/src/GrammarEx.gf",
-    ) is None
+    assert (
+        match_source_location_prefix(
+            "gf -make lib/src/GrammarEx.gf",
+        )
+        is None
+    )
     assert parse_source_location("lib/src/GrammarEx.gf") is None
 
 
@@ -500,10 +491,13 @@ def test_path_normalization_is_lexical_and_only_relativizes_contained_paths(
     project_root: str,
     expected: str,
 ) -> None:
-    assert normalize_source_path(
-        raw_path,
-        project_root=project_root,
-    ) == expected
+    assert (
+        normalize_source_path(
+            raw_path,
+            project_root=project_root,
+        )
+        == expected
+    )
 
 
 @pytest.mark.parametrize(

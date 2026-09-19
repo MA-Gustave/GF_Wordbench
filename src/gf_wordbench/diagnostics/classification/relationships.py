@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -124,9 +124,7 @@ def normalize_blocker_identity(value: object) -> BlockerIdentity:
     """Return a stable project-relative POSIX or namespaced identity."""
 
     if not isinstance(value, str):
-        raise TypeError(
-            f"blocker identity must be a string, got {type(value).__name__}"
-        )
+        raise TypeError(f"blocker identity must be a string, got {type(value).__name__}")
 
     candidate = value.strip()
     if not candidate:
@@ -203,15 +201,13 @@ def normalize_blocker_identities(
         else blocker_identity_key(self_identity, case_sensitive=case_sensitive)
     )
     excluded_keys = frozenset(
-        blocker_identity_key(value, case_sensitive=case_sensitive)
-        for value in excluded
+        blocker_identity_key(value, case_sensitive=case_sensitive) for value in excluded
     )
     allowed_keys = (
         None
         if allowed is None
         else frozenset(
-            blocker_identity_key(value, case_sensitive=case_sensitive)
-            for value in allowed
+            blocker_identity_key(value, case_sensitive=case_sensitive) for value in allowed
         )
     )
 
@@ -267,9 +263,7 @@ def relationship_fields(
         return False, canonical_blockers
 
     if canonical_blockers:
-        raise ValueError(
-            f"{canonical_class.value!r} diagnostic class requires empty blockers"
-        )
+        raise ValueError(f"{canonical_class.value!r} diagnostic class requires empty blockers")
 
     return canonical_class is DiagnosticClass.DIRECT, ()
 
@@ -292,10 +286,7 @@ def validate_relationship_fields(
         self_identity=self_identity,
     )
     if is_direct is not expected_direct:
-        raise ValueError(
-            "is_direct must equal "
-            "(diagnostic_class == DiagnosticClass.DIRECT)"
-        )
+        raise ValueError("is_direct must equal (diagnostic_class == DiagnosticClass.DIRECT)")
     return canonical_blockers
 
 
@@ -319,9 +310,7 @@ def build_blocker_graph(
     )
 
     raw_subjects = (
-        tuple(immediate_blockers.keys())
-        if known_subjects is None
-        else tuple(known_subjects)
+        tuple(immediate_blockers.keys()) if known_subjects is None else tuple(known_subjects)
     )
     subjects = normalize_blocker_identities(
         raw_subjects,
@@ -354,13 +343,9 @@ def build_blocker_graph(
         subject = normalize_blocker_identity(raw_subject)
         key = blocker_identity_key(subject, case_sensitive=case_sensitive)
         if key not in subject_by_key:
-            raise ValueError(
-                f"blocker-map subject is not declared: {subject!r}"
-            )
+            raise ValueError(f"blocker-map subject is not declared: {subject!r}")
         if key in source_by_key:
-            raise ValueError(
-                f"duplicate blocker-map subject after normalization: {subject!r}"
-            )
+            raise ValueError(f"duplicate blocker-map subject after normalization: {subject!r}")
         source_by_key[key] = raw_blockers
 
     edges: dict[str, BlockerSequence] = {}
@@ -373,9 +358,7 @@ def build_blocker_graph(
         )
         raw_blockers = source_by_key.get(subject_key, ())
         if isinstance(raw_blockers, (str, bytes)):
-            raise TypeError(
-                f"blockers for {subject!r} must be an iterable, not one string"
-            )
+            raise TypeError(f"blockers for {subject!r} must be an iterable, not one string")
 
         known_values: list[str] = []
         unknown_values: list[str] = []
@@ -465,9 +448,7 @@ def find_blocker_cycles(graph: BlockerGraph) -> tuple[BlockerSequence, ...]:
                 break
 
         if len(component) > 1:
-            cycles.append(
-                tuple(sorted(component, key=_identity_sort_key))
-            )
+            cycles.append(tuple(sorted(component, key=_identity_sort_key)))
 
     for subject in graph.subjects:
         if subject not in indexes:
@@ -476,9 +457,7 @@ def find_blocker_cycles(graph: BlockerGraph) -> tuple[BlockerSequence, ...]:
     return tuple(
         sorted(
             cycles,
-            key=lambda cycle: tuple(
-                _identity_sort_key(value) for value in cycle
-            ),
+            key=lambda cycle: tuple(_identity_sort_key(value) for value in cycle),
         )
     )
 
@@ -504,9 +483,7 @@ def collapse_blocker_graph(
         )
     )
     cycles = find_blocker_cycles(graph)
-    cycle_nodes = frozenset(
-        subject for cycle in cycles for subject in cycle
-    )
+    cycle_nodes = frozenset(subject for cycle in cycles for subject in cycle)
 
     memo: dict[tuple[str, str], frozenset[str]] = {}
 
@@ -534,11 +511,7 @@ def collapse_blocker_graph(
 
         blockers = graph.edges[node]
         if not blockers:
-            result = (
-                frozenset((node,))
-                if terminal_subjects_are_roots
-                else frozenset()
-            )
+            result = frozenset((node,)) if terminal_subjects_are_roots else frozenset()
             memo[cache_key] = result
             return result
 
@@ -583,8 +556,7 @@ def collapse_blocker_graph(
         root_map[subject] = canonical_roots
 
         has_relationship_evidence = bool(
-            graph.edges[subject]
-            or graph.unknown_references.get(subject)
+            graph.edges[subject] or graph.unknown_references.get(subject)
         )
         if has_relationship_evidence and not canonical_roots:
             unresolved.append(subject)
@@ -656,7 +628,7 @@ def has_blocker_path(
 
 
 def _freeze_blocker_map(
-    values: Mapping[object, Iterable[object]],
+    values: Mapping[str, Iterable[object]],
     *,
     subjects: frozenset[str],
     allow_external: frozenset[str],
@@ -684,15 +656,12 @@ def _freeze_blocker_map(
             rendered = ", ".join(sorted(missing, key=_identity_sort_key))
             raise ValueError(f"edges omit graph subjects: {rendered}")
 
-    ordered = {
-        subject: copied[subject]
-        for subject in sorted(copied, key=_identity_sort_key)
-    }
+    ordered = {subject: copied[subject] for subject in sorted(copied, key=_identity_sort_key)}
     return MappingProxyType(ordered)
 
 
 def _freeze_closed_map(
-    values: Mapping[object, Iterable[object]],
+    values: Mapping[str, Iterable[object]],
 ) -> BlockerMap:
     if not isinstance(values, Mapping):
         raise TypeError("blocker map must be a mapping")
@@ -706,7 +675,7 @@ def _freeze_closed_map(
 
 
 def _freeze_result_map(
-    values: Mapping[object, Iterable[object]],
+    values: Mapping[str, Iterable[object]],
     *,
     subjects: frozenset[str],
 ) -> BlockerMap:
@@ -716,9 +685,7 @@ def _freeze_result_map(
     for raw_subject, raw_blockers in values.items():
         subject = normalize_blocker_identity(raw_subject)
         if subject not in subjects:
-            raise ValueError(
-                f"root blocker source is not a subject: {subject!r}"
-            )
+            raise ValueError(f"root blocker source is not a subject: {subject!r}")
         if subject in copied:
             raise ValueError(f"duplicate root blocker source: {subject!r}")
         copied[subject] = normalize_blocker_identities(
@@ -730,15 +697,12 @@ def _freeze_result_map(
         rendered = ", ".join(sorted(missing, key=_identity_sort_key))
         raise ValueError(f"root_blockers omit subjects: {rendered}")
     return MappingProxyType(
-        {
-            subject: copied[subject]
-            for subject in sorted(copied, key=_identity_sort_key)
-        }
+        {subject: copied[subject] for subject in sorted(copied, key=_identity_sort_key)}
     )
 
 
 def _freeze_unknown_map(
-    values: Mapping[object, Iterable[object]],
+    values: Mapping[str, Iterable[object]],
     *,
     subjects: frozenset[str],
     known: frozenset[str],
@@ -749,24 +713,17 @@ def _freeze_unknown_map(
     for raw_subject, raw_references in values.items():
         subject = normalize_blocker_identity(raw_subject)
         if subject not in subjects:
-            raise ValueError(
-                f"unknown-reference source is not a subject: {subject!r}"
-            )
+            raise ValueError(f"unknown-reference source is not a subject: {subject!r}")
         references = normalize_blocker_identities(
             raw_references,
             self_identity=subject,
         )
         if any(reference in known for reference in references):
-            raise ValueError(
-                "unknown_references contains a declared subject or external root"
-            )
+            raise ValueError("unknown_references contains a declared subject or external root")
         if references:
             copied[subject] = references
     return MappingProxyType(
-        {
-            subject: copied[subject]
-            for subject in sorted(copied, key=_identity_sort_key)
-        }
+        {subject: copied[subject] for subject in sorted(copied, key=_identity_sort_key)}
     )
 
 
@@ -791,9 +748,7 @@ def _normalize_cycles(
     return tuple(
         sorted(
             cycles,
-            key=lambda cycle: tuple(
-                _identity_sort_key(identity) for identity in cycle
-            ),
+            key=lambda cycle: tuple(_identity_sort_key(identity) for identity in cycle),
         )
     )
 

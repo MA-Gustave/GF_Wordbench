@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import os
-import stat
-from dataclasses import dataclass
 from pathlib import Path
+import stat
 from typing import BinaryIO, Final
 
 HASH_ALGORITHM: Final[str] = "sha256"
@@ -159,20 +159,12 @@ class HashVerification:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", _path(self.path))
-        if (
-            type(self.expected_size_bytes) is not int
-            or self.expected_size_bytes < 0
-        ):
-            raise ValueError(
-                "expected_size_bytes must be a non-negative integer"
-            )
+        if type(self.expected_size_bytes) is not int or self.expected_size_bytes < 0:
+            raise ValueError("expected_size_bytes must be a non-negative integer")
         if self.actual_size_bytes is not None and (
-            type(self.actual_size_bytes) is not int
-            or self.actual_size_bytes < 0
+            type(self.actual_size_bytes) is not int or self.actual_size_bytes < 0
         ):
-            raise ValueError(
-                "actual_size_bytes must be a non-negative integer or None"
-            )
+            raise ValueError("actual_size_bytes must be a non-negative integer or None")
         object.__setattr__(
             self,
             "expected_sha256",
@@ -230,9 +222,7 @@ def normalize_hash_algorithm(value: str) -> str:
         raise TypeError("hash algorithm must be a string")
     normalized = value.strip().lower().replace("-", "")
     if normalized != HASH_ALGORITHM:
-        raise UnsupportedHashAlgorithmError(
-            f"Unsupported hash algorithm: {value!r}"
-        )
+        raise UnsupportedHashAlgorithmError(f"Unsupported hash algorithm: {value!r}")
     return HASH_ALGORITHM
 
 
@@ -240,9 +230,8 @@ def is_sha256(value: object) -> bool:
     if not isinstance(value, str):
         return False
     candidate = value.strip()
-    return (
-        len(candidate) == SHA256_HEX_LENGTH
-        and all(character in "0123456789abcdefABCDEF" for character in candidate)
+    return len(candidate) == SHA256_HEX_LENGTH and all(
+        character in "0123456789abcdefABCDEF" for character in candidate
     )
 
 
@@ -251,9 +240,7 @@ def normalize_sha256(value: str) -> str:
         raise TypeError("SHA-256 digest must be a string")
     candidate = value.strip()
     if not is_sha256(candidate):
-        raise ValueError(
-            "SHA-256 digest must contain exactly 64 hexadecimal characters"
-        )
+        raise ValueError("SHA-256 digest must contain exactly 64 hexadecimal characters")
     return candidate.lower()
 
 
@@ -334,13 +321,10 @@ def hash_file(
                 if (
                     hashed.sha256 != second.sha256
                     or hashed.size_bytes != second.size_bytes
-                    or not hashed.identity.same_final_bytes_identity(
-                        second.identity
-                    )
+                    or not hashed.identity.same_final_bytes_identity(second.identity)
                 ):
                     raise ArtifactChangedDuringHashError(
-                        f"Artifact changed during strict re-open verification: "
-                        f"{target}"
+                        f"Artifact changed during strict re-open verification: {target}"
                     )
                 hashed = FileHash(
                     path=hashed.path,
@@ -541,8 +525,8 @@ def matches_file_hash(
 class Sha256FileHasher:
     __slots__ = (
         "_chunk_size_bytes",
-        "_reject_symlinks",
         "_mutation_retries",
+        "_reject_symlinks",
         "_verify_reopen",
     )
 
@@ -594,9 +578,7 @@ class Sha256FileHasher:
         return hash_file(
             path,
             chunk_size_bytes=(
-                self._chunk_size_bytes
-                if chunk_size_bytes is None
-                else chunk_size_bytes
+                self._chunk_size_bytes if chunk_size_bytes is None else chunk_size_bytes
             ),
             reject_symlinks=self._reject_symlinks,
             mutation_retries=self._mutation_retries,
@@ -616,9 +598,7 @@ class Sha256FileHasher:
             expected_size_bytes=expected_size_bytes,
             expected_sha256=expected_sha256,
             chunk_size_bytes=(
-                self._chunk_size_bytes
-                if chunk_size_bytes is None
-                else chunk_size_bytes
+                self._chunk_size_bytes if chunk_size_bytes is None else chunk_size_bytes
             ),
             reject_symlinks=self._reject_symlinks,
             mutation_retries=self._mutation_retries,
@@ -638,19 +618,13 @@ def _hash_file_once(
     try:
         path_before_stat = path.lstat()
     except FileNotFoundError as exc:
-        raise ArtifactNotFoundError(
-            f"Artifact does not exist: {path}"
-        ) from exc
+        raise ArtifactNotFoundError(f"Artifact does not exist: {path}") from exc
 
     path_before = FileIdentity.from_stat(path_before_stat)
     if path_before.is_symlink and reject_symlinks:
-        raise ArtifactSymlinkError(
-            f"Artifact is a symbolic link: {path}"
-        )
+        raise ArtifactSymlinkError(f"Artifact is a symbolic link: {path}")
     if not path_before.is_symlink and not path_before.is_regular_file:
-        raise ArtifactNotRegularFileError(
-            f"Artifact is not a regular file: {path}"
-        )
+        raise ArtifactNotRegularFileError(f"Artifact is not a regular file: {path}")
 
     descriptor = _open_read_only(
         path,
@@ -661,9 +635,7 @@ def _hash_file_once(
             descriptor = -1
             open_before = FileIdentity.from_stat(os.fstat(stream.fileno()))
             if not open_before.is_regular_file:
-                raise ArtifactNotRegularFileError(
-                    f"Artifact is not a regular file: {path}"
-                )
+                raise ArtifactNotRegularFileError(f"Artifact is not a regular file: {path}")
             if not path_before.same_file(open_before):
                 raise ArtifactChangedDuringHashError(
                     f"Artifact identity changed before hashing: {path}"
@@ -690,17 +662,11 @@ def _hash_file_once(
             f"Artifact became a symbolic link during hashing: {path}"
         )
     if not open_before.same_final_bytes_identity(open_after):
-        raise ArtifactChangedDuringHashError(
-            f"Artifact changed while its bytes were read: {path}"
-        )
+        raise ArtifactChangedDuringHashError(f"Artifact changed while its bytes were read: {path}")
     if not open_after.same_final_bytes_identity(path_after):
-        raise ArtifactChangedDuringHashError(
-            f"Artifact changed before hashing completed: {path}"
-        )
+        raise ArtifactChangedDuringHashError(f"Artifact changed before hashing completed: {path}")
     if bytes_read != open_after.size_bytes:
-        raise ArtifactChangedDuringHashError(
-            f"Artifact byte count changed during hashing: {path}"
-        )
+        raise ArtifactChangedDuringHashError(f"Artifact byte count changed during hashing: {path}")
 
     return FileHash(
         path=path,
@@ -725,16 +691,12 @@ def _open_read_only(
     try:
         return os.open(path, flags)
     except FileNotFoundError as exc:
-        raise ArtifactNotFoundError(
-            f"Artifact does not exist: {path}"
-        ) from exc
+        raise ArtifactNotFoundError(f"Artifact does not exist: {path}") from exc
     except OSError as exc:
         if reject_symlinks:
             try:
                 if path.is_symlink():
-                    raise ArtifactSymlinkError(
-                        f"Artifact is a symbolic link: {path}"
-                    ) from exc
+                    raise ArtifactSymlinkError(f"Artifact is a symbolic link: {path}") from exc
             except OSError:
                 pass
         raise
@@ -754,10 +716,7 @@ def _chunk_size(value: object) -> int:
     if value <= 0:
         raise ValueError("chunk_size_bytes must be positive")
     if value > MAX_HASH_CHUNK_SIZE_BYTES:
-        raise ValueError(
-            f"chunk_size_bytes must not exceed "
-            f"{MAX_HASH_CHUNK_SIZE_BYTES}"
-        )
+        raise ValueError(f"chunk_size_bytes must not exceed {MAX_HASH_CHUNK_SIZE_BYTES}")
     return value
 
 
@@ -787,20 +746,20 @@ def _exception_text(exc: BaseException) -> str:
 __all__ = (
     "DEFAULT_HASH_CHUNK_SIZE_BYTES",
     "DEFAULT_MUTATION_RETRIES",
-    "FileHash",
-    "FileHasher",
-    "FileIdentity",
     "HASH_ALGORITHM",
-    "HashVerification",
-    "ManifestHashingError",
     "MAX_HASH_CHUNK_SIZE_BYTES",
     "SHA256_HEX_LENGTH",
-    "Sha256FileHasher",
     "ArtifactChangedDuringHashError",
     "ArtifactHashMismatchError",
     "ArtifactNotFoundError",
     "ArtifactNotRegularFileError",
     "ArtifactSymlinkError",
+    "FileHash",
+    "FileHasher",
+    "FileIdentity",
+    "HashVerification",
+    "ManifestHashingError",
+    "Sha256FileHasher",
     "UnsupportedHashAlgorithmError",
     "hash_artifact",
     "hash_file",

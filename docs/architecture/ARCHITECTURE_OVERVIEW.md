@@ -1,12 +1,12 @@
 # GF Wordbench — Architecture Overview
 
-**Document ID:** `GF-WB-ARCH-OVERVIEW`  
-**Status:** Normative architectural overview  
-**Applies to:** GF Wordbench framework, path-resolved language startup, optional validation profiles, generated run artifacts, and the public interoperability boundary  
-**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
-**Owner:** GF Wordbench maintainers  
-**Architecture version:** `2.1`  
-**Last reviewed:** 2026-07-30  
+**Document ID:** `GF-WB-ARCH-OVERVIEW`
+**Status:** Normative architectural overview
+**Applies to:** GF Wordbench framework, path-resolved language startup, optional validation profiles, generated run artifacts, and the public interoperability boundary
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
+**Owner:** GF Wordbench maintainers
+**Architecture version:** `2.1`
+**Last reviewed:** 2026-07-30
 
 ---
 
@@ -34,7 +34,7 @@ docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 The project and template locks apply when an optional validation profile uses those layouts. They do not make `project/project.toml` mandatory for opening a language source tree.
@@ -118,7 +118,7 @@ The architecture is designed to achieve the following goals.
 - Resolve language-specific source facts from one explicit user-selected path.
 - Reuse existing selection, path, preflight, GF and diagnostic services.
 - Keep optional validation policy in explicit profiles rather than framework defaults.
-- Provide `templates/project/` only for optional advanced validation-profile initialization.
+- Provide `templates/validation-profile/` only for optional advanced validation-profile initialization.
 - Make language replacement possible without rewriting framework code.
 
 ### 3.3 Traceability
@@ -344,7 +344,7 @@ GF_Wordbench/
 ├── docs/                   permanent framework documentation
 ├── tests/                  framework and contract tests
 ├── project/                optional validation-profile example
-├── templates/project/      optional profile template
+├── templates/validation-profile/      optional profile template
 └── <output-root>/          generated run directories
 
 <selected-source-tree>/
@@ -401,7 +401,7 @@ The profile adds explicit validation and release policy. It is not required to b
 
 ### 7.4 Project template
 
-`templates/project/` provides generic initialization material for optional validation profiles. It contains:
+`templates/validation-profile/` provides generic initialization material for optional validation profiles. It contains:
 
 - generic placeholders;
 - generic instructions;
@@ -2262,7 +2262,7 @@ docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 The project and template locks govern optional validation profiles and templates, not normal path-resolved startup.

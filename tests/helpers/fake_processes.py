@@ -7,14 +7,14 @@ or reporting semantics.
 
 from __future__ import annotations
 
-import stat
 from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+import stat
 from threading import RLock
-from typing import Final, Protocol, TypeAlias
+from typing import Final, Protocol, TypeAlias, TypedDict, Unpack, cast
 
 from gf_wordbench.infrastructure.process.models import (
     ArtifactExpectation,
@@ -39,6 +39,7 @@ __all__ = (
     "FakeProcessRunner",
     "ProcessCall",
     "ProcessOutcomeFactory",
+    "ProcessResultOverrides",
     "RecordingProcessEventSink",
     "make_cancelled_process_result",
     "make_completed_process_result",
@@ -55,12 +56,45 @@ _UNSET: Final = object()
 
 StreamContent: TypeAlias = str | bytes | bytearray | memoryview
 
+
+class ProcessResultOverrides(TypedDict, total=False):
+    """Typed keyword overrides accepted by the deterministic result factories."""
+
+    operation_id: str
+    operation_kind: ProcessOperationKind
+    executable: Path | str
+    args: Sequence[str]
+    cwd: Path | str
+    exit_code: object
+    pid: object
+    started_at: datetime
+    duration_ms: int
+    cancellation_reason: object
+    launch_error_kind: object
+    launch_error_message: object
+    termination_attempted: object
+    termination_succeeded: object
+    stdout: StreamContent
+    stderr: StreamContent
+    stdout_path: Path | str | None
+    stderr_path: Path | str | None
+    capture_root: Path | str | None
+    write_captures: bool | None
+    output_limit_exceeded: object
+    capture_complete: bool
+    environment_policy: str | None
+    recorded_env_overrides: Mapping[str, str] | None
+    artifact_observations: Iterable[ArtifactObservation] | None
+
+
 class ProcessOutcomeFactory(Protocol):
     """Build one result from a recorded fake-runner call."""
 
-    def __call__(self, call: "ProcessCall", /) -> ProcessResult: ...
+    def __call__(self, call: ProcessCall, /) -> ProcessResult: ...
+
 
 QueuedOutcome: TypeAlias = ProcessResult | ProcessOutcomeFactory | BaseException
+
 
 @dataclass(frozen=True, slots=True)
 class ProcessCall:
@@ -78,6 +112,7 @@ class ProcessCall:
             raise TypeError("ordinal must be an integer")
         if self.ordinal < 1:
             raise ValueError("ordinal must be greater than zero")
+
 
 @dataclass(slots=True)
 class FakeCancellationToken:
@@ -116,6 +151,7 @@ class FakeCancellationToken:
             value = self.cancellation_reason
             return value.value if isinstance(value, CancellationReason) else value
 
+
 @dataclass(slots=True)
 class RecordingProcessEventSink:
     """Thread-safe ordered collector for production ``ProcessEvent`` values."""
@@ -138,6 +174,7 @@ class RecordingProcessEventSink:
     def names(self) -> tuple[str, ...]:
         with self._lock:
             return tuple(event.name for event in self._events)
+
 
 class FakeProcessRunner:
     """FIFO scripted callable matching ``run_process`` exactly.
@@ -182,10 +219,7 @@ class FakeProcessRunner:
             )
             self._calls.append(call)
             if not self._outcomes:
-                raise AssertionError(
-                    "unexpected fake process request: "
-                    f"{request.operation_id!r}"
-                )
+                raise AssertionError(f"unexpected fake process request: {request.operation_id!r}")
             outcome = self._outcomes.popleft()
 
         if isinstance(outcome, BaseException):
@@ -197,49 +231,55 @@ class FakeProcessRunner:
             _assert_matches(result, request)
         return result
 
-    def enqueue(self, outcome: QueuedOutcome) -> "FakeProcessRunner":
-        if not (
-            isinstance(outcome, (ProcessResult, BaseException))
-            or callable(outcome)
-        ):
-            raise TypeError(
-                "outcome must be ProcessResult, callable, or BaseException"
-            )
+    def enqueue(self, outcome: QueuedOutcome) -> FakeProcessRunner:
+        if not (isinstance(outcome, (ProcessResult, BaseException)) or callable(outcome)):
+            raise TypeError("outcome must be ProcessResult, callable, or BaseException")
         with self._lock:
             self._outcomes.append(outcome)
         return self
 
     def enqueue_completed(
         self,
-        *,
-        exit_code: int = 0,
-        stdout: StreamContent = b"",
-        stderr: StreamContent = b"",
-        **changes: object,
-    ) -> "FakeProcessRunner":
+        **changes: Unpack[ProcessResultOverrides],
+    ) -> FakeProcessRunner:
         return self.enqueue(
-            lambda call: make_completed_process_result(
+            lambda call: make_completed_process_result(call.request, **changes)
+        )
+
+    def enqueue_timed_out(
+        self,
+        **changes: Unpack[ProcessResultOverrides],
+    ) -> FakeProcessRunner:
+        return self.enqueue(lambda call: make_timed_out_process_result(call.request, **changes))
+
+    def enqueue_cancelled(
+        self,
+        *,
+        reason: CancellationReason | str = CancellationReason.USER,
+        **changes: Unpack[ProcessResultOverrides],
+    ) -> FakeProcessRunner:
+        return self.enqueue(
+            lambda call: make_cancelled_process_result(
                 call.request,
-                exit_code=exit_code,
-                stdout=stdout,
-                stderr=stderr,
+                reason=reason,
                 **changes,
             )
         )
 
-    def enqueue_timed_out(self, **changes: object) -> "FakeProcessRunner":
+    def enqueue_launch_failed(
+        self,
+        *,
+        error_kind: ProcessErrorKind | str = ProcessErrorKind.LAUNCH,
+        message: str = "fake process launch failed",
+        **changes: Unpack[ProcessResultOverrides],
+    ) -> FakeProcessRunner:
         return self.enqueue(
-            lambda call: make_timed_out_process_result(call.request, **changes)
-        )
-
-    def enqueue_cancelled(self, **changes: object) -> "FakeProcessRunner":
-        return self.enqueue(
-            lambda call: make_cancelled_process_result(call.request, **changes)
-        )
-
-    def enqueue_launch_failed(self, **changes: object) -> "FakeProcessRunner":
-        return self.enqueue(
-            lambda call: make_launch_failed_process_result(call.request, **changes)
+            lambda call: make_launch_failed_process_result(
+                call.request,
+                error_kind=error_kind,
+                message=message,
+                **changes,
+            )
         )
 
     @property
@@ -269,9 +309,8 @@ class FakeProcessRunner:
 
     def assert_consumed(self) -> None:
         if self.remaining:
-            raise AssertionError(
-                f"{self.remaining} fake process outcome(s) were not consumed"
-            )
+            raise AssertionError(f"{self.remaining} fake process outcome(s) were not consumed")
+
 
 def make_process_result(
     request: ProcessRequest | None = None,
@@ -282,12 +321,12 @@ def make_process_result(
     executable: Path | str = Path("gf"),
     args: Sequence[str] = (),
     cwd: Path | str = Path("."),
-    exit_code: int | None | object = _UNSET,
-    pid: int | None | object = _UNSET,
+    exit_code: int | object | None = _UNSET,
+    pid: int | object | None = _UNSET,
     started_at: datetime = DEFAULT_STARTED_AT,
     duration_ms: int = DEFAULT_DURATION_MS,
-    cancellation_reason: CancellationReason | str | None | object = _UNSET,
-    launch_error_kind: ProcessErrorKind | str | None | object = _UNSET,
+    cancellation_reason: CancellationReason | str | object | None = _UNSET,
+    launch_error_kind: ProcessErrorKind | str | object | None = _UNSET,
     launch_error_message: str | object = _UNSET,
     termination_attempted: bool | object = _UNSET,
     termination_succeeded: bool | object = _UNSET,
@@ -338,7 +377,9 @@ def make_process_result(
         _write(stderr_path, stderr_bytes)
 
     defaults = _state_defaults(state)
-    value = lambda supplied, key: defaults[key] if supplied is _UNSET else supplied
+
+    def resolved(supplied: object, key: str) -> object:
+        return defaults[key] if supplied is _UNSET else supplied
     observations = (
         _observe_expected(request.expected_artifacts)
         if artifact_observations is None and request is not None
@@ -352,99 +393,126 @@ def make_process_result(
         args=tuple(args),
         cwd=Path(cwd),
         execution_state=state,
-        exit_code=value(exit_code, "exit_code"),  # type: ignore[arg-type]
-        pid=value(pid, "pid"),  # type: ignore[arg-type]
+        exit_code=cast("int | None", resolved(exit_code, "exit_code")),
+        pid=cast("int | None", resolved(pid, "pid")),
         started_at=started_at,
         finished_at=started_at + timedelta(milliseconds=duration_ms),
         duration_ms=duration_ms,
-        cancellation_reason=value(
-            cancellation_reason, "cancellation_reason"
-        ),  # type: ignore[arg-type]
-        launch_error_kind=value(
-            launch_error_kind, "launch_error_kind"
-        ),  # type: ignore[arg-type]
-        launch_error_message=value(
-            launch_error_message, "launch_error_message"
-        ),  # type: ignore[arg-type]
-        termination_attempted=value(
-            termination_attempted, "termination_attempted"
-        ),  # type: ignore[arg-type]
-        termination_succeeded=value(
-            termination_succeeded, "termination_succeeded"
-        ),  # type: ignore[arg-type]
+        cancellation_reason=cast(
+            "CancellationReason | None",
+            resolved(cancellation_reason, "cancellation_reason"),
+        ),
+        launch_error_kind=cast(
+            "ProcessErrorKind | None",
+            resolved(launch_error_kind, "launch_error_kind"),
+        ),
+        launch_error_message=cast(
+            "str",
+            resolved(launch_error_message, "launch_error_message"),
+        ),
+        termination_attempted=cast(
+            "bool",
+            resolved(termination_attempted, "termination_attempted"),
+        ),
+        termination_succeeded=cast(
+            "bool",
+            resolved(termination_succeeded, "termination_succeeded"),
+        ),
         stdout_path=stdout_path,
         stderr_path=stderr_path,
         stdout_size_bytes=len(stdout_bytes),
         stderr_size_bytes=len(stderr_bytes),
-        output_limit_exceeded=value(
-            output_limit_exceeded, "output_limit_exceeded"
-        ),  # type: ignore[arg-type]
+        output_limit_exceeded=cast(
+            "bool",
+            resolved(output_limit_exceeded, "output_limit_exceeded"),
+        ),
         capture_complete=capture_complete,
         environment_policy=environment_policy or "controlled-inherit-v1",
         recorded_env_overrides=dict(recorded_env_overrides or {}),
         artifact_observations=observations,
     )
 
+
+def _result_with_overrides(
+    request: ProcessRequest | None,
+    fixed: Mapping[str, object],
+    changes: ProcessResultOverrides,
+) -> ProcessResult:
+    values: dict[str, object] = dict(changes)
+    values.update(fixed)
+    return make_process_result(request, **cast("ProcessResultOverrides", values))
+
+
 def make_completed_process_result(
     request: ProcessRequest | None = None,
-    *,
-    exit_code: int = 0,
-    **changes: object,
+    **changes: Unpack[ProcessResultOverrides],
 ) -> ProcessResult:
-    return make_process_result(
+    return _result_with_overrides(
         request,
-        execution_state=ExecutionState.COMPLETED,
-        exit_code=exit_code,
-        **changes,
+        {"execution_state": ExecutionState.COMPLETED},
+        changes,
     )
+
 
 def make_timed_out_process_result(
     request: ProcessRequest | None = None,
-    **changes: object,
+    **changes: Unpack[ProcessResultOverrides],
 ) -> ProcessResult:
-    return make_process_result(
-        request, execution_state=ExecutionState.TIMED_OUT, **changes
+    return _result_with_overrides(
+        request,
+        {"execution_state": ExecutionState.TIMED_OUT},
+        changes,
     )
+
 
 def make_cancelled_process_result(
     request: ProcessRequest | None = None,
     *,
     reason: CancellationReason | str = CancellationReason.USER,
-    **changes: object,
+    **changes: Unpack[ProcessResultOverrides],
 ) -> ProcessResult:
-    return make_process_result(
+    return _result_with_overrides(
         request,
-        execution_state=ExecutionState.CANCELLED,
-        cancellation_reason=reason,
-        **changes,
+        {
+            "execution_state": ExecutionState.CANCELLED,
+            "cancellation_reason": reason,
+        },
+        changes,
     )
+
 
 def make_output_limited_process_result(
     request: ProcessRequest | None = None,
-    **changes: object,
+    **changes: Unpack[ProcessResultOverrides],
 ) -> ProcessResult:
-    return make_process_result(
+    return _result_with_overrides(
         request,
-        execution_state=ExecutionState.CANCELLED,
-        cancellation_reason=CancellationReason.OUTPUT_LIMIT,
-        output_limit_exceeded=True,
-        **changes,
+        {
+            "execution_state": ExecutionState.CANCELLED,
+            "cancellation_reason": CancellationReason.OUTPUT_LIMIT,
+            "output_limit_exceeded": True,
+        },
+        changes,
     )
+
 
 def make_launch_failed_process_result(
     request: ProcessRequest | None = None,
     *,
     error_kind: ProcessErrorKind | str = ProcessErrorKind.LAUNCH,
     message: str = "fake process launch failed",
-    **changes: object,
+    **changes: Unpack[ProcessResultOverrides],
 ) -> ProcessResult:
-    return make_process_result(
+    return _result_with_overrides(
         request,
-        execution_state=ExecutionState.LAUNCH_FAILED,
-        launch_error_kind=error_kind,
-        launch_error_message=message,
-        **changes,
+        {
+            "execution_state": ExecutionState.LAUNCH_FAILED,
+            "launch_error_kind": error_kind,
+            "launch_error_message": message,
+        },
+        changes,
     )
+
 
 def _state_defaults(state: ExecutionState) -> dict[str, object]:
     common = {
@@ -489,6 +557,7 @@ def _state_defaults(state: ExecutionState) -> dict[str, object]:
         }
     raise ValueError(f"unsupported execution state: {state!r}")
 
+
 def _capture_paths(
     request: ProcessRequest | None,
     operation_id: str,
@@ -503,10 +572,10 @@ def _capture_paths(
         if request is not None
         else Path(".test-process-evidence")
     )
-    safe_id = "".join(
-        char if char.isalnum() or char in "-_." else "_"
-        for char in operation_id
-    ) or "process"
+    safe_id = (
+        "".join(char if char.isalnum() or char in "-_." else "_" for char in operation_id)
+        or "process"
+    )
     stdout = (
         Path(stdout_path)
         if stdout_path is not None
@@ -522,6 +591,7 @@ def _capture_paths(
         else root / f"{safe_id}.stderr.log"
     )
     return stdout, stderr
+
 
 def _observe_expected(
     expectations: Iterable[ArtifactExpectation],
@@ -552,6 +622,7 @@ def _observe_expected(
         )
     return tuple(observations)
 
+
 def _assert_matches(result: ProcessResult, request: ProcessRequest) -> None:
     pairs = {
         "operation_id": (result.operation_id, request.operation_id),
@@ -568,9 +639,8 @@ def _assert_matches(result: ProcessResult, request: ProcessRequest) -> None:
         if actual != expected
     ]
     if errors:
-        raise AssertionError(
-            "fake result does not match request: " + "; ".join(errors)
-        )
+        raise AssertionError("fake result does not match request: " + "; ".join(errors))
+
 
 def _bytes(value: StreamContent, field_name: str) -> bytes:
     if isinstance(value, str):
@@ -579,9 +649,11 @@ def _bytes(value: StreamContent, field_name: str) -> bytes:
         return bytes(value)
     raise TypeError(f"{field_name} must be text or bytes-like")
 
+
 def _write(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
+
 
 def _reason_text(reason: CancellationReason | str) -> str:
     if isinstance(reason, CancellationReason):

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 from datetime import UTC, datetime, timedelta, timezone
+import hashlib
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
 
 import pytest
 
@@ -39,6 +40,15 @@ def _entry(document: Any, path: str) -> dict[str, Any]:
     artifacts = document["artifacts"]
     assert isinstance(artifacts, list)
     return next(item for item in artifacts if item["path"] == path)
+
+
+def _artifact_entries(document: Mapping[str, object]) -> list[dict[str, Any]]:
+    raw = document["artifacts"]
+    assert isinstance(raw, list)
+    assert all(isinstance(item, dict) for item in raw)
+    return cast(list[dict[str, Any]], raw)
+
+
 
 
 def _current_manifest() -> dict[str, object]:
@@ -155,7 +165,7 @@ def test_manifest_migration_hashes_actual_bytes_and_preserves_legacy_metadata(
     assert document["run_id"] == _RUN_ID
     assert document["generated_at"] == _TIMESTAMP
     assert document["hash_algorithm"] == "sha256"
-    assert [item["path"] for item in document["artifacts"]] == [
+    assert [item["path"] for item in _artifact_entries(document)] == [
         "raw/master.log",
         "summary.json",
     ]
@@ -301,7 +311,7 @@ def test_legacy_artifact_mapping_is_converted_and_sorted(tmp_path: Path) -> None
         "Converted legacy manifest artifact mapping to an ordered path list.",
     )
     assert migration.document is not None
-    assert [item["path"] for item in migration.document["artifacts"]] == [
+    assert [item["path"] for item in _artifact_entries(migration.document)] == [
         "a.txt",
         "z.txt",
     ]
@@ -406,7 +416,7 @@ def test_absolute_path_inside_run_root_is_relativized(tmp_path: Path) -> None:
     )
     assert migration.result.losses == ()
     assert migration.document is not None
-    assert migration.document["artifacts"][0]["path"] == "raw/stdout.txt"
+    assert _artifact_entries(migration.document)[0]["path"] == "raw/stdout.txt"
 
 
 def test_absolute_path_outside_run_root_blocks_strict_migration(tmp_path: Path) -> None:
@@ -484,9 +494,7 @@ def test_permissive_migration_records_losses_and_keeps_recoverable_entries(
         "The manifest cannot contain itself as an artifact entry.",
     )
     assert migration.document is not None
-    assert [item["path"] for item in migration.document["artifacts"]] == [
-        "summary.json"
-    ]
+    assert [item["path"] for item in _artifact_entries(migration.document)] == ["summary.json"]
     assert _entry(migration.document, "summary.json")["sha256"] == _sha256(summary)
 
 
@@ -622,7 +630,7 @@ def test_invalid_generated_at_is_rejected(
             run_root=tmp_path.resolve(),
             run_id=_RUN_ID,
             artifact_paths=(),
-            generated_at=generated_at,
+            generated_at=cast(datetime | str | None, generated_at),
         )
 
 
@@ -685,7 +693,7 @@ def test_artifact_paths_rejects_scalar_text(tmp_path: Path) -> None:
             None,
             run_root=tmp_path.resolve(),
             run_id=_RUN_ID,
-            artifact_paths="summary.json",  # type: ignore[arg-type]
+            artifact_paths=cast(tuple[str, ...], "summary.json")
         )
 
 

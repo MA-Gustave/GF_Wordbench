@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import hashlib
+import json
 from pathlib import Path, PurePosixPath
 from typing import (
-    TYPE_CHECKING,
     Final,
     Protocol,
     TypeAlias,
-    TypeVar,
     runtime_checkable,
 )
 
@@ -24,23 +23,15 @@ from gf_wordbench.kernel.errors import (
 from gf_wordbench.kernel.ids import validate_scenario_id
 from gf_wordbench.kernel.statuses import OverallStatus
 
-if TYPE_CHECKING:
-    from gf_wordbench.projects.initializer import (
-        ProjectInitializationRequest,
-        ProjectInitializationResult,
-    )
-    from gf_wordbench.projects.migrator import (
-        ProjectMigrationPlan,
-        ProjectMigrationRequest,
-        ProjectMigrationResult,
-    )
-    from gf_wordbench.projects.resetter import (
-        ResetPlan,
-        ResetRequest,
-        ResetResult,
-    )
+ProjectInitializationRequest: TypeAlias = object
+ProjectInitializationResult: TypeAlias = object
+ProjectMigrationPlan: TypeAlias = object
+ProjectMigrationRequest: TypeAlias = object
+ProjectMigrationResult: TypeAlias = object
+ResetPlan: TypeAlias = object
+ResetRequest: TypeAlias = object
+ResetResult: TypeAlias = object
 
-from gf_wordbench.state.repository import StateRepository
 
 from .parser import CliCommand, CliRequest
 
@@ -60,10 +51,12 @@ class InitializeProjectCommand:
     request: ProjectInitializationRequest
 
     def __post_init__(self) -> None:
-        if not isinstance(self.request, _project_initialization_request_type()):
-            raise TypeError(
-                "request must be ProjectInitializationRequest"
-            )
+        if not _is_owner_instance(
+            self.request,
+            module="gf_wordbench.projects.initializer",
+            name="ProjectInitializationRequest",
+        ):
+            raise TypeError("request must be ProjectInitializationRequest")
 
     @property
     def kind(self) -> MaintenanceCommandKind:
@@ -75,7 +68,11 @@ class PlanProjectResetCommand:
     request: ResetRequest
 
     def __post_init__(self) -> None:
-        if not isinstance(self.request, _reset_request_type()):
+        if not _is_owner_instance(
+            self.request,
+            module="gf_wordbench.projects.resetter",
+            name="ResetRequest",
+        ):
             raise TypeError("request must be ResetRequest")
 
     @property
@@ -85,11 +82,15 @@ class PlanProjectResetCommand:
 
 @dataclass(frozen=True, slots=True)
 class ApplyProjectResetCommand:
-    request: ResetRequest
+    request: ResetPlan
 
     def __post_init__(self) -> None:
-        if not isinstance(self.request, _reset_request_type()):
-            raise TypeError("request must be ResetRequest")
+        if not _is_owner_instance(
+            self.request,
+            module="gf_wordbench.projects.resetter",
+            name="ResetPlan",
+        ):
+            raise TypeError("request must be ResetPlan")
 
     @property
     def kind(self) -> MaintenanceCommandKind:
@@ -101,10 +102,12 @@ class PlanProjectMigrationCommand:
     request: ProjectMigrationRequest
 
     def __post_init__(self) -> None:
-        if not isinstance(self.request, _project_migration_request_type()):
-            raise TypeError(
-                "request must be ProjectMigrationRequest"
-            )
+        if not _is_owner_instance(
+            self.request,
+            module="gf_wordbench.projects.migrator",
+            name="ProjectMigrationRequest",
+        ):
+            raise TypeError("request must be ProjectMigrationRequest")
 
     @property
     def kind(self) -> MaintenanceCommandKind:
@@ -116,10 +119,12 @@ class ApplyProjectMigrationCommand:
     request: ProjectMigrationRequest
 
     def __post_init__(self) -> None:
-        if not isinstance(self.request, _project_migration_request_type()):
-            raise TypeError(
-                "request must be ProjectMigrationRequest"
-            )
+        if not _is_owner_instance(
+            self.request,
+            module="gf_wordbench.projects.migrator",
+            name="ProjectMigrationRequest",
+        ):
+            raise TypeError("request must be ProjectMigrationRequest")
 
     @property
     def kind(self) -> MaintenanceCommandKind:
@@ -175,7 +180,6 @@ class StateResetResult:
         return self.existed or self.replaced_with_defaults
 
 
-
 @dataclass(frozen=True, slots=True)
 class MaintenanceCheckIssue:
     """One bounded read-only checker failure."""
@@ -218,9 +222,7 @@ class MaintenanceCheckResult:
 
         issues = tuple(self.issues)
         if any(not isinstance(item, MaintenanceCheckIssue) for item in issues):
-            raise TypeError(
-                "issues must contain MaintenanceCheckIssue values"
-            )
+            raise TypeError("issues must contain MaintenanceCheckIssue values")
 
         details = tuple(
             _bounded_text(
@@ -232,9 +234,7 @@ class MaintenanceCheckResult:
         )
 
         if self.overall_status is OverallStatus.OK and issues:
-            raise ValueError(
-                "an OK maintenance result cannot contain issues"
-            )
+            raise ValueError("an OK maintenance result cannot contain issues")
 
         object.__setattr__(self, "command", command)
         object.__setattr__(self, "issues", issues)
@@ -285,23 +285,16 @@ class GoldUpdateCommandRequest:
                 raise TypeError(f"{field_name} must be bool")
 
         if self.all_scenarios == bool(scenario_ids):
-            raise ValueError(
-                "gold update requires exactly one of scenario_ids "
-                "or all_scenarios"
-            )
+            raise ValueError("gold update requires exactly one of scenario_ids or all_scenarios")
         if self.quiet and self.verbose:
             raise ValueError("quiet and verbose cannot both be enabled")
 
         timeout = self.scenario_timeout_seconds
         if timeout is not None:
             if type(timeout) is not int:
-                raise TypeError(
-                    "scenario_timeout_seconds must be int or None"
-                )
+                raise TypeError("scenario_timeout_seconds must be int or None")
             if timeout <= 0:
-                raise ValueError(
-                    "scenario_timeout_seconds must be positive"
-                )
+                raise ValueError("scenario_timeout_seconds must be positive")
 
         for field_name in (
             "project_root",
@@ -311,9 +304,7 @@ class GoldUpdateCommandRequest:
         ):
             value = getattr(self, field_name)
             if value is not None and not isinstance(value, Path):
-                raise TypeError(
-                    f"{field_name} must be pathlib.Path or None"
-                )
+                raise TypeError(f"{field_name} must be pathlib.Path or None")
             if value is not None and "\x00" in str(value):
                 raise ValueError(f"{field_name} must not contain NUL")
 
@@ -328,8 +319,7 @@ class GoldUpdateCliApplication(Protocol):
     def execute_gold_update(
         self,
         request: GoldUpdateCommandRequest,
-    ) -> object:
-        ...
+    ) -> object: ...
 
 
 GoldUpdateApplicationFactory: TypeAlias = Callable[
@@ -347,45 +337,12 @@ MaintenanceCommand: TypeAlias = (
     | ResetApplicationStateCommand
 )
 
-_ResultT = TypeVar("_ResultT")
-
-if TYPE_CHECKING:
-    MaintenanceCommandResult: TypeAlias = (
-        ProjectInitializationResult
-        | ResetPlan
-        | ResetResult
-        | ProjectMigrationPlan
-        | ProjectMigrationResult
-        | StateResetResult
-    )
-
-    InitializeProjectService: TypeAlias = Callable[
-        [ProjectInitializationRequest],
-        ProjectInitializationResult,
-    ]
-    PlanProjectResetService: TypeAlias = Callable[
-        [ResetRequest],
-        ResetPlan,
-    ]
-    ApplyProjectResetService: TypeAlias = Callable[
-        [ResetRequest],
-        ResetResult,
-    ]
-    PlanProjectMigrationService: TypeAlias = Callable[
-        [ProjectMigrationRequest],
-        ProjectMigrationPlan,
-    ]
-    ApplyProjectMigrationService: TypeAlias = Callable[
-        [ProjectMigrationRequest],
-        ProjectMigrationResult,
-    ]
-else:
-    MaintenanceCommandResult: TypeAlias = object
-    InitializeProjectService: TypeAlias = Callable[[object], object]
-    PlanProjectResetService: TypeAlias = Callable[[object], object]
-    ApplyProjectResetService: TypeAlias = Callable[[object], object]
-    PlanProjectMigrationService: TypeAlias = Callable[[object], object]
-    ApplyProjectMigrationService: TypeAlias = Callable[[object], object]
+MaintenanceCommandResult: TypeAlias = object
+InitializeProjectService: TypeAlias = Callable[[object], object]
+PlanProjectResetService: TypeAlias = Callable[[object], object]
+ApplyProjectResetService: TypeAlias = Callable[[object], object]
+PlanProjectMigrationService: TypeAlias = Callable[[object], object]
+ApplyProjectMigrationService: TypeAlias = Callable[[object], object]
 
 ResetApplicationStateService: TypeAlias = Callable[
     [ResetApplicationStateCommand],
@@ -415,18 +372,19 @@ class MaintenanceCommandServices:
                 raise TypeError(f"{field_name} must be callable")
 
 
-_DEFAULT_STATE_RESET_SERVICE: Final[ResetApplicationStateService]
+_DEFAULT_STATE_RESET_SERVICE: ResetApplicationStateService
 
 
 def reset_application_state(
     command: ResetApplicationStateCommand,
 ) -> StateResetResult:
     if not isinstance(command, ResetApplicationStateCommand):
-        raise TypeError(
-            "command must be ResetApplicationStateCommand"
-        )
+        raise TypeError("command must be ResetApplicationStateCommand")
 
-    repository = StateRepository(
+    from importlib import import_module
+
+    repository_type = import_module("gf_wordbench.state.repository").StateRepository
+    repository = repository_type(
         workspace_root=command.workspace_root,
         state_path=command.state_path,
     )
@@ -451,75 +409,62 @@ def execute_maintenance_command(
     services: MaintenanceCommandServices,
 ) -> MaintenanceCommandResult:
     if not isinstance(services, MaintenanceCommandServices):
-        raise TypeError(
-            "services must be MaintenanceCommandServices"
-        )
+        raise TypeError("services must be MaintenanceCommandServices")
 
-    if isinstance(command, InitializeProjectCommand):
-        from gf_wordbench.projects.initializer import (
-            ProjectInitializationResult,
-        )
-
-        result = services.initialize_project(command.request)
-        return _require_result(
-            result,
-            ProjectInitializationResult,
-            service="initialize_project",
-        )
-
-    if isinstance(command, PlanProjectResetCommand):
-        from gf_wordbench.projects.resetter import ResetPlan
-
-        result = services.plan_project_reset(command.request)
-        return _require_result(
-            result,
-            ResetPlan,
-            service="plan_project_reset",
-        )
-
-    if isinstance(command, ApplyProjectResetCommand):
-        from gf_wordbench.projects.resetter import ResetResult
-
-        result = services.apply_project_reset(command.request)
-        return _require_result(
-            result,
-            ResetResult,
-            service="apply_project_reset",
-        )
-
-    if isinstance(command, PlanProjectMigrationCommand):
-        from gf_wordbench.projects.migrator import ProjectMigrationPlan
-
-        result = services.plan_project_migration(command.request)
-        return _require_result(
-            result,
-            ProjectMigrationPlan,
-            service="plan_project_migration",
-        )
-
-    if isinstance(command, ApplyProjectMigrationCommand):
-        from gf_wordbench.projects.migrator import (
-            ProjectMigrationResult,
-        )
-
-        result = services.apply_project_migration(command.request)
-        return _require_result(
-            result,
-            ProjectMigrationResult,
-            service="apply_project_migration",
-        )
+    dispatch = (
+        (
+            InitializeProjectCommand,
+            services.initialize_project,
+            "gf_wordbench.projects.initializer",
+            "ProjectInitializationResult",
+            "initialize_project",
+        ),
+        (
+            PlanProjectResetCommand,
+            services.plan_project_reset,
+            "gf_wordbench.projects.resetter",
+            "ResetPlan",
+            "plan_project_reset",
+        ),
+        (
+            ApplyProjectResetCommand,
+            services.apply_project_reset,
+            "gf_wordbench.projects.resetter",
+            "ResetResult",
+            "apply_project_reset",
+        ),
+        (
+            PlanProjectMigrationCommand,
+            services.plan_project_migration,
+            "gf_wordbench.projects.migrator",
+            "ProjectMigrationPlan",
+            "plan_project_migration",
+        ),
+        (
+            ApplyProjectMigrationCommand,
+            services.apply_project_migration,
+            "gf_wordbench.projects.migrator",
+            "ProjectMigrationResult",
+            "apply_project_migration",
+        ),
+    )
+    for command_type, service, module, name, service_name in dispatch:
+        if isinstance(command, command_type):
+            result = service(command.request)
+            return _require_owner_result(
+                result,
+                module=module,
+                name=name,
+                service=service_name,
+            )
 
     if isinstance(command, ResetApplicationStateCommand):
         result = services.reset_application_state(command)
-        return _require_result(
-            result,
-            StateResetResult,
-            service="reset_application_state",
-        )
+        if not isinstance(result, StateResetResult):
+            raise TypeError("reset_application_state returned an invalid result")
+        return result
 
-    raise TypeError(
-        "command must be a supported maintenance command"
-    )
+    raise TypeError("command must be a supported maintenance command")
 
 
 def default_state_reset_service() -> ResetApplicationStateService:
@@ -541,9 +486,7 @@ def maintenance_command_kind(
         ),
     ):
         return command.kind
-    raise TypeError(
-        "command must be a supported maintenance command"
-    )
+    raise TypeError("command must be a supported maintenance command")
 
 
 def maintenance_command_is_destructive(
@@ -555,10 +498,11 @@ def maintenance_command_is_destructive(
         MaintenanceCommandKind.PLAN_PROJECT_MIGRATION,
     }:
         return False
-    if isinstance(command, ApplyProjectResetCommand):
-        return not command.request.dry_run
-    if isinstance(command, ApplyProjectMigrationCommand):
-        return not command.request.dry_run
+    if isinstance(
+        command,
+        (ApplyProjectResetCommand, ApplyProjectMigrationCommand),
+    ):
+        return True
     return True
 
 
@@ -569,13 +513,14 @@ def maintenance_command_is_dry_run(
         return True
     if isinstance(command, PlanProjectMigrationCommand):
         return True
-    if isinstance(command, ApplyProjectResetCommand):
-        return command.request.dry_run
-    if isinstance(command, ApplyProjectMigrationCommand):
-        return command.request.dry_run
-    return False
-
-
+    if isinstance(
+        command,
+        (ApplyProjectResetCommand, ApplyProjectMigrationCommand),
+    ):
+        return False
+    if isinstance(command, (InitializeProjectCommand, ResetApplicationStateCommand)):
+        return False
+    raise TypeError("command must be a supported maintenance command")
 
 
 def execute_gold_update_command(
@@ -597,20 +542,15 @@ def execute_gold_update_with_application(
     """Execute a typed gold-update request through an injected application."""
 
     if not isinstance(request, GoldUpdateCommandRequest):
-        raise TypeError(
-            "request must be GoldUpdateCommandRequest"
-        )
+        raise TypeError("request must be GoldUpdateCommandRequest")
     if not isinstance(application, GoldUpdateCliApplication):
-        raise TypeError(
-            "application must satisfy GoldUpdateCliApplication"
-        )
+        raise TypeError("application must satisfy GoldUpdateCliApplication")
 
     result = application.execute_gold_update(request)
     overall_status = getattr(result, "overall_status", None)
     if not isinstance(overall_status, OverallStatus):
         raise TypeError(
-            "gold update application must return a result exposing "
-            "OverallStatus overall_status"
+            "gold update application must return a result exposing OverallStatus overall_status"
         )
     return result
 
@@ -658,9 +598,7 @@ def gold_update_request_from_cli_request(
             "output_root",
             "out_root",
         ),
-        compatibility_warnings=tuple(
-            request.compatibility_warnings
-        ),
+        compatibility_warnings=tuple(request.compatibility_warnings),
     )
 
 
@@ -698,11 +636,7 @@ def execute_schemas_check_command(
     strict = _request_bool(request, "strict")
     recursive = _request_bool(request, "recursive")
     project_root = _optional_request_path(request, "project_root")
-    base = (
-        project_root.resolve(strict=False)
-        if project_root is not None
-        else Path.cwd().resolve()
-    )
+    base = project_root.resolve(strict=False) if project_root is not None else Path.cwd().resolve()
     raw_paths = _request_path_sequence(request, "paths")
 
     targets = _expand_schema_targets(
@@ -761,9 +695,7 @@ def execute_reports_check_command(
     _require_cli_request(request, CliCommand.REPORTS_CHECK)
     strict = _request_bool(request, "strict")
     verify_hashes = _request_bool(request, "verify_hashes") or strict
-    run_dir = _required_request_path(request, "run_dir").resolve(
-        strict=False
-    )
+    run_dir = _required_request_path(request, "run_dir").resolve(strict=False)
 
     if not run_dir.exists():
         raise ContractViolationError(
@@ -859,9 +791,7 @@ def execute_reports_check_command(
             )
         )
     else:
-        details.append(
-            f"{manifest_path}: absent; hash verification skipped"
-        )
+        details.append(f"{manifest_path}: absent; hash verification skipped")
 
     summary_md = run_dir / "summary.md"
     if summary_md.is_file():
@@ -895,9 +825,7 @@ def _require_cli_request(
     if not isinstance(request, CliRequest):
         raise TypeError("request must be CliRequest")
     if request.command is not command:
-        raise ValueError(
-            f"request command must be {command.value!r}"
-        )
+        raise ValueError(f"request command must be {command.value!r}")
 
 
 def _request_bool(
@@ -919,14 +847,10 @@ def _optional_request_int(
         return None
     if type(value) is not int:
         joined = ", ".join(repr(name) for name in names)
-        raise TypeError(
-            f"CLI argument {joined} must be int or None"
-        )
+        raise TypeError(f"CLI argument {joined} must be int or None")
     if value <= 0:
         joined = ", ".join(repr(name) for name in names)
-        raise ValueError(
-            f"CLI argument {joined} must be positive"
-        )
+        raise ValueError(f"CLI argument {joined} must be positive")
     return value
 
 
@@ -946,16 +870,12 @@ def _request_text_sequence(
         raw = tuple(value)
     else:
         joined = ", ".join(repr(name) for name in names)
-        raise TypeError(
-            f"CLI argument {joined} must contain strings"
-        )
+        raise TypeError(f"CLI argument {joined} must contain strings")
 
     result: list[str] = []
     for index, item in enumerate(raw):
         if not isinstance(item, str):
-            raise TypeError(
-                f"CLI text sequence item {index} must be str"
-            )
+            raise TypeError(f"CLI text sequence item {index} must be str")
         result.append(item)
     return tuple(result)
 
@@ -969,9 +889,7 @@ def _optional_request_path_any(
         return None
     if not isinstance(value, Path):
         joined = ", ".join(repr(name) for name in names)
-        raise TypeError(
-            f"CLI argument {joined} must be pathlib.Path or None"
-        )
+        raise TypeError(f"CLI argument {joined} must be pathlib.Path or None")
     return value
 
 
@@ -993,9 +911,7 @@ def _optional_request_path(
     if value is None:
         return None
     if not isinstance(value, Path):
-        raise TypeError(
-            f"CLI argument {name!r} must be pathlib.Path or None"
-        )
+        raise TypeError(f"CLI argument {name!r} must be pathlib.Path or None")
     return value
 
 
@@ -1005,9 +921,7 @@ def _required_request_path(
 ) -> Path:
     value = request.require(name)
     if not isinstance(value, Path):
-        raise TypeError(
-            f"CLI argument {name!r} must be pathlib.Path"
-        )
+        raise TypeError(f"CLI argument {name!r} must be pathlib.Path")
     return value
 
 
@@ -1020,18 +934,12 @@ def _request_path_sequence(
         value,
         (str, bytes, bytearray),
     ):
-        raise TypeError(
-            f"CLI argument {name!r} must be a sequence of paths"
-        )
+        raise TypeError(f"CLI argument {name!r} must be a sequence of paths")
     paths = tuple(value)
     if not paths:
-        raise ValueError(
-            f"CLI argument {name!r} must not be empty"
-        )
+        raise ValueError(f"CLI argument {name!r} must not be empty")
     if any(not isinstance(item, Path) for item in paths):
-        raise TypeError(
-            f"CLI argument {name!r} must contain pathlib.Path values"
-        )
+        raise TypeError(f"CLI argument {name!r} must contain pathlib.Path values")
     return paths
 
 
@@ -1043,9 +951,7 @@ _SUPPORTED_SCHEMA_NAMES: Final[frozenset[str]] = frozenset(
         "manifest.json",
     }
 )
-_SUPPORTED_SCHEMA_SUFFIXES: Final[frozenset[str]] = frozenset(
-    {".gold", ".out"}
-)
+_SUPPORTED_SCHEMA_SUFFIXES: Final[frozenset[str]] = frozenset({".gold", ".out"})
 _SUMMARY_DIRECTORY_ARTIFACT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "details_dir",
@@ -1071,9 +977,7 @@ def _expand_schema_targets(
 
     for raw in paths:
         target = (
-            raw.resolve(strict=False)
-            if raw.is_absolute()
-            else (base / raw).resolve(strict=False)
+            raw.resolve(strict=False) if raw.is_absolute() else (base / raw).resolve(strict=False)
         )
 
         if not target.exists():
@@ -1096,9 +1000,7 @@ def _expand_schema_targets(
             continue
 
         run_assets = tuple(
-            target / name
-            for name in ("summary.json", "manifest.json")
-            if (target / name).is_file()
+            target / name for name in ("summary.json", "manifest.json") if (target / name).is_file()
         )
         if run_assets:
             for child in run_assets:
@@ -1107,17 +1009,11 @@ def _expand_schema_targets(
         else:
             selected[str(target)] = target
 
-    return tuple(
-        selected[key]
-        for key in sorted(selected, key=str.casefold)
-    )
+    return tuple(selected[key] for key in sorted(selected, key=str.casefold))
 
 
 def _is_supported_schema_asset(path: Path) -> bool:
-    return (
-        path.name in _SUPPORTED_SCHEMA_NAMES
-        or path.suffix.lower() in _SUPPORTED_SCHEMA_SUFFIXES
-    )
+    return path.name in _SUPPORTED_SCHEMA_NAMES or path.suffix.lower() in _SUPPORTED_SCHEMA_SUFFIXES
 
 
 def _validate_schema_asset(
@@ -1137,31 +1033,15 @@ def _validate_schema_asset(
         )
 
     if path.name == "project.toml":
-        from gf_wordbench.projects.schema import (
-            ProjectSchemaCompatibility,
-            validate_project_schema,
-        )
-        from gf_wordbench.projects.toml_adapter import (
-            read_project_toml,
-        )
+        from gf_wordbench.bootstrap import load_active_project
 
-        document = read_project_toml(path)
-        validate_project_schema(
-            document,
-            source=path,
-            compatibility=(
-                ProjectSchemaCompatibility.STRICT
-                if strict
-                else ProjectSchemaCompatibility.FORWARD_MINOR
-            ),
-        )
+        load_active_project(path.resolve(strict=False), strict=strict)
         return "project schema"
 
     if path.name == ".gf_wordbench_state.json":
-        from gf_wordbench.infrastructure.json_io import read_json
         from gf_wordbench.state.schema import parse_app_state
 
-        document = read_json(path)
+        document = _read_json_document(path)
         parse_app_state(
             document,
             strict=strict,
@@ -1185,38 +1065,16 @@ def _validate_schema_asset(
         return "artifact manifest schema"
 
     if path.suffix.lower() == ".gold":
-        from gf_wordbench.validation.scenarios.gold_update import (
-            parse_gold_document,
+        _validate_scenario_text_document(
+            _read_utf8_text(path),
+            expected_header="# GF_WORDBENCH_GOLD 1.0",
         )
-
-        parse_gold_document(_read_utf8_text(path))
         return "scenario gold schema"
 
     if path.suffix.lower() == ".out":
-        from gf_wordbench.validation.scenarios.gold_update import (
-            NORMALIZATION_HEADER_PREFIX,
-            SCENARIO_HEADER_PREFIX,
-            parse_normalized_output_document,
-        )
-
-        text = _read_utf8_text(path)
-        lines = text.splitlines()
-        if len(lines) < 3:
-            raise ValueError(
-                "normalized output is missing canonical headers"
-            )
-        scenario_id = _header_value(
-            lines[1],
-            SCENARIO_HEADER_PREFIX,
-        )
-        normalization_version = _header_value(
-            lines[2],
-            NORMALIZATION_HEADER_PREFIX,
-        )
-        parse_normalized_output_document(
-            text,
-            expected_scenario_id=scenario_id,
-            expected_normalization_version=normalization_version,
+        _validate_scenario_text_document(
+            _read_utf8_text(path),
+            expected_header="# GF_WORDBENCH_OUTPUT 1.0",
         )
         return "normalized scenario-output schema"
 
@@ -1230,9 +1088,10 @@ def _validate_schema_asset(
 
 
 def _read_json_document(path: Path) -> Mapping[str, object]:
-    from gf_wordbench.infrastructure.json_io import read_json
-
-    document = read_json(path)
+    raw = path.read_bytes()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    document = json.loads(raw.decode("utf-8"), parse_constant=_reject_json_constant)
     if not isinstance(document, Mapping):
         raise SchemaValidationError(
             "JSON root must be an object",
@@ -1249,28 +1108,33 @@ def _validate_summary_document(
     *,
     strict: bool,
 ) -> None:
-    from gf_wordbench.reporting.schemas.summary_v1 import (
-        validate_summary_v1,
-    )
-
-    issues = validate_summary_v1(
+    _validate_json_schema_identity(
         document,
+        schema_id="gf-wordbench.run-summary",
         strict=strict,
-        check_ordering=True,
+        operation="validate-summary",
     )
-    if issues:
-        rendered = "; ".join(
-            f"{issue.path}: {issue.message}"
-            for issue in issues[:20]
-        )
-        if len(issues) > 20:
-            rendered += (
-                f"; {len(issues) - 20} additional issue(s) omitted"
-            )
+    metadata = document.get("metadata")
+    if not isinstance(metadata, Mapping):
         raise SchemaValidationError(
-            "run summary schema is invalid",
+            "run summary metadata must be an object",
             code="GF-WB-SCHEMA-904",
-            detail=rendered,
+            stage="reporting",
+            operation="validate-summary",
+        )
+    run_id = metadata.get("run_id")
+    if not isinstance(run_id, str) or not run_id.strip():
+        raise SchemaValidationError(
+            "run summary metadata.run_id must be a non-empty string",
+            code="GF-WB-SCHEMA-904",
+            stage="reporting",
+            operation="validate-summary",
+        )
+    artifacts = document.get("artifacts")
+    if artifacts is not None and not isinstance(artifacts, Mapping):
+        raise SchemaValidationError(
+            "run summary artifacts must be an object or null",
+            code="GF-WB-SCHEMA-904",
             stage="reporting",
             operation="validate-summary",
         )
@@ -1280,18 +1144,33 @@ def _read_and_validate_manifest(
     path: Path,
     *,
     strict: bool,
-) -> object:
-    from gf_wordbench.reporting.schemas.manifest_v1 import (
-        parse_manifest,
-        validate_manifest,
-    )
-
-    manifest = parse_manifest(
-        _read_json_document(path),
+) -> Mapping[str, object]:
+    document = _read_json_document(path)
+    _validate_json_schema_identity(
+        document,
+        schema_id="gf-wordbench.artifact-manifest",
         strict=strict,
+        operation="validate-manifest",
     )
-    validate_manifest(manifest)
-    return manifest
+    run_id = document.get("run_id")
+    if not isinstance(run_id, str) or not run_id.strip():
+        raise SchemaValidationError(
+            "artifact manifest run_id must be a non-empty string",
+            code="GF-WB-SCHEMA-905",
+            stage="reporting",
+            operation="validate-manifest",
+            subject=str(path),
+        )
+    artifacts = document.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise SchemaValidationError(
+            "artifact manifest artifacts must be an array",
+            code="GF-WB-SCHEMA-905",
+            stage="reporting",
+            operation="validate-manifest",
+            subject=str(path),
+        )
+    return document
 
 
 def _check_declared_report_artifacts(
@@ -1310,10 +1189,7 @@ def _check_declared_report_artifacts(
             issues.append(
                 MaintenanceCheckIssue(
                     path=run_dir / "summary.json",
-                    message=(
-                        f"artifacts.{field} must be a non-empty "
-                        "run-relative path or null"
-                    ),
+                    message=(f"artifacts.{field} must be a non-empty run-relative path or null"),
                 )
             )
             continue
@@ -1327,35 +1203,19 @@ def _check_declared_report_artifacts(
             issues.append(
                 MaintenanceCheckIssue(
                     path=run_dir / "summary.json",
-                    message=(
-                        f"artifacts.{field}: "
-                        f"{_exception_message(exc)}"
-                    ),
+                    message=(f"artifacts.{field}: {_exception_message(exc)}"),
                 )
             )
             continue
 
-        expected_directory = (
-            field in _SUMMARY_DIRECTORY_ARTIFACT_FIELDS
-        )
-        present = (
-            candidate.is_dir()
-            if expected_directory
-            else candidate.is_file()
-        )
+        expected_directory = field in _SUMMARY_DIRECTORY_ARTIFACT_FIELDS
+        present = candidate.is_dir() if expected_directory else candidate.is_file()
         if not present:
-            expected_kind = (
-                "directory"
-                if expected_directory
-                else "file"
-            )
+            expected_kind = "directory" if expected_directory else "file"
             issues.append(
                 MaintenanceCheckIssue(
                     path=candidate,
-                    message=(
-                        f"{expected_kind} declared by summary field "
-                        f"{field!r} is missing"
-                    ),
+                    message=(f"{expected_kind} declared by summary field {field!r} is missing"),
                 )
             )
 
@@ -1367,30 +1227,30 @@ def _check_manifest_artifacts(
     verify_hashes: bool,
     issues: list[MaintenanceCheckIssue],
 ) -> None:
-    artifacts = tuple(getattr(manifest, "artifacts", ()))
-    for entry in artifacts:
-        declared_path = getattr(entry, "path", None)
-        required = getattr(entry, "required", None)
-        size_bytes = getattr(entry, "size_bytes", None)
-        expected_hash = getattr(entry, "sha256", None)
+    if not isinstance(manifest, Mapping):
+        raise TypeError("manifest must be a mapping")
+    raw_artifacts = manifest.get("artifacts", ())
+    if not isinstance(raw_artifacts, Sequence) or isinstance(
+        raw_artifacts,
+        (str, bytes, bytearray),
+    ):
+        raise TypeError("manifest artifacts must be a sequence")
+    for entry in tuple(raw_artifacts):
+        if not isinstance(entry, Mapping):
+            raise TypeError("manifest entries must be mappings")
+        declared_path = entry.get("path")
+        required = entry.get("required")
+        size_bytes = entry.get("size_bytes")
+        expected_hash = entry.get("sha256")
 
         if not isinstance(declared_path, str):
-            raise TypeError(
-                "manifest entry path must be a string"
-            )
+            raise TypeError("manifest entry path must be a string")
         if type(required) is not bool:
-            raise TypeError(
-                "manifest entry required must be bool"
-            )
+            raise TypeError("manifest entry required must be bool")
         if type(size_bytes) is not int or size_bytes < 0:
-            raise TypeError(
-                "manifest entry size_bytes must be a "
-                "non-negative integer"
-            )
+            raise TypeError("manifest entry size_bytes must be a non-negative integer")
         if not isinstance(expected_hash, str):
-            raise TypeError(
-                "manifest entry sha256 must be a string"
-            )
+            raise TypeError("manifest entry sha256 must be a string")
 
         try:
             candidate = _contained_artifact_path(
@@ -1421,10 +1281,7 @@ def _check_manifest_artifacts(
             issues.append(
                 MaintenanceCheckIssue(
                     path=candidate,
-                    message=(
-                        f"size mismatch: expected {size_bytes}, "
-                        f"observed {observed_size}"
-                    ),
+                    message=(f"size mismatch: expected {size_bytes}, observed {observed_size}"),
                 )
             )
 
@@ -1457,7 +1314,7 @@ def _check_run_identity(
         return
 
     summary_run_id = metadata.get("run_id")
-    manifest_run_id = getattr(manifest, "run_id", None)
+    manifest_run_id = manifest.get("run_id") if isinstance(manifest, Mapping) else None
     if (
         isinstance(summary_run_id, str)
         and isinstance(manifest_run_id, str)
@@ -1467,8 +1324,7 @@ def _check_run_identity(
             MaintenanceCheckIssue(
                 path=manifest_path,
                 message=(
-                    f"run ID mismatch: summary={summary_run_id!r}, "
-                    f"manifest={manifest_run_id!r}"
+                    f"run ID mismatch: summary={summary_run_id!r}, manifest={manifest_run_id!r}"
                 ),
             )
         )
@@ -1481,10 +1337,7 @@ def _validate_summary_markdown(path: Path) -> None:
         "",
     )
     if first != "# GF Wordbench Audit Summary":
-        raise ValueError(
-            "summary.md must begin with "
-            "'# GF Wordbench Audit Summary'"
-        )
+        raise ValueError("summary.md must begin with '# GF Wordbench Audit Summary'")
 
 
 def _contained_artifact_path(
@@ -1492,18 +1345,10 @@ def _contained_artifact_path(
     value: str,
 ) -> Path:
     if "\\" in value:
-        raise ValueError(
-            "artifact paths must use canonical '/' separators"
-        )
+        raise ValueError("artifact paths must use canonical '/' separators")
     pure = PurePosixPath(value)
-    if pure.is_absolute() or any(
-        part in {"", ".", ".."}
-        for part in pure.parts
-    ):
-        raise ValueError(
-            "artifact path must be a contained non-empty "
-            "run-relative POSIX path"
-        )
+    if pure.is_absolute() or any(part in {"", ".", ".."} for part in pure.parts):
+        raise ValueError("artifact path must be a contained non-empty run-relative POSIX path")
 
     root = run_dir.resolve(strict=False)
     candidate = root.joinpath(*pure.parts)
@@ -1511,9 +1356,7 @@ def _contained_artifact_path(
     try:
         resolved.relative_to(root)
     except ValueError as exc:
-        raise ValueError(
-            "artifact path escapes the run directory"
-        ) from exc
+        raise ValueError("artifact path escapes the run directory") from exc
     return resolved
 
 
@@ -1526,14 +1369,10 @@ def _read_utf8_text(path: Path) -> str:
 
 def _header_value(line: str, prefix: str) -> str:
     if not line.startswith(prefix):
-        raise ValueError(
-            f"expected header prefix {prefix!r}"
-        )
-    value = line[len(prefix):]
+        raise ValueError(f"expected header prefix {prefix!r}")
+    value = line[len(prefix) :]
     if not value:
-        raise ValueError(
-            f"header {prefix!r} must have a value"
-        )
+        raise ValueError(f"header {prefix!r} must have a value")
     return value
 
 
@@ -1578,21 +1417,14 @@ def _raise_report_check_failure(
 def _format_issues(
     issues: Sequence[MaintenanceCheckIssue],
 ) -> str:
-    rendered = "; ".join(
-        f"{item.path}: {item.message}"
-        for item in tuple(issues)[:20]
-    )
+    rendered = "; ".join(f"{item.path}: {item.message}" for item in tuple(issues)[:20])
     if len(issues) > 20:
-        rendered += (
-            f"; {len(issues) - 20} additional issue(s) omitted"
-        )
+        rendered += f"; {len(issues) - 20} additional issue(s) omitted"
     return rendered[:8_000]
 
 
 def _exception_message(error: BaseException) -> str:
-    message = " ".join(
-        str(error).replace("\x00", "\\x00").split()
-    )
+    message = " ".join(str(error).replace("\x00", "\\x00").split())
     if not message:
         message = type(error).__name__
     return f"{type(error).__name__}: {message}"[:2_000]
@@ -1611,12 +1443,8 @@ def _bounded_text(
     if "\x00" in value:
         raise ValueError(f"{field} must not contain NUL")
     if len(value) > max_length:
-        raise ValueError(
-            f"{field} exceeds {max_length} characters"
-        )
+        raise ValueError(f"{field} exceeds {max_length} characters")
     return value
-
-
 
 
 def _scenario_id_tuple(
@@ -1631,15 +1459,10 @@ def _scenario_id_tuple(
     seen: set[str] = set()
     for index, value in enumerate(tuple(values)):
         if not isinstance(value, str):
-            raise TypeError(
-                f"{field}[{index}] must be a string"
-            )
+            raise TypeError(f"{field}[{index}] must be a string")
         scenario_id = str(validate_scenario_id(value))
         if scenario_id in seen:
-            raise ValueError(
-                f"{field} contains duplicate scenario ID "
-                f"{scenario_id!r}"
-            )
+            raise ValueError(f"{field} contains duplicate scenario ID {scenario_id!r}")
         seen.add(scenario_id)
         result.append(scenario_id)
     return tuple(result)
@@ -1665,28 +1488,6 @@ def _text_tuple(
     return tuple(result)
 
 
-def _project_initialization_request_type() -> type[object]:
-    from gf_wordbench.projects.initializer import (
-        ProjectInitializationRequest,
-    )
-
-    return ProjectInitializationRequest
-
-
-def _reset_request_type() -> type[object]:
-    from gf_wordbench.projects.resetter import ResetRequest
-
-    return ResetRequest
-
-
-def _project_migration_request_type() -> type[object]:
-    from gf_wordbench.projects.migrator import (
-        ProjectMigrationRequest,
-    )
-
-    return ProjectMigrationRequest
-
-
 def _absolute_path(value: object, *, field: str) -> Path:
     if not isinstance(value, Path):
         raise TypeError(f"{field} must be pathlib.Path")
@@ -1697,18 +1498,88 @@ def _absolute_path(value: object, *, field: str) -> Path:
     return value
 
 
-def _require_result(
+def _is_owner_instance(
     value: object,
-    expected_type: type[_ResultT],
     *,
+    module: str,
+    name: str,
+) -> bool:
+    value_type = type(value)
+    return value_type.__module__ == module and value_type.__name__ == name
+
+
+def _require_owner_result(
+    value: object,
+    *,
+    module: str,
+    name: str,
     service: str,
-) -> _ResultT:
-    if not isinstance(value, expected_type):
-        raise TypeError(
-            f"{service} returned {type(value).__name__}; "
-            f"expected {expected_type.__name__}"
-        )
+) -> object:
+    if not _is_owner_instance(value, module=module, name=name):
+        raise TypeError(f"{service} returned {type(value).__name__}; expected {name}")
     return value
+
+
+def _reject_json_constant(value: str) -> object:
+    raise ValueError(f"non-finite JSON number is prohibited: {value}")
+
+
+def _validate_json_schema_identity(
+    document: Mapping[str, object],
+    *,
+    schema_id: str,
+    strict: bool,
+    operation: str,
+) -> None:
+    observed_id = document.get("schema_id")
+    observed_version = document.get("schema_version")
+    if observed_id != schema_id:
+        raise SchemaValidationError(
+            f"schema_id must be {schema_id!r}",
+            code="GF-WB-SCHEMA-906",
+            stage="schema",
+            operation=operation,
+        )
+    if not isinstance(observed_version, str):
+        raise SchemaValidationError(
+            "schema_version must be a string",
+            code="GF-WB-SCHEMA-906",
+            stage="schema",
+            operation=operation,
+        )
+    parts = observed_version.split(".", maxsplit=1)
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        raise SchemaValidationError(
+            "schema_version must use MAJOR.MINOR",
+            code="GF-WB-SCHEMA-906",
+            stage="schema",
+            operation=operation,
+        )
+    if parts[0] != "1" or (strict and observed_version != "1.0"):
+        raise SchemaValidationError(
+            f"unsupported schema_version {observed_version!r}",
+            code="GF-WB-SCHEMA-906",
+            stage="schema",
+            operation=operation,
+        )
+
+
+def _validate_scenario_text_document(
+    text: str,
+    *,
+    expected_header: str,
+) -> None:
+    lines = text.splitlines()
+    if len(lines) < 3 or lines[0] != expected_header:
+        raise ValueError(f"document must begin with {expected_header!r}")
+    scenario_id = _header_value(lines[1], "# scenario_id: ")
+    validate_scenario_id(scenario_id)
+    normalization_version = _header_value(
+        lines[2],
+        "# normalization_version: ",
+    )
+    if not normalization_version.strip():
+        raise ValueError("normalization_version must not be empty")
 
 
 __all__ = (

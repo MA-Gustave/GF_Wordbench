@@ -127,12 +127,8 @@ def test_case_string_concatenation_requires_explicit_pattern_type() -> None:
 
     untyped_result = scan_structure_rules(_views(untyped))
     assert untyped_result.untyped_case_str_pat == 1
-    assert untyped_result.findings[0].rule_id == (
-        UNTYPED_CASE_STRING_PATTERN_RULE_ID
-    )
-    assert untyped_result.findings[0].count_field == (
-        UNTYPED_CASE_STRING_PATTERN_COUNT_FIELD
-    )
+    assert untyped_result.findings[0].rule_id == (UNTYPED_CASE_STRING_PATTERN_RULE_ID)
+    assert untyped_result.findings[0].count_field == (UNTYPED_CASE_STRING_PATTERN_COUNT_FIELD)
 
     typed_result = scan_structure_rules(_views(typed))
     assert typed_result.untyped_case_str_pat == 0
@@ -148,12 +144,8 @@ def test_table_string_concatenation_requires_explicit_pattern_type() -> None:
 
     untyped_result = scan_structure_rules(_views(untyped))
     assert untyped_result.untyped_table_str_pat == 1
-    assert untyped_result.findings[0].rule_id == (
-        UNTYPED_TABLE_STRING_PATTERN_RULE_ID
-    )
-    assert untyped_result.findings[0].count_field == (
-        UNTYPED_TABLE_STRING_PATTERN_COUNT_FIELD
-    )
+    assert untyped_result.findings[0].rule_id == (UNTYPED_TABLE_STRING_PATTERN_RULE_ID)
+    assert untyped_result.findings[0].count_field == (UNTYPED_TABLE_STRING_PATTERN_COUNT_FIELD)
 
     assert scan_structure_rules(_views(typed)).untyped_table_str_pat == 0
 
@@ -178,10 +170,10 @@ def test_one_case_block_can_emit_runtime_and_pattern_findings() -> None:
 
 
 def test_keywords_and_braces_inside_comments_or_strings_are_ignored() -> None:
-    source = '''lin literal = "case record.s of { \\"yes\\" => True }" ;
+    source = """lin literal = "case record.s of { \\"yes\\" => True }" ;
 -- case record.s of { "yes" => True }
 {- table { stem + "s" => stem } -}
-lin ordinary = ordinary ;'''
+lin ordinary = ordinary ;"""
 
     result = scan_structure_rules(_views(source))
 

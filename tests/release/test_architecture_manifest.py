@@ -15,14 +15,13 @@ import re
 from types import ModuleType
 from typing import Final
 
-
-EXPECTED_TOTAL: Final = 393
-EXPECTED_MANIFEST_SHA256: Final = "2261e217a68600a1cbbf56bad888b134a0d482385eb9e8ba615b2de524f3d348"
+EXPECTED_TOTAL: Final = 404
+EXPECTED_MANIFEST_SHA256: Final = "50ae962a49493cc64258b5dfdec14f95a0401e4f64908373558bddf404c59559"
 
 EXPECTED_CATEGORY_COUNTS: Final = {
-    "runtime": 222,
+    "runtime": 229,
     "support": 14,
-    "tests": 157,
+    "tests": 161,
 }
 
 EXPECTED_RUNTIME_COUNTS: Final = {
@@ -30,31 +29,28 @@ EXPECTED_RUNTIME_COUNTS: Final = {
     "config": 6,
     "kernel": 7,
     "state": 5,
-    "projects": 14,
+    "projects": 19,
     "runs": 21,
     "validation": 54,
     "diagnostics": 32,
     "reporting": 38,
     "infrastructure": 15,
-    "entrypoints": 25,
+    "entrypoints": 27,
 }
 
 EXPECTED_TEST_COUNTS: Final = {
     "test_root": 1,
     "helpers": 4,
-    "unit": 90,
+    "unit": 92,
     "components": 8,
     "contracts": 14,
     "schemas": 7,
-    "integration": 24,
+    "integration": 26,
     "migrations": 4,
     "release": 5,
 }
 
-_DOCUMENT_CANDIDATES: Final = (
-    Path("docs/architecture/CANONICAL_FILE_ARCHITECTURE.md"),
-    Path("docs/GF_WORDBENCH_CANONICAL_FILE_ARCHITECTURE.md"),
-)
+_DOCUMENT: Final = Path("docs/architecture/CANONICAL_FILE_ARCHITECTURE.md")
 
 _MANIFEST_TEXT: Final = """\
 .github/workflows/quality.yml
@@ -117,6 +113,7 @@ src/gf_wordbench/entrypoints/automation.py
 src/gf_wordbench/entrypoints/cli/__init__.py
 src/gf_wordbench/entrypoints/cli/audit_commands.py
 src/gf_wordbench/entrypoints/cli/exit_codes.py
+src/gf_wordbench/entrypoints/cli/language_commands.py
 src/gf_wordbench/entrypoints/cli/main.py
 src/gf_wordbench/entrypoints/cli/maintenance_commands.py
 src/gf_wordbench/entrypoints/cli/output.py
@@ -133,6 +130,7 @@ src/gf_wordbench/entrypoints/gui/panels/progress.py
 src/gf_wordbench/entrypoints/gui/panels/project.py
 src/gf_wordbench/entrypoints/gui/panels/results.py
 src/gf_wordbench/entrypoints/gui/panels/validation.py
+src/gf_wordbench/entrypoints/gui/startup.py
 src/gf_wordbench/entrypoints/gui/view_model.py
 src/gf_wordbench/entrypoints/gui/widgets.py
 src/gf_wordbench/entrypoints/gui/window.py
@@ -162,6 +160,11 @@ src/gf_wordbench/kernel/statuses.py
 src/gf_wordbench/projects/__init__.py
 src/gf_wordbench/projects/filesystem_adapter.py
 src/gf_wordbench/projects/initializer.py
+src/gf_wordbench/projects/languages/__init__.py
+src/gf_wordbench/projects/languages/models.py
+src/gf_wordbench/projects/languages/ports.py
+src/gf_wordbench/projects/languages/probe.py
+src/gf_wordbench/projects/languages/public.py
 src/gf_wordbench/projects/loader.py
 src/gf_wordbench/projects/migrator.py
 src/gf_wordbench/projects/models.py
@@ -326,6 +329,7 @@ tests/integration/cli/test_maintenance_commands.py
 tests/integration/end_to_end/test_checkpoint_mode.py
 tests/integration/end_to_end/test_diagnostic_mode.py
 tests/integration/end_to_end/test_partial_run_finalization.py
+tests/integration/end_to_end/test_path_resolved_language_startup.py
 tests/integration/end_to_end/test_quick_mode.py
 tests/integration/end_to_end/test_release_mode.py
 tests/integration/gf/test_artifact_observation.py
@@ -336,6 +340,7 @@ tests/integration/gf/test_pgf_build.py
 tests/integration/gf/test_scenario_execution.py
 tests/integration/gf/test_unicode.py
 tests/integration/gf/test_version_probe.py
+tests/integration/gui/test_language_switching.py
 tests/integration/gui/test_run_and_cancel.py
 tests/integration/gui/test_startup.py
 tests/integration/process/test_arguments.py
@@ -365,6 +370,7 @@ tests/unit/config/test_precedence.py
 tests/unit/config/test_resolver.py
 tests/unit/diagnostics/test_blockers.py
 tests/unit/diagnostics/test_classification.py
+tests/unit/diagnostics/test_control_panel.py
 tests/unit/diagnostics/test_deduplication.py
 tests/unit/diagnostics/test_findings.py
 tests/unit/diagnostics/test_multiline_and_matching.py
@@ -392,6 +398,7 @@ tests/unit/kernel/test_ids.py
 tests/unit/kernel/test_paths.py
 tests/unit/kernel/test_serialization.py
 tests/unit/kernel/test_statuses.py
+tests/unit/projects/test_language_probe.py
 tests/unit/projects/test_lifecycle.py
 tests/unit/projects/test_loader.py
 tests/unit/projects/test_migrator.py
@@ -474,9 +481,7 @@ _IGNORED_DIRECTORY_NAMES: Final = frozenset(
 def _repository_root() -> Path:
     root = Path(__file__).resolve().parents[2]
     if not (root / "pyproject.toml").is_file():
-        raise AssertionError(
-            f"Could not locate repository root from {__file__!r}"
-        )
+        raise AssertionError(f"Could not locate repository root from {__file__!r}")
     return root
 
 
@@ -508,15 +513,10 @@ def _test_area(path: str) -> str:
 
 
 def _normative_document(root: Path) -> Path:
-    for relative in _DOCUMENT_CANDIDATES:
-        candidate = root / relative
-        if candidate.is_file():
-            return candidate
-    expected = ", ".join(path.as_posix() for path in _DOCUMENT_CANDIDATES)
-    raise AssertionError(
-        "Canonical architecture document is missing; expected one of: "
-        f"{expected}"
-    )
+    document = root / _DOCUMENT
+    if document.is_file():
+        return document
+    raise AssertionError(f"Canonical architecture document is missing: {_DOCUMENT.as_posix()}")
 
 
 def _parse_document_manifest(text: str) -> frozenset[str]:
@@ -529,51 +529,34 @@ def _parse_document_manifest(text: str) -> frozenset[str]:
         flags=re.MULTILINE | re.DOTALL,
     )
     if section is None:
-        raise AssertionError(
-            "Canonical architecture document has no Section 3 text tree"
-        )
+        raise AssertionError("Canonical architecture document has no Section 3 text tree")
 
     lines = section.group("tree").splitlines()
     if not lines or lines[0].strip() != "GF_Wordbench/":
-        raise AssertionError(
-            "Canonical architecture tree must start with GF_Wordbench/"
-        )
+        raise AssertionError("Canonical architecture tree must start with GF_Wordbench/")
 
     files: list[str] = []
     stack: list[str] = []
-    item_pattern = re.compile(
-        r"^(?P<prefix>(?:│   |    )*)(?:├── |└── )(?P<name>.+)$"
-    )
+    item_pattern = re.compile(r"^(?P<prefix>(?:│   |    )*)(?:├── |└── )(?P<name>.+)$")
 
     for line_number, line in enumerate(lines[1:], start=2):
         item = item_pattern.fullmatch(line)
         if item is None:
             if line.strip():
-                raise AssertionError(
-                    "Malformed canonical tree line "
-                    f"{line_number}: {line!r}"
-                )
+                raise AssertionError(f"Malformed canonical tree line {line_number}: {line!r}")
             continue
 
         prefix = item.group("prefix")
         if len(prefix) % 4:
-            raise AssertionError(
-                "Malformed canonical tree indentation on line "
-                f"{line_number}"
-            )
+            raise AssertionError(f"Malformed canonical tree indentation on line {line_number}")
 
         depth = len(prefix) // 4
         if depth > len(stack):
-            raise AssertionError(
-                "Canonical tree skips a directory level on line "
-                f"{line_number}"
-            )
+            raise AssertionError(f"Canonical tree skips a directory level on line {line_number}")
 
         name = item.group("name").strip()
         if not name or name in {".", ".."}:
-            raise AssertionError(
-                f"Invalid canonical tree entry on line {line_number}"
-            )
+            raise AssertionError(f"Invalid canonical tree entry on line {line_number}")
 
         stack = stack[:depth]
         if name.endswith("/"):
@@ -583,14 +566,9 @@ def _parse_document_manifest(text: str) -> frozenset[str]:
         files.append("/".join((*stack, name)))
 
     if len(files) != len(set(files)):
-        duplicates = sorted(
-            path
-            for path, count in Counter(files).items()
-            if count > 1
-        )
+        duplicates = sorted(path for path, count in Counter(files).items() if count > 1)
         raise AssertionError(
-            "Canonical document contains duplicate paths: "
-            + ", ".join(duplicates)
+            "Canonical document contains duplicate paths: " + ", ".join(duplicates)
         )
 
     return frozenset(files)
@@ -648,10 +626,7 @@ def _collect_repository_fixed_paths(root: Path) -> frozenset[str]:
     for candidate in root.iterdir():
         if not candidate.is_file():
             continue
-        if (
-            candidate.name in root_code_names
-            or candidate.suffix.lower() in root_code_suffixes
-        ):
+        if candidate.name in root_code_names or candidate.suffix.lower() in root_code_suffixes:
             collected.add(candidate.name)
 
     return frozenset(collected)
@@ -684,9 +659,7 @@ def _load_verifier(root: Path) -> ModuleType:
         script,
     )
     if specification is None or specification.loader is None:
-        raise AssertionError(
-            f"Could not load architecture verifier: {script}"
-        )
+        raise AssertionError(f"Could not load architecture verifier: {script}")
 
     module = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(module)
@@ -698,41 +671,31 @@ def _render_verifier_failure(result: object) -> str:
     rendered: list[str] = []
     for finding in findings:
         render = getattr(finding, "render", None)
-        rendered.append(
-            str(render()) if callable(render) else str(finding)
-        )
+        rendered.append(str(render()) if callable(render) else str(finding))
     return "\n".join(rendered) or repr(result)
 
 
 def test_embedded_release_manifest_is_self_consistent() -> None:
     assert len(EXPECTED_FIXED_PATHS) == EXPECTED_TOTAL
-    assert _manifest_digest(EXPECTED_FIXED_PATHS) == (
-        EXPECTED_MANIFEST_SHA256
+    assert _manifest_digest(EXPECTED_FIXED_PATHS) == (EXPECTED_MANIFEST_SHA256)
+
+    assert Counter(_category(path) for path in EXPECTED_FIXED_PATHS) == Counter(
+        EXPECTED_CATEGORY_COUNTS
     )
 
     assert Counter(
-        _category(path) for path in EXPECTED_FIXED_PATHS
-    ) == Counter(EXPECTED_CATEGORY_COUNTS)
-
-    assert Counter(
-        _runtime_area(path)
-        for path in EXPECTED_FIXED_PATHS
-        if _category(path) == "runtime"
+        _runtime_area(path) for path in EXPECTED_FIXED_PATHS if _category(path) == "runtime"
     ) == Counter(EXPECTED_RUNTIME_COUNTS)
 
     assert Counter(
-        _test_area(path)
-        for path in EXPECTED_FIXED_PATHS
-        if _category(path) == "tests"
+        _test_area(path) for path in EXPECTED_FIXED_PATHS if _category(path) == "tests"
     ) == Counter(EXPECTED_TEST_COUNTS)
 
 
 def test_normative_document_matches_release_manifest() -> None:
     root = _repository_root()
     document = _normative_document(root)
-    documented = _parse_document_manifest(
-        document.read_text(encoding="utf-8")
-    )
+    documented = _parse_document_manifest(document.read_text(encoding="utf-8"))
 
     missing = set(EXPECTED_FIXED_PATHS - documented)
     unexpected = set(documented - EXPECTED_FIXED_PATHS)
@@ -759,11 +722,7 @@ def test_architecture_verifier_accepts_release_tree() -> None:
     verifier = _load_verifier(root)
 
     verify = getattr(verifier, "verify", None)
-    assert callable(verify), (
-        "scripts/verify_architecture.py must expose verify(root)"
-    )
+    assert callable(verify), "scripts/verify_architecture.py must expose verify(root)"
 
     result = verify(root)
-    assert getattr(result, "passed", False), _render_verifier_failure(
-        result
-    )
+    assert getattr(result, "passed", False), _render_verifier_failure(result)

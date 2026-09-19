@@ -7,28 +7,26 @@ set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 
 pushd "%GF_WORDBENCH_ROOT%" >nul 2>&1
-if errorlevel 1 (
-    >&2 echo GF Wordbench launcher error: unable to access repository directory "%GF_WORDBENCH_ROOT%".
-    exit /b 3
-)
+if errorlevel 1 goto :repository_error
 
-if exist "%GF_WORDBENCH_LOCAL_CLI%" (
-    "%GF_WORDBENCH_LOCAL_CLI%" %*
-    set "GF_WORDBENCH_EXIT_CODE=%ERRORLEVEL%"
-    popd
-    exit /b %GF_WORDBENCH_EXIT_CODE%
-)
+if not exist "%GF_WORDBENCH_LOCAL_CLI%" goto :missing_cli
 
-where.exe gf-wordbench.exe >nul 2>&1
-if not errorlevel 1 (
-    gf-wordbench.exe %*
-    set "GF_WORDBENCH_EXIT_CODE=%ERRORLEVEL%"
-    popd
-    exit /b %GF_WORDBENCH_EXIT_CODE%
-)
+"%GF_WORDBENCH_LOCAL_CLI%" %*
+set "GF_WORDBENCH_EXIT_CODE=%ERRORLEVEL%"
+goto :finish
 
->&2 echo GF Wordbench launcher error: the canonical CLI executable was not found.
->&2 echo Expected local executable: "%GF_WORDBENCH_LOCAL_CLI%"
->&2 echo Install the project into .venv or make gf-wordbench.exe available on PATH.
+:missing_cli
+echo ERROR: Wordbench CLI environment is unavailable. 1>&2
+echo Expected local entrypoint: "%GF_WORDBENCH_LOCAL_CLI%" 1>&2
+echo Install the project into the repository-local .venv environment. 1>&2
+set "GF_WORDBENCH_EXIT_CODE=3"
+goto :finish
+
+:repository_error
+echo ERROR: Wordbench CLI cannot access its repository directory. 1>&2
+echo Repository directory: "%GF_WORDBENCH_ROOT%" 1>&2
+exit /b 3
+
+:finish
 popd
-exit /b 9009
+exit /b %GF_WORDBENCH_EXIT_CODE%

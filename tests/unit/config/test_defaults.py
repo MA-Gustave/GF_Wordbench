@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from gf_wordbench.config import defaults
 from gf_wordbench.config.models import (
+    EvidenceLevel,
     OutputDefaults,
     SchemaSupport,
     SelectionDefaults,
@@ -65,7 +67,7 @@ def test_selection_defaults_match_the_canonical_checkpoint_policy() -> None:
 
 def test_output_defaults_preserve_required_evidence_products() -> None:
     output = OutputDefaults(
-        evidence_level=defaults.DEFAULT_EVIDENCE_LEVEL,
+        evidence_level=cast("EvidenceLevel", defaults.DEFAULT_EVIDENCE_LEVEL),
         generate_manifest=defaults.DEFAULT_GENERATE_MANIFEST,
         generate_ai_ready=defaults.DEFAULT_GENERATE_AI_READY,
         aggregate_logs=defaults.DEFAULT_AGGREGATE_LOGS,
@@ -84,9 +86,7 @@ def test_supported_schema_majors_form_a_valid_schema_support_policy() -> None:
         project_major=defaults.SUPPORTED_PROJECT_SCHEMA_MAJOR,
         app_state_major=defaults.SUPPORTED_APP_STATE_SCHEMA_MAJOR,
         run_summary_major=defaults.SUPPORTED_RUN_SUMMARY_SCHEMA_MAJOR,
-        artifact_manifest_major=(
-            defaults.SUPPORTED_ARTIFACT_MANIFEST_SCHEMA_MAJOR
-        ),
+        artifact_manifest_major=(defaults.SUPPORTED_ARTIFACT_MANIFEST_SCHEMA_MAJOR),
     )
 
     assert support == SchemaSupport(
@@ -108,9 +108,6 @@ def test_local_state_and_text_defaults_are_portable_leaf_values() -> None:
 
 
 def test_framework_defaults_do_not_embed_machine_specific_paths() -> None:
-    public_values = (
-        getattr(defaults, name)
-        for name in defaults.__all__
-    )
+    public_values = (getattr(defaults, name) for name in defaults.__all__)
 
     assert all(not isinstance(value, Path) for value in public_values)

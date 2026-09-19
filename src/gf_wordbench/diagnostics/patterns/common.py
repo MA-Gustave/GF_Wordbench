@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import re
-import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
+import importlib
+import re
+import sys
 from types import MappingProxyType
-from typing import Final, Protocol, TypeAlias, runtime_checkable
+from typing import Callable, Final, Protocol, TypeAlias, cast, runtime_checkable
 
-from gf_wordbench.kernel.ids import (
-    DiagnosticPatternId,
-    validate_diagnostic_pattern_id,
-)
 from gf_wordbench.diagnostics.models import (
     DiagnosticEvidence as _CanonicalDiagnosticEvidence,
     DiagnosticLine as EvidenceLine,
@@ -23,7 +20,17 @@ from gf_wordbench.diagnostics.models import (
     PatternConfidence as _CanonicalPatternConfidence,
     PatternMatch as _CanonicalPatternMatch,
 )
-
+from gf_wordbench.diagnostics.vocabulary import (
+    DiagnosticSeverity,
+    DiagnosticStream,
+    DiagnosticStreamScope,
+    PatternConfidence,
+    PatternLifecycle,
+)
+from gf_wordbench.kernel.ids import (
+    DiagnosticPatternId,
+    validate_diagnostic_pattern_id,
+)
 from gf_wordbench.kernel.statuses import ErrorKind
 
 PARSER_PATTERN_VERSION: Final[str] = "1.0"
@@ -33,35 +40,27 @@ MAX_EXCERPT_CHARACTERS: Final[int] = 128 * 1024
 MAX_EXTRACTED_FIELDS: Final[int] = 32
 MAX_FIELD_CHARACTERS: Final[int] = 32 * 1024
 
-INTERNAL_GENERATE_PMCFG_PATTERN_ID: Final[DiagnosticPatternId] = (
-    validate_diagnostic_pattern_id("GF-DIAG-INTERNAL-001")
+INTERNAL_GENERATE_PMCFG_PATTERN_ID: Final[DiagnosticPatternId] = validate_diagnostic_pattern_id(
+    "GF-DIAG-INTERNAL-001"
 )
-EXPECTED_INFERRED_TYPE_PATTERN_ID: Final[DiagnosticPatternId] = (
-    validate_diagnostic_pattern_id("GF-DIAG-TYPE-001")
+EXPECTED_INFERRED_TYPE_PATTERN_ID: Final[DiagnosticPatternId] = validate_diagnostic_pattern_id(
+    "GF-DIAG-TYPE-001"
 )
-SOURCE_SYNTAX_PATTERN_ID: Final[DiagnosticPatternId] = (
-    validate_diagnostic_pattern_id("GF-DIAG-SYNTAX-001")
+SOURCE_SYNTAX_PATTERN_ID: Final[DiagnosticPatternId] = validate_diagnostic_pattern_id(
+    "GF-DIAG-SYNTAX-001"
 )
-GF_SOURCE_REFERENCE_PATTERN_ID: Final[DiagnosticPatternId] = (
-    validate_diagnostic_pattern_id("GF-DIAG-LOCATION-001")
+GF_SOURCE_REFERENCE_PATTERN_ID: Final[DiagnosticPatternId] = validate_diagnostic_pattern_id(
+    "GF-DIAG-LOCATION-001"
 )
-FATAL_CONTEXT_PATTERN_ID: Final[DiagnosticPatternId] = (
-    validate_diagnostic_pattern_id("GF-DIAG-CONTEXT-001")
+FATAL_CONTEXT_PATTERN_ID: Final[DiagnosticPatternId] = validate_diagnostic_pattern_id(
+    "GF-DIAG-CONTEXT-001"
 )
-UNKNOWN_PATTERN_ID: Final[str] = "DIAG-UNKNOWN"
+UNKNOWN_PATTERN_ID: Final[str] = "DP-FALLBACK-001"
 
-_INTERNAL_GENERATE_PMCFG_RE: Final[re.Pattern[str]] = re.compile(
-    r"Internal error in GeneratePMCFG"
-)
-_EXPECTED_RE: Final[re.Pattern[str]] = re.compile(
-    r"^\s*expected:\s*(?P<value>.*)$"
-)
-_INFERRED_RE: Final[re.Pattern[str]] = re.compile(
-    r"^\s*inferred:\s*(?P<value>.*)$"
-)
-_HAPPENED_IN_RE: Final[re.Pattern[str]] = re.compile(
-    r"^\s*(?P<message>Happened in[^\r\n]*)\s*$"
-)
+_INTERNAL_GENERATE_PMCFG_RE: Final[re.Pattern[str]] = re.compile(r"Internal error in GeneratePMCFG")
+_EXPECTED_RE: Final[re.Pattern[str]] = re.compile(r"^\s*expected:\s*(?P<value>.*)$")
+_INFERRED_RE: Final[re.Pattern[str]] = re.compile(r"^\s*inferred:\s*(?P<value>.*)$")
+_HAPPENED_IN_RE: Final[re.Pattern[str]] = re.compile(r"^\s*(?P<message>Happened in[^\r\n]*)\s*$")
 _SOURCE_SYNTAX_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<message>.*(?:Syntax error|Parse error|Unexpected token).*)$"
 )
@@ -69,12 +68,8 @@ _GF_SOURCE_REFERENCE_RE: Final[re.Pattern[str]] = re.compile(
     r"(?P<path>[A-Za-z0-9_./\\-]+\.gf)\b",
     re.IGNORECASE,
 )
-_PROGRESS_COMPILE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^\s*-\s+compiling\b"
-)
-_PROGRESS_LINK_RE: Final[re.Pattern[str]] = re.compile(
-    r"^\s*(?:linking|Writing)\b"
-)
+_PROGRESS_COMPILE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*-\s+compiling\b")
+_PROGRESS_LINK_RE: Final[re.Pattern[str]] = re.compile(r"^\s*(?:linking|Writing)\b")
 _FATAL_CONTEXT_RES: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"Internal error"),
     re.compile(r"Cannot find an inflection rule"),
@@ -93,44 +88,6 @@ class DiagnosticOperation(StrEnum):
     BUILD_PGF = "build_pgf"
     RUN_SCENARIO = "run_scenario"
     INSPECT_GRAMMAR = "inspect_grammar"
-
-
-@unique
-class DiagnosticStream(StrEnum):
-    STDOUT = "stdout"
-    STDERR = "stderr"
-
-
-@unique
-class DiagnosticStreamScope(StrEnum):
-    STDOUT = "stdout"
-    STDERR = "stderr"
-    EITHER = "either"
-    BOTH_STRUCTURE = "both-structure"
-
-
-@unique
-class PatternLifecycle(StrEnum):
-    ACTIVE = "active"
-    EXPERIMENTAL = "experimental"
-    DEPRECATED = "deprecated"
-    RETIRED = "retired"
-
-
-@unique
-class PatternConfidence(StrEnum):
-    EXACT = "exact"
-    STRONG = "strong"
-    FALLBACK = "fallback"
-    UNKNOWN = "unknown"
-
-
-@unique
-class DiagnosticSeverity(StrEnum):
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-    FATAL = "fatal"
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,16 +174,10 @@ ExtractedFields: TypeAlias = Mapping[str, str]
 
 @dataclass(frozen=True, slots=True)
 class PatternMatch:
-    def __new__(cls, *args: object, **kwargs: object) -> object:
-        if (
-            cls is PatternMatch
-            and (
-                "source_stream" in kwargs
-                or "line_number" in kwargs
-            )
-        ):
-            return _build_legacy_compilation_match(*args, **kwargs)
-        return object.__new__(cls)
+    def __new__(cls, *args: object, **kwargs: object) -> PatternMatch:
+        if cls is PatternMatch and ("source_stream" in kwargs or "line_number" in kwargs):
+            return cast("PatternMatch", _build_legacy_compilation_match(*args, **kwargs))
+        return cast("PatternMatch", object.__new__(cls))
 
     pattern_id: DiagnosticPatternId
     error_kind: ErrorKind | None
@@ -269,9 +220,7 @@ class PatternMatch:
         if type(self.primary_eligible) is not bool:
             raise TypeError("primary_eligible must be a boolean")
         if self.primary_eligible and self.error_kind is None:
-            raise ValueError(
-                "a primary-eligible match must define an error kind"
-            )
+            raise ValueError("a primary-eligible match must define an error kind")
         object.__setattr__(self, "pattern_id", pattern_id)
         object.__setattr__(self, "message", message)
         object.__setattr__(self, "detail", detail)
@@ -288,23 +237,18 @@ class DiagnosticPatternMatcher(Protocol):
     def __call__(
         self,
         evidence: DiagnosticPatternInput,
-    ) -> PatternMatch | None:
-        ...
+    ) -> PatternMatch | None: ...
 
 
 @dataclass(frozen=True, slots=True)
 class DiagnosticPattern:
-    def __new__(cls, *args: object, **kwargs: object) -> object:
-        if (
-            cls is DiagnosticPattern
-            and (
-                "operations" in kwargs
-                or "streams" in kwargs
-                or "priority" in kwargs
-            )
+    def __new__(cls, *args: object, **kwargs: object) -> DiagnosticPattern:
+        if cls is DiagnosticPattern and (
+            "operations" in kwargs or "streams" in kwargs or "priority" in kwargs
         ):
-            return _CanonicalDiagnosticPattern(*args, **kwargs)
-        return object.__new__(cls)
+            factory = cast("Callable[..., DiagnosticPattern]", _CanonicalDiagnosticPattern)
+            return factory(*args, **kwargs)
+        return cast("DiagnosticPattern", object.__new__(cls))
 
     pattern_id: DiagnosticPatternId
     lifecycle_state: PatternLifecycle
@@ -328,13 +272,8 @@ class DiagnosticPattern:
         operations = frozenset(self.supported_operations)
         if not operations:
             raise ValueError("supported_operations must not be empty")
-        if any(
-            not isinstance(operation, DiagnosticOperation)
-            for operation in operations
-        ):
-            raise TypeError(
-                "supported_operations must contain DiagnosticOperation values"
-            )
+        if any(not isinstance(operation, DiagnosticOperation) for operation in operations):
+            raise TypeError("supported_operations must contain DiagnosticOperation values")
         versions = _freeze_text_tuple(
             self.supported_gf_versions,
             field_name="supported_gf_versions",
@@ -342,8 +281,7 @@ class DiagnosticPattern:
             maximum=128,
         )
         platforms = frozenset(
-            _canonical_platform(platform)
-            for platform in self.supported_platforms
+            _canonical_platform(platform) for platform in self.supported_platforms
         )
         if not platforms:
             raise ValueError("supported_platforms must not be empty")
@@ -364,9 +302,7 @@ class DiagnosticPattern:
         ):
             raise TypeError("severity must be DiagnosticSeverity or None")
         if not isinstance(self.matcher, DiagnosticPatternMatcher):
-            raise TypeError(
-                "matcher must satisfy DiagnosticPatternMatcher"
-            )
+            raise TypeError("matcher must satisfy DiagnosticPatternMatcher")
         guards = _freeze_text_tuple(
             self.false_positive_guards,
             field_name="false_positive_guards",
@@ -417,25 +353,14 @@ class DiagnosticPattern:
         if result is None:
             return None
         if result.pattern_id != self.pattern_id:
-            raise ValueError(
-                f"matcher returned {result.pattern_id!r} for "
-                f"{self.pattern_id!r}"
-            )
+            raise ValueError(f"matcher returned {result.pattern_id!r} for {self.pattern_id!r}")
         if result.confidence is not self.confidence:
-            raise ValueError(
-                f"matcher confidence does not match {self.pattern_id!r}"
-            )
+            raise ValueError(f"matcher confidence does not match {self.pattern_id!r}")
         if result.error_kind is not self.error_kind:
-            raise ValueError(
-                f"matcher error kind does not match {self.pattern_id!r}"
-            )
+            raise ValueError(f"matcher error kind does not match {self.pattern_id!r}")
         if result.severity is not self.severity:
-            raise ValueError(
-                f"matcher severity does not match {self.pattern_id!r}"
-            )
+            raise ValueError(f"matcher severity does not match {self.pattern_id!r}")
         return result
-
-
 
 
 def _canonical_evidence_lines(
@@ -465,11 +390,7 @@ def _canonical_evidence_lines(
 
 
 if not hasattr(_CanonicalDiagnosticEvidence, "lines"):
-    setattr(
-        _CanonicalDiagnosticEvidence,
-        "lines",
-        property(_canonical_evidence_lines),
-    )
+    setattr(_CanonicalDiagnosticEvidence, "lines", property(_canonical_evidence_lines))
 
 
 _LEGACY_COMPILATION_MATCH_METADATA: Final[
@@ -507,9 +428,7 @@ def _build_legacy_compilation_match(
     **kwargs: object,
 ) -> _CanonicalPatternMatch:
     if args:
-        raise TypeError(
-            "legacy compilation PatternMatch requires keyword arguments"
-        )
+        raise TypeError("legacy compilation PatternMatch requires keyword arguments")
 
     values = dict(kwargs)
     pattern_id = _require_text(
@@ -526,26 +445,18 @@ def _build_legacy_compilation_match(
 
     if values:
         unexpected = ", ".join(sorted(values))
-        raise TypeError(
-            f"unexpected legacy PatternMatch fields: {unexpected}"
-        )
+        raise TypeError(f"unexpected legacy PatternMatch fields: {unexpected}")
 
     if source_stream == "combined":
         canonical_stream: _CanonicalDiagnosticStream | None = None
-        metadata: Mapping[str, str] = MappingProxyType(
-            {"legacy_source_stream": "combined"}
-        )
+        metadata: Mapping[str, str] = MappingProxyType({"legacy_source_stream": "combined"})
     else:
         try:
             canonical_stream = (
-                None
-                if source_stream is None
-                else _CanonicalDiagnosticStream(str(source_stream))
+                None if source_stream is None else _CanonicalDiagnosticStream(str(source_stream))
             )
         except ValueError as exc:
-            raise ValueError(
-                "source_stream must be stdout, stderr, combined, or None"
-            ) from exc
+            raise ValueError("source_stream must be stdout, stderr, combined, or None") from exc
         metadata = MappingProxyType({})
 
     if line_number is not None:
@@ -553,13 +464,9 @@ def _build_legacy_compilation_match(
             raise ValueError("line_number must be a positive integer or None")
 
     try:
-        error_kind, severity, confidence = (
-            _LEGACY_COMPILATION_MATCH_METADATA[pattern_id]
-        )
+        error_kind, severity, confidence = _LEGACY_COMPILATION_MATCH_METADATA[pattern_id]
     except KeyError as exc:
-        raise ValueError(
-            f"unsupported legacy compilation pattern ID: {pattern_id}"
-        ) from exc
+        raise ValueError(f"unsupported legacy compilation pattern ID: {pattern_id}") from exc
 
     return _CanonicalPatternMatch(
         pattern_id=pattern_id,
@@ -597,33 +504,29 @@ def select_diagnostic_patterns(
 ) -> tuple[_CanonicalDiagnosticPattern, ...]:
     """Return the deterministic canonical pattern catalog for evidence.
 
-    Imports are intentionally lazy so the common contract module remains free
-    of eager catalog registration and circular imports.
+    Catalog modules are resolved dynamically so this shared contract module has
+    no static dependency on modules that import its compatibility contracts.
     """
 
     if not isinstance(evidence, _CanonicalDiagnosticEvidence):
         raise TypeError("evidence must be DiagnosticEvidence")
 
-    from .compilation import COMPILATION_PATTERNS
-    from .scenarios import SCENARIO_PATTERNS
-
     candidates = (
-        *COMPILATION_PATTERNS,
-        *SCENARIO_PATTERNS,
+        *_load_canonical_pattern_catalog(
+            "gf_wordbench.diagnostics.patterns.compilation",
+            "COMPILATION_PATTERNS",
+        ),
+        *_load_canonical_pattern_catalog(
+            "gf_wordbench.diagnostics.patterns.scenarios",
+            "SCENARIO_PATTERNS",
+        ),
     )
     identifiers: set[str] = set()
     selected: list[_CanonicalDiagnosticPattern] = []
 
     for pattern in candidates:
-        if not isinstance(pattern, _CanonicalDiagnosticPattern):
-            raise TypeError(
-                "diagnostic catalogs must contain canonical "
-                "DiagnosticPattern values"
-            )
         if pattern.pattern_id in identifiers:
-            raise ValueError(
-                f"duplicate diagnostic pattern ID: {pattern.pattern_id}"
-            )
+            raise ValueError(f"duplicate diagnostic pattern ID: {pattern.pattern_id}")
         identifiers.add(pattern.pattern_id)
         selected.append(pattern)
 
@@ -637,6 +540,26 @@ def select_diagnostic_patterns(
         )
     )
 
+
+def _load_canonical_pattern_catalog(
+    module_name: str,
+    attribute_name: str,
+) -> tuple[_CanonicalDiagnosticPattern, ...]:
+    """Load and validate one canonical pattern catalog without static imports."""
+
+    module = importlib.import_module(module_name)
+    catalog = getattr(module, attribute_name, None)
+    if not isinstance(catalog, tuple):
+        raise TypeError(f"{module_name}.{attribute_name} must be a tuple")
+
+    validated: list[_CanonicalDiagnosticPattern] = []
+    for pattern in catalog:
+        if not isinstance(pattern, _CanonicalDiagnosticPattern):
+            raise TypeError("diagnostic catalogs must contain canonical DiagnosticPattern values")
+        validated.append(pattern)
+    return tuple(validated)
+
+
 def match_internal_generate_pmcfg(
     evidence: DiagnosticPatternInput,
 ) -> PatternMatch | None:
@@ -648,8 +571,7 @@ def match_internal_generate_pmcfg(
             error_kind=ErrorKind.INTERNAL,
             severity=DiagnosticSeverity.FATAL,
             confidence=PatternConfidence.STRONG,
-            message=line.text.strip()
-            or "Internal error in GeneratePMCFG",
+            message=line.text.strip() or "Internal error in GeneratePMCFG",
             detail="GeneratePMCFG",
             evidence_lines=bounded_context(
                 evidence,
@@ -665,7 +587,7 @@ def match_internal_generate_pmcfg(
 def match_expected_inferred_type(
     evidence: DiagnosticPatternInput,
 ) -> PatternMatch | None:
-    lines = evidence.lines(DiagnosticStreamScope.BOTH_STRUCTURE)
+    lines = evidence.lines(DiagnosticStreamScope.BOTH)
     expected_line: DiagnosticLine | None = None
     inferred_line: DiagnosticLine | None = None
     expected_value = ""
@@ -690,11 +612,7 @@ def match_expected_inferred_type(
         expected_line=expected_line,
         inferred_line=inferred_line,
     )
-    message = (
-        context_line.text.strip()
-        if context_line is not None
-        else "Type error"
-    )
+    message = context_line.text.strip() if context_line is not None else "Type error"
     evidence_lines = tuple(
         sorted(
             {
@@ -714,10 +632,7 @@ def match_expected_inferred_type(
         severity=DiagnosticSeverity.ERROR,
         confidence=PatternConfidence.STRONG,
         message=message,
-        detail=(
-            f"expected: {expected_value} | "
-            f"inferred: {inferred_value}"
-        ),
+        detail=(f"expected: {expected_value} | inferred: {inferred_value}"),
         evidence_lines=evidence_lines,
         extracted_fields={
             "expected": expected_value,
@@ -789,9 +704,7 @@ def extract_gf_source_references(
             ),
         )
     else:
-        raise TypeError(
-            "value must be a string or DiagnosticPatternInput"
-        )
+        raise TypeError("value must be a string or DiagnosticPatternInput")
 
     references: dict[str, str] = {}
     for text in texts:
@@ -862,49 +775,36 @@ def bounded_context(
     if anchor.number > len(stream_lines):
         raise ValueError("anchor line is outside the selected stream")
     selected = stream_lines[
-        max(0, anchor.number - before - 1):
-        min(len(stream_lines), anchor.number + after)
+        max(0, anchor.number - before - 1) : min(len(stream_lines), anchor.number + after)
     ]
-    if not any(
-        line.number == anchor.number and line.text == anchor.text
-        for line in selected
-    ):
+    if not any(line.number == anchor.number and line.text == anchor.text for line in selected):
         raise ValueError("anchor does not match the supplied evidence")
     return _bound_excerpt_lines(selected)
 
 
 def render_evidence_lines(lines: Iterable[DiagnosticLine]) -> str:
     prepared = _freeze_lines(lines)
-    rendered = "\n".join(
-        f"[{line.stream.value}:{line.number}] {line.text}"
-        for line in prepared
-    )
+    rendered = "\n".join(f"[{line.stream.value}:{line.number}] {line.text}" for line in prepared)
     if len(rendered) <= MAX_EXCERPT_CHARACTERS:
         return rendered
-    return (
-        rendered[: MAX_EXCERPT_CHARACTERS - 26]
-        + "\n... <excerpt omitted> ..."
-    )
+    return rendered[: MAX_EXCERPT_CHARACTERS - 26] + "\n... <excerpt omitted> ..."
 
 
 def canonical_pattern_order(
-    patterns: Iterable[DiagnosticPattern],
+    patterns: object,
 ) -> tuple[DiagnosticPattern, ...]:
-    if isinstance(patterns, (str, bytes)):
-        raise TypeError(
-            "patterns must be an iterable of DiagnosticPattern"
-        )
-    prepared = tuple(patterns)
+    if isinstance(patterns, (str, bytes)) or not isinstance(patterns, Iterable):
+        raise TypeError("patterns must be an iterable of DiagnosticPattern")
+    raw_patterns = tuple(patterns)
+    prepared: list[DiagnosticPattern] = []
+    for pattern in raw_patterns:
+        if not isinstance(pattern, DiagnosticPattern):
+            raise TypeError("patterns must contain DiagnosticPattern objects")
+        prepared.append(pattern)
     seen: set[DiagnosticPatternId] = set()
     for pattern in prepared:
-        if not isinstance(pattern, DiagnosticPattern):
-            raise TypeError(
-                "patterns must contain DiagnosticPattern objects"
-            )
         if pattern.pattern_id in seen:
-            raise ValueError(
-                f"duplicate diagnostic pattern ID {pattern.pattern_id!r}"
-            )
+            raise ValueError(f"duplicate diagnostic pattern ID {pattern.pattern_id!r}")
         seen.add(pattern.pattern_id)
     return tuple(
         sorted(
@@ -977,8 +877,7 @@ def _line_distance(
 
 def _is_progress_line(value: str) -> bool:
     return (
-        _PROGRESS_COMPILE_RE.match(value) is not None
-        or _PROGRESS_LINK_RE.match(value) is not None
+        _PROGRESS_COMPILE_RE.match(value) is not None or _PROGRESS_LINK_RE.match(value) is not None
     )
 
 
@@ -1008,28 +907,21 @@ def _bound_excerpt_lines(
 
 
 def _freeze_lines(
-    values: Iterable[DiagnosticLine],
+    values: object,
 ) -> tuple[DiagnosticLine, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "evidence_lines must be an iterable of DiagnosticLine"
-        )
-    prepared = tuple(values)
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
+        raise TypeError("evidence_lines must be an iterable of DiagnosticLine")
+    raw_lines = tuple(values)
+    prepared: list[DiagnosticLine] = []
+    for line in raw_lines:
+        if not isinstance(line, DiagnosticLine):
+            raise TypeError("evidence_lines must contain DiagnosticLine objects")
+        prepared.append(line)
     if not prepared:
         raise ValueError("evidence_lines must not be empty")
-    for line in prepared:
-        if not isinstance(line, DiagnosticLine):
-            raise TypeError(
-                "evidence_lines must contain DiagnosticLine objects"
-            )
-    keys = tuple(
-        (line.stream, line.number)
-        for line in prepared
-    )
+    keys = tuple((line.stream, line.number) for line in prepared)
     if len(keys) != len(set(keys)):
-        raise ValueError(
-            "evidence_lines must not repeat a stream line"
-        )
+        raise ValueError("evidence_lines must not repeat a stream line")
     return tuple(sorted(prepared, key=_line_sort_key))
 
 
@@ -1037,9 +929,7 @@ def _freeze_fields(values: ExtractedFields) -> ExtractedFields:
     if not isinstance(values, Mapping):
         raise TypeError("extracted_fields must be a mapping")
     if len(values) > MAX_EXTRACTED_FIELDS:
-        raise ValueError(
-            "extracted_fields exceeds the supported item limit"
-        )
+        raise ValueError("extracted_fields exceeds the supported item limit")
     prepared: dict[str, str] = {}
     for key, value in values.items():
         key = _require_text(
@@ -1052,9 +942,7 @@ def _freeze_fields(values: ExtractedFields) -> ExtractedFields:
             r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*",
             key,
         ):
-            raise ValueError(
-                f"invalid extracted field name {key!r}"
-            )
+            raise ValueError(f"invalid extracted field name {key!r}")
         prepared[key] = _require_text(
             value,
             field_name=f"extracted_fields[{key!r}]",
@@ -1161,9 +1049,7 @@ def _require_text(
     if not allow_empty and not value.strip():
         raise ValueError(f"{field_name} must not be empty")
     if len(value) > maximum:
-        raise ValueError(
-            f"{field_name} exceeds the supported length limit"
-        )
+        raise ValueError(f"{field_name} exceeds the supported length limit")
     return value
 
 
@@ -1208,7 +1094,7 @@ EXPECTED_INFERRED_TYPE_PATTERN: Final[DiagnosticPattern] = DiagnosticPattern(
     ),
     supported_gf_versions=("tested",),
     supported_platforms=frozenset({"windows", "posix"}),
-    stream_scope=DiagnosticStreamScope.BOTH_STRUCTURE,
+    stream_scope=DiagnosticStreamScope.BOTH,
     precedence=200,
     confidence=PatternConfidence.STRONG,
     error_kind=ErrorKind.TYPE,
@@ -1279,19 +1165,16 @@ __all__ = (
     "SOURCE_SYNTAX_PATTERN",
     "SOURCE_SYNTAX_PATTERN_ID",
     "UNKNOWN_PATTERN_ID",
-    "DiagnosticLine",
-    "EvidenceLine",
     "DiagnosticOperation",
-    "DiagnosticPattern",
     "DiagnosticPatternInput",
     "DiagnosticPatternMatcher",
     "DiagnosticSeverity",
     "DiagnosticStream",
     "DiagnosticStreamScope",
+    "EvidenceLine",
     "ExtractedFields",
     "PatternConfidence",
     "PatternLifecycle",
-    "PatternMatch",
     "bounded_context",
     "canonical_pattern_order",
     "extract_gf_source_references",

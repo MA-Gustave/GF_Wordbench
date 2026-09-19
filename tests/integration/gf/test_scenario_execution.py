@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 from dataclasses import dataclass
+import os
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -47,16 +47,12 @@ class _ScenarioFixture:
 
 
 def _find_gf_executable() -> Path:
-    configured = (
-        os.environ.get("GF_WORDBENCH_GF_EXECUTABLE")
-        or os.environ.get("GF_EXECUTABLE")
-    )
+    configured = os.environ.get("GF_WORDBENCH_GF_EXECUTABLE") or os.environ.get("GF_EXECUTABLE")
     candidate = configured or shutil.which("gf")
 
     if not candidate:
         pytest.skip(
-            "A real GF executable is required; set "
-            "GF_WORDBENCH_GF_EXECUTABLE or place gf on PATH."
+            "A real GF executable is required; set GF_WORDBENCH_GF_EXECUTABLE or place gf on PATH."
         )
 
     executable = Path(candidate).expanduser().resolve()
@@ -108,8 +104,7 @@ def _write_fixture(
 
     source_paths = (abstract_path, concrete_path, script_path)
     source_hashes = tuple(
-        __import__("hashlib").sha256(path.read_bytes()).hexdigest()
-        for path in source_paths
+        __import__("hashlib").sha256(path.read_bytes()).hexdigest() for path in source_paths
     )
 
     return _ScenarioFixture(
@@ -175,10 +170,7 @@ def _execute(fixture: _ScenarioFixture) -> tuple[ProcessRequest, ProcessResult]:
 def _assert_sources_unchanged(fixture: _ScenarioFixture) -> None:
     import hashlib
 
-    observed = tuple(
-        hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in fixture.source_paths
-    )
+    observed = tuple(hashlib.sha256(path.read_bytes()).hexdigest() for path in fixture.source_paths)
     assert observed == fixture.source_hashes
 
 

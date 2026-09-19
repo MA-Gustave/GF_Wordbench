@@ -126,10 +126,13 @@ def test_exact_comparison_accepts_crlf_as_permitted_newline_handling() -> None:
     assert expected.canonical_text.endswith("\n")
     assert "\r" not in expected.canonical_text
     assert expected.comparison_projection() == actual.comparison_projection()
-    assert expected.sha256 == parse_scenario_text(
-        _scenario_text(kind=ScenarioTextKind.GOLD),
-        kind=ScenarioTextKind.GOLD,
-    ).sha256
+    assert (
+        expected.sha256
+        == parse_scenario_text(
+            _scenario_text(kind=ScenarioTextKind.GOLD),
+            kind=ScenarioTextKind.GOLD,
+        ).sha256
+    )
     assert expected.sha256 != actual.sha256
 
 
@@ -173,8 +176,7 @@ def test_mismatch_writes_a_bounded_unified_diff_and_preserves_gold(tmp_path: Pat
 
     diff_text = diff.read_text(encoding="utf-8")
     assert diff_text.startswith(
-        "--- project/validation/gold/parse.gold\n"
-        "+++ raw/scenarios/parse.out\n"
+        "--- project/validation/gold/parse.gold\n+++ raw/scenarios/parse.out\n"
     )
     assert "-expected value\n" in diff_text
     assert "+actual value\n" in diff_text
@@ -428,10 +430,7 @@ def test_build_unified_diff_is_deterministic_and_terminates_with_lf() -> None:
     )
 
     assert first == second
-    assert first.startswith(
-        "--- project/validation/gold/parse.gold\n"
-        "+++ raw/scenarios/parse.out\n"
-    )
+    assert first.startswith("--- project/validation/gold/parse.gold\n+++ raw/scenarios/parse.out\n")
     assert first.endswith("\n")
     assert "\r" not in first
 

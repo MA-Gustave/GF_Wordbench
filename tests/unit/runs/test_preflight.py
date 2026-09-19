@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import FrozenInstanceError, dataclass, replace
+import os
 from pathlib import Path
 from typing import Any, cast
 
@@ -16,13 +16,14 @@ from gf_wordbench.config.models import (
     ValidationTarget,
 )
 from gf_wordbench.kernel.errors import ConfigurationError
+from gf_wordbench.kernel.ids import validate_project_id, validate_scenario_id
 from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
 from gf_wordbench.projects.models import (
-    GFProjectConfig,
-    ModuleTargets,
     PROJECT_CONFIG_FILENAME,
     PROJECT_SCHEMA_ID,
     PROJECT_SCHEMA_VERSION,
+    GFProjectConfig,
+    ModuleTargets,
     ProjectConfig,
     ProjectIdentity,
     SourceConfig,
@@ -98,7 +99,7 @@ def _project(tmp_path: Path, **overrides: object) -> ProjectConfig:
         "schema_id": PROJECT_SCHEMA_ID,
         "schema_version": PROJECT_SCHEMA_VERSION,
         "identity": ProjectIdentity(
-            id="example-language",
+            id=validate_project_id("example-language"),
             name="Example Language",
             language_code="Exa",
             root=Path("."),
@@ -113,8 +114,11 @@ def _project(tmp_path: Path, **overrides: object) -> ProjectConfig:
             checkpoints=(Path("Checkpoint.gf"),),
         ),
         "validation": ValidationPolicy(
-            required_scenarios=("parse-basic", "generate-basic"),
-            optional_scenarios=("unicode-smoke",),
+            required_scenarios=(
+                validate_scenario_id("parse-basic"),
+                validate_scenario_id("generate-basic"),
+            ),
+            optional_scenarios=(validate_scenario_id("unicode-smoke"),),
             release_requires_pgf=True,
         ),
         "project_file": project_root / PROJECT_CONFIG_FILENAME,
@@ -122,11 +126,11 @@ def _project(tmp_path: Path, **overrides: object) -> ProjectConfig:
         "source_root": project_root / sources.directory,
     }
     values.update(overrides)
-    return ProjectConfig(**cast(Any, values))
+    return ProjectConfig(**cast("Any", values))
 
 
 def _configuration(tmp_path: Path, **overrides: object) -> RunConfig:
-    project = cast(ProjectConfig, overrides.pop("project", _project(tmp_path)))
+    project = cast("ProjectConfig", overrides.pop("project", _project(tmp_path)))
     environment = ResolvedEnvironment(
         project_root=project.project_root,
         rgl_root=tmp_path / "rgl",
@@ -147,27 +151,28 @@ def _configuration(tmp_path: Path, **overrides: object) -> RunConfig:
         "no_compile": False,
         "emit_cpu_stats": False,
         "selected_checkpoints": tuple(
-            project.source_root / path
-            for path in project.modules.checkpoints
+            project.source_root / path for path in project.modules.checkpoints
         ),
         "selected_entrypoints": tuple(
-            project.source_root / path
-            for path in project.modules.entrypoints
+            project.source_root / path for path in project.modules.entrypoints
         ),
-        "selected_scenarios": tuple(
-            str(value)
-            for value in project.validation.all_scenarios
-        ),
+        "selected_scenarios": tuple(str(value) for value in project.validation.all_scenarios),
         "release_requires_pgf": project.validation.release_requires_pgf,
         "evidence_level": "standard",
         "compatibility_warnings": (),
     }
     values.update(overrides)
-    return RunConfig(**cast(Any, values))
+    return RunConfig(**cast("Any", values))
+
+
+def _project_of(configuration: RunConfig) -> ProjectConfig:
+    project = configuration.project
+    assert isinstance(project, ProjectConfig)
+    return project
 
 
 def _filesystem(configuration: RunConfig) -> _FakeFilesystem:
-    project = configuration.project
+    project = _project_of(configuration)
     environment = configuration.environment
     project_paths = ProjectPaths.from_root(project.project_root)
 
@@ -308,7 +313,7 @@ def test_preflight_issue_rejects_invalid_contract_values(
     values.update(overrides)
 
     with pytest.raises(exception, match=message):
-        PreflightIssue(**cast(Any, values))
+        PreflightIssue(**cast("Any", values))
 
 
 def test_preflight_result_partitions_issues_and_requires_success(
@@ -387,17 +392,18 @@ def test_valid_preflight_succeeds_without_mutation(tmp_path: Path) -> None:
     assert result.succeeded is True
     assert result.issues == ()
     assert result.require() is configuration
-    assert require_preflight(
-        configuration,
-        filesystem=harness.filesystem,
-    ) is configuration
-    assert len({_key(path) for path in result.checked_paths}) == len(
-        result.checked_paths
+    assert (
+        require_preflight(
+            configuration,
+            filesystem=harness.filesystem,
+        )
+        is configuration
     )
+    assert len({_key(path) for path in result.checked_paths}) == len(result.checked_paths)
     assert result.checked_paths[:3] == (
-        configuration.project.project_root,
-        configuration.project.project_file,
-        configuration.project.source_root,
+        _project_of(configuration).project_root,
+        _project_of(configuration).project_file,
+        _project_of(configuration).source_root,
     )
 
 
@@ -405,12 +411,12 @@ def test_preflight_rejects_invalid_boundary_inputs(tmp_path: Path) -> None:
     harness = _harness(tmp_path)
 
     with pytest.raises(TypeError, match="RunConfig"):
-        preflight_run(cast(Any, object()))
+        preflight_run(cast("Any", object()))
 
     with pytest.raises(TypeError, match="PreflightFilesystem"):
         preflight_run(
             harness.configuration,
-            filesystem=cast(Any, object()),
+            filesystem=cast("Any", object()),
         )
 
 
@@ -428,7 +434,7 @@ def test_project_root_failures_are_structured(
     expected_code: str,
 ) -> None:
     harness = _harness(tmp_path)
-    path = harness.configuration.project.project_root
+    path = _project_of(harness.configuration).project_root
 
     if kind == "missing":
         harness.filesystem.directories.remove(path)
@@ -465,7 +471,7 @@ def test_project_config_failures_are_structured(
     expected_code: str,
 ) -> None:
     harness = _harness(tmp_path)
-    path = harness.configuration.project.project_file
+    path = _project_of(harness.configuration).project_file
 
     if kind == "missing":
         harness.filesystem.files.remove(path)
@@ -514,7 +520,7 @@ def test_source_root_failures_are_structured(
     expected_code: str,
 ) -> None:
     harness = _harness(tmp_path)
-    path = harness.configuration.project.source_root
+    path = _project_of(harness.configuration).source_root
 
     if kind == "missing":
         harness.filesystem.directories.remove(path)
@@ -646,7 +652,7 @@ def test_output_root_must_not_overlap_project_owned_paths(
     configuration = _configuration(tmp_path)
     environment = replace(
         configuration.environment,
-        output_root=configuration.project.project_root,
+        output_root=_project_of(configuration).project_root,
     )
     configuration = replace(configuration, environment=environment)
     filesystem = _filesystem(configuration)
@@ -655,7 +661,7 @@ def test_output_root_must_not_overlap_project_owned_paths(
 
     issue = _issues_for(result, "GF-WB-CONFIG-142")[0]
     assert issue.check is PreflightCheck.OUTPUT_ROOT
-    assert issue.path == configuration.project.project_root
+    assert issue.path == _project_of(configuration).project_root
 
 
 def test_resolved_output_symlink_overlap_is_detected(
@@ -663,7 +669,7 @@ def test_resolved_output_symlink_overlap_is_detected(
 ) -> None:
     harness = _harness(tmp_path)
     output = harness.configuration.environment.output_root
-    project_root = harness.configuration.project.project_root
+    project_root = _project_of(harness.configuration).project_root
     harness.filesystem.resolved[output] = project_root / "generated"
 
     result = preflight_run(
@@ -716,9 +722,7 @@ def test_each_gf_path_component_must_be_a_readable_directory(
     )
 
     assert expected_code in _codes(result)
-    assert _issues_for(result, expected_code)[0].field_path == (
-        "environment.gf_path[0]"
-    )
+    assert _issues_for(result, expected_code)[0].field_path == ("environment.gf_path[0]")
 
 
 @pytest.mark.parametrize(
@@ -860,11 +864,18 @@ def test_selected_module_membership_and_existence_are_enforced(
     expected_code: str,
 ) -> None:
     configuration = _configuration(tmp_path)
-    selected_path = configuration.project.source_root / path
-    configuration = replace(
-        configuration,
-        **{collection: (selected_path,)},
-    )
+    selected_path = _project_of(configuration).source_root / path
+    if collection == "selected_checkpoints":
+        configuration = replace(
+            configuration,
+            selected_checkpoints=(selected_path,),
+        )
+    else:
+        assert collection == "selected_entrypoints"
+        configuration = replace(
+            configuration,
+            selected_entrypoints=(selected_path,),
+        )
     filesystem = _filesystem(configuration)
 
     if "Missing" in path:
@@ -893,7 +904,7 @@ def test_release_must_select_every_declared_entrypoint(
     result = preflight_run(configuration, filesystem=filesystem)
 
     issue = _issues_for(result, "GF-WB-CONFIG-133")[0]
-    assert issue.path == configuration.project.source_root / "Secondary.gf"
+    assert issue.path == _project_of(configuration).source_root / "Secondary.gf"
 
 
 def test_selected_scenario_must_be_declared(tmp_path: Path) -> None:
@@ -924,7 +935,7 @@ def test_selected_scenario_file_must_exist_and_be_readable(
 ) -> None:
     harness = _harness(tmp_path, selected_scenarios=("parse-basic",))
     scenario_path = resolve_scenario_path(
-        ProjectPaths.from_root(harness.configuration.project.project_root),
+        ProjectPaths.from_root(_project_of(harness.configuration).project_root),
         "parse-basic",
     )
 
@@ -957,8 +968,7 @@ def test_release_must_select_every_required_scenario(
 
     assert "GF-WB-CONFIG-137" in _codes(result)
     assert any(
-        "generate-basic" in issue.message
-        for issue in _issues_for(result, "GF-WB-CONFIG-137")
+        "generate-basic" in issue.message for issue in _issues_for(result, "GF-WB-CONFIG-137")
     )
 
 
@@ -988,11 +998,18 @@ def test_release_cannot_weaken_required_execution_policy(
     expected_code: str,
 ) -> None:
     configuration = _configuration(tmp_path)
-    configuration = replace(
-        configuration,
-        mode=ValidationMode.RELEASE,
-        **overrides,
-    )
+    if "skip_version_probe" in overrides:
+        configuration = replace(
+            configuration,
+            mode=ValidationMode.RELEASE,
+            skip_version_probe=cast("bool", overrides["skip_version_probe"]),
+        )
+    else:
+        configuration = replace(
+            configuration,
+            mode=ValidationMode.RELEASE,
+            no_compile=cast("bool", overrides["no_compile"]),
+        )
     filesystem = _filesystem(configuration)
 
     result = preflight_run(configuration, filesystem=filesystem)
@@ -1016,9 +1033,7 @@ def test_compatibility_warnings_are_preserved_without_failing_preflight(
 
     assert result.succeeded is True
     assert tuple(issue.message for issue in result.warnings) == warnings
-    assert {issue.code for issue in result.warnings} == {
-        "GF-WB-CONFIG-141"
-    }
+    assert {issue.code for issue in result.warnings} == {"GF-WB-CONFIG-141"}
     assert result.require() is harness.configuration
 
 
@@ -1039,8 +1054,8 @@ def test_require_preflight_raises_first_structured_error(
     tmp_path: Path,
 ) -> None:
     harness = _harness(tmp_path)
-    project_root = harness.configuration.project.project_root
-    project_file = harness.configuration.project.project_file
+    project_root = _project_of(harness.configuration).project_root
+    project_file = _project_of(harness.configuration).project_file
     harness.filesystem.directories.remove(project_root)
     harness.filesystem.files.remove(project_file)
 

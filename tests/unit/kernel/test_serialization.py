@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from collections import OrderedDict
 from dataclasses import FrozenInstanceError, dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from enum import Enum, StrEnum
+import json
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
@@ -150,15 +150,12 @@ def test_rfc3339_formatter_rejects_invalid_values(
 
 
 def test_portable_path_serialization_uses_forward_slashes() -> None:
-    assert path_to_portable_string(
-        PureWindowsPath(r"C:\workspace\project\src\Main.gf")
-    ) == "C:/workspace/project/src/Main.gf"
-    assert path_to_portable_string(
-        PureWindowsPath(r"project\src\Main.gf")
-    ) == "project/src/Main.gf"
-    assert path_to_portable_string(
-        PurePosixPath("project/src/Main.gf")
-    ) == "project/src/Main.gf"
+    assert (
+        path_to_portable_string(PureWindowsPath(r"C:\workspace\project\src\Main.gf"))
+        == "C:/workspace/project/src/Main.gf"
+    )
+    assert path_to_portable_string(PureWindowsPath(r"project\src\Main.gf")) == "project/src/Main.gf"
+    assert path_to_portable_string(PurePosixPath("project/src/Main.gf")) == "project/src/Main.gf"
 
 
 def test_portable_path_serialization_rejects_invalid_values() -> None:
@@ -288,7 +285,8 @@ def test_object_keys_must_be_plain_strings(mapping: dict[object, object]) -> Non
 
 
 def test_root_document_must_be_a_mapping() -> None:
-    for value in (None, [], (), "text", 1):
+    invalid_values: tuple[object, ...] = (None, [], (), "text", 1)
+    for value in invalid_values:
         with pytest.raises(TypeError, match="mapping at the root"):
             to_json_object(value)  # type: ignore[arg-type]
 

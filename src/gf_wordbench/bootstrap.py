@@ -18,17 +18,16 @@ execute validation while being imported.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 import importlib
 import inspect
 import os
-import shutil
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
 from pathlib import Path
+import shutil
 from types import MappingProxyType
 from typing import (
-    TYPE_CHECKING,
     Final,
     Protocol,
     TypeAlias,
@@ -63,6 +62,7 @@ from gf_wordbench.config.models import (
     ConfigurationResolution,
     ConfigurationResolutionRequest,
     EnvironmentOverrides,
+    EvidenceLevel,
     IssueSeverity,
     OutputDefaults,
     ResolvedEnvironment,
@@ -82,14 +82,13 @@ from gf_wordbench.kernel.errors import (
 from gf_wordbench.kernel.ids import RunId, validate_run_id
 from gf_wordbench.kernel.paths import normalize_environment_path
 from gf_wordbench.kernel.serialization import ProducerInfo
-from gf_wordbench.kernel.statuses import OverallStatus, TargetKind, ValidationMode
+from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
 from gf_wordbench.projects.models import ProjectConfig
 from gf_wordbench.projects.paths import PROJECT_CONFIG_FILENAME
 from gf_wordbench.projects.policies import enforce_project_invariants
 from gf_wordbench.projects.schema import parse_project_document
 from gf_wordbench.projects.toml_adapter import read_project_toml
 from gf_wordbench.runs.identity import (
-    create_run_id,
     iter_run_id_candidates,
     run_directory_name,
 )
@@ -105,18 +104,12 @@ from gf_wordbench.state.repository import StateRepository
 from gf_wordbench.state.schema import default_app_state
 from gf_wordbench.version import __version__
 
-if TYPE_CHECKING:
-    from gf_wordbench.entrypoints.cli.maintenance_commands import (
-        GoldUpdateCliApplication,
-        GoldUpdateCommandRequest,
-    )
-
 PathInput: TypeAlias = str | os.PathLike[str] | Path
 ProjectDocument: TypeAlias = Mapping[str, object]
 SourceValues: TypeAlias = Mapping[ConfigurationSource, Mapping[str, object]]
 Clock: TypeAlias = Callable[[], datetime]
 AuditWorkflow: TypeAlias = Callable[..., object]
-GoldUpdateWorkflow: TypeAlias = Callable[["GoldUpdateCommandRequest"], object]
+GoldUpdateWorkflow: TypeAlias = Callable[[object], object]
 _LanguageProbeWorkflow: TypeAlias = Callable[[object], object]
 _ProjectCheckWorkflow: TypeAlias = Callable[[object], object]
 _ProjectProbeWorkflow: TypeAlias = Callable[[object, ProjectConfig], None]
@@ -124,23 +117,40 @@ _ScenarioCheckWorkflow: TypeAlias = Callable[[object], object]
 
 
 @runtime_checkable
+class GoldUpdateApplication(Protocol):
+    """Bootstrap-owned application boundary for reviewed gold updates.
+
+    CLI adapters may pass their immutable command request objects through this
+    structural boundary. Bootstrap deliberately does not import entrypoint
+    request or application types, which would reverse the dependency direction
+    and create a composition cycle.
+    """
+
+    def execute_gold_update(self, request: object) -> object:
+        """Execute one injected, reviewed gold-update workflow."""
+
+
+@runtime_checkable
 class GuiRuntime(Protocol):
-    """Bootstrap-owned desktop runtime returned to the GUI entrypoint.
+    """Bootstrap-owned desktop startup runtime returned to the GUI entrypoint.
 
     The entrypoint depends only on this structural contract.  The concrete
-    startup window, language probe, state repository and main runtime remain
-    owned by their functional modules.
+    introduction window, language probe, state repository and language runtime
+    remain owned by their functional modules.
     """
 
     @property
     def window(self) -> object:
-        """Return the top-level startup or main window."""
+        """Return the top-level introduction window."""
+
+    def start(self) -> None:
+        """Connect startup actions without selecting or probing a language."""
 
     def shutdown(self) -> None:
         """Release runtime resources without starting new work."""
 
 
-GuiRuntimeFactory: TypeAlias = Callable[[object], GuiRuntime]
+GuiRuntimeFactory: TypeAlias = Callable[[object, tuple[str, ...]], GuiRuntime]
 
 _APPLICATION_NAME: Final[str] = "gf-wordbench"
 _LEGACY_MODE_ALIASES: Final[Mapping[str, ValidationMode]] = MappingProxyType(
@@ -230,13 +240,11 @@ class InvocationRequest:
         object.__setattr__(self, "mode", normalized_mode)
         if isinstance(raw_mode, str) and raw_mode.strip().lower() in _LEGACY_MODE_ALIASES:
             alias = raw_mode.strip().lower()
+            canonical_mode = _require_validation_mode(normalized_mode, field_name="mode")
             object.__setattr__(
                 self,
                 "compatibility_warnings",
-                (
-                    f"mode={alias} is deprecated; use "
-                    f"mode={normalized_mode.value}",
-                ),
+                (f"mode={alias} is deprecated; use mode={canonical_mode.value}",),
             )
 
         if self.target is not None and not isinstance(self.target, ValidationTarget):
@@ -251,13 +259,10 @@ class InvocationRequest:
         object.__setattr__(self, "checkpoint_id", checkpoint_id)
 
         supplied_targets = sum(
-            item is not None
-            for item in (self.target, target_file, checkpoint_id)
+            item is not None for item in (self.target, target_file, checkpoint_id)
         )
         if supplied_targets > 1:
-            raise ValueError(
-                "target, target_file, and checkpoint_id are mutually exclusive"
-            )
+            raise ValueError("target, target_file, and checkpoint_id are mutually exclusive")
 
         scenarios = _unique_text_tuple(
             self.scenario_filter,
@@ -307,20 +312,20 @@ class BootstrapServices:
 
     environment_reader: Callable[[], EnvironmentOverrides] = read_environment
     project_reader: Callable[[Path], ProjectDocument] = read_project_toml
-    project_parser: Callable[[ProjectDocument, Path], ProjectConfig] = (
-        lambda document, source: parse_project_document(
-            cast(object, document),
+    project_parser: Callable[[ProjectDocument, Path], ProjectConfig] = lambda document, source: (
+        parse_project_document(
+            document,
             source_file=source,
         )
     )
-    project_policy: Callable[[ProjectConfig, bool], ProjectConfig] = (
-        lambda project, strict: enforce_project_invariants(
+    project_policy: Callable[[ProjectConfig, bool], ProjectConfig] = lambda project, strict: (
+        enforce_project_invariants(
             project,
             strict=strict,
         )
     )
-    state_loader: Callable[[Path, Path | None], StateLoadResult] = (
-        lambda workspace, state_path: StateRepository(
+    state_loader: Callable[[Path, Path | None], StateLoadResult] = lambda workspace, state_path: (
+        StateRepository(
             workspace_root=workspace,
             state_path=state_path,
         ).load_with_diagnostics()
@@ -330,12 +335,8 @@ class BootstrapServices:
         ConfigurationResolution,
     ] = lambda request: _resolve_configuration_compat(request)
     preflight: Callable[[RunConfig], PreflightResult] = preflight_run
-    planner: Callable[[RunConfig, object | None], RunPlan] = (
-        resolve_execution_plan
-    )
-    run_path_allocator: Callable[[Path, RunId | str], RunPaths] = (
-        allocate_run_paths
-    )
+    planner: Callable[[RunConfig, object | None], RunPlan] = resolve_execution_plan
+    run_path_allocator: Callable[[Path, RunId | str], RunPaths] = allocate_run_paths
     clock: Clock = _utc_now
 
     def __post_init__(self) -> None:
@@ -382,9 +383,7 @@ class BootstrapContext:
         if not isinstance(self.state, StateLoadResult):
             raise TypeError("state must be a StateLoadResult")
         if not isinstance(self.environment_overrides, EnvironmentOverrides):
-            raise TypeError(
-                "environment_overrides must be EnvironmentOverrides"
-            )
+            raise TypeError("environment_overrides must be EnvironmentOverrides")
         if not isinstance(self.resolution, ConfigurationResolution):
             raise TypeError("resolution must be a ConfigurationResolution")
         if not isinstance(self.run_config, RunConfig):
@@ -438,8 +437,7 @@ class _SourceValuesResolutionRequest(ConfigurationResolutionRequest):
 
     @property
     def candidates_by_source(self) -> SourceValues:
-        return cast(SourceValues, self.source_values)
-
+        return cast("SourceValues", self.source_values)
 
 
 def _resolve_configuration_compat(
@@ -454,10 +452,7 @@ def _resolve_configuration_compat(
         known_drift = (
             "candidates_by_source" in message
             or "ConfigurationProvenance.__init__" in message
-            or (
-                "ConfigurationProvenance" in message
-                and "required positional arguments" in message
-            )
+            or ("ConfigurationProvenance" in message and "required positional arguments" in message)
         )
         if not known_drift:
             raise
@@ -469,7 +464,7 @@ def _compose_configuration_fallback(
 ) -> ConfigurationResolution:
     """Compose the documented precedence model for compatible code snapshots."""
 
-    project = request.project
+    project = _require_project_config(request.project, field_name="request.project")
     defaults = request.defaults
     source_values = _request_source_values(request)
     issues: list[ConfigurationIssue] = []
@@ -486,8 +481,7 @@ def _compose_configuration_fallback(
             present = [
                 (source, source_values[source][field_name])
                 for source in tier
-                if source in source_values
-                and field_name in source_values[source]
+                if source in source_values and field_name in source_values[source]
             ]
             if not present:
                 continue
@@ -621,7 +615,7 @@ def _compose_configuration_fallback(
             continue
         try:
             resolved_paths[field_name] = normalize_environment_path(
-                cast(PathInput, value),
+                cast("PathInput", value),
                 role=field_name,
             )
         except Exception as exc:
@@ -705,9 +699,8 @@ def _compose_configuration_fallback(
 
     output_root = resolved_paths.get("output_root")
     if output_root is not None:
-        overlaps = (
-            _paths_overlap(output_root, project.source_root)
-            or (rgl_root is not None and _paths_overlap(output_root, rgl_root))
+        overlaps = _paths_overlap(output_root, project.source_root) or (
+            rgl_root is not None and _paths_overlap(output_root, rgl_root)
         )
         if overlaps:
             issues.append(
@@ -738,28 +731,27 @@ def _compose_configuration_fallback(
         configuration = RunConfig(
             project=project,
             environment=environment,
-            mode=cast(ValidationMode, mode),
-            target=cast(ValidationTarget | None, target),
-            timeout_sec=cast(int, timeout_sec),
-            max_files=cast(int, max_files),
-            keep_ok_details=cast(bool, keep_ok_details),
-            diff_previous=cast(bool, diff_previous),
-            skip_version_probe=cast(bool, skip_version_probe),
-            no_compile=cast(bool, no_compile),
-            emit_cpu_stats=cast(bool, emit_cpu_stats),
+            mode=cast("ValidationMode", mode),
+            target=cast("ValidationTarget | None", target),
+            timeout_sec=cast("int", timeout_sec),
+            max_files=cast("int", max_files),
+            keep_ok_details=cast("bool", keep_ok_details),
+            diff_previous=cast("bool", diff_previous),
+            skip_version_probe=cast("bool", skip_version_probe),
+            no_compile=cast("bool", no_compile),
+            emit_cpu_stats=cast("bool", emit_cpu_stats),
             selected_checkpoints=tuple(
-                project.source_root.joinpath(*path.parts)
-                for path in project.modules.checkpoints
+                project.source_root.joinpath(*path.parts) for path in project.modules.checkpoints
             ),
             selected_entrypoints=tuple(
-                project.source_root.joinpath(*path.parts)
-                for path in project.modules.entrypoints
+                project.source_root.joinpath(*path.parts) for path in project.modules.entrypoints
             ),
-            selected_scenarios=tuple(
-                str(item) for item in project.validation.all_scenarios
-            ),
+            selected_scenarios=tuple(str(item) for item in project.validation.all_scenarios),
             release_requires_pgf=project.validation.release_requires_pgf,
-            evidence_level=cast(object, evidence_level),
+            evidence_level=_coerce_evidence_level(
+                evidence_level,
+                field_name="evidence_level",
+            ),
             compatibility_warnings=(),
         )
     except (TypeError, ValueError, KeyError) as exc:
@@ -802,8 +794,8 @@ def _request_source_values(
     request: ConfigurationResolutionRequest,
 ) -> SourceValues:
     if hasattr(request, "source_values"):
-        return cast(SourceValues, request.source_values)
-    return cast(SourceValues, getattr(request, "candidates_by_source"))
+        return cast("SourceValues", request.source_values)
+    return cast("SourceValues", request.candidates_by_source)
 
 
 def _configuration_issue(
@@ -829,7 +821,16 @@ def _winning_source(
 ) -> ConfigurationSource:
     for item in reversed(provenance):
         if item.field_path == field_path:
-            return item.source
+            source = item.source
+            if not isinstance(source, ConfigurationSource):
+                raise ContractViolationError(
+                    "Configuration provenance contains an invalid source.",
+                    code="GF-WB-CONTRACT-008",
+                    stage="bootstrap",
+                    operation="resolve-configuration-provenance",
+                    subject=field_path,
+                )
+            return source
     return ConfigurationSource.RUNTIME_DERIVED
 
 
@@ -844,7 +845,6 @@ def _paths_overlap(left: Path, right: Path) -> bool:
         return True
     except ValueError:
         return False
-
 
 
 @dataclass(frozen=True, slots=True)
@@ -864,12 +864,8 @@ class _ComposedAuditApplication:
         cancellation_check: Callable[[], None] | None = None,
         event_sink: Callable[[object], None] | None = None,
     ) -> object:
-        if cancellation_check is not None and not callable(
-            cancellation_check
-        ):
-            raise TypeError(
-                "cancellation_check must be callable or None"
-            )
+        if cancellation_check is not None and not callable(cancellation_check):
+            raise TypeError("cancellation_check must be callable or None")
         if event_sink is not None and not callable(event_sink):
             raise TypeError("event_sink must be callable or None")
 
@@ -923,18 +919,14 @@ def _load_audit_workflow() -> AuditWorkflow:
             module = importlib.import_module(module_name)
         except ModuleNotFoundError as exc:
             if exc.name == module_name or (
-                exc.name is not None
-                and module_name.startswith(f"{exc.name}.")
+                exc.name is not None and module_name.startswith(f"{exc.name}.")
             ):
                 unavailable.append(module_name)
                 continue
             raise ConfigurationError(
                 "The audit application service could not be imported.",
                 code="GF-WB-CONFIG-912",
-                detail=(
-                    f"{module_name}: {type(exc).__name__}: "
-                    f"{_bounded_message(exc)}"
-                ),
+                detail=(f"{module_name}: {type(exc).__name__}: {_bounded_message(exc)}"),
                 stage="bootstrap",
                 operation="load-audit-application",
                 subject=module_name,
@@ -943,10 +935,7 @@ def _load_audit_workflow() -> AuditWorkflow:
             raise ConfigurationError(
                 "The audit application service could not be imported.",
                 code="GF-WB-CONFIG-912",
-                detail=(
-                    f"{module_name}: {type(exc).__name__}: "
-                    f"{_bounded_message(exc)}"
-                ),
+                detail=(f"{module_name}: {type(exc).__name__}: {_bounded_message(exc)}"),
                 stage="bootstrap",
                 operation="load-audit-application",
                 subject=module_name,
@@ -955,23 +944,18 @@ def _load_audit_workflow() -> AuditWorkflow:
         workflow = getattr(module, symbol_name, None)
         if not callable(workflow):
             raise ContractViolationError(
-                "Audit application provider must expose callable "
-                f"{symbol_name}().",
+                f"Audit application provider must expose callable {symbol_name}().",
                 code="GF-WB-CONTRACT-006",
                 stage="bootstrap",
                 operation="load-audit-application",
                 subject=f"{module_name}.{symbol_name}",
             )
-        return cast(AuditWorkflow, workflow)
+        return cast("AuditWorkflow", workflow)
 
     expected = ", ".join(
-        f"{module_name}.{symbol_name}"
-        for module_name, symbol_name in _AUDIT_PROVIDER_CANDIDATES
+        f"{module_name}.{symbol_name}" for module_name, symbol_name in _AUDIT_PROVIDER_CANDIDATES
     )
-    detail = (
-        "No canonical audit application provider is installed. "
-        f"Expected one of: {expected}."
-    )
+    detail = f"No canonical audit application provider is installed. Expected one of: {expected}."
     if unavailable:
         detail += " Missing modules: " + ", ".join(unavailable) + "."
 
@@ -1032,46 +1016,58 @@ class _ComposedScenarioCheckApplication:
         return self.workflow(request)
 
 
-def build_gui_runtime(
+def build_gui_startup_runtime(
     application: object,
+    argv: tuple[str, ...] = (),
     *,
     runtime_factory: GuiRuntimeFactory | None = None,
 ) -> GuiRuntime:
-    """Compose the desktop startup runtime used by ``entrypoints.gui.main``.
+    """Compose the desktop pre-launch runtime used by ``entrypoints.gui.main``.
 
     The default factory is imported lazily so importing :mod:`bootstrap` never
     imports Qt.  ``entrypoints.gui.startup`` owns the introduction window and
-    path-resolved language-selection workflow; this composition root only
-    validates and returns its runtime.
+    explicit path-resolved language-selection workflow; this composition root
+    only validates and returns its startup runtime.
 
-    ``runtime_factory`` is an explicit test and embedding seam.  It must return
-    an object with a ``window`` exposing ``show()`` and a callable
-    ``shutdown()`` method.
+    ``runtime_factory`` is an explicit test and embedding seam.  It receives
+    the application and immutable argument tuple and must return an object with
+    ``window``, ``start()`` and ``shutdown()``.  This function never selects,
+    probes or opens a language automatically.
     """
 
     if application is None:
         raise TypeError("application must not be None")
+    if not isinstance(argv, tuple):
+        raise TypeError("argv must be a tuple of strings")
+    for index, value in enumerate(argv):
+        if not isinstance(value, str):
+            raise TypeError(f"argv[{index}] must be a string")
+        if "\x00" in value:
+            raise ValueError(f"argv[{index}] must be NUL-free")
     if runtime_factory is not None and not callable(runtime_factory):
         raise TypeError("runtime_factory must be callable or None")
 
-    factory = runtime_factory or _default_gui_runtime_factory
+    factory = runtime_factory or _default_gui_startup_runtime_factory
     try:
-        runtime = factory(application)
+        runtime = factory(application, argv)
     except (ConfigurationError, ContractViolationError):
         raise
     except Exception as exc:
         raise ConfigurationError(
-            "GF Wordbench GUI runtime could not be composed.",
+            "GF Wordbench GUI startup runtime could not be composed.",
             code="GF-WB-CONFIG-910",
             detail=f"{type(exc).__name__}: {_bounded_message(exc)}",
             stage="bootstrap",
-            operation="build-gui-runtime",
+            operation="build-gui-startup-runtime",
         ) from exc
 
-    return _require_gui_runtime(runtime)
+    return _require_gui_startup_runtime(runtime)
 
 
-def _default_gui_runtime_factory(application: object) -> GuiRuntime:
+def _default_gui_startup_runtime_factory(
+    application: object,
+    argv: tuple[str, ...],
+) -> GuiRuntime:
     """Load the path-resolved GUI startup factory without eager Qt imports."""
 
     try:
@@ -1099,22 +1095,62 @@ def _default_gui_runtime_factory(application: object) -> GuiRuntime:
             operation="load-gui-startup-factory",
             subject="build_startup_runtime",
         )
-    return cast(GuiRuntime, build_startup_runtime(application))
+
+    _require_canonical_gui_startup_factory(build_startup_runtime)
+    return cast(
+        "GuiRuntime",
+        build_startup_runtime(application, argv),
+    )
 
 
-def _require_gui_runtime(runtime: object) -> GuiRuntime:
-    """Validate the small structural runtime contract at the composition edge."""
+def _require_canonical_gui_startup_factory(factory: Callable[..., object]) -> None:
+    """Require the canonical startup signature without extra required inputs.
+
+    ``entrypoints.gui.startup`` owns composition of its concrete services.  The
+    bootstrap boundary supplies only the Qt application and immutable argument
+    tuple.  Requiring another input here would split startup ownership across
+    modules and make the desktop entrypoint dependent on implementation details.
+    """
+
+    try:
+        signature = inspect.signature(factory)
+    except (TypeError, ValueError):
+        # Some extension or generated callables do not expose an inspectable
+        # signature.  Their runtime contract is still checked by the call below
+        # and by ``_require_gui_startup_runtime``.
+        return
+
+    try:
+        signature.bind(object(), ())
+    except TypeError as exc:
+        raise ContractViolationError(
+            "GUI startup factory has a non-canonical signature.",
+            code="GF-WB-CONTRACT-008",
+            detail=(
+                "build_startup_runtime must accept application and argv without "
+                "additional required arguments. Concrete startup services must "
+                "be composed inside entrypoints.gui.startup. "
+                f"Detected signature: {signature}."
+            ),
+            stage="bootstrap",
+            operation="load-gui-startup-factory",
+            subject="build_startup_runtime",
+        ) from exc
+
+
+def _require_gui_startup_runtime(runtime: object) -> GuiRuntime:
+    """Validate the startup runtime contract at the composition edge."""
 
     if not isinstance(runtime, GuiRuntime):
         raise ContractViolationError(
             "GUI startup factory returned an invalid runtime.",
             code="GF-WB-CONTRACT-003",
             detail=(
-                "The runtime must expose a window property and a callable "
-                "shutdown() method."
+                "The runtime must expose a window property and callable "
+                "start() and shutdown() methods."
             ),
             stage="bootstrap",
-            operation="validate-gui-runtime",
+            operation="validate-gui-startup-runtime",
         )
 
     window = runtime.window
@@ -1124,18 +1160,26 @@ def _require_gui_runtime(runtime: object) -> GuiRuntime:
             "GUI runtime window must expose show().",
             code="GF-WB-CONTRACT-004",
             stage="bootstrap",
-            operation="validate-gui-runtime",
+            operation="validate-gui-startup-runtime",
             subject=type(window).__name__,
+        )
+    if not callable(runtime.start):
+        raise ContractViolationError(
+            "GUI startup runtime must expose start().",
+            code="GF-WB-CONTRACT-007",
+            stage="bootstrap",
+            operation="validate-gui-startup-runtime",
+            subject=type(runtime).__name__,
         )
     if not callable(runtime.shutdown):
         raise ContractViolationError(
-            "GUI runtime must expose shutdown().",
+            "GUI startup runtime must expose shutdown().",
             code="GF-WB-CONTRACT-005",
             stage="bootstrap",
-            operation="validate-gui-runtime",
+            operation="validate-gui-startup-runtime",
             subject=type(runtime).__name__,
         )
-    return cast(GuiRuntime, runtime)
+    return runtime
 
 
 def build_language_probe_application(
@@ -1177,9 +1221,7 @@ def build_project_check_application(
         if not callable(workflow):
             raise TypeError("workflow must be callable or None")
         if probe_workflow is not None:
-            raise ValueError(
-                "probe_workflow cannot be combined with a custom workflow"
-            )
+            raise ValueError("probe_workflow cannot be combined with a custom workflow")
         return _ComposedProjectCheckApplication(workflow)
     if probe_workflow is not None and not callable(probe_workflow):
         raise TypeError("probe_workflow must be callable or None")
@@ -1307,9 +1349,7 @@ def _run_project_check(
         strict=strict,
     )
     if not isinstance(result, ProjectValidationResult):
-        raise TypeError(
-            "check_project must return ProjectValidationResult"
-        )
+        raise TypeError("check_project must return ProjectValidationResult")
 
     if _check_request_bool(request, "probe_gf", default=False):
         if probe_workflow is None:
@@ -1335,11 +1375,12 @@ def _run_scenario_check(
     *,
     services: BootstrapServices,
 ) -> object:
-    from gf_wordbench.entrypoints.cli.project_commands import (
-        ScenarioCheckCommandResult,
-        ScenarioCheckIssue,
-    )
     from gf_wordbench.kernel.ids import validate_scenario_id
+    from gf_wordbench.projects.models import (
+        ProjectDiagnostic,
+        ProjectDiagnosticSeverity,
+        ProjectValidationResult,
+    )
     from gf_wordbench.projects.paths import (
         resolve_project_paths,
         resolve_scenario_path,
@@ -1368,8 +1409,7 @@ def _run_scenario_check(
     registered = tuple(project.validation.all_scenarios)
     registered_set = set(registered)
     selected_ids = _check_scenario_ids(request, registered)
-    checked: list[str] = []
-    issues: list[ScenarioCheckIssue] = []
+    diagnostics: list[ProjectDiagnostic] = []
 
     for scenario_id in selected_ids:
         validated_id = validate_scenario_id(scenario_id)
@@ -1384,40 +1424,29 @@ def _run_scenario_check(
             )
 
         scenario_path = resolve_scenario_path(project_paths, validated_id)
-        checked.append(str(validated_id))
         try:
             validate_scenario_file(
                 scenario_path,
                 scenario_id=validated_id,
             )
         except (GFWordbenchError, OSError, ValueError) as exc:
-            issues.append(
-                ScenarioCheckIssue(
-                    severity="error",
-                    code=str(
-                        getattr(exc, "code", None)
-                        or "GF-WB-SCENARIO-001"
-                    ),
-                    message=_bounded_message(exc),
-                    path=scenario_path,
-                    scenario_id=str(validated_id),
-                    line=_positive_optional_int(getattr(exc, "line", None)),
+            line = _positive_optional_int(getattr(exc, "line", None))
+            message = _bounded_message(exc)
+            if line is not None:
+                message = f"{message} (line {line})"
+            diagnostics.append(
+                ProjectDiagnostic(
+                    code=str(getattr(exc, "code", None) or "GF-WB-SCENARIO-001"),
+                    severity=ProjectDiagnosticSeverity.ERROR,
+                    field=f"scenarios.{validated_id}",
+                    message=message,
+                    source_file=scenario_path,
+                    suggestion=("Correct the scenario contract before retrying the check."),
+                    subject=scenario_path,
                 )
             )
 
-    overall_status = OverallStatus.FAIL if issues else OverallStatus.OK
-    message = (
-        f"Scenario contract check failed with {len(issues)} issue(s)."
-        if issues
-        else "Scenario contracts are valid."
-    )
-    return ScenarioCheckCommandResult(
-        overall_status=overall_status,
-        project_root=project.project_root,
-        checked_scenarios=tuple(checked),
-        issues=tuple(issues),
-        message=message,
-    )
+    return ProjectValidationResult(tuple(diagnostics))
 
 
 def _check_validation_profile_file(
@@ -1432,7 +1461,7 @@ def _check_validation_profile_file(
     )
     if raw_profile is not None:
         return _require_regular_file(
-            _project_file_path(cast(PathInput, raw_profile)),
+            _project_file_path(cast("PathInput", raw_profile)),
             role="validation profile",
         )
 
@@ -1442,7 +1471,7 @@ def _check_validation_profile_file(
         None,
     )
     if raw_root is not None:
-        return _legacy_profile_from_root(cast(PathInput, raw_root))
+        return _legacy_profile_from_root(cast("PathInput", raw_root))
 
     if not required:
         return None
@@ -1509,7 +1538,7 @@ def _check_resolved_language_context(
         )
 
     selected_path = _absolute_path(
-        cast(PathInput, raw_selected),
+        cast("PathInput", raw_selected),
         role="language_path",
     )
     explicit_rgl_root = _check_optional_path_value(
@@ -1552,11 +1581,7 @@ def _require_resolved_probe_context(
         return context
 
     diagnostics = getattr(result, "diagnostics", ())
-    first = (
-        diagnostics[0]
-        if isinstance(diagnostics, Sequence) and diagnostics
-        else None
-    )
+    first = diagnostics[0] if isinstance(diagnostics, Sequence) and diagnostics else None
     detail = _bounded_message(first) if first is not None else f"status={status_value}"
     raise ConfigurationError(
         "The selected language path could not be resolved.",
@@ -1609,12 +1634,9 @@ def _check_scenario_ids(
     if isinstance(raw, (str, bytes, bytearray)):
         raise TypeError("scenario_ids must be a sequence of strings")
 
-    try:
-        values = tuple(raw)
-    except TypeError as exc:
-        raise TypeError(
-            "scenario_ids must be a sequence of strings"
-        ) from exc
+    if not isinstance(raw, Iterable):
+        raise TypeError("scenario_ids must be a sequence of strings")
+    values: tuple[object, ...] = tuple(raw)
 
     if not values:
         return registered
@@ -1634,7 +1656,7 @@ def _check_request_bool(
     value = _check_request_value(request, name, default)
     if type(value) is not bool:
         raise TypeError(f"{name} must be a bool")
-    return cast(bool, value)
+    return value
 
 
 def _check_request_value(
@@ -1687,7 +1709,7 @@ def _check_required_path_value(
             operation="resolve-request-path",
             subject=role,
         )
-    return _absolute_path(cast(PathInput, value), role=role)
+    return _absolute_path(cast("PathInput", value), role=role)
 
 
 def _check_optional_path_value(
@@ -1699,7 +1721,7 @@ def _check_optional_path_value(
     value = _first_check_request_value(request, names, None)
     if value is None:
         return None
-    return _absolute_path(cast(PathInput, value), role=role)
+    return _absolute_path(cast("PathInput", value), role=role)
 
 
 def _check_request_int(
@@ -1713,17 +1735,15 @@ def _check_request_int(
     value = _check_request_value(request, name, default)
     if type(value) is not int:
         raise TypeError(f"{name} must be an integer")
-    checked = cast(int, value)
+    checked = value
     if checked < minimum or checked > maximum:
-        raise ValueError(
-            f"{name} must be between {minimum} and {maximum}"
-        )
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
     return checked
 
 
 def _positive_optional_int(value: object) -> int | None:
-    if type(value) is int and cast(int, value) > 0:
-        return cast(int, value)
+    if type(value) is int and value > 0:
+        return value
     return None
 
 
@@ -1739,7 +1759,7 @@ class _ComposedGoldUpdateApplication:
 
     def execute_gold_update(
         self,
-        request: "GoldUpdateCommandRequest",
+        request: object,
     ) -> object:
         return self.workflow(request)
 
@@ -1747,7 +1767,7 @@ class _ComposedGoldUpdateApplication:
 def build_gold_update_application(
     *,
     workflow: GoldUpdateWorkflow | None = None,
-) -> "GoldUpdateCliApplication":
+) -> GoldUpdateApplication:
     """Compose the CLI gold-update application boundary.
 
     The current repository snapshot exposes the low-level, atomic gold-update
@@ -1761,23 +1781,16 @@ def build_gold_update_application(
     if not callable(active_workflow):
         raise TypeError("workflow must be callable or None")
 
-    return cast(
-        "GoldUpdateCliApplication",
-        _ComposedGoldUpdateApplication(active_workflow),
-    )
+    return _ComposedGoldUpdateApplication(active_workflow)
 
 
 def _unconfigured_gold_update_workflow(
-    request: "GoldUpdateCommandRequest",
+    request: object,
 ) -> object:
     """Reject gold mutation until the reviewed application use case is wired."""
 
-    from gf_wordbench.entrypoints.cli.maintenance_commands import (
-        GoldUpdateCommandRequest,
-    )
-
-    if not isinstance(request, GoldUpdateCommandRequest):
-        raise TypeError("request must be GoldUpdateCommandRequest")
+    if request is None:
+        raise TypeError("request must not be None")
 
     raise ConfigurationError(
         "Gold update application workflow is not configured.",
@@ -1815,7 +1828,10 @@ def build_framework_defaults() -> AppConfig:
             emit_cpu_stats=DEFAULT_EMIT_CPU_STATS,
         ),
         output_defaults=OutputDefaults(
-            evidence_level=cast(object, DEFAULT_EVIDENCE_LEVEL),
+            evidence_level=_coerce_evidence_level(
+                DEFAULT_EVIDENCE_LEVEL,
+                field_name="DEFAULT_EVIDENCE_LEVEL",
+            ),
             generate_manifest=DEFAULT_GENERATE_MANIFEST,
             generate_ai_ready=DEFAULT_GENERATE_AI_READY,
             aggregate_logs=DEFAULT_AGGREGATE_LOGS,
@@ -1824,9 +1840,7 @@ def build_framework_defaults() -> AppConfig:
             project_major=SUPPORTED_PROJECT_SCHEMA_MAJOR,
             app_state_major=SUPPORTED_APP_STATE_SCHEMA_MAJOR,
             run_summary_major=SUPPORTED_RUN_SUMMARY_SCHEMA_MAJOR,
-            artifact_manifest_major=(
-                SUPPORTED_ARTIFACT_MANIFEST_SCHEMA_MAJOR
-            ),
+            artifact_manifest_major=(SUPPORTED_ARTIFACT_MANIFEST_SCHEMA_MAJOR),
         ),
         state_filename=DEFAULT_STATE_FILENAME,
     )
@@ -1972,9 +1986,7 @@ def _prepare(
         ) from exc
 
     if not isinstance(resolution, ConfigurationResolution):
-        raise TypeError(
-            "configuration_resolver must return ConfigurationResolution"
-        )
+        raise TypeError("configuration_resolver must return ConfigurationResolution")
     run_config = resolution.require()
     run_config = _apply_effective_selection(run_config, request)
 
@@ -1993,7 +2005,7 @@ def _prepare(
             detail=f"{type(exc).__name__}: {_bounded_message(exc)}",
             stage="bootstrap",
             operation="plan-run",
-            subject=run_config.project.project_id,
+            subject=project.project_id,
         ) from exc
 
     if not isinstance(plan, RunPlan):
@@ -2023,18 +2035,21 @@ def _make_resolution_request(
     source_values: SourceValues,
 ) -> ConfigurationResolutionRequest:
     parameters = inspect.signature(ConfigurationResolutionRequest).parameters
-    common: dict[str, object] = {
-        "defaults": defaults,
-        "project": project,
-        "environment": environment,
-    }
 
     if "source_values" in parameters:
-        common["source_values"] = source_values
-        return _SourceValuesResolutionRequest(**common)
+        return _SourceValuesResolutionRequest(
+            defaults=defaults,
+            project=project,
+            environment=environment,
+            source_values=source_values,
+        )
     if "candidates_by_source" in parameters:
-        common["candidates_by_source"] = source_values
-        return ConfigurationResolutionRequest(**common)
+        return ConfigurationResolutionRequest(
+            defaults=defaults,
+            project=project,
+            environment=environment,
+            candidates_by_source=source_values,
+        )
 
     raise ContractViolationError(
         "ConfigurationResolutionRequest exposes no supported source-values field",
@@ -2088,7 +2103,7 @@ def _configuration_source_values(
     state_values = _state_source_values(state)
     runtime_values: dict[str, object] = {}
     if target is None:
-        derived = _derived_target(request.mode, project)
+        derived = _derived_target(_coerce_mode(request.mode), project)
         if derived is not None:
             runtime_values["target"] = derived
 
@@ -2096,13 +2111,9 @@ def _configuration_source_values(
     if invocation:
         grouped[request.source] = MappingProxyType(invocation)
     if state_values:
-        grouped[ConfigurationSource.APPLICATION_STATE] = MappingProxyType(
-            state_values
-        )
+        grouped[ConfigurationSource.APPLICATION_STATE] = MappingProxyType(state_values)
     if runtime_values:
-        grouped[ConfigurationSource.RUNTIME_DERIVED] = MappingProxyType(
-            runtime_values
-        )
+        grouped[ConfigurationSource.RUNTIME_DERIVED] = MappingProxyType(runtime_values)
 
     return MappingProxyType(grouped)
 
@@ -2148,14 +2159,16 @@ def _apply_effective_selection(
 ) -> RunConfig:
     mode = configuration.mode
     target = configuration.target
+    project = _require_project_config(
+        configuration.project,
+        field_name="configuration.project",
+    )
     checkpoints = configuration.selected_checkpoints
     entrypoints = configuration.selected_entrypoints
     scenarios = configuration.selected_scenarios
 
     if request.scenario_filter:
-        unknown = tuple(
-            item for item in request.scenario_filter if item not in scenarios
-        )
+        unknown = tuple(item for item in request.scenario_filter if item not in scenarios)
         if unknown:
             raise ConfigurationError(
                 "Unknown scenario filter.",
@@ -2163,7 +2176,7 @@ def _apply_effective_selection(
                 detail=", ".join(unknown),
                 stage="bootstrap",
                 operation="select-scenarios",
-                subject=configuration.project.project_id,
+                subject=project.project_id,
             )
         scenarios = request.scenario_filter
 
@@ -2178,8 +2191,7 @@ def _apply_effective_selection(
     elif mode is ValidationMode.RELEASE:
         if request.scenario_filter:
             required = tuple(
-                str(item)
-                for item in configuration.project.validation.required_scenarios
+                str(item) for item in project.validation.required_scenarios
             )
             omitted = tuple(item for item in required if item not in scenarios)
             if omitted:
@@ -2189,7 +2201,7 @@ def _apply_effective_selection(
                     detail=", ".join(omitted),
                     stage="bootstrap",
                     operation="select-scenarios",
-                    subject=configuration.project.project_id,
+                    subject=project.project_id,
                 )
 
     return replace(
@@ -2274,6 +2286,8 @@ def _select_project_file(
     for source, value in candidates:
         if value is None or value == "":
             continue
+        if not isinstance(value, (str, os.PathLike, Path)):
+            raise TypeError(f"{source} project root must be path-like")
         root = _absolute_path(value, role=f"{source} project root")
         return root / PROJECT_CONFIG_FILENAME
 
@@ -2327,9 +2341,7 @@ def _load_state(
     _require_directory(workspace_root, role="workspace root")
     state_path_value = request.state_path or environment.state_path
     state_path = (
-        None
-        if state_path_value is None
-        else _absolute_path(state_path_value, role="state_path")
+        None if state_path_value is None else _absolute_path(state_path_value, role="state_path")
     )
     try:
         result = services.state_loader(workspace_root, state_path)
@@ -2382,7 +2394,6 @@ def _preview_paths(
     )
 
 
-
 def _build_preview_run_paths(
     run_id: RunId | str,
     run_dir: Path,
@@ -2410,6 +2421,7 @@ def _build_preview_run_paths(
         out_dir=expected["out_dir"],
         pgf_dir=expected["pgf_dir"],
     )
+
 
 def _allocate_paths(
     output_root: Path,
@@ -2484,8 +2496,8 @@ def _collect_warnings(
         severity = getattr(issue.severity, "value", str(issue.severity))
         if severity == "warning":
             values.append(issue.message)
-    for issue in preflight.warnings:
-        values.append(issue.message)
+    for warning in preflight.warnings:
+        values.append(warning.message)
     return _unique_text_tuple(
         values,
         field_name="bootstrap warnings",
@@ -2568,6 +2580,51 @@ def _require_directory(path: Path, *, role: str) -> Path:
     return path
 
 
+def _require_project_config(
+    value: object | None,
+    *,
+    field_name: str,
+) -> ProjectConfig:
+    if not isinstance(value, ProjectConfig):
+        raise ContractViolationError(
+            f"{field_name} must be a ProjectConfig.",
+            code="GF-WB-CONTRACT-009",
+            stage="bootstrap",
+            operation="validate-project-configuration",
+            subject=field_name,
+        )
+    return value
+
+
+def _require_validation_mode(
+    value: ValidationMode | None,
+    *,
+    field_name: str,
+) -> ValidationMode:
+    if value is None:
+        raise ValueError(f"{field_name} must resolve to a validation mode")
+    return value
+
+
+def _coerce_evidence_level(
+    value: object,
+    *,
+    field_name: str,
+) -> EvidenceLevel:
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be a string")
+    allowed: tuple[EvidenceLevel, ...] = (
+        "bounded",
+        "standard",
+        "complete",
+        "expanded",
+    )
+    if value not in allowed:
+        choices = ", ".join(allowed)
+        raise ValueError(f"{field_name} must be one of: {choices}")
+    return cast("EvidenceLevel", value)
+
+
 def _coerce_mode(value: ValidationMode | str | None) -> ValidationMode | None:
     if value is None or isinstance(value, ValidationMode):
         return value
@@ -2596,8 +2653,6 @@ def _require_utc_timestamp(value: datetime) -> datetime:
 
 def _validate_path_input(value: PathInput, *, field_name: str) -> None:
     rendered = os.fspath(value)
-    if isinstance(rendered, bytes):
-        raise TypeError(f"{field_name} must resolve to text")
     if not rendered or "\x00" in rendered:
         raise ValueError(f"{field_name} must be non-empty and NUL-free")
 
@@ -2635,9 +2690,7 @@ def _unique_text_tuple(
     for index, value in enumerate(values):
         text = _require_text(value, field_name=f"{field_name}[{index}]")
         if text != text.strip():
-            raise ValueError(
-                f"{field_name}[{index}] must not contain surrounding whitespace"
-            )
+            raise ValueError(f"{field_name}[{index}] must not contain surrounding whitespace")
         if text not in seen:
             result.append(text)
             seen.add(text)
@@ -2652,7 +2705,7 @@ def _require_plain_int(
 ) -> int:
     if type(value) is not int:
         raise TypeError(f"{field_name} must be an integer")
-    checked = cast(int, value)
+    checked = value
     if checked < minimum:
         raise ValueError(f"{field_name} must be at least {minimum}")
     return checked
@@ -2668,6 +2721,7 @@ def _bounded_message(error: BaseException) -> str:
 __all__ = (
     "BootstrapContext",
     "BootstrapServices",
+    "GoldUpdateApplication",
     "GoldUpdateWorkflow",
     "GuiRuntime",
     "GuiRuntimeFactory",
@@ -2676,7 +2730,7 @@ __all__ = (
     "build_audit_application",
     "build_framework_defaults",
     "build_gold_update_application",
-    "build_gui_runtime",
+    "build_gui_startup_runtime",
     "build_language_probe_application",
     "build_project_check_application",
     "build_scenario_check_application",

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import codecs
-import os
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import os
 from pathlib import Path
 from typing import Final, TypeAlias
 
@@ -440,14 +440,13 @@ def truncate_lines(
                 retained_ranges=ranges,
             ),
         )
+    ranges: tuple[tuple[int, int], ...]
     if strategy is RetentionStrategy.HEAD:
         retained = lines[:maximum_lines]
         ranges = ((1, len(retained)),) if retained else ()
     elif strategy is RetentionStrategy.TAIL:
         retained = lines[-maximum_lines:] if maximum_lines else []
-        ranges = (
-            ((observed - len(retained) + 1, observed),) if retained else ()
-        )
+        ranges = ((observed - len(retained) + 1, observed),) if retained else ()
     else:
         head, tail = _line_partition(maximum_lines, head_lines, tail_lines)
         retained = lines[:head] + (lines[-tail:] if tail else [])

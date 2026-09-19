@@ -2,21 +2,27 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import replace
+import hashlib
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 import pytest
+from tests.helpers.fake_processes import make_process_result
 
 from gf_wordbench.infrastructure.process.models import (
     ArtifactExpectation,
     ArtifactKind,
     ProcessInput,
+    ProcessEvent,
+    ProcessEventSink,
     ProcessInputKind,
     ProcessOperationKind,
     ProcessRequest,
+    ProcessResult,
 )
+from gf_wordbench.kernel.ids import ScenarioId
 from gf_wordbench.validation.scenarios import execution as scenario_execution
 from gf_wordbench.validation.scenarios.execution import (
     ScenarioScriptInput,
@@ -24,9 +30,8 @@ from gf_wordbench.validation.scenarios.execution import (
     execute_scenario_process,
     prepare_and_execute_scenario,
 )
-from tests.helpers.fake_processes import make_process_result
 
-_SCENARIO_ID: Final[str] = "linearize-smoke"
+_SCENARIO_ID: Final[ScenarioId] = ScenarioId("linearize-smoke")
 _SCRIPT_TEXT: Final[str] = 'ps "GF_WORDBENCH_BEGIN:linearize"\nl Greeting\nq\n'
 
 
@@ -36,6 +41,14 @@ class _CancellationToken:
 
     def reason(self) -> str | None:
         return None
+
+
+class _EventSink:
+    def __init__(self, events: list[ProcessEvent]) -> None:
+        self.events = events
+
+    def emit(self, event: ProcessEvent, /) -> None:
+        self.events.append(event)
 
 
 def _script(
@@ -210,12 +223,11 @@ def test_request_uses_shell_free_direct_utf8_stdin_and_canonical_defaults(
     assert request.sensitive_arg_indexes == frozenset({1})
     assert request.metadata["scenario_id"] == _SCENARIO_ID
     assert request.metadata["script_path"].endswith("linearize-smoke.gfs")
-    assert request.metadata["script_sha256"] == hashlib.sha256(
-        _SCRIPT_TEXT.encode("utf-8")
-    ).hexdigest()
-    assert request.metadata["script_size_bytes"] == str(
-        len(_SCRIPT_TEXT.encode("utf-8"))
+    assert (
+        request.metadata["script_sha256"]
+        == hashlib.sha256(_SCRIPT_TEXT.encode("utf-8")).hexdigest()
     )
+    assert request.metadata["script_size_bytes"] == str(len(_SCRIPT_TEXT.encode("utf-8")))
     assert request.metadata["script_encoding"] == "utf-8"
     assert request.metadata["script_has_utf8_bom"] == "false"
     assert request.metadata["execution_transport"] == "direct-stdin"
@@ -310,31 +322,32 @@ def test_request_rejects_unbounded_execution_limits(
 
 def test_request_rejects_shell_like_scalar_args_and_empty_roots(tmp_path: Path) -> None:
     script = _script(tmp_path)
-    common = {
-        "executable": tmp_path / "gf",
-        "working_directory": tmp_path,
-        "stdout_path": tmp_path / "stdout.txt",
-        "stderr_path": tmp_path / "stderr.txt",
-        "timeout_sec": 10,
-        "output_limit_bytes": 1024,
-    }
-
     with pytest.raises(TypeError, match="args must be a sequence"):
         build_scenario_process_request(
             script,
-            args="< scenario.gfs",
+            executable=tmp_path / "gf",
+            args=cast(Sequence[str], "< scenario.gfs"),
+            working_directory=tmp_path,
+            stdout_path=tmp_path / "stdout.txt",
+            stderr_path=tmp_path / "stderr.txt",
+            timeout_sec=10,
+            output_limit_bytes=1024,
             approved_read_roots=(tmp_path,),
             approved_write_roots=(tmp_path,),
-            **common,
         )
 
     with pytest.raises(ValueError, match="approved_read_roots must not be empty"):
         build_scenario_process_request(
             script,
+            executable=tmp_path / "gf",
             args=(),
+            working_directory=tmp_path,
+            stdout_path=tmp_path / "stdout.txt",
+            stderr_path=tmp_path / "stderr.txt",
+            timeout_sec=10,
+            output_limit_bytes=1024,
             approved_read_roots=(),
             approved_write_roots=(tmp_path,),
-            **common,
         )
 
 
@@ -357,15 +370,16 @@ def test_execute_validates_then_delegates_with_cancellation_and_events(
     request = _request(tmp_path)
     expected = make_process_result(request)
     token = _CancellationToken()
-    events: list[object] = []
+    events: list[ProcessEvent] = []
+    sink = _EventSink(events)
     calls: list[tuple[ProcessRequest, object, object]] = []
 
     def fake_run_process(
         received: ProcessRequest,
         *,
         cancellation_token: object = None,
-        event_sink: object = None,
-    ) -> object:
+        event_sink: ProcessEventSink | None = None,
+    ) -> ProcessResult:
         calls.append((received, cancellation_token, event_sink))
         return expected
 
@@ -374,11 +388,11 @@ def test_execute_validates_then_delegates_with_cancellation_and_events(
     result = execute_scenario_process(
         request,
         cancellation_token=token,
-        event_sink=events.append,
+        event_sink=sink,
     )
 
     assert result is expected
-    assert calls == [(request, token, events.append)]
+    assert calls == [(request, token, sink)]
 
 
 def _corrupt_stdout_path(request: ProcessRequest) -> ProcessRequest:
@@ -485,15 +499,16 @@ def test_prepare_and_execute_builds_one_request_and_delegates(
 ) -> None:
     script = _script(tmp_path)
     token = _CancellationToken()
-    events: list[object] = []
+    events: list[ProcessEvent] = []
+    sink = _EventSink(events)
     captured: list[tuple[ProcessRequest, object, object]] = []
 
     def fake_execute(
         request: ProcessRequest,
         *,
         cancellation_token: object = None,
-        event_sink: object = None,
-    ) -> object:
+        event_sink: ProcessEventSink | None = None,
+    ) -> ProcessResult:
         captured.append((request, cancellation_token, event_sink))
         return make_process_result(request)
 
@@ -513,7 +528,7 @@ def test_prepare_and_execute_builds_one_request_and_delegates(
         request_id="scenario.unit",
         operation_id="scenario.unit",
         cancellation_token=token,
-        event_sink=events.append,
+        event_sink=sink,
     )
 
     request, observed_token, observed_sink = captured[0]
@@ -522,5 +537,5 @@ def test_prepare_and_execute_builds_one_request_and_delegates(
     assert request.operation_id == "scenario.unit"
     assert request.stdin.text == script.text
     assert observed_token is token
-    assert observed_sink == events.append
+    assert observed_sink is sink
     assert len(captured) == 1

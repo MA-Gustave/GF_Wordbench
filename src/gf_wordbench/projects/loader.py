@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from gf_wordbench.kernel.errors import ProjectConfigurationError
 
@@ -11,7 +12,7 @@ from .models import ProjectConfig
 from .paths import PROJECT_CONFIG_FILENAME
 from .policies import enforce_project_invariants
 from .ports import ProjectConfigReader
-from .schema import parse_project_document
+from .schema import ProjectDocument, parse_project_document
 from .validator import ProjectValidator
 
 __all__ = (
@@ -41,12 +42,12 @@ class ProjectLoader:
 
         source = _require_explicit_project_file(project_file)
 
-        document = self.reader.read(
-            source,
-            workspace_root=source.parent,
-        )
+        document = self.reader.read(source)
+        # The schema parser owns runtime validation of the decoded mapping.
+        # The cast only reconciles its narrower TypedDict annotation with the
+        # transport port while preserving the original document identity.
         project = parse_project_document(
-            document,
+            cast(ProjectDocument, document),
             source_file=source,
         )
 
@@ -80,7 +81,7 @@ def _require_explicit_project_file(project_file: Path) -> Path:
     if "\x00" in rendered:
         raise ProjectConfigurationError(
             "project_file must not contain a NUL character",
-            subject=rendered,
+            subject="<invalid project path>",
         )
 
     if not project_file.is_absolute():

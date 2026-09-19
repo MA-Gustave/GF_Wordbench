@@ -185,9 +185,7 @@ class _Observer:
         index: int,
         total: int,
     ) -> None:
-        self.events.append(
-            ("target_completed", target.target_id, summary.status, index, total)
-        )
+        self.events.append(("target_completed", target.target_id, summary.status, index, total))
 
     def plan_completed(
         self,
@@ -315,17 +313,15 @@ def _summary(
     skipped_reason: str = "",
 ) -> CompileSummary:
     command = request.command if request is not None else ()
-    working_directory = (
-        request.working_directory.as_posix() if request is not None else ""
-    )
+    working_directory = request.working_directory if request is not None else Path(".")
     expected_artifacts = (
-        tuple(path.as_posix() for path in request.expected_artifacts)
+        request.expected_artifacts
         if request is not None
-        else tuple(path.as_posix() for path in target.expected_artifacts)
+        else target.expected_artifacts
     )
     return CompileSummary(
         target_id=target_id or target.target_id,
-        target_kind=target.kind.value,
+        target_kind=target.kind,
         status=status,
         command=command,
         working_directory=working_directory,
@@ -343,12 +339,8 @@ def _summary(
         error_kind=error_kind,
         first_error=first_error,
         error_detail=error_detail,
-        stdout_path=(
-            process_result.stdout_path.as_posix() if process_result is not None else None
-        ),
-        stderr_path=(
-            process_result.stderr_path.as_posix() if process_result is not None else None
-        ),
+        stdout_path=(process_result.stdout_path if process_result is not None else None),
+        stderr_path=(process_result.stderr_path if process_result is not None else None),
         expected_artifacts=expected_artifacts,
         produced_artifacts=(),
         artifact_checks_passed=status is ValidationStatus.OK,
@@ -389,11 +381,17 @@ def test_protocol_fakes_satisfy_public_service_ports(tmp_path: Path) -> None:
     factory = _SummaryFactory()
     observer = _Observer()
 
-    assert isinstance(validator, CompilationPreflightValidator)
-    assert isinstance(builder, CompilationRequestBuilder)
-    assert isinstance(executor, CompilationExecutor)
-    assert isinstance(factory, CompilationSummaryFactory)
-    assert isinstance(observer, CompilationObserver)
+    validator_port: CompilationPreflightValidator = validator
+    builder_port: CompilationRequestBuilder = builder
+    executor_port: CompilationExecutor = executor
+    factory_port: CompilationSummaryFactory = factory
+    observer_port: CompilationObserver = observer
+
+    assert validator_port is validator
+    assert builder_port is builder
+    assert executor_port is executor
+    assert factory_port is factory
+    assert observer_port is observer
 
 
 def test_preflight_value_object_enforces_success_and_failure_coherence() -> None:

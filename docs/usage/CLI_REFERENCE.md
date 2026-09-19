@@ -8,10 +8,25 @@
 **Owner:** GF Wordbench maintainers  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **CLI contract version:** `1.2`  
-**Last structural review:** 2026-07-29  
+**Last structural review:** 2026-08-05  
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines the command-line interface of GF Wordbench.
@@ -40,7 +55,7 @@ The CLI does not own validation semantics.
 
 ### 1.1 Product boundary
 
-One CLI invocation resolves one GF Wordbench workspace, one active project and one run request.
+One CLI invocation resolves one selected language context, zero or one explicit validation profile, and one run request.
 
 The CLI does not provide:
 
@@ -50,7 +65,7 @@ The CLI does not provide:
 - portfolio aggregation or portfolio readiness commands;
 - any dependency on `gf-portfolio` runtime, storage or configuration.
 
-`gf-portfolio` may invoke separate `gf-wordbench` processes and consume finalized public Wordbench artifacts. It does not alter Wordbench command semantics, project identity or run results.
+`gf-portfolio` may invoke separate `gf-wordbench` processes and consume finalized public Wordbench artifacts. It does not alter Wordbench command semantics, resolved language identity or run results.
 
 ---
 
@@ -75,7 +90,7 @@ The canonical validation flow is:
 
 ```text
 parse CLI arguments
-    -> resolve project and environment configuration
+    -> resolve the selected language, optional profile and environment configuration
     -> validate the resolved request
     -> build RunConfig
     -> invoke the shared run application service
@@ -192,7 +207,7 @@ gf-wordbench validate --mode release --strict
 gf-wordbench project check
 gf-wordbench scenarios check --strict
 gf-wordbench gold update linearize-basic
-gf-wordbench schemas check project/project.toml
+gf-wordbench schemas check <validation-profile-root>/project.toml
 gf-wordbench reports check _gf_wordbench/run_20260722_181542
 ```
 
@@ -328,7 +343,7 @@ The following options are common to commands that load the active project or exe
 Purpose:
 
 ```text
-Root containing the active project and framework context.
+Compatibility option naming the framework/repository root; it does not identify the selected language.
 ```
 
 Canonical default:
@@ -337,10 +352,10 @@ Canonical default:
 current GF Wordbench repository root
 ```
 
-The active project configuration is then:
+When supplied explicitly, the optional validation profile may be:
 
 ```text
-<project-root>/project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 Example:
@@ -375,7 +390,7 @@ The resolved path must be recorded in run evidence.
 Purpose:
 
 ```text
-Root of the RGL installation or source tree used by the active project.
+Root of the RGL installation or source tree containing the selected language.
 ```
 
 Resolution precedence:
@@ -461,7 +476,7 @@ language code
 Those belong to:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 Resolved environment-derived values must be recorded.
@@ -476,7 +491,7 @@ For one CLI request, precedence from lowest to highest is:
 
 ```text
 1. framework-safe defaults
-2. project/project.toml
+2. <validation-profile-root>/project.toml
 3. documented environment-specific values
 4. explicit command-line options
 ```
@@ -494,7 +509,7 @@ Rules:
 
 ---
 
-# 12. Project-owned settings
+# 12. Validation-profile settings
 
 The canonical CLI does not expose these predecessor project-owned options:
 
@@ -509,7 +524,7 @@ The canonical CLI does not expose these predecessor project-owned options:
 These settings belong to:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 Reasons:
@@ -647,7 +662,7 @@ The target:
 
 - must exist;
 - must be a file;
-- must remain inside the configured project source root;
+- must remain inside the resolved source root;
 - must satisfy project source policy;
 - is persisted as a project-relative identity.
 
@@ -914,9 +929,9 @@ Rules:
 
 - accepted path must exist;
 - directory values are invalid;
-- path must be inside the active source root;
+- path must be inside the resolved source root;
 - path is normalized to project-relative identity;
-- a target does not override project identity;
+- a target does not override the resolved language identity;
 - release mode rejects target narrowing.
 
 ---
@@ -1314,7 +1329,7 @@ The structured meanings and exit code must remain stable.
 
 ## 30.1 Purpose
 
-Validate the active project contract without running full validation.
+Validate the selected-language and optional-profile contract without running full validation.
 
 Syntax:
 
@@ -1337,7 +1352,7 @@ gf-wordbench project check [OPTIONS]
 ## 30.3 Checks
 
 ```text
-project/project.toml exists
+<validation-profile-root>/project.toml exists
 UTF-8/TOML parsing succeeds
 schema ID supported
 schema version supported
@@ -1556,7 +1571,7 @@ Gold is not updated when:
 The command may modify only selected:
 
 ```text
-project/validation/gold/<scenario-id>.gold
+<validation-profile-root>/validation/gold/<scenario-id>.gold
 ```
 
 It must not modify:
@@ -1600,7 +1615,7 @@ gf-wordbench schemas check <PATH>... [OPTIONS]
 Examples:
 
 ```text
-gf-wordbench schemas check project/project.toml
+gf-wordbench schemas check <validation-profile-root>/project.toml
 gf-wordbench schemas check .gf_wordbench_state.json
 gf-wordbench schemas check _gf_wordbench/run_20260722_181542/summary.json
 gf-wordbench schemas check _gf_wordbench/run_20260722_181542

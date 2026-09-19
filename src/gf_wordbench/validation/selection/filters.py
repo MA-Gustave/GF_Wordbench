@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+import os
 from pathlib import Path, PurePosixPath
+import re
 from typing import Final, Literal, TypeAlias
 
 from gf_wordbench.kernel.errors import ConfigurationError
@@ -31,9 +31,7 @@ OUTSIDE_PROJECT_ROOT: Final[SelectionExclusionReason] = "outside_project_root"
 OUTSIDE_SOURCE_ROOT: Final[SelectionExclusionReason] = "outside_source_root"
 UNREADABLE_FILE: Final[SelectionExclusionReason] = "unreadable_file"
 EXCLUDED_BY_REGEX: Final[SelectionExclusionReason] = "excluded_by_regex"
-NOT_MATCHED_BY_INCLUDE_REGEX: Final[SelectionExclusionReason] = (
-    "not_matched_by_include_regex"
-)
+NOT_MATCHED_BY_INCLUDE_REGEX: Final[SelectionExclusionReason] = "not_matched_by_include_regex"
 EXCLUDED_BY_LIMIT: Final[SelectionExclusionReason] = "excluded_by_limit"
 DUPLICATE_CANDIDATE: Final[SelectionExclusionReason] = "duplicate_candidate"
 
@@ -64,13 +62,10 @@ class CompiledSourceFilters:
         ):
             return EXCLUDED_BY_REGEX
 
-        if (
-            self.include_pattern is not None
-            and not _matches_either(
-                self.include_pattern,
-                file_name=file_name,
-                project_relative_path=project_relative_path,
-            )
+        if self.include_pattern is not None and not _matches_either(
+            self.include_pattern,
+            file_name=file_name,
+            project_relative_path=project_relative_path,
         ):
             return NOT_MATCHED_BY_INCLUDE_REGEX
 
@@ -102,23 +97,17 @@ class CandidateFilterDecision:
                 field_name="project_relative_path",
             )
             if "\\" in relative_path:
-                raise ValueError(
-                    "project_relative_path must use POSIX separators"
-                )
+                raise ValueError("project_relative_path must use POSIX separators")
             portable = PurePosixPath(relative_path)
             if portable.is_absolute() or ".." in portable.parts:
-                raise ValueError(
-                    "project_relative_path must be contained and relative"
-                )
+                raise ValueError("project_relative_path must be contained and relative")
 
         reason = self.excluded_reason
         if reason is not None and reason not in _EXCLUSION_REASONS:
             raise ValueError(f"unsupported exclusion reason: {reason!r}")
 
         if reason is None and relative_path is None:
-            raise ValueError(
-                "a selected candidate requires project_relative_path"
-            )
+            raise ValueError("a selected candidate requires project_relative_path")
 
         object.__setattr__(self, "candidate_path", candidate_path)
         object.__setattr__(self, "resolved_path", resolved_path)
@@ -208,9 +197,7 @@ def matches_source_glob(
     relative_path = PurePosixPath(project_relative_path)
 
     if relative_path.is_absolute() or ".." in relative_path.parts:
-        raise ValueError(
-            "project_relative_path must be a contained relative path"
-        )
+        raise ValueError("project_relative_path must be a contained relative path")
 
     return relative_path.match(pattern)
 
@@ -281,9 +268,7 @@ def candidate_exclusion_reason(
             excluded_reason=OUTSIDE_PROJECT_ROOT,
         )
 
-    project_relative_path = resolved_candidate.relative_to(
-        resolved_project_root
-    ).as_posix()
+    project_relative_path = resolved_candidate.relative_to(resolved_project_root).as_posix()
 
     if not _is_relative_to(resolved_candidate, resolved_source_root):
         return CandidateFilterDecision(
@@ -464,8 +449,7 @@ def _matches_either(
     if pattern is None:
         return False
     return (
-        pattern.search(file_name) is not None
-        or pattern.search(project_relative_path) is not None
+        pattern.search(file_name) is not None or pattern.search(project_relative_path) is not None
     )
 
 
@@ -473,15 +457,15 @@ def _require_match_text(value: object, *, field_name: str) -> str:
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a string")
     if not value or "\x00" in value:
-        raise ValueError(
-            f"{field_name} must be non-empty and contain no NUL"
-        )
+        raise ValueError(f"{field_name} must be non-empty and contain no NUL")
     return value
 
 
-def _coerce_path(value: Path, *, field_name: str) -> Path:
+def _coerce_path(value: object, *, field_name: str) -> Path:
     if isinstance(value, bytes):
         raise TypeError(f"{field_name} must be path-like text")
+    if not isinstance(value, (str, os.PathLike)):
+        raise TypeError(f"{field_name} must be path-like")
     try:
         path = Path(value)
     except TypeError as exc:
@@ -491,7 +475,7 @@ def _coerce_path(value: Path, *, field_name: str) -> Path:
     return path
 
 
-def _resolve_root(value: Path, *, field_name: str) -> Path:
+def _resolve_root(value: object, *, field_name: str) -> Path:
     root = _coerce_path(value, field_name=field_name).resolve(strict=False)
     if not root.is_absolute():
         raise ValueError(f"{field_name} must resolve to an absolute path")
@@ -517,8 +501,6 @@ def _relative_path_or_none(
 
 
 __all__ = (
-    "CandidateFilterDecision",
-    "CompiledSourceFilters",
     "DUPLICATE_CANDIDATE",
     "EXCLUDED_BY_LIMIT",
     "EXCLUDED_BY_REGEX",
@@ -528,8 +510,10 @@ __all__ = (
     "NOT_MATCHED_BY_INCLUDE_REGEX",
     "OUTSIDE_PROJECT_ROOT",
     "OUTSIDE_SOURCE_ROOT",
-    "SelectionExclusionReason",
     "UNREADABLE_FILE",
+    "CandidateFilterDecision",
+    "CompiledSourceFilters",
+    "SelectionExclusionReason",
     "apply_diagnostic_limit",
     "candidate_exclusion_reason",
     "compile_optional_regex",

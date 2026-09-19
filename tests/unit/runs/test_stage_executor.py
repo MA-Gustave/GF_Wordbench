@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from types import MappingProxyType, SimpleNamespace
-from typing import Iterator
+from types import SimpleNamespace
 
 import pytest
 
@@ -101,7 +101,7 @@ def _record(
     )
 
 
-def _clock(*values: int):
+def _clock(*values: int) -> Callable[[], int]:
     iterator: Iterator[int] = iter(values)
     return lambda: next(iterator)
 
@@ -288,9 +288,7 @@ def test_blocked_dependents_are_skipped_but_independent_work_continues() -> None
     assert calls == [StageId.CONFIGURATION, StageId.SELECTION]
     blocked = report.record(StageId.ENVIRONMENT)
     assert blocked.status is ValidationStatus.SKIPPED
-    assert blocked.primary_message == (
-        "blocked by unavailable prerequisites: configuration"
-    )
+    assert blocked.primary_message == ("blocked by unavailable prerequisites: configuration")
     assert report.record(StageId.SELECTION).status is ValidationStatus.OK
     assert report.aborted is False
 
@@ -305,6 +303,10 @@ def test_nonblocking_failure_does_not_prevent_a_dependent_stage() -> None:
     )
     calls: list[StageId] = []
 
+    def environment_handler(invocation: StageInvocation) -> _Result:
+        calls.append(invocation.stage.stage_id)
+        return _Result()
+
     report = execute_plan(
         plan,
         {
@@ -313,9 +315,7 @@ def test_nonblocking_failure_does_not_prevent_a_dependent_stage() -> None:
                 error_kind=ErrorKind.CONFIG,
                 primary_message="non-blocking policy failure",
             ),
-            StageId.ENVIRONMENT: lambda invocation: (
-                calls.append(invocation.stage.stage_id) or _Result()
-            ),
+            StageId.ENVIRONMENT: environment_handler,
         },
     )
 
@@ -362,9 +362,7 @@ def test_fail_fast_skips_remaining_required_work_but_runs_finalization() -> None
     assert report.record(StageId.WRITE_REPORTS).status is ValidationStatus.OK
     assert report.record(StageId.WRITE_MANIFEST).status is ValidationStatus.OK
     assert report.aborted is True
-    assert report.abort_reason == (
-        "fail-fast stopped execution after configuration"
-    )
+    assert report.abort_reason == ("fail-fast stopped execution after configuration")
 
 
 def test_fail_fast_does_not_abort_after_an_optional_failure() -> None:
@@ -415,9 +413,7 @@ def test_pre_stage_cancellation_stops_normal_work_and_preserves_finalization() -
 
     assert calls == [StageId.WRITE_REPORTS, StageId.WRITE_MANIFEST]
     assert report.record(StageId.CONFIGURATION).status is ValidationStatus.SKIPPED
-    assert report.record(StageId.CONFIGURATION).primary_message == (
-        "cancelled by operator"
-    )
+    assert report.record(StageId.CONFIGURATION).primary_message == ("cancelled by operator")
     assert report.record(StageId.ENVIRONMENT).status is ValidationStatus.SKIPPED
     assert report.record(StageId.WRITE_REPORTS).status is ValidationStatus.OK
     assert report.aborted is True
@@ -540,15 +536,13 @@ def test_exhausted_execution_budget_skips_validation_but_not_finalization() -> N
     )
     calls: list[StageId] = []
 
+    def recording_handler(invocation: StageInvocation) -> _Result:
+        calls.append(invocation.stage.stage_id)
+        return _Result()
+
     report = execute_plan(
         plan,
-        {
-            stage.stage_id: (
-                lambda invocation: calls.append(invocation.stage.stage_id)
-                or _Result()
-            )
-            for stage in plan.stages
-        },
+        {stage.stage_id: recording_handler for stage in plan.stages},
         remaining_execution_seconds=lambda: 0,
     )
 
@@ -590,16 +584,13 @@ def test_finalization_uses_its_own_timeout_and_does_not_consume_normal_budget() 
         budget_called = True
         return 0
 
+    def finalization_handler(invocation: StageInvocation) -> _Result:
+        observed.append((invocation.timeout_seconds, invocation.finalizing))
+        return _Result()
+
     report = execute_plan(
         plan,
-        {
-            StageId.WRITE_REPORTS: lambda invocation: (
-                observed.append(
-                    (invocation.timeout_seconds, invocation.finalizing)
-                )
-                or _Result()
-            )
-        },
+        {StageId.WRITE_REPORTS: finalization_handler},
         remaining_execution_seconds=budget,
     )
 
@@ -670,14 +661,8 @@ def test_unsafe_run_ownership_disables_all_finalization_handlers() -> None:
     )
 
     assert called is False
-    assert all(
-        record.status is ValidationStatus.SKIPPED
-        for record in report.records
-    )
-    assert all(
-        "run ownership is unsafe" in record.primary_message
-        for record in report.records
-    )
+    assert all(record.status is ValidationStatus.SKIPPED for record in report.records)
+    assert all("run ownership is unsafe" in record.primary_message for record in report.records)
     assert report.aborted is False
 
 
@@ -817,14 +802,14 @@ def test_executor_rejects_invalid_callback_contracts() -> None:
         execute_plan(
             plan,
             handler,
-            cancellation_requested=lambda: 1,  # type: ignore[return-value]
+            cancellation_requested=lambda: 1,  # type: ignore[arg-type]
         )
 
     with pytest.raises(TypeError, match="must return a number or None"):
         execute_plan(
             plan,
             handler,
-            remaining_execution_seconds=lambda: "many",  # type: ignore[return-value]
+            remaining_execution_seconds=lambda: "many",  # type: ignore[arg-type]
         )
 
     with pytest.raises(ValueError, match="timeout.*positive"):
@@ -842,7 +827,7 @@ def test_clock_must_be_monotonic_and_return_non_negative_integers() -> None:
         execute_stage(
             stage,
             lambda invocation: _Result(),
-            clock_ns=lambda: 1.5,  # type: ignore[return-value]
+            clock_ns=lambda: 1.5,  # type: ignore[arg-type]
         )
 
     with pytest.raises(ValueError, match="non-negative"):

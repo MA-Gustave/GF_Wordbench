@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import math
-import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum, unique
+import math
 from threading import Condition, RLock
+import time
 from typing import Final, TypeAlias
 
 from gf_wordbench.kernel.errors import CancellationRequested
@@ -54,20 +54,11 @@ class CancellationSnapshot:
                 raise ValueError("requested cancellation requires a reason")
             _normalize_reason(reason)
             if requested_at is None:
-                raise ValueError(
-                    "requested cancellation requires requested_at"
-                )
+                raise ValueError("requested cancellation requires requested_at")
             if requested_at_monotonic is None:
-                raise ValueError(
-                    "requested cancellation requires requested_at_monotonic"
-                )
-        elif any(
-            value is not None
-            for value in (reason, requested_at, requested_at_monotonic)
-        ):
-            raise ValueError(
-                "unrequested cancellation cannot contain request metadata"
-            )
+                raise ValueError("requested cancellation requires requested_at_monotonic")
+        elif any(value is not None for value in (reason, requested_at, requested_at_monotonic)):
+            raise ValueError("unrequested cancellation cannot contain request metadata")
 
         if requested_at is not None:
             object.__setattr__(
@@ -127,9 +118,7 @@ class CancellationController:
             if self._reason is not None:
                 return False
 
-            requested_at_monotonic = _read_monotonic_clock(
-                self._monotonic_clock
-            )
+            requested_at_monotonic = _read_monotonic_clock(self._monotonic_clock)
             requested_at = _read_utc_clock(self._utc_clock)
 
             self._reason = normalized_reason
@@ -271,8 +260,7 @@ def cancellation_requested(source: object | None) -> bool:
         method = getattr(source, "is_cancelled", None)
     if not callable(method):
         raise TypeError(
-            "cancellation source must expose "
-            "is_cancellation_requested() or is_cancelled()"
+            "cancellation source must expose is_cancellation_requested() or is_cancelled()"
         )
 
     value = method()
@@ -334,9 +322,7 @@ def _normalize_reason(value: CancellationReason | str) -> str:
     if "\x00" in raw:
         raise ValueError("cancellation reason must not contain NUL")
     if len(raw) > _MAX_REASON_LENGTH:
-        raise ValueError(
-            f"cancellation reason exceeds {_MAX_REASON_LENGTH} characters"
-        )
+        raise ValueError(f"cancellation reason exceeds {_MAX_REASON_LENGTH} characters")
     return raw
 
 

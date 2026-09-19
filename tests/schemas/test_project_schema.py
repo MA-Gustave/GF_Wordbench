@@ -10,11 +10,11 @@ import pytest
 
 from gf_wordbench.kernel.errors import SchemaValidationError, UnsupportedVersionError
 from gf_wordbench.projects.models import (
-    GFProjectConfig,
-    ModuleTargets,
     PROJECT_CONFIG_FILENAME,
     PROJECT_SCHEMA_ID,
     PROJECT_SCHEMA_VERSION,
+    GFProjectConfig,
+    ModuleTargets,
     ProjectConfig,
     ProjectIdentity,
     SourceConfig,

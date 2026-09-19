@@ -2,31 +2,32 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, cast
 
 from gf_wordbench.diagnostics.models import (
     DiagnosticEvidence,
+    DiagnosticLine,
     DiagnosticMatchResult,
     DiagnosticParseResult,
     DiagnosticPattern,
     DiagnosticRecord,
+    DiagnosticSeverity,
+    DiagnosticStream,
+    PatternConfidence,
+    PatternMatch,
+    records_from_matches,
 )
 from gf_wordbench.diagnostics.patterns.common import select_diagnostic_patterns
-from gf_wordbench.kernel.statuses import (
-    ErrorKind,
-    ExecutionState,
-    ValidationStatus,
-)
+from gf_wordbench.kernel.statuses import ErrorKind, ExecutionState, ValidationStatus
 
-from .deduplication import deduplicated_record_view
-from .matcher import match_diagnostic_streams
-from .primary import select_primary_record
-from .streams import build_stream_views
+from .deduplication import deduplicated_records
+from .matcher import MatcherWarningCode, PatternMatchBatch, match_diagnostic_patterns
+from .primary import DiagnosticRecordLike, select_primary_diagnostic
 
 PARSER_VERSION: Final[str] = "1.0"
 MAX_PARSE_WARNINGS: Final[int] = 64
 MAX_WARNING_LENGTH: Final[int] = 1_000
-
+_MAX_FALLBACK_EXCERPT: Final[int] = 8_192
 PatternProvider = Callable[[DiagnosticEvidence], Sequence[DiagnosticPattern]]
 
 
@@ -49,22 +50,13 @@ class DiagnosticParsingService:
     ) -> DiagnosticParseResult:
         if not isinstance(evidence, DiagnosticEvidence):
             raise TypeError("evidence must be DiagnosticEvidence")
-
-        preflight = _preflight_result(
-            evidence,
-            max_warnings=self.max_warnings,
-        )
+        preflight = _preflight(evidence, max_warnings=self.max_warnings)
         if preflight is not None:
             return preflight
-
         try:
             return self._parse(evidence, patterns=patterns)
         except Exception as exc:
-            return _parser_failure_result(
-                evidence,
-                exc,
-                max_warnings=self.max_warnings,
-            )
+            return _failure(evidence, exc, max_warnings=self.max_warnings)
 
     def _parse(
         self,
@@ -72,62 +64,62 @@ class DiagnosticParsingService:
         *,
         patterns: Sequence[DiagnosticPattern] | None,
     ) -> DiagnosticParseResult:
-        selected_patterns = _resolve_patterns(
-            evidence,
-            patterns=patterns,
-            provider=self.pattern_provider,
-        )
-        stream_views = build_stream_views(evidence)
-        matched = match_diagnostic_streams(
-            evidence=evidence,
-            streams=stream_views,
-            patterns=selected_patterns,
-        )
-        if not isinstance(matched, DiagnosticMatchResult):
-            raise TypeError(
-                "match_diagnostic_streams must return DiagnosticMatchResult"
+        selected = _resolve_patterns(evidence, patterns=patterns, provider=self.pattern_provider)
+        matched = _match(evidence, selected)
+        records = matched.records
+        if not records and evidence.exit_code not in (None, 0):
+            records = (_fallback_record(evidence),)
+            matched = DiagnosticMatchResult(
+                records=records,
+                warnings=matched.warnings,
+                patterns_considered=matched.patterns_considered + 1,
+                patterns_matched=matched.patterns_matched + 1,
+                unknown_lines=matched.unknown_lines,
+                limits_reached=matched.limits_reached,
+                parse_complete=matched.parse_complete,
+                contract_error=matched.contract_error,
             )
-
-        records = _record_tuple(matched.records)
-        primary_candidates = deduplicated_record_view(records)
-        primary = select_primary_record(
-            primary_candidates,
-            evidence=evidence,
+        primary_candidate = select_primary_diagnostic(
+            cast(
+                "Iterable[DiagnosticRecordLike]",
+                deduplicated_records(records),
+            ),
+            exit_code=evidence.exit_code,
         )
+        primary = primary_candidate
         if primary is not None and not isinstance(primary, DiagnosticRecord):
-            raise TypeError(
-                "select_primary_record must return DiagnosticRecord or None"
+            raise TypeError("select_primary_diagnostic must return DiagnosticRecord or None")
+        complete = not any(
+            (
+                evidence.stdout_truncated,
+                evidence.stderr_truncated,
+                evidence.decoding_lossy,
+                not evidence.capture_complete,
+                matched.limits_reached,
+                not matched.parse_complete,
             )
-
-        request_warnings = _request_warnings(evidence)
+        )
         warnings = _merge_warnings(
-            request_warnings,
+            _evidence_warnings(evidence),
             matched.warnings,
             limit=self.max_warnings,
         )
-        parse_complete = _parse_complete(evidence, matched)
-        status = _parser_status(
-            evidence,
-            matched,
-            parse_complete=parse_complete,
-        )
-        if evidence.strict and not parse_complete:
+        if not complete:
             warnings = _merge_warnings(
                 warnings,
-                (
-                    "strict diagnostic parsing requires complete and lossless "
-                    "evidence",
-                ),
+                ("diagnostic parsing requires complete and lossless evidence",),
                 limit=self.max_warnings,
             )
-
-        return _build_result(
+        status = ValidationStatus.OK
+        if matched.contract_error or not complete:
+            status = ValidationStatus.ERROR
+        return _result(
             evidence=evidence,
             status=status,
             records=records,
             warnings=warnings,
             primary=primary,
-            parse_complete=parse_complete,
+            parse_complete=complete,
             patterns_considered=matched.patterns_considered,
             patterns_matched=matched.patterns_matched,
             unknown_lines=matched.unknown_lines,
@@ -146,19 +138,15 @@ def parse_diagnostics(
     return _DEFAULT_SERVICE.parse(evidence, patterns=patterns)
 
 
-def _preflight_result(
+def _preflight(
     evidence: DiagnosticEvidence,
     *,
     max_warnings: int,
 ) -> DiagnosticParseResult | None:
-    stdout_missing = evidence.stdout_text is None
-    stderr_missing = evidence.stderr_text is None
-
-    if not stdout_missing or not stderr_missing:
+    if evidence.stdout_text is not None or evidence.stderr_text is not None:
         return None
-
     if evidence.execution_state is ExecutionState.LAUNCH_FAILED:
-        return _build_result(
+        return _result(
             evidence=evidence,
             status=ValidationStatus.SKIPPED,
             records=(),
@@ -173,17 +161,13 @@ def _preflight_result(
             unknown_lines=0,
             limits_reached=False,
         )
-
-    return _build_result(
+    return _result(
         evidence=evidence,
         status=ValidationStatus.ERROR,
         records=(),
         warnings=_merge_warnings(
-            (
-                "raw stdout and stderr text are unavailable for diagnostic "
-                "parsing",
-            ),
-            _request_warnings(evidence),
+            ("raw stdout and stderr text are unavailable for diagnostic parsing",),
+            _evidence_warnings(evidence),
             limit=max_warnings,
         ),
         primary=None,
@@ -201,90 +185,168 @@ def _resolve_patterns(
     patterns: Sequence[DiagnosticPattern] | None,
     provider: PatternProvider,
 ) -> tuple[DiagnosticPattern, ...]:
-    provided = provider(evidence) if patterns is None else patterns
-    if isinstance(provided, (str, bytes)):
+    provided: object = provider(evidence) if patterns is None else patterns
+    if isinstance(provided, (str, bytes, bytearray)) or not isinstance(
+        provided, Sequence
+    ):
         raise TypeError("patterns must be a sequence of DiagnosticPattern")
-
     resolved = tuple(provided)
     identifiers: set[str] = set()
     for index, pattern in enumerate(resolved):
         if not isinstance(pattern, DiagnosticPattern):
-            raise TypeError(
-                f"patterns[{index}] must be DiagnosticPattern"
-            )
+            raise TypeError(f"patterns[{index}] must be DiagnosticPattern")
         if pattern.pattern_id in identifiers:
-            raise ValueError(
-                f"duplicate diagnostic pattern ID: {pattern.pattern_id}"
-            )
+            raise ValueError(f"duplicate diagnostic pattern ID: {pattern.pattern_id}")
         identifiers.add(pattern.pattern_id)
-
-    return tuple(
-        sorted(
-            resolved,
-            key=lambda pattern: (
-                pattern.precedence,
-                pattern.pattern_id,
-            ),
-        )
-    )
+    return tuple(sorted(resolved, key=lambda item: (item.priority, item.pattern_id)))
 
 
-def _record_tuple(
-    records: Iterable[DiagnosticRecord],
-) -> tuple[DiagnosticRecord, ...]:
-    if isinstance(records, (str, bytes)):
-        raise TypeError("records must be an iterable of DiagnosticRecord")
-    frozen = tuple(records)
-    for index, record in enumerate(frozen):
-        if not isinstance(record, DiagnosticRecord):
-            raise TypeError(
-                f"records[{index}] must be DiagnosticRecord"
-            )
-    return frozen
-
-
-def _request_warnings(
+def _match(
     evidence: DiagnosticEvidence,
-) -> tuple[str, ...]:
-    warnings: list[str] = []
-    if evidence.stdout_truncated:
-        warnings.append("stdout evidence is truncated")
-    if evidence.stderr_truncated:
-        warnings.append("stderr evidence is truncated")
-    if evidence.decoding_lossy:
-        warnings.append("stream decoding was lossy")
-    return tuple(warnings)
-
-
-def _parse_complete(
-    evidence: DiagnosticEvidence,
-    matched: DiagnosticMatchResult,
-) -> bool:
-    return not any(
+    patterns: tuple[DiagnosticPattern, ...],
+) -> DiagnosticMatchResult:
+    batch = match_diagnostic_patterns(patterns, evidence)
+    if not isinstance(batch, PatternMatchBatch):
+        raise TypeError("match_diagnostic_patterns must return PatternMatchBatch")
+    matches: list[PatternMatch] = []
+    for index, value in enumerate(batch.matches):
+        if not isinstance(value, PatternMatch):
+            raise TypeError(f"matcher result {index} must be PatternMatch")
+        matches.append(value)
+    records = records_from_matches(matches)
+    limit_codes = {
+        MatcherWarningCode.MATCH_LIMIT_REACHED,
+        MatcherWarningCode.WARNING_LIMIT_REACHED,
+    }
+    warnings = tuple(
         (
-            evidence.stdout_truncated,
-            evidence.stderr_truncated,
-            evidence.decoding_lossy,
-            matched.limits_reached,
-            not matched.parse_complete,
+            f"{warning.code.value} [{warning.pattern_id}]: {warning.message}"
+            if warning.pattern_id is not None
+            else f"{warning.code.value}: {warning.message}"
         )
+        for warning in batch.warnings
+    )
+    return DiagnosticMatchResult(
+        records=records,
+        warnings=warnings,
+        patterns_considered=len(batch.attempted_pattern_ids),
+        patterns_matched=len({record.pattern_id for record in records}),
+        unknown_lines=_unknown_lines(evidence, records),
+        limits_reached=any(warning.code in limit_codes for warning in batch.warnings),
+        parse_complete=batch.complete,
+        contract_error=False,
     )
 
 
-def _parser_status(
+def _fallback_record(evidence: DiagnosticEvidence) -> DiagnosticRecord:
+    candidate = _fallback_line(evidence)
+    if candidate is None:
+        match = PatternMatch(
+            pattern_id="DP-FALLBACK-001",
+            operation=evidence.operation_kind,
+            stream=None,
+            start_line=None,
+            end_line=None,
+            severity=DiagnosticSeverity.ERROR,
+            error_kind=ErrorKind.OTHER,
+            message=(
+                f"Process exited with code {evidence.exit_code} without a "
+                "recognized diagnostic message"
+            ),
+            confidence=PatternConfidence.FALLBACK,
+            is_unknown=True,
+            metadata={"exit_code": evidence.exit_code},
+        )
+    else:
+        raw = (
+            evidence.stderr_text
+            if candidate.stream is DiagnosticStream.STDERR
+            else evidence.stdout_text
+        ) or ""
+        raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+        if len(raw) > _MAX_FALLBACK_EXCERPT:
+            raw = raw[: _MAX_FALLBACK_EXCERPT - 1] + "…"
+        match = PatternMatch(
+            pattern_id="DP-FALLBACK-002",
+            operation=evidence.operation_kind,
+            stream=candidate.stream,
+            start_line=candidate.line_number,
+            end_line=candidate.line_number,
+            severity=DiagnosticSeverity.ERROR,
+            error_kind=ErrorKind.OTHER,
+            message=candidate.text.strip(),
+            detail=f"unrecognized process failure; exit_code={evidence.exit_code}",
+            confidence=PatternConfidence.FALLBACK,
+            raw_excerpt=raw,
+            is_unknown=True,
+            metadata={"exit_code": evidence.exit_code},
+        )
+    return DiagnosticRecord.from_match(match)
+
+
+def _fallback_line(evidence: DiagnosticEvidence) -> DiagnosticLine | None:
+    ordered = sorted(
+        _lines(evidence),
+        key=lambda line: (
+            0 if line.stream is DiagnosticStream.STDERR else 1,
+            line.line_number,
+        ),
+    )
+    for line in ordered:
+        text = line.text.strip()
+        folded = text.casefold()
+        progress = (
+            folded.startswith("- compiling")
+            or folded.startswith("linking")
+            or folded.startswith("writing")
+        )
+        if text and not progress:
+            return line
+    return None
+
+
+def _lines(evidence: DiagnosticEvidence) -> tuple[DiagnosticLine, ...]:
+    sources = (
+        (DiagnosticStream.STDOUT, evidence.stdout_text, evidence.stdout_path),
+        (DiagnosticStream.STDERR, evidence.stderr_text, evidence.stderr_path),
+    )
+    return tuple(
+        DiagnosticLine(stream=stream, line_number=number, text=value, raw_path=path)
+        for stream, text, path in sources
+        if text is not None
+        for number, value in enumerate(text.splitlines(), start=1)
+    )
+
+
+def _unknown_lines(
     evidence: DiagnosticEvidence,
-    matched: DiagnosticMatchResult,
-    *,
-    parse_complete: bool,
-) -> ValidationStatus:
-    if matched.contract_error:
-        return ValidationStatus.ERROR
-    if evidence.strict and not parse_complete:
-        return ValidationStatus.ERROR
-    return ValidationStatus.OK
+    records: tuple[DiagnosticRecord, ...],
+) -> int:
+    claimed = {
+        (stream, number)
+        for record in records
+        if isinstance((stream := record.stream), DiagnosticStream)
+        and stream in (DiagnosticStream.STDOUT, DiagnosticStream.STDERR)
+        and record.start_line is not None
+        for number in range(record.start_line, (record.end_line or record.start_line) + 1)
+    }
+    return sum(
+        line.text.strip() != "" and (line.stream, line.line_number) not in claimed
+        for line in _lines(evidence)
+    )
 
 
-def _build_result(
+def _evidence_warnings(evidence: DiagnosticEvidence) -> tuple[str, ...]:
+    candidates = (
+        (evidence.stdout_truncated, "stdout evidence is truncated"),
+        (evidence.stderr_truncated, "stderr evidence is truncated"),
+        (evidence.decoding_lossy, "stream decoding was lossy"),
+        (not evidence.capture_complete, "diagnostic evidence capture is incomplete"),
+    )
+    return tuple(message for active, message in candidates if active)
+
+
+def _result(
     *,
     evidence: DiagnosticEvidence,
     status: ValidationStatus,
@@ -297,41 +359,13 @@ def _build_result(
     unknown_lines: int,
     limits_reached: bool,
 ) -> DiagnosticParseResult:
-    if not isinstance(status, ValidationStatus):
-        raise TypeError("status must be ValidationStatus")
     if status is ValidationStatus.FAIL:
         raise ValueError("the diagnostic parser must not return FAIL")
-    if type(parse_complete) is not bool:
-        raise TypeError("parse_complete must be a bool")
-    if type(limits_reached) is not bool:
-        raise TypeError("limits_reached must be a bool")
-
-    for name, value in (
-        ("patterns_considered", patterns_considered),
-        ("patterns_matched", patterns_matched),
-        ("unknown_lines", unknown_lines),
-    ):
-        if type(value) is not int or value < 0:
-            raise ValueError(f"{name} must be a non-negative integer")
-
-    primary_record_id: str | None
-    primary_error_kind: ErrorKind | None
-    primary_message: str
-    primary_detail: str
-
-    if primary is None:
-        primary_record_id = None
-        primary_error_kind = (
-            ErrorKind.OK if status is ValidationStatus.OK else None
-        )
-        primary_message = ""
-        primary_detail = ""
-    else:
-        primary_record_id = primary.record_id
-        primary_error_kind = primary.error_kind
-        primary_message = primary.message
-        primary_detail = primary.detail
-
+    primary_kind: ErrorKind | str | None = None
+    if primary is not None:
+        primary_kind = primary.error_kind
+    elif status is ValidationStatus.OK:
+        primary_kind = ErrorKind.OK
     return DiagnosticParseResult(
         status=status,
         parser_version=PARSER_VERSION,
@@ -339,10 +373,10 @@ def _build_result(
         operation_kind=evidence.operation_kind,
         records=records,
         warnings=warnings,
-        primary_record_id=primary_record_id,
-        primary_error_kind=primary_error_kind,
-        primary_message=primary_message,
-        primary_detail=primary_detail,
+        primary_record_id=primary.record_id if primary is not None else None,
+        primary_error_kind=primary_kind,
+        primary_message=primary.message if primary is not None else "",
+        primary_detail=primary.detail if primary is not None else "",
         fatal_detected=any(record.is_fatal for record in records),
         unknown_failure_output=any(record.is_unknown for record in records),
         stdout_truncated=evidence.stdout_truncated,
@@ -357,20 +391,19 @@ def _build_result(
     )
 
 
-def _parser_failure_result(
+def _failure(
     evidence: DiagnosticEvidence,
     exc: Exception,
     *,
     max_warnings: int,
 ) -> DiagnosticParseResult:
-    warning = f"diagnostic parser failed: {type(exc).__name__}"
-    return _build_result(
+    return _result(
         evidence=evidence,
         status=ValidationStatus.ERROR,
         records=(),
         warnings=_merge_warnings(
-            _request_warnings(evidence),
-            (warning,),
+            _evidence_warnings(evidence),
+            (f"diagnostic parser failed: {type(exc).__name__}",),
             limit=max_warnings,
         ),
         primary=None,
@@ -388,9 +421,8 @@ def _merge_warnings(
 ) -> tuple[str, ...]:
     merged: list[str] = []
     seen: set[str] = set()
-
     for group in groups:
-        if isinstance(group, (str, bytes)):
+        if isinstance(group, (str, bytes, bytearray)):
             raise TypeError("warning groups must be iterables of strings")
         for item in group:
             if not isinstance(item, str):
@@ -406,7 +438,6 @@ def _merge_warnings(
             merged.append(normalized)
             if len(merged) == limit:
                 return tuple(merged)
-
     return tuple(merged)
 
 

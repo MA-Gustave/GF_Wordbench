@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 import pytest
 
 from gf_wordbench.validation.scanning.masking import build_source_views
@@ -101,10 +99,7 @@ def test_double_backslash_before_thin_arrow_matches_source_line() -> None:
 
 
 def test_notation_rules_count_lines_not_occurrences() -> None:
-    source = (
-        "oper first = \\x => x ; second = \\y => y ;\n"
-        "oper third = \\z => z ;\n"
-    )
+    source = "oper first = \\x => x ; second = \\y => y ;\noper third = \\z => z ;\n"
 
     assert _single_slash(source) == ((1, 1), (2, 2))
 
@@ -138,24 +133,13 @@ def test_notation_like_text_in_comments_and_strings_is_ignored() -> None:
 
 
 def test_runtime_string_match_requires_dot_s_and_literal_branch() -> None:
-    source = (
-        "oper f x = case x.s of {\n"
-        '  "abc" => foo ;\n'
-        "  _ => bar\n"
-        "} ;\n"
-    )
+    source = 'oper f x = case x.s of {\n  "abc" => foo ;\n  _ => bar\n} ;\n'
 
     assert _runtime(source) == ((1, 4),)
 
 
 def test_runtime_string_match_counts_block_once_with_multiple_literals() -> None:
-    source = (
-        "oper f x = case x.s of {\n"
-        '  "a" => foo ;\n'
-        '  "b" => bar ;\n'
-        "  _ => baz\n"
-        "} ;\n"
-    )
+    source = 'oper f x = case x.s of {\n  "a" => foo ;\n  "b" => bar ;\n  _ => baz\n} ;\n'
 
     assert _runtime(source) == ((1, 5),)
 
@@ -169,14 +153,7 @@ def test_runtime_string_match_rejects_missing_dot_s_or_literal_branch() -> None:
 
 
 def test_runtime_string_match_supports_multiline_case_header() -> None:
-    source = (
-        "oper f x = case\n"
-        "  x.s\n"
-        "of {\n"
-        '  "abc" => foo ;\n'
-        "  _ => bar\n"
-        "} ;\n"
-    )
+    source = 'oper f x = case\n  x.s\nof {\n  "abc" => foo ;\n  _ => bar\n} ;\n'
 
     assert _runtime(source) == ((1, 6),)
 
@@ -191,23 +168,13 @@ def test_two_separate_runtime_blocks_count_twice() -> None:
 
 
 def test_untyped_case_string_concatenation_pattern_matches() -> None:
-    source = (
-        "oper f stem = case stem of {\n"
-        '  _ + "s" => mkN stem ;\n'
-        "  _ => mkN stem\n"
-        "} ;\n"
-    )
+    source = 'oper f stem = case stem of {\n  _ + "s" => mkN stem ;\n  _ => mkN stem\n} ;\n'
 
     assert _case_pattern(source) == ((1, 4),)
 
 
 def test_untyped_table_string_concatenation_pattern_matches() -> None:
-    source = (
-        "oper endings = table {\n"
-        '  "s" + _ => "plural" ;\n'
-        '  _ => "other"\n'
-        "} ;\n"
-    )
+    source = 'oper endings = table {\n  "s" + _ => "plural" ;\n  _ => "other"\n} ;\n'
 
     assert _table_pattern(source) == ((1, 4),)
 
@@ -233,30 +200,15 @@ def test_explicit_str_pattern_type_exempts_block(
 
 
 def test_pattern_detectors_accept_whitespace_variants() -> None:
-    case_source = (
-        "oper f x = case x of {\n"
-        '  _+"s"=>one ;\n'
-        "  _=>two\n"
-        "} ;\n"
-    )
-    table_source = (
-        "oper f = table {\n"
-        '  "s"+_=>one ;\n'
-        "  _=>two\n"
-        "} ;\n"
-    )
+    case_source = 'oper f x = case x of {\n  _+"s"=>one ;\n  _=>two\n} ;\n'
+    table_source = 'oper f = table {\n  "s"+_=>one ;\n  _=>two\n} ;\n'
 
     assert _case_pattern(case_source) == ((1, 4),)
     assert _table_pattern(table_source) == ((1, 4),)
 
 
 def test_pattern_like_text_in_comment_does_not_match() -> None:
-    source = (
-        "oper f x = case x of {\n"
-        '  -- _ + "s" => fake ;\n'
-        "  _ => real\n"
-        "} ;\n"
-    )
+    source = 'oper f x = case x of {\n  -- _ + "s" => fake ;\n  _ => real\n} ;\n'
 
     assert _case_pattern(source) == ()
 
@@ -302,11 +254,7 @@ def test_nested_case_is_not_counted_independently_in_same_traversal() -> None:
 
 
 def test_unbalanced_case_block_is_not_reported() -> None:
-    source = (
-        "oper f x = case x.s of {\n"
-        '  "a" => one ;\n'
-        "  _ => two\n"
-    )
+    source = 'oper f x = case x.s of {\n  "a" => one ;\n  _ => two\n'
 
     assert _runtime(source) == ()
     assert _case_pattern(source) == ()
@@ -337,7 +285,7 @@ def test_trailing_whitespace_counts_physical_lines_once() -> None:
 
 def test_trailing_whitespace_applies_inside_comments_and_strings() -> None:
     lines = (
-        '-- comment  \n',
+        "-- comment  \n",
         'oper text = "value"; \n',
     )
 

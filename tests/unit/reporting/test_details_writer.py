@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -369,9 +369,7 @@ def test_write_file_and_scenario_details_use_owned_names_and_lf(
         run_root=run_root,
     )
 
-    assert file_path == details_root / "files" / (
-        f"{file_detail_key(file_result.file_path)}.md"
-    )
+    assert file_path == details_root / "files" / (f"{file_detail_key(file_result.file_path)}.md")
     assert scenario_path == details_root / "scenarios" / (
         f"{scenario_detail_key(scenario_result.scenario_id)}.md"
     )
@@ -435,9 +433,7 @@ def test_write_detail_reports_honors_keep_ok_details_configuration(
     result = write_detail_reports(run_result)  # type: ignore[arg-type]
 
     assert result.ok is True
-    assert [artifact.subject_id for artifact in result.artifacts] == [
-        "z/Failure.gf"
-    ]
+    assert [artifact.subject_id for artifact in result.artifacts] == ["z/Failure.gf"]
     assert result.skipped_subjects == (
         "file:a/Okay.gf",
         "scenario:ok-scenario",
@@ -486,8 +482,8 @@ def test_write_detail_reports_isolates_failures_and_sorts_results(
     )
     real_write_file_detail = writer.write_file_detail
 
-    def selective_write(file_result: object, **kwargs: object) -> Path:
-        if str(getattr(file_result, "file_path")) == "z/Failure.gf":
+    def selective_write(file_result: _FileResult, **kwargs: object) -> Path:
+        if str(file_result.file_path) == "z/Failure.gf":
             raise OSError("simulated detail failure")
         return real_write_file_detail(file_result, **kwargs)  # type: ignore[arg-type]
 

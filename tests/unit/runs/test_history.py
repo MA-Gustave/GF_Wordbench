@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 
+from gf_wordbench.kernel.ids import validate_project_id, validate_run_id
 from gf_wordbench.kernel.statuses import OverallStatus, ValidationMode
 from gf_wordbench.runs.history import (
     MANIFEST_FILENAME,
@@ -21,7 +23,6 @@ from gf_wordbench.runs.history import (
     is_previous_run_eligible,
     select_previous_run,
 )
-
 
 _BASE_TIME = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
 _PROJECT_ID = "example-language"
@@ -42,8 +43,8 @@ def _record(
 ) -> RunHistoryRecord:
     started = started_at or _BASE_TIME
     return RunHistoryRecord(
-        run_id=run_id,
-        project_id=project_id,
+        run_id=validate_run_id(run_id),
+        project_id=validate_project_id(project_id),
         mode=mode,
         started_at=started,
         finished_at=finished_at or started + timedelta(minutes=1),
@@ -76,7 +77,7 @@ def _run_directory(
     return run_dir
 
 
-def _reader(records: dict[str, RunHistoryRecord]):
+def _reader(records: dict[str, RunHistoryRecord]) -> Callable[[Path], RunHistoryRecord]:
     def read(summary_path: Path) -> RunHistoryRecord:
         return records[summary_path.parent.name]
 
@@ -98,8 +99,8 @@ def _verified(
 def test_record_normalizes_enums_timezones_and_portable_paths() -> None:
     eastern = timezone(timedelta(hours=-4))
     record = RunHistoryRecord(
-        run_id="20260725_120000",
-        project_id=_PROJECT_ID,
+        run_id=validate_run_id("20260725_120000"),
+        project_id=validate_project_id(_PROJECT_ID),
         mode="quick",  # type: ignore[arg-type]
         started_at=datetime(2026, 7, 25, 8, 0, tzinfo=eastern),
         finished_at=datetime(2026, 7, 25, 8, 1, tzinfo=eastern),
@@ -113,7 +114,7 @@ def test_record_normalizes_enums_timezones_and_portable_paths() -> None:
     assert record.started_at == _BASE_TIME
     assert record.finished_at == _BASE_TIME + timedelta(minutes=1)
     assert record.target_file == "src/Grammar.gf"
-    assert record.manifest_relative_path is not None
+    assert isinstance(record.manifest_relative_path, PurePosixPath)
     assert record.manifest_relative_path.as_posix() == "metadata/manifest.json"
 
 
@@ -643,9 +644,7 @@ def test_discovery_visibility_flags_control_diagnostic_entries(
         summary_reader=reader,
         manifest_verifier=None,
     )
-    assert [entry.state for entry in corrupt_result.entries] == [
-        RunHistoryState.CORRUPT
-    ]
+    assert [entry.state for entry in corrupt_result.entries] == [RunHistoryState.CORRUPT]
 
 
 def test_eligibility_applies_project_mode_target_and_time_filters(
@@ -731,26 +730,35 @@ def test_legacy_eligibility_requires_explicit_unverified_policy(
         record=record,
     )
 
-    assert is_previous_run_eligible(
-        entry,
-        RunHistoryQuery(output_root=tmp_path),
-    ) is False
-    assert is_previous_run_eligible(
-        entry,
-        RunHistoryQuery(
-            output_root=tmp_path,
-            allow_legacy=True,
-            require_manifest_verification=True,
-        ),
-    ) is False
-    assert is_previous_run_eligible(
-        entry,
-        RunHistoryQuery(
-            output_root=tmp_path,
-            allow_legacy=True,
-            require_manifest_verification=False,
-        ),
-    ) is True
+    assert (
+        is_previous_run_eligible(
+            entry,
+            RunHistoryQuery(output_root=tmp_path),
+        )
+        is False
+    )
+    assert (
+        is_previous_run_eligible(
+            entry,
+            RunHistoryQuery(
+                output_root=tmp_path,
+                allow_legacy=True,
+                require_manifest_verification=True,
+            ),
+        )
+        is False
+    )
+    assert (
+        is_previous_run_eligible(
+            entry,
+            RunHistoryQuery(
+                output_root=tmp_path,
+                allow_legacy=True,
+                require_manifest_verification=False,
+            ),
+        )
+        is True
+    )
 
 
 def test_select_previous_run_returns_none_without_eligible_candidate(
@@ -774,10 +782,7 @@ def test_discovery_is_read_only(tmp_path: Path) -> None:
     run_dir = _run_directory(tmp_path, run_id)
     summary = run_dir / SUMMARY_FILENAME
     manifest = run_dir / MANIFEST_FILENAME
-    before = {
-        path: (path.read_bytes(), path.stat().st_mtime_ns)
-        for path in (summary, manifest)
-    }
+    before = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (summary, manifest)}
 
     result = discover_run_history(
         RunHistoryQuery(output_root=tmp_path),

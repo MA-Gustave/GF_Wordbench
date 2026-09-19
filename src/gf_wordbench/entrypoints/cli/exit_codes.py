@@ -34,7 +34,7 @@ class ExitCode(IntEnum):
 CANONICAL_EXIT_CODES: Final[tuple[int, ...]] = tuple(int(code) for code in ExitCode)
 CANONICAL_EXIT_CODE_SET: Final[frozenset[int]] = frozenset(CANONICAL_EXIT_CODES)
 RESERVED_EXIT_CODE_RANGE: Final[range] = range(5, 64)
-PORTABLE_EXIT_CODE_RANGE: Final[range] = range(0, 256)
+PORTABLE_EXIT_CODE_RANGE: Final[range] = range(256)
 
 _STATUS_TO_EXIT_CODE: Final[dict[OverallStatus, ExitCode]] = {
     OverallStatus.OK: ExitCode.OK,
@@ -53,26 +53,29 @@ class HasOverallStatus(Protocol):
 def determine_exit_code(
     command_result: HasOverallStatus,
     *,
-    cancelled: bool = False,
+    cancelled: bool | None = None,
     runtime_error: bool = False,
     cancellation_error: bool = False,
 ) -> int:
-    """Map one complete command result to its canonical process exit code.
-
-    Precedence is runtime error, controlled cancellation, validation failure,
-    then success. Usage errors are handled before a valid command result exists.
-    """
+    """Map one complete structured command result to a canonical exit code."""
 
     if not isinstance(command_result, HasOverallStatus):
-        raise TypeError("command_result must expose overall_status")
-    _require_bool(cancelled, field="cancelled")
+        raise TypeError("command result must expose overall_status")
+    status = command_result.overall_status
+    if not isinstance(status, OverallStatus):
+        raise TypeError("overall_status must be an OverallStatus")
+
+    result_cancelled = getattr(command_result, "cancelled", False)
+    _require_bool(result_cancelled, field="cancelled")
+    if cancelled is not None:
+        _require_bool(cancelled, field="cancelled")
+        result_cancelled = cancelled
     _require_bool(runtime_error, field="runtime_error")
     _require_bool(cancellation_error, field="cancellation_error")
 
-    status = coerce_overall_status(command_result.overall_status)
     if runtime_error or cancellation_error or status is OverallStatus.ERROR:
         return EXIT_RUNTIME_ERROR
-    if cancelled:
+    if result_cancelled:
         return EXIT_CANCELLED
     return int(_STATUS_TO_EXIT_CODE[status])
 
@@ -126,9 +129,9 @@ def exit_code_for_exception(
 
 
 def normalize_parser_exit_code(value: object) -> int:
-    """Normalize parser termination to success for help/version or usage error."""
+    """Normalize parser termination to help success or usage failure."""
 
-    if type(value) is int and value == EXIT_OK:
+    if value is None or (type(value) is int and value == EXIT_OK):
         return EXIT_OK
     return EXIT_USAGE_ERROR
 
@@ -162,9 +165,7 @@ def coerce_overall_status(value: OverallStatus | str) -> OverallStatus:
 def is_canonical_exit_code(value: object) -> bool:
     """Return whether a value is one of the five allocated application codes."""
 
-    return isinstance(value, ExitCode) or (
-        type(value) is int and value in CANONICAL_EXIT_CODE_SET
-    )
+    return isinstance(value, ExitCode) or (type(value) is int and value in CANONICAL_EXIT_CODE_SET)
 
 
 def is_reserved_exit_code(value: object) -> bool:
@@ -176,9 +177,7 @@ def is_reserved_exit_code(value: object) -> bool:
 def is_portable_exit_code(value: object) -> bool:
     """Return whether a value fits the cross-platform process-code range."""
 
-    return isinstance(value, ExitCode) or (
-        type(value) is int and value in PORTABLE_EXIT_CODE_RANGE
-    )
+    return isinstance(value, ExitCode) or (type(value) is int and value in PORTABLE_EXIT_CODE_RANGE)
 
 
 def preserve_observed_exit_code(value: object) -> int:
@@ -220,10 +219,10 @@ __all__ = (
     "EXIT_RUNTIME_ERROR",
     "EXIT_USAGE_ERROR",
     "EXIT_VALIDATION_FAILED",
-    "ExitCode",
-    "HasOverallStatus",
     "PORTABLE_EXIT_CODE_RANGE",
     "RESERVED_EXIT_CODE_RANGE",
+    "ExitCode",
+    "HasOverallStatus",
     "coerce_exit_code",
     "coerce_overall_status",
     "determine_exit_code",

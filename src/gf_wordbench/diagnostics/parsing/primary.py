@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import IntEnum, unique
 from pathlib import PurePath
-from typing import Final, Generic, Protocol, TypeVar, runtime_checkable
+from typing import Final, Generic, Protocol, TypeVar, cast, runtime_checkable
 
 _MAX_PRIMARY_MESSAGE: Final[int] = 1_000
 _MAX_ERROR_DETAIL: Final[int] = 4_000
@@ -48,9 +48,7 @@ class PrimarySelection(Generic[DiagnosticRecordT]):
 
     def __post_init__(self) -> None:
         secondary = tuple(self.secondary)
-        if self.primary is not None and any(
-            item is self.primary for item in secondary
-        ):
+        if self.primary is not None and any(item is self.primary for item in secondary):
             raise ValueError("primary must not also appear in secondary")
         object.__setattr__(self, "secondary", secondary)
 
@@ -201,9 +199,9 @@ def primary_sort_key(
         _stream_value(record),
         len(_STREAM_RANK),
     )
-    start_line = _positive_int(
-        _first_attribute(record, "start_line", "line_number", "line"),
-        default=_MAX_LINE_NUMBER,
+    start_line = (
+        _positive_int(_first_attribute(record, "start_line", "line_number", "line"))
+        or _MAX_LINE_NUMBER
     )
     pattern_id = _safe_text(record.pattern_id)
     message = _safe_text(record.message)
@@ -234,14 +232,12 @@ def primary_tier(
     unknown = _is_unknown(record)
 
     if confidence == "authoritative" and (
-        error_kind in _AUTHORITATIVE_ERROR_KINDS
-        or pattern_id.startswith(_PROCESS_PATTERN_PREFIXES)
+        error_kind in _AUTHORITATIVE_ERROR_KINDS or pattern_id.startswith(_PROCESS_PATTERN_PREFIXES)
     ):
         return PrimaryDiagnosticTier.AUTHORITATIVE_PROCESS
 
     if confidence == "authoritative" and (
-        error_kind in _CONTRACT_ERROR_KINDS
-        or pattern_id.startswith(_CONTRACT_PATTERN_PREFIXES)
+        error_kind in _CONTRACT_ERROR_KINDS or pattern_id.startswith(_CONTRACT_PATTERN_PREFIXES)
     ):
         return PrimaryDiagnosticTier.AUTHORITATIVE_CONTRACT
 
@@ -329,14 +325,15 @@ def compact_primary_fields(
 
 
 def _prepare_records(
-    records: Iterable[DiagnosticRecordT],
+    records: object,
 ) -> tuple[DiagnosticRecordT, ...]:
-    if isinstance(records, (str, bytes, bytearray)):
+    if isinstance(records, (str, bytes, bytearray)) or not isinstance(records, Iterable):
         raise TypeError("records must be an iterable of diagnostic records")
-    prepared = tuple(records)
-    for record in prepared:
+    prepared: list[DiagnosticRecordT] = []
+    for record in records:
         _validate_record(record)
-    return prepared
+        prepared.append(cast("DiagnosticRecordT", record))
+    return tuple(prepared)
 
 
 def _is_primary_eligible(
@@ -360,16 +357,13 @@ def _is_primary_eligible(
 
 
 def _validate_record(record: object) -> None:
-    if record is None:
-        raise TypeError("diagnostic record must not be None")
-    for field in ("pattern_id", "error_kind", "severity", "confidence", "message"):
-        if not hasattr(record, field):
-            raise TypeError(f"diagnostic record is missing required field {field!r}")
-    if not _safe_text(getattr(record, "pattern_id")):
+    if not isinstance(record, DiagnosticRecordLike):
+        raise TypeError("diagnostic record does not satisfy DiagnosticRecordLike")
+    if not _safe_text(record.pattern_id):
         raise ValueError("diagnostic pattern_id must not be empty")
-    if not _enum_value(getattr(record, "severity")):
+    if not _enum_value(record.severity):
         raise ValueError("diagnostic severity must not be empty")
-    if not _enum_value(getattr(record, "confidence")):
+    if not _enum_value(record.confidence):
         raise ValueError("diagnostic confidence must not be empty")
 
 
@@ -390,9 +384,7 @@ def _is_unknown(record: object) -> bool:
 
 
 def _stream_value(record: object) -> str:
-    return _enum_value(
-        _first_attribute(record, "stream", "source_stream")
-    ).casefold()
+    return _enum_value(_first_attribute(record, "stream", "source_stream")).casefold()
 
 
 def _render_location(record: object) -> str:
@@ -401,12 +393,8 @@ def _render_location(record: object) -> str:
         source = _safe_text(_first_attribute(record, "source_module", "module_name"))
     if source:
         source = PurePath(source.replace("\\", "/")).as_posix()
-    line = _positive_int(
-        _first_attribute(record, "line", "source_line", "line_number")
-    )
-    column = _positive_int(
-        _first_attribute(record, "column", "source_column")
-    )
+    line = _positive_int(_first_attribute(record, "line", "source_line", "line_number"))
+    column = _positive_int(_first_attribute(record, "column", "source_column"))
     if not source:
         return ""
     if line is None:
@@ -427,7 +415,7 @@ def _first_attribute(record: object, *names: str) -> object | None:
         if hasattr(record, name):
             value = getattr(record, name)
             if value is not None:
-                return value
+                return cast(object, value)
     return None
 
 

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import StrEnum
 import math
 import os
 import signal
-import subprocess
 import time
-from dataclasses import dataclass
-from enum import StrEnum
-from typing import IO, Final, Protocol, TypeAlias
+from typing import IO, Callable, Final, Protocol, TypeAlias, cast
 
 Seconds: TypeAlias = float
 
@@ -268,11 +267,9 @@ def _validate_containment(
             raise ValueError("POSIX containment cannot be used on Windows")
 
         try:
-            own_group = os.getpgrp()
+            own_group = _posix_getpgrp()
         except OSError as error:
-            raise ValueError(
-                "unable to validate POSIX process-group containment"
-            ) from error
+            raise ValueError("unable to validate POSIX process-group containment") from error
 
         if containment.identifier == own_group:
             raise ValueError("refusing to terminate the current process group")
@@ -281,6 +278,27 @@ def _validate_containment(
 
     if os.name != "nt":
         raise ValueError("Windows containment cannot be used on this platform")
+
+
+def _posix_getpgrp() -> int:
+    function = getattr(os, "getpgrp", None)
+    if not callable(function):
+        raise OSError("os.getpgrp is unavailable on this platform")
+    return cast("Callable[[], int]", function)()
+
+
+def _posix_killpg(group_id: int, signal_number: int) -> None:
+    function = getattr(os, "killpg", None)
+    if not callable(function):
+        raise OSError("os.killpg is unavailable on this platform")
+    cast("Callable[[int, int], None]", function)(group_id, signal_number)
+
+
+def _posix_signal(name: str) -> int:
+    value = getattr(signal, name, None)
+    if not isinstance(value, int):
+        raise RuntimeError(f"{name} is unavailable on this platform")
+    return value
 
 
 def _close_stdin(
@@ -304,7 +322,7 @@ def _request_soft_termination(
 ) -> None:
     try:
         if containment.kind is ContainmentKind.POSIX_PROCESS_GROUP:
-            os.killpg(containment.identifier, signal.SIGTERM)
+            _posix_killpg(containment.identifier, _posix_signal("SIGTERM"))
         elif containment.kind is ContainmentKind.WINDOWS_PROCESS_GROUP:
             ctrl_break = getattr(signal, "CTRL_BREAK_EVENT", None)
             if ctrl_break is None:
@@ -324,7 +342,7 @@ def _request_forced_termination(
 ) -> None:
     try:
         if containment.kind is ContainmentKind.POSIX_PROCESS_GROUP:
-            os.killpg(containment.identifier, signal.SIGKILL)
+            _posix_killpg(containment.identifier, _posix_signal("SIGKILL"))
         else:
             process.kill()
     except (OSError, RuntimeError, ValueError) as error:
@@ -360,8 +378,13 @@ def _reap_if_available(process: TerminableProcess) -> None:
 
     try:
         process.wait(timeout=0)
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError:
         pass
+    except Exception as exc:
+        # Process implementations commonly expose subprocess.TimeoutExpired,
+        # but this mechanism-neutral module must not import subprocess.
+        if type(exc).__name__ != "TimeoutExpired":
+            raise
 
 
 def _is_stopped(
@@ -378,7 +401,7 @@ def _is_stopped(
 
 def _posix_group_exists(group_id: int) -> bool:
     try:
-        os.killpg(group_id, 0)
+        _posix_killpg(group_id, 0)
     except ProcessLookupError:
         return False
     except PermissionError:

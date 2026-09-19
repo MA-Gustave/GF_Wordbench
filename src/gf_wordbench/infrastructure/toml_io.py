@@ -7,14 +7,14 @@ is owned by :mod:`gf_wordbench.infrastructure.atomic_io`.
 
 from __future__ import annotations
 
-import math
-import re
-import tomllib
 from collections.abc import Mapping
 from datetime import date, datetime, time
 from enum import Enum
+import math
 from pathlib import Path, PurePath
-from typing import Final, TypeAlias, cast
+import re
+import tomllib
+from typing import Final, TypeAlias, TypeVar, cast
 
 from gf_wordbench.kernel.serialization import (
     format_rfc3339_utc,
@@ -24,6 +24,9 @@ from gf_wordbench.kernel.serialization import (
 TomlScalar: TypeAlias = str | int | float | bool | datetime | date | time
 TomlValue: TypeAlias = TomlScalar | list["TomlValue"] | dict[str, "TomlValue"]
 TomlDocument: TypeAlias = dict[str, TomlValue]
+
+_KeyT = TypeVar("_KeyT")
+_ValueT = TypeVar("_ValueT")
 
 _UTF8_BOM: Final[str] = "\ufeff"
 _BARE_KEY_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -70,7 +73,7 @@ def loads_toml(text: str) -> TomlDocument:
 
     if text.startswith(_UTF8_BOM):
         text = text.removeprefix(_UTF8_BOM)
-    return cast(TomlDocument, tomllib.loads(text))
+    return cast("TomlDocument", tomllib.loads(text))
 
 
 def dumps_canonical_toml(document: Mapping[str, object]) -> str:
@@ -115,7 +118,7 @@ def _emit_table(
         for key, value in table.items():
             _require_plain_string_key(key)
             if isinstance(value, Mapping):
-                child_tables.append((key, cast(Mapping[str, object], value)))
+                child_tables.append((key, cast("Mapping[str, object]", value)))
             else:
                 scalar_items.append((key, value))
 
@@ -150,8 +153,7 @@ def _format_value(value: object, *, active_containers: set[int]) -> str:
         enum_value = value.value
         if not isinstance(enum_value, str):
             raise TypeError(
-                "Canonical TOML enums must expose string values, got "
-                f"{type(enum_value).__name__}"
+                f"Canonical TOML enums must expose string values, got {type(enum_value).__name__}"
             )
         return _format_basic_string(enum_value)
 
@@ -190,8 +192,7 @@ def _format_value(value: object, *, active_containers: set[int]) -> str:
         raise TypeError("Sets must be converted to an explicitly ordered array")
 
     raise TypeError(
-        "Unsupported canonical TOML type: "
-        f"{type(value).__module__}.{type(value).__qualname__}"
+        f"Unsupported canonical TOML type: {type(value).__module__}.{type(value).__qualname__}"
     )
 
 
@@ -205,10 +206,7 @@ def _format_array(
         if not values:
             return "[]"
 
-        rendered = [
-            _format_value(item, active_containers=active_containers)
-            for item in values
-        ]
+        rendered = [_format_value(item, active_containers=active_containers) for item in values]
         lines = ["["]
         for item in rendered:
             item_lines = item.splitlines()
@@ -230,7 +228,7 @@ def _format_inline_table(
     try:
         entries: list[str] = []
         for key, value in table.items():
-            _require_plain_string_key(key)
+            key = _require_plain_string_key(key)
             rendered = _format_value(value, active_containers=active_containers)
             if "\n" in rendered:
                 rendered = " ".join(line.strip() for line in rendered.splitlines())
@@ -276,14 +274,15 @@ def _format_basic_string(value: str) -> str:
     return "".join(escaped)
 
 
-def _require_string_keys(value: Mapping[object, object]) -> None:
+def _require_string_keys(value: Mapping[_KeyT, _ValueT]) -> None:
     for key in value:
         _require_plain_string_key(key)
 
 
-def _require_plain_string_key(key: object) -> None:
+def _require_plain_string_key(key: object) -> str:
     if isinstance(key, Enum) or not isinstance(key, str):
         raise TypeError("Canonical TOML keys must be plain strings")
+    return key
 
 
 def _enter_container(value: object, active_containers: set[int]) -> int:

@@ -1,0 +1,44 @@
+Python: 3.13.5 (main, May  5 2026, 21:05:52) [GCC 14.2.0]
+Compile checks:
+PASS compile src/gf_wordbench/validation/compilation/gf_adapter.py
+PASS compile src/gf_wordbench/reporting/manifest/requiredness.py
+PASS compile src/gf_wordbench/diagnostics/patterns/common.py
+PASS compile src/gf_wordbench/reporting/schemas/migrations.py
+PASS compile src/gf_wordbench/validation/scenarios/gold_compare.py
+PASS compile src/gf_wordbench/config/environment.py
+PASS compile src/gf_wordbench/diagnostics/classification/service.py
+PASS compile src/gf_wordbench/reporting/schemas/manifest_v1.py
+PASS compile src/gf_wordbench/validation/regression/loader.py
+PASS compile src/gf_wordbench/reporting/publisher.py
+PASS compile src/gf_wordbench/validation/compilation/artifacts.py
+PASS compile src/gf_wordbench/validation/scenarios/assertions.py
+PASS compile src/gf_wordbench/validation/selection/ordering.py
+PASS compile src/gf_wordbench/diagnostics/parsing/primary.py
+PASS compile src/gf_wordbench/reporting/manifest/verifier.py
+PASS compile src/gf_wordbench/validation/compilation/module_compile.py
+PASS compile src/gf_wordbench/config/precedence.py
+PASS compile src/gf_wordbench/config/resolver.py
+PASS compile src/gf_wordbench/diagnostics/classification/top_errors.py
+PASS compile src/gf_wordbench/reporting/schemas/validation.py
+Import checks:
+PASS import gf_wordbench.validation.compilation.gf_adapter
+PASS import gf_wordbench.reporting.manifest.requiredness
+PASS import gf_wordbench.diagnostics.patterns.common
+PASS import gf_wordbench.reporting.schemas.migrations
+PASS import gf_wordbench.validation.scenarios.gold_compare
+PASS import gf_wordbench.config.environment
+PASS import gf_wordbench.diagnostics.classification.service
+PASS import gf_wordbench.reporting.schemas.manifest_v1
+PASS import gf_wordbench.validation.regression.loader
+PASS import gf_wordbench.reporting.publisher
+PASS import gf_wordbench.validation.compilation.artifacts
+PASS import gf_wordbench.validation.scenarios.assertions
+PASS import gf_wordbench.validation.selection.ordering
+PASS import gf_wordbench.diagnostics.parsing.primary
+PASS import gf_wordbench.reporting.manifest.verifier
+PASS import gf_wordbench.validation.compilation.module_compile
+PASS import gf_wordbench.config.precedence
+PASS import gf_wordbench.config.resolver
+PASS import gf_wordbench.diagnostics.classification.top_errors
+PASS import gf_wordbench.reporting.schemas.validation
+RESULT: 20/20 compile, 20/20 import

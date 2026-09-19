@@ -53,10 +53,13 @@ class _Operations:
             datetime(2026, 7, 25, 12, 0, tzinfo=UTC),
             datetime(2026, 7, 25, 12, 0, 1, tzinfo=UTC),
         ]
-        self.last_run_update: tuple[
-            FinalizationDisposition,
-            Path | None,
-        ] | None = None
+        self.last_run_update: (
+            tuple[
+                FinalizationDisposition,
+                Path | None,
+            ]
+            | None
+        ) = None
         self.finalized_request: FinalizationRequest[_Result] | None = None
 
     def _event(self, name: str) -> None:
@@ -315,9 +318,7 @@ def test_result_change_republishes_before_manifest_creation(
     assert operations.events.count("publish_artifacts") == 2
     assert operations.events.count("publish_manifest") == 1
     assert operations.events.index("publish_manifest") > max(
-        index
-        for index, event in enumerate(operations.events)
-        if event == "publish_artifacts"
+        index for index, event in enumerate(operations.events) if event == "publish_artifacts"
     )
 
 
@@ -334,9 +335,7 @@ def test_unstable_result_is_bounded_and_left_incomplete(
 
     assert outcome.incomplete is True
     assert outcome.consistency_passes == 2
-    assert "GF-WB-INTERNAL-006" in {
-        failure.error.code for failure in outcome.required_failures
-    }
+    assert "GF-WB-INTERNAL-006" in {failure.error.code for failure in outcome.required_failures}
     assert "publish_manifest" not in operations.events
     assert "mark_incomplete" in operations.events
 
@@ -456,9 +455,7 @@ def test_last_run_update_is_optional_after_successful_finalization(
     assert outcome.finalized is True
     assert outcome.state_updated is False
     state_failures = [
-        failure
-        for failure in outcome.failures
-        if failure.step is FinalizationStep.UPDATE_LAST_RUN
+        failure for failure in outcome.failures if failure.step is FinalizationStep.UPDATE_LAST_RUN
     ]
     assert len(state_failures) == 1
     assert state_failures[0].required is False
@@ -470,16 +467,13 @@ def test_artifact_paths_must_remain_beneath_the_run_root(
     run_root = tmp_path / "run"
     run_root.mkdir()
     operations = _Operations(run_root)
-    operations.publication_return = PublicationBatch(
-        (_publication(tmp_path / "escaped.txt"),)
-    )
+    operations.publication_return = PublicationBatch((_publication(tmp_path / "escaped.txt"),))
 
     outcome = finalize_run(_request(run_root), operations)
 
     assert outcome.incomplete is True
     assert any(
-        failure.error.code == "GF-WB-CONTRACT-001"
-        and "escapes run root" in failure.error.message
+        failure.error.code == "GF-WB-CONTRACT-001" and "escapes run root" in failure.error.message
         for failure in outcome.required_failures
     )
 
@@ -563,8 +557,7 @@ def test_deadline_exhaustion_stops_publication_and_records_timeout(
     assert outcome.incomplete is True
     assert "publish_artifacts" not in operations.events
     assert any(
-        failure.error.error_kind is ErrorKind.TIMEOUT
-        and failure.error.code == "GF-WB-INTERNAL-005"
+        failure.error.error_kind is ErrorKind.TIMEOUT and failure.error.code == "GF-WB-INTERNAL-005"
         for failure in outcome.required_failures
     )
     assert outcome.state_updated is False
@@ -585,17 +578,13 @@ def test_controlled_exception_metadata_is_preserved(
     outcome = finalize_run(_request(tmp_path), operations)
 
     failure = next(
-        item
-        for item in outcome.failures
-        if item.step is FinalizationStep.MARK_FINALIZING
+        item for item in outcome.failures if item.step is FinalizationStep.MARK_FINALIZING
     )
     assert failure.error.code == "GF-WB-STATE-001"
     assert failure.error.message == "controlled finalization failure"
     assert failure.error.detail == "state transition rejected"
     assert failure.error.retryable is True
-    assert failure.error.evidence_paths == (
-        str(tmp_path / "lifecycle.json"),
-    )
+    assert failure.error.evidence_paths == (str(tmp_path / "lifecycle.json"),)
     assert failure.error.cause_type == "GFWordbenchError"
 
 
@@ -688,4 +677,3 @@ def test_finalization_outcome_normalizes_timestamp_to_utc(
         12,
         tzinfo=UTC,
     )
-

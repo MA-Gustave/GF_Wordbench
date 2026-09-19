@@ -10,15 +10,15 @@ from typing import cast
 import pytest
 
 from gf_wordbench.reporting.schemas.summary_v1 import (
+    SUMMARY_JSON_FILENAME,
+    SUMMARY_PRODUCER_NAME,
+    SUMMARY_SCHEMA_ID,
+    SUMMARY_SCHEMA_VERSION,
     ArtifactsV1,
     DiffEntryV1,
     FileResultV1,
     MetadataV1,
     ProducerV1,
-    SUMMARY_JSON_FILENAME,
-    SUMMARY_PRODUCER_NAME,
-    SUMMARY_SCHEMA_ID,
-    SUMMARY_SCHEMA_VERSION,
     SummaryV1,
     SummaryV1ValidationError,
     TopErrorV1,
@@ -141,7 +141,7 @@ def _file_result(
     digest: str,
 ) -> FileResultV1:
     return cast(
-        FileResultV1,
+        "FileResultV1",
         {
             "file_path": file_path,
             "module_name": Path(file_path).stem,
@@ -315,7 +315,7 @@ def test_canonicalization_orders_collections_without_mutating_input() -> None:
         digest=_SHA_A,
     )
     diff_entries = cast(
-        list[DiffEntryV1],
+        "list[DiffEntryV1]",
         [
             {
                 "subject_kind": "file",
@@ -336,7 +336,7 @@ def test_canonicalization_orders_collections_without_mutating_input() -> None:
         ],
     )
     top_errors = cast(
-        list[TopErrorV1],
+        "list[TopErrorV1]",
         [
             {
                 "error_kind": "TYPE",

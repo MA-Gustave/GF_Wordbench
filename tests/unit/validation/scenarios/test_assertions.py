@@ -401,9 +401,7 @@ def test_process_assertions_cover_success_failure_and_unavailable_exit_code(
 
     results = evaluate_assertion_results(specs, context)
 
-    assert tuple(result.status for result in results) == (
-        AssertionStatus.PASSED,
-    ) * len(specs)
+    assert tuple(result.status for result in results) == (AssertionStatus.PASSED,) * len(specs)
     assert all(result.evidence_path == context.process.evidence_path for result in results)
 
     nonzero = replace(context, process=replace(context.process, exit_code=2))
@@ -541,7 +539,7 @@ def test_text_assertions_are_deterministic_over_declared_evidence(
     kind: AssertionKind,
     source: AssertionInputSource,
     section_id: str | None,
-    parameters: dict[str, str | bool],
+    parameters: dict[str, str | int | bool | tuple[str, ...] | None],
 ) -> None:
     result = evaluate_assertion(
         _spec(
@@ -696,10 +694,12 @@ def test_gold_assertion_maps_match_mismatch_and_missing_evidence(
     context = _context(tmp_path)
 
     assert evaluate_assertion(spec, context).status is AssertionStatus.PASSED
+    gold = context.gold
+    assert gold is not None
     assert (
         evaluate_assertion(
             spec,
-            replace(context, gold=replace(context.gold, matched=False)),
+            replace(context, gold=replace(gold, matched=False)),
         ).status
         is AssertionStatus.FAILED
     )
@@ -710,7 +710,7 @@ def test_gold_assertion_maps_match_mismatch_and_missing_evidence(
             evaluated=False,
             matched=None,
             missing_required_gold=True,
-            evidence_path=context.gold.evidence_path,
+            evidence_path=gold.evidence_path,
         ),
     )
     missing_result = evaluate_assertion(spec, missing_gold)
@@ -811,7 +811,9 @@ def test_batch_validation_rejects_duplicate_missing_unknown_and_mismatched_resul
         AssertionInputSource.PROCESS,
     )
     with pytest.raises(ValueError, match="identical lengths"):
-        aggregate_assertion_results((duplicate, other), (_result(duplicate, AssertionStatus.PASSED),))
+        aggregate_assertion_results(
+            (duplicate, other), (_result(duplicate, AssertionStatus.PASSED),)
+        )
 
     unknown_result = ScenarioAssertionResult(
         assertion_id="unknown",

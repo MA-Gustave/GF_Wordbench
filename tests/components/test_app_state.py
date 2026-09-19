@@ -69,10 +69,8 @@ def _custom_state() -> AppState:
         state,
         environment=replace(
             state.environment,
-            last_selected_language_path="C:/gf-rgl/src/english",
-            last_selected_validation_profile=(
-                "C:/work/project/project/project.toml"
-            ),
+            last_selected_language_path="C:/gf-rgl/src/testlang",
+            last_selected_validation_profile=("C:/work/project/project/project.toml"),
             last_rgl_root="C:/gf-rgl",
             gf_executable="C:/gf/bin/gf.exe",
             output_root="C:/work/output",
@@ -80,7 +78,7 @@ def _custom_state() -> AppState:
         selection=replace(
             state.selection,
             mode=ValidationMode.CHECKPOINT,
-            target_file="LangEng.gf",
+            target_file="LangTst.gf",
             timeout_sec=91,
             max_files=17,
             keep_ok_details=True,
@@ -184,9 +182,7 @@ def test_state_schema_contains_only_language_startup_convenience() -> None:
 
 
 def test_tolerant_parser_recovers_invalid_convenience_values() -> None:
-    document: dict[str, Any] = json.loads(
-        json.dumps(default_app_state_document())
-    )
+    document: dict[str, Any] = json.loads(json.dumps(default_app_state_document()))
     document["unknown_optional_root"] = "ignored"
     selection = document["selection"]
     assert isinstance(selection, dict)
@@ -263,16 +259,14 @@ def test_save_and_load_round_trip_canonical_typed_state(tmp_path: Path) -> None:
         "version": __version__,
     }
     assert document["environment"] == {
-        "last_selected_language_path": "C:/gf-rgl/src/english",
-        "last_selected_validation_profile": (
-            "C:/work/project/project/project.toml"
-        ),
+        "last_selected_language_path": "C:/gf-rgl/src/testlang",
+        "last_selected_validation_profile": ("C:/work/project/project/project.toml"),
         "last_rgl_root": "C:/gf-rgl",
         "gf_executable": "C:/gf/bin/gf.exe",
         "output_root": "C:/work/output",
     }
     assert document["selection"]["mode"] == "checkpoint"
-    assert document["selection"]["target_file"] == "LangEng.gf"
+    assert document["selection"]["target_file"] == "LangTst.gf"
     assert document["selection"]["timeout_sec"] == 91
     assert loaded == replace(
         state,
@@ -296,13 +290,10 @@ def test_malformed_state_falls_back_and_can_be_quarantined(
     assert result.migrated is False
     assert result.diagnostics[0].code is StateDiagnosticCode.MALFORMED
     assert any(
-        diagnostic.code is StateDiagnosticCode.QUARANTINED
-        for diagnostic in result.diagnostics
+        diagnostic.code is StateDiagnosticCode.QUARANTINED for diagnostic in result.diagnostics
     )
     assert state_path.read_bytes() == malformed
-    quarantines = tuple(
-        tmp_path.glob(".gf_wordbench_state.invalid-*.json")
-    )
+    quarantines = tuple(tmp_path.glob(".gf_wordbench_state.invalid-*.json"))
     assert len(quarantines) == 1
     assert quarantines[0].read_bytes() == malformed
 
@@ -311,9 +302,7 @@ def test_future_major_fails_closed_without_rewriting_source(
     tmp_path: Path,
 ) -> None:
     state_path = tmp_path / CANONICAL_STATE_FILENAME
-    document: dict[str, Any] = json.loads(
-        json.dumps(default_app_state_document())
-    )
+    document: dict[str, Any] = json.loads(json.dumps(default_app_state_document()))
     document["schema_version"] = _future_major_version()
     original = json.dumps(document, separators=(",", ":"))
     state_path.write_text(original, encoding="utf-8")
@@ -333,9 +322,7 @@ def test_future_minor_recovers_known_fields_without_rewriting_source(
     tmp_path: Path,
 ) -> None:
     state_path = tmp_path / CANONICAL_STATE_FILENAME
-    document: dict[str, Any] = json.loads(
-        json.dumps(default_app_state_document())
-    )
+    document: dict[str, Any] = json.loads(json.dumps(default_app_state_document()))
     document["schema_version"] = _future_minor_version()
     selection = document["selection"]
     assert isinstance(selection, dict)
@@ -360,15 +347,13 @@ def test_legacy_state_migrates_once_and_preserves_legacy_source(
     legacy_path = tmp_path / LEGACY_STATE_FILENAME
     legacy_document = {
         "selected_mode": "file",
-        "selected_target_file": "LangEng.gf",
-        "selected_language_path": "C:/gf-rgl/src/english",
-        "selected_validation_profile": (
-            "C:/work/project/project/project.toml"
-        ),
+        "selected_target_file": "LangTst.gf",
+        "selected_language_path": "C:/gf-rgl/src/testlang",
+        "selected_validation_profile": ("C:/work/project/project/project.toml"),
         "selected_rgl_root": "C:/gf-rgl",
         # Catalog/project-era fields are deliberately non-authoritative.
         "selected_project_root": "C:/work/project",
-        "last_language_id": "Eng",
+        "last_language_id": "Tst",
         "catalog_path": "C:/work/rgl-language-catalog.json",
         "selected_timeout_sec": "90",
         "selected_max_files": 12,
@@ -393,14 +378,12 @@ def test_legacy_state_migrates_once_and_preserves_legacy_source(
     assert first.migrated is True
     assert first.diagnostics[0].code is StateDiagnosticCode.MIGRATED
     assert first.state.selection.mode is ValidationMode.QUICK
-    assert first.state.environment.last_selected_language_path == (
-        "C:/gf-rgl/src/english"
-    )
+    assert first.state.environment.last_selected_language_path == ("C:/gf-rgl/src/testlang")
     assert first.state.environment.last_selected_validation_profile == (
         "C:/work/project/project/project.toml"
     )
     assert first.state.environment.last_rgl_root == "C:/gf-rgl"
-    assert first.state.selection.target_file == "LangEng.gf"
+    assert first.state.selection.target_file == "LangTst.gf"
     assert first.state.selection.timeout_sec == 90
     assert first.state.selection.max_files == 12
     assert first.state.selection.keep_ok_details is True
@@ -488,9 +471,7 @@ def test_alternate_parent_creation_is_explicit(tmp_path: Path) -> None:
     state_path = tmp_path / "portable" / CANONICAL_STATE_FILENAME
 
     with pytest.raises(StateWriteError):
-        StateRepository(tmp_path, state_path=state_path).save(
-            default_app_state()
-        )
+        StateRepository(tmp_path, state_path=state_path).save(default_app_state())
 
     destination = StateRepository(
         tmp_path,

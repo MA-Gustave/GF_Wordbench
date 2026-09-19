@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import math
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum, unique
+import math
 from pathlib import Path
+import re
 from types import MappingProxyType
-from typing import Final, NewType, Protocol, TypeAlias, runtime_checkable
+from typing import Final, NewType, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 from gf_wordbench.kernel.ids import (
     ProjectId,
@@ -25,12 +25,11 @@ ToolFlagValue: TypeAlias = str | int | float | bool | Path | tuple[str, ...]
 ToolFlagValues: TypeAlias = Mapping[str, ToolFlagValue]
 StringMap: TypeAlias = Mapping[str, str]
 
-_TOOL_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z0-9][a-z0-9-]{0,127}$"
-)
-_PORTABLE_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*$"
-)
+_EnumT = TypeVar("_EnumT", bound=StrEnum)
+_ItemT = TypeVar("_ItemT")
+
+_TOOL_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9][a-z0-9-]{0,127}$")
+_PORTABLE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*$")
 _VERSION_RE: Final[re.Pattern[str]] = re.compile(
     r"^[0-9]+(?:\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.-]+)?$"
 )
@@ -163,9 +162,7 @@ class ToolVersionPolicy:
     tested_versions: tuple[str, ...] = ()
     blocked_versions: tuple[str, ...] = ()
     version_probe: tuple[str, ...] = ()
-    unparseable_version_policy: UnparseableVersionPolicy = (
-        UnparseableVersionPolicy.ERROR
-    )
+    unparseable_version_policy: UnparseableVersionPolicy = UnparseableVersionPolicy.ERROR
 
     def __post_init__(self) -> None:
         minimum = _optional_version(self.minimum_version, "minimum_version")
@@ -177,14 +174,9 @@ class ToolVersionPolicy:
             self.unparseable_version_policy,
             UnparseableVersionPolicy,
         ):
-            raise TypeError(
-                "unparseable_version_policy must be "
-                "UnparseableVersionPolicy"
-            )
+            raise TypeError("unparseable_version_policy must be UnparseableVersionPolicy")
         if set(tested).intersection(blocked):
-            raise ValueError(
-                "tested_versions and blocked_versions must be disjoint"
-            )
+            raise ValueError("tested_versions and blocked_versions must be disjoint")
         object.__setattr__(self, "minimum_version", minimum)
         object.__setattr__(self, "maximum_version", maximum)
         object.__setattr__(self, "tested_versions", tested)
@@ -198,9 +190,7 @@ class ToolExecutableResolution:
     executable_name: str
     configuration_key: str | None = None
     approved_path_names: tuple[str, ...] = ()
-    platform_locations: Mapping[ToolPlatform, tuple[Path, ...]] = field(
-        default_factory=dict
-    )
+    platform_locations: Mapping[ToolPlatform, tuple[Path, ...]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, ToolExecutableResolutionKind):
@@ -222,35 +212,24 @@ class ToolExecutableResolution:
         locations = _freeze_platform_paths(self.platform_locations)
         if self.kind is ToolExecutableResolutionKind.CONFIGURED_ABSOLUTE_PATH:
             if configuration_key is None:
-                raise ValueError(
-                    "configured absolute-path resolution requires "
-                    "configuration_key"
-                )
+                raise ValueError("configured absolute-path resolution requires configuration_key")
         elif configuration_key is not None:
             raise ValueError(
-                "configuration_key is permitted only for configured "
-                "absolute-path resolution"
+                "configuration_key is permitted only for configured absolute-path resolution"
             )
         if self.kind is ToolExecutableResolutionKind.APPROVED_PATH_LOOKUP:
             if not approved_names:
-                raise ValueError(
-                    "approved PATH lookup requires approved_path_names"
-                )
+                raise ValueError("approved PATH lookup requires approved_path_names")
         elif approved_names:
-            raise ValueError(
-                "approved_path_names are permitted only for approved "
-                "PATH lookup"
-            )
+            raise ValueError("approved_path_names are permitted only for approved PATH lookup")
         if self.kind is ToolExecutableResolutionKind.PLATFORM_REGISTERED_LOCATION:
             if not locations:
                 raise ValueError(
-                    "platform registered-location resolution requires "
-                    "platform_locations"
+                    "platform registered-location resolution requires platform_locations"
                 )
         elif locations:
             raise ValueError(
-                "platform_locations are permitted only for platform "
-                "registered-location resolution"
+                "platform_locations are permitted only for platform registered-location resolution"
             )
         object.__setattr__(self, "executable_name", executable_name)
         object.__setattr__(self, "configuration_key", configuration_key)
@@ -266,9 +245,7 @@ class ToolInputContract:
     maximum_input_count: int = 1
     maximum_input_size_bytes: int = 8 * 1024 * 1024
     stdin_policy: ToolStdinPolicy = ToolStdinPolicy.NONE
-    temporary_file_policy: ToolTemporaryFilePolicy = (
-        ToolTemporaryFilePolicy.PROHIBITED
-    )
+    temporary_file_policy: ToolTemporaryFilePolicy = ToolTemporaryFilePolicy.PROHIBITED
 
     def __post_init__(self) -> None:
         subject_kinds = _id_tuple(self.subject_kinds, "subject_kinds")
@@ -293,9 +270,7 @@ class ToolInputContract:
             self.temporary_file_policy,
             ToolTemporaryFilePolicy,
         ):
-            raise TypeError(
-                "temporary_file_policy must be ToolTemporaryFilePolicy"
-            )
+            raise TypeError("temporary_file_policy must be ToolTemporaryFilePolicy")
         object.__setattr__(self, "subject_kinds", subject_kinds)
         object.__setattr__(self, "file_types", file_types)
         object.__setattr__(self, "encodings", encodings)
@@ -320,8 +295,7 @@ class ToolFlagSpec:
             marker in argument for marker in (" ", "\t", "\n", "\r")
         ):
             raise ValueError(
-                "argument must be one shell-free command-line token "
-                "beginning with '-'"
+                "argument must be one shell-free command-line token beginning with '-'"
             )
         if not isinstance(self.value_type, ToolFlagType):
             raise TypeError("value_type must be ToolFlagType")
@@ -378,13 +352,9 @@ class ToolEnvironmentPolicy:
             "sensitive_variables",
         )
         if set(removed).intersection(inherited):
-            raise ValueError(
-                "removed_variables and inherited_variables must be disjoint"
-            )
+            raise ValueError("removed_variables and inherited_variables must be disjoint")
         if not set(sensitive).issubset(set(allowed) | set(inherited)):
-            raise ValueError(
-                "sensitive_variables must be allowed or inherited"
-            )
+            raise ValueError("sensitive_variables must be allowed or inherited")
         locale = _require_text(self.locale, "locale", max_length=128)
         encoding = _require_text(self.encoding, "encoding", max_length=128)
         object.__setattr__(self, "policy_id", policy_id)
@@ -447,8 +417,7 @@ class ToolOutputLimits:
             self.generated_files_bytes,
         ):
             raise ValueError(
-                "total_retained_bytes must not be less than an individual "
-                "output limit"
+                "total_retained_bytes must not be less than an individual output limit"
             )
 
     @property
@@ -487,9 +456,7 @@ class DiagnosticToolSpec:
         tool_id = validate_tool_id(self.tool_id)
         catalog_version = _version(self.catalog_version, "catalog_version")
         if not isinstance(self.tool_version_policy, ToolVersionPolicy):
-            raise TypeError(
-                "tool_version_policy must be ToolVersionPolicy"
-            )
+            raise TypeError("tool_version_policy must be ToolVersionPolicy")
         description = _require_text(
             self.description,
             "description",
@@ -500,9 +467,7 @@ class DiagnosticToolSpec:
             self.executable_resolution,
             ToolExecutableResolution,
         ):
-            raise TypeError(
-                "executable_resolution must be ToolExecutableResolution"
-            )
+            raise TypeError("executable_resolution must be ToolExecutableResolution")
         if not isinstance(self.input_contract, ToolInputContract):
             raise TypeError("input_contract must be ToolInputContract")
         flags = _flag_specs(self.allowed_flags)
@@ -510,23 +475,16 @@ class DiagnosticToolSpec:
             self.working_directory_policy,
             ToolWorkingDirectoryPolicy,
         ):
-            raise TypeError(
-                "working_directory_policy must be "
-                "ToolWorkingDirectoryPolicy"
-            )
+            raise TypeError("working_directory_policy must be ToolWorkingDirectoryPolicy")
         if not isinstance(self.environment_policy, ToolEnvironmentPolicy):
-            raise TypeError(
-                "environment_policy must be ToolEnvironmentPolicy"
-            )
+            raise TypeError("environment_policy must be ToolEnvironmentPolicy")
         if not isinstance(self.mutability, ToolMutability):
             raise TypeError("mutability must be ToolMutability")
         if not isinstance(
             self.confirmation_policy,
             ToolConfirmationPolicy,
         ):
-            raise TypeError(
-                "confirmation_policy must be ToolConfirmationPolicy"
-            )
+            raise TypeError("confirmation_policy must be ToolConfirmationPolicy")
         if not isinstance(self.allowed_paths, ToolPathPolicy):
             raise TypeError("allowed_paths must be ToolPathPolicy")
         if not isinstance(self.network_policy, ToolNetworkPolicy):
@@ -554,9 +512,7 @@ class DiagnosticToolSpec:
             self.availability_policy,
             ToolAvailabilityPolicy,
         ):
-            raise TypeError(
-                "availability_policy must be ToolAvailabilityPolicy"
-            )
+            raise TypeError("availability_policy must be ToolAvailabilityPolicy")
         platforms = _enum_tuple(
             self.platforms,
             ToolPlatform,
@@ -641,9 +597,7 @@ class ToolConfirmationRecord:
         if type(self.accepted) is not bool:
             raise TypeError("accepted must be a boolean")
         if self.policy is ToolConfirmationPolicy.NONE:
-            raise ValueError(
-                "confirmation records cannot use the none policy"
-            )
+            raise ValueError("confirmation records cannot use the none policy")
         object.__setattr__(self, "confirmation_id", confirmation_id)
         object.__setattr__(self, "confirmed_at", confirmed_at)
         object.__setattr__(self, "confirmed_by", confirmed_by)
@@ -708,16 +662,12 @@ class DiagnosticToolRequest:
             self.confirmation_record,
             ToolConfirmationRecord,
         ):
-            raise TypeError(
-                "confirmation_record must be ToolConfirmationRecord or None"
-            )
+            raise TypeError("confirmation_record must be ToolConfirmationRecord or None")
         if (
             self.confirmation_record is not None
             and self.confirmation_record.operation_id != operation_id
         ):
-            raise ValueError(
-                "confirmation_record operation_id does not match request"
-            )
+            raise ValueError("confirmation_record operation_id does not match request")
         object.__setattr__(self, "tool_id", tool_id)
         object.__setattr__(self, "active_project_id", project_id)
         object.__setattr__(self, "run_id", run_id)
@@ -806,9 +756,7 @@ class DiagnosticToolResult:
             self.execution_state,
             ExecutionState,
         ):
-            raise TypeError(
-                "execution_state must be ExecutionState or None"
-            )
+            raise TypeError("execution_state must be ExecutionState or None")
         if self.exit_code is not None and type(self.exit_code) is not int:
             raise TypeError("exit_code must be an integer or None")
         _non_negative_int(self.duration_ms, "duration_ms")
@@ -833,10 +781,7 @@ class DiagnosticToolResult:
             raise ValueError("diagnostics exceeds the supported item limit")
         for diagnostic in diagnostics:
             if not isinstance(diagnostic, ToolDiagnosticRecord):
-                raise TypeError(
-                    "diagnostics must contain records exposing a string "
-                    "message field"
-                )
+                raise TypeError("diagnostics must contain records exposing a string message field")
             _require_text(
                 diagnostic.message,
                 "diagnostic message",
@@ -901,9 +846,7 @@ ToolResult = DiagnosticToolResult
 def validate_tool_id(value: object, *, field: str = "tool_id") -> ToolId:
     text = _require_text(value, field, max_length=128)
     if not text.isascii() or _TOOL_ID_RE.fullmatch(text) is None:
-        raise ValueError(
-            f"{field} must use lowercase ASCII letters, digits, and hyphens"
-        )
+        raise ValueError(f"{field} must use lowercase ASCII letters, digits, and hyphens")
     return ToolId(text)
 
 
@@ -918,23 +861,23 @@ def _validate_tool_spec_policy(
     availability_policy: ToolAvailabilityPolicy,
     evidence_roles: tuple[ToolEvidenceRole, ...],
 ) -> None:
-    if mutability in {
-        ToolMutability.PROJECT_MUTATING,
-        ToolMutability.EXTERNAL_MUTATING,
-    } and confirmation_policy is ToolConfirmationPolicy.NONE:
+    if (
+        mutability
+        in {
+            ToolMutability.PROJECT_MUTATING,
+            ToolMutability.EXTERNAL_MUTATING,
+        }
+        and confirmation_policy is ToolConfirmationPolicy.NONE
+    ):
         raise ValueError("mutating tools require an explicit confirmation policy")
     if (
         mutability in {ToolMutability.READ_ONLY, ToolMutability.RUN_ARTIFACTS_ONLY}
         and confirmation_policy is not ToolConfirmationPolicy.NONE
     ):
-        raise ValueError(
-            "non-mutating tools must use the none confirmation policy"
-        )
+        raise ValueError("non-mutating tools must use the none confirmation policy")
     if network_policy is ToolNetworkPolicy.APPROVED_ENDPOINTS:
         if not endpoints:
-            raise ValueError(
-                "approved_endpoints network policy requires endpoint entries"
-            )
+            raise ValueError("approved_endpoints network policy requires endpoint entries")
     elif endpoints:
         raise ValueError(
             "approved_network_endpoints are permitted only with the "
@@ -946,9 +889,7 @@ def _validate_tool_spec_policy(
         if availability_policy is ToolAvailabilityPolicy.REQUIRED:
             raise ValueError("AI-assisted tools cannot be required")
         if ToolEvidenceRole.AI_ANNOTATION not in evidence_roles:
-            raise ValueError(
-                "AI-assisted tools must declare the ai_annotation evidence role"
-            )
+            raise ValueError("AI-assisted tools must declare the ai_annotation evidence role")
 
 
 def _validate_result_coherence(
@@ -968,14 +909,10 @@ def _validate_result_coherence(
         raise ValueError("AI-assisted results must be non-normative")
     if result_kind is ToolResultKind.UNAVAILABLE_OPTIONAL_TOOL:
         if status is not ToolExecutionStatus.SKIPPED or execution_state is not None:
-            raise ValueError(
-                "unavailable optional tools must be skipped without execution"
-            )
+            raise ValueError("unavailable optional tools must be skipped without execution")
     if result_kind is ToolResultKind.INVALID_REQUEST:
         if status is not ToolExecutionStatus.ERROR or execution_state is not None:
-            raise ValueError(
-                "invalid requests must be errors without execution"
-            )
+            raise ValueError("invalid requests must be errors without execution")
     if result_kind is ToolResultKind.LAUNCH_FAILURE:
         if execution_state is not ExecutionState.LAUNCH_FAILED:
             raise ValueError("launch failures require launch_failed execution state")
@@ -985,30 +922,32 @@ def _validate_result_coherence(
     if result_kind is ToolResultKind.CANCELLATION:
         if execution_state is not ExecutionState.CANCELLED:
             raise ValueError("cancellations require cancelled execution state")
-    if execution_state in {
-        ExecutionState.LAUNCH_FAILED,
-        ExecutionState.TIMED_OUT,
-        ExecutionState.CANCELLED,
-    } and status is not ToolExecutionStatus.ERROR:
-        raise ValueError(
-            "launch failure, timeout, and cancellation require error status"
-        )
-    if status in {
-        ToolExecutionStatus.COMPLETED,
-        ToolExecutionStatus.FAILED,
-    } and execution_state is not ExecutionState.COMPLETED:
-        raise ValueError(
-            "completed and failed tool statuses require completed execution"
-        )
+    if (
+        execution_state
+        in {
+            ExecutionState.LAUNCH_FAILED,
+            ExecutionState.TIMED_OUT,
+            ExecutionState.CANCELLED,
+        }
+        and status is not ToolExecutionStatus.ERROR
+    ):
+        raise ValueError("launch failure, timeout, and cancellation require error status")
+    if (
+        status
+        in {
+            ToolExecutionStatus.COMPLETED,
+            ToolExecutionStatus.FAILED,
+        }
+        and execution_state is not ExecutionState.COMPLETED
+    ):
+        raise ValueError("completed and failed tool statuses require completed execution")
     if status is ToolExecutionStatus.SKIPPED and execution_state is not None:
         raise ValueError("skipped tool status must not have execution state")
     if execution_state is ExecutionState.LAUNCH_FAILED and exit_code is not None:
         raise ValueError("launch failure must not have an exit code")
     if execution_state is not None and not command:
         raise ValueError("executed results require a command")
-    if execution_state is not None and (
-        stdout_path is None or stderr_path is None
-    ):
+    if execution_state is not None and (stdout_path is None or stderr_path is None):
         raise ValueError("executed results require stdout and stderr paths")
     if status is ToolExecutionStatus.ERROR and not error_message:
         raise ValueError("error results require error_message")
@@ -1027,8 +966,7 @@ def _flag_specs(values: Iterable[ToolFlagSpec]) -> tuple[ToolFlagSpec, ...]:
         unknown = set(spec.mutually_exclusive_with).difference(known)
         if unknown:
             raise ValueError(
-                f"flag {spec.name!r} references unknown exclusions: "
-                f"{', '.join(sorted(unknown))}"
+                f"flag {spec.name!r} references unknown exclusions: {', '.join(sorted(unknown))}"
             )
     return result
 
@@ -1044,10 +982,7 @@ def _freeze_flag_values(values: ToolFlagValues) -> ToolFlagValues:
     for key, value in values.items():
         key = _portable_id(key, "selected_registered_flags key")
         if type(value) not in (str, int, float, bool, Path, tuple):
-            raise TypeError(
-                f"unsupported flag value type for {key!r}: "
-                f"{type(value).__name__}"
-            )
+            raise TypeError(f"unsupported flag value type for {key!r}: {type(value).__name__}")
         if isinstance(value, str):
             value = _require_text(
                 value,
@@ -1081,7 +1016,11 @@ def _validate_flag_value(
     elif value_type is ToolFlagType.INTEGER:
         valid = type(value) is int
     elif value_type is ToolFlagType.NUMBER:
-        valid = type(value) in (int, float) and math.isfinite(float(value))
+        valid = (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+        )
     elif value_type is ToolFlagType.STRING:
         valid = isinstance(value, str)
     elif value_type is ToolFlagType.CHOICE:
@@ -1089,13 +1028,9 @@ def _validate_flag_value(
     elif value_type is ToolFlagType.PATH:
         valid = isinstance(value, Path)
     elif value_type is ToolFlagType.STRING_LIST:
-        valid = isinstance(value, tuple) and all(
-            isinstance(item, str) for item in value
-        )
+        valid = isinstance(value, tuple) and all(isinstance(item, str) for item in value)
     if not valid:
-        raise TypeError(
-            f"default value does not match flag type {value_type.value!r}"
-        )
+        raise TypeError(f"default value does not match flag type {value_type.value!r}")
 
 
 def _freeze_platform_paths(
@@ -1114,39 +1049,45 @@ def _freeze_platform_paths(
             f"platform_locations[{platform.value!r}]",
         )
         if not normalized:
-            raise ValueError(
-                f"platform_locations[{platform.value!r}] must not be empty"
-            )
+            raise ValueError(f"platform_locations[{platform.value!r}] must not be empty")
         copied[platform] = normalized
     return MappingProxyType(copied)
 
 
-def _enum_tuple(values: Iterable[object], enum_type: type, field_name: str) -> tuple:
+def _enum_tuple(
+    values: Iterable[object],
+    enum_type: type[_EnumT],
+    field_name: str,
+) -> tuple[_EnumT, ...]:
     if isinstance(values, (str, bytes)):
         raise TypeError(f"{field_name} must be an iterable")
-    result = tuple(values)
-    if len(result) > _MAX_ITEMS:
-        raise ValueError(f"{field_name} exceeds the supported item limit")
-    if any(not isinstance(item, enum_type) for item in result):
-        raise TypeError(
-            f"{field_name} must contain {enum_type.__name__} values"
-        )
+    result: list[_EnumT] = []
+    for item in values:
+        if not isinstance(item, enum_type):
+            raise TypeError(f"{field_name} must contain {enum_type.__name__} values")
+        result.append(item)
+        if len(result) > _MAX_ITEMS:
+            raise ValueError(f"{field_name} exceeds the supported item limit")
     if len(result) != len(set(result)):
         raise ValueError(f"{field_name} must not contain duplicates")
-    return result
+    return tuple(result)
 
 
-def _typed_tuple(values: Iterable[object], item_type: type, field_name: str) -> tuple:
+def _typed_tuple(
+    values: Iterable[object],
+    item_type: type[_ItemT],
+    field_name: str,
+) -> tuple[_ItemT, ...]:
     if isinstance(values, (str, bytes)):
         raise TypeError(f"{field_name} must be an iterable")
-    result = tuple(values)
-    if len(result) > _MAX_ITEMS:
-        raise ValueError(f"{field_name} exceeds the supported item limit")
-    if any(not isinstance(item, item_type) for item in result):
-        raise TypeError(
-            f"{field_name} must contain {item_type.__name__} values"
-        )
-    return result
+    result: list[_ItemT] = []
+    for item in values:
+        if not isinstance(item, item_type):
+            raise TypeError(f"{field_name} must contain {item_type.__name__} values")
+        result.append(item)
+        if len(result) > _MAX_ITEMS:
+            raise ValueError(f"{field_name} exceeds the supported item limit")
+    return tuple(result)
 
 
 def _text_tuple(
@@ -1158,8 +1099,7 @@ def _text_tuple(
     if isinstance(values, (str, bytes)):
         raise TypeError(f"{field_name} must be an iterable of strings")
     result = tuple(
-        _require_text(item, f"{field_name} item", max_length=max_length)
-        for item in values
+        _require_text(item, f"{field_name} item", max_length=max_length) for item in values
     )
     if len(result) > _MAX_ITEMS:
         raise ValueError(f"{field_name} exceeds the supported item limit")
@@ -1183,9 +1123,7 @@ def _file_type_tuple(values: Iterable[str]) -> tuple[str, ...]:
     result = _text_tuple(values, "file_types", max_length=128)
     for item in result:
         if not item.startswith(".") or "/" in item or "\\" in item:
-            raise ValueError(
-                "file_types entries must be simple suffixes beginning with '.'"
-            )
+            raise ValueError("file_types entries must be simple suffixes beginning with '.'")
     return result
 
 
@@ -1196,9 +1134,7 @@ def _environment_names(
     result = _text_tuple(values, field_name, max_length=256)
     for item in result:
         if "=" in item or not item.isascii():
-            raise ValueError(
-                f"{field_name} entries must be ASCII variable names"
-            )
+            raise ValueError(f"{field_name} entries must be ASCII variable names")
     return result
 
 
@@ -1229,9 +1165,7 @@ def _absolute_path_tuple(
 ) -> tuple[Path, ...]:
     if isinstance(values, (str, bytes, Path)):
         raise TypeError(f"{field_name} must be an iterable of paths")
-    result = tuple(
-        _absolute_path(item, f"{field_name} item") for item in values
-    )
+    result = tuple(_absolute_path(item, f"{field_name} item") for item in values)
     if len(result) > _MAX_ITEMS:
         raise ValueError(f"{field_name} exceeds the supported item limit")
     if len(result) != len(set(result)):
@@ -1313,7 +1247,7 @@ def _non_negative_int(value: object, field_name: str) -> int:
 
 
 def _positive_finite(value: object, field_name: str) -> float:
-    if type(value) not in (int, float):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{field_name} must be a number")
     result = float(value)
     if not math.isfinite(result) or result <= 0:

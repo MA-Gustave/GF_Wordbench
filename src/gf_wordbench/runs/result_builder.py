@@ -15,10 +15,13 @@ from gf_wordbench.diagnostics.models import TopError
 from gf_wordbench.kernel.ids import validate_scenario_id
 from gf_wordbench.kernel.paths import normalize_environment_path
 from gf_wordbench.kernel.statuses import (
-    ChangeKind, DiagnosticClass, ErrorKind, ExecutionState, OverallStatus,
+    ChangeKind,
+    DiagnosticClass,
+    ErrorKind,
+    ExecutionState,
+    OverallStatus,
     ValidationStatus,
 )
-
 from gf_wordbench.validation.regression.models import DiffEntry
 from gf_wordbench.validation.scenarios.models import ScenarioResult
 
@@ -29,8 +32,11 @@ from .models.results import FileResult, RunResult, RunTotals
 ResultSubject: TypeAlias = FileResult | ScenarioResult
 
 _CHANGE_ORDER: Final = {
-    ChangeKind.REGRESSED: 0, ChangeKind.NEW: 1, ChangeKind.IMPROVED: 2,
-    ChangeKind.REMOVED: 3, ChangeKind.UNCHANGED: 4,
+    ChangeKind.REGRESSED: 0,
+    ChangeKind.NEW: 1,
+    ChangeKind.IMPROVED: 2,
+    ChangeKind.REMOVED: 3,
+    ChangeKind.UNCHANGED: 4,
 }
 
 
@@ -119,7 +125,7 @@ def build_scenario_result(
         )
 
     return ScenarioResult(
-        scenario_id=str(validate_scenario_id(scenario_id)),
+        scenario_id=validate_scenario_id(scenario_id),
         script_path=script_path,
         script_sha256=script_sha256,
         required=required,
@@ -192,21 +198,11 @@ def derive_overall_status(
 
     statuses = [
         *(result.status for result in file_results),
-        *(
-            result.status
-            for result in scenario_results
-            if result.required
-        ),
+        *(result.status for result in scenario_results if result.required),
         *required_stage_statuses,
     ]
-    statuses = [
-        _require_enum(value, ValidationStatus, "status")
-        for value in statuses
-    ]
-    if any(
-        value in {ValidationStatus.ERROR, ValidationStatus.SKIPPED}
-        for value in statuses
-    ):
+    statuses = [_require_enum(value, ValidationStatus, "status") for value in statuses]
+    if any(value in {ValidationStatus.ERROR, ValidationStatus.SKIPPED} for value in statuses):
         return OverallStatus.ERROR
     if any(value is ValidationStatus.FAIL for value in statuses):
         return OverallStatus.FAIL
@@ -228,15 +224,9 @@ def update_run_counts(
     scenarios = tuple(scenario_results)
     excluded = _count(files_excluded, "files_excluded")
     included = len(files)
-    seen = (
-        included + excluded
-        if files_seen is None
-        else _count(files_seen, "files_seen")
-    )
+    seen = included + excluded if files_seen is None else _count(files_seen, "files_seen")
     if seen != included + excluded:
-        raise ValueError(
-            "files_seen must equal files_included plus files_excluded"
-        )
+        raise ValueError("files_seen must equal files_included plus files_excluded")
 
     totals = RunTotals(
         files_seen=seen,
@@ -271,8 +261,7 @@ def update_run_counts(
             ValidationStatus.SKIPPED,
         ),
         required_scenario_fail=sum(
-            result.required and result.status is ValidationStatus.FAIL
-            for result in scenarios
+            result.required and result.status is ValidationStatus.FAIL for result in scenarios
         ),
         overall_status=derive_overall_status(
             files,
@@ -367,9 +356,7 @@ def validate_run_result(result: RunResult) -> None:
         result.file_results,
         result.scenario_results,
     ):
-        raise ValueError(
-            "top_errors must be derived from structured result messages"
-        )
+        raise ValueError("top_errors must be derived from structured result messages")
 
 
 def _status_count(
@@ -392,20 +379,29 @@ def _diagnostic_count(
 
 def _validate_totals(totals: RunTotals) -> None:
     for field in (
-        "files_seen", "files_included", "files_excluded", "files_ok",
-        "files_fail", "files_error", "files_skipped", "direct_fail",
-        "downstream_fail", "ambiguous_fail", "excluded_noise",
-        "scenarios_seen", "scenarios_ok", "scenarios_fail",
-        "scenarios_error", "scenarios_skipped", "required_scenario_fail",
+        "files_seen",
+        "files_included",
+        "files_excluded",
+        "files_ok",
+        "files_fail",
+        "files_error",
+        "files_skipped",
+        "direct_fail",
+        "downstream_fail",
+        "ambiguous_fail",
+        "excluded_noise",
+        "scenarios_seen",
+        "scenarios_ok",
+        "scenarios_fail",
+        "scenarios_error",
+        "scenarios_skipped",
+        "required_scenario_fail",
     ):
         _count(getattr(totals, field), f"totals.{field}")
     if totals.files_seen != totals.files_included + totals.files_excluded:
         raise ValueError("files_seen is inconsistent")
     if totals.files_included != (
-        totals.files_ok
-        + totals.files_fail
-        + totals.files_error
-        + totals.files_skipped
+        totals.files_ok + totals.files_fail + totals.files_error + totals.files_skipped
     ):
         raise ValueError("file totals are inconsistent")
     if totals.scenarios_seen != (
@@ -437,16 +433,16 @@ def _validate_diagnostic(
             raise ValueError("an OK result must not expose an error")
     elif status is ValidationStatus.SKIPPED:
         if diagnostic_class is not DiagnosticClass.SKIPPED:
-            raise ValueError(
-                "a SKIPPED result must use diagnostic class skipped"
-            )
-    elif diagnostic_class in {
-        DiagnosticClass.OK,
-        DiagnosticClass.SKIPPED,
-    } or error_kind is ErrorKind.OK:
-        raise ValueError(
-            "a failed or errored result needs failure classification"
-        )
+            raise ValueError("a SKIPPED result must use diagnostic class skipped")
+    elif (
+        diagnostic_class
+        in {
+            DiagnosticClass.OK,
+            DiagnosticClass.SKIPPED,
+        }
+        or error_kind is ErrorKind.OK
+    ):
+        raise ValueError("a failed or errored result needs failure classification")
 
 
 def _file_key(result: FileResult) -> tuple[str, str]:
@@ -458,9 +454,7 @@ def _diff_key(entry: DiffEntry) -> tuple[int, str, str, str, str]:
     try:
         rank = _CHANGE_ORDER[entry.change_kind]
     except KeyError as exc:
-        raise ValueError(
-            f"unsupported change kind: {entry.change_kind!r}"
-        ) from exc
+        raise ValueError(f"unsupported change kind: {entry.change_kind!r}") from exc
 
     subject_kind = _enum_text(entry.subject_kind, "subject_kind")
     previous_status = _optional_enum_text(
@@ -557,9 +551,7 @@ def _count(value: int, field: str) -> int:
 
 
 def _exit_code(value: int | None) -> int | None:
-    if value is not None and (
-        isinstance(value, bool) or not isinstance(value, int)
-    ):
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
         raise TypeError("exit_code must be an integer or None")
     return value
 
@@ -587,7 +579,12 @@ def _optional_path(value: Path | None, role: str) -> Path | None:
 
 
 __all__ = (
-    "ResultSubject", "bucket_top_errors", "build_file_result",
-    "build_run_result", "build_scenario_result", "derive_overall_status",
-    "update_run_counts", "validate_run_result",
+    "ResultSubject",
+    "bucket_top_errors",
+    "build_file_result",
+    "build_run_result",
+    "build_scenario_result",
+    "derive_overall_status",
+    "update_run_counts",
+    "validate_run_result",
 )

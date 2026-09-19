@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path, PurePosixPath
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -16,9 +16,7 @@ APPLICATION_OCTET_STREAM: Final[str] = "application/octet-stream"
 MANIFEST_MEDIA_TYPE_INVALID: Final[str] = "MANIFEST_MEDIA_TYPE_INVALID"
 MANIFEST_ROLE_UNKNOWN: Final[str] = "MANIFEST_ROLE_UNKNOWN"
 
-_TOKEN_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
-)
+_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 _MEDIA_TYPE_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<type>[!#$%&'*+.^_`|~0-9A-Za-z-]+)/"
     r"(?P<subtype>[!#$%&'*+.^_`|~0-9A-Za-z-]+)$"
@@ -48,7 +46,7 @@ class MediaTypeFamily(StrEnum):
 
 
 class MediaTypeContractError(ValueError):
-    __slots__ = ("code", "role", "media_type")
+    __slots__ = ("code", "media_type", "role")
 
     def __init__(
         self,
@@ -89,9 +87,7 @@ class ParsedMediaType:
     def render(self) -> str:
         if not self.parameters:
             return self.essence
-        suffix = "; ".join(
-            f"{name}={value}" for name, value in self.parameters.items()
-        )
+        suffix = "; ".join(f"{name}={value}" for name, value in self.parameters.items())
         return f"{self.essence}; {suffix}"
 
 
@@ -140,9 +136,7 @@ class RoleMediaTypePolicy:
 
 _JSON_SUFFIXES: Final[frozenset[str]] = frozenset({".json"})
 _MARKDOWN_SUFFIXES: Final[frozenset[str]] = frozenset({".md", ".markdown"})
-_TEXT_SUFFIXES: Final[frozenset[str]] = frozenset(
-    {".txt", ".log", ".out", ".err", ".diff"}
-)
+_TEXT_SUFFIXES: Final[frozenset[str]] = frozenset({".txt", ".log", ".out", ".err", ".diff"})
 _DETAIL_SUFFIXES: Final[frozenset[str]] = frozenset(
     {".txt", ".log", ".md", ".markdown", ".out", ".err", ".diff"}
 )
@@ -372,8 +366,7 @@ def validate_media_type_path_consistency(
         inferred,
     ):
         raise MediaTypeContractError(
-            f"artifact path {str(path)!r} implies {inferred!r}, not "
-            f"{normalized!r}",
+            f"artifact path {str(path)!r} implies {inferred!r}, not {normalized!r}",
             role=canonical_role,
             media_type=normalized,
         )
@@ -438,9 +431,7 @@ def media_type_family(
 
 
 def artifact_suffix(path: PathLike) -> str:
-    if isinstance(path, Path):
-        name = path.name
-    elif isinstance(path, PurePosixPath):
+    if isinstance(path, Path) or isinstance(path, PurePosixPath):
         name = path.name
     elif isinstance(path, str):
         if not path or "\x00" in path:
@@ -459,8 +450,7 @@ def _validate_canonical_parameters(
     if parsed.essence in {"text/plain", "text/markdown"}:
         if parsed.parameters != {"charset": "utf-8"}:
             raise MediaTypeContractError(
-                f"UTF-8 text media type for role {role!r} must declare "
-                "exactly charset=utf-8",
+                f"UTF-8 text media type for role {role!r} must declare exactly charset=utf-8",
                 role=role,
                 media_type=parsed.render(),
             )
@@ -553,19 +543,13 @@ def _normalize_token(value: str, *, field: str) -> str:
 def _normalize_parameter_value(value: str, *, field: str) -> str:
     if value.startswith('"'):
         if len(value) < 2 or not value.endswith('"'):
-            raise MediaTypeContractError(
-                f"unterminated quoted value for parameter {field!r}"
-            )
+            raise MediaTypeContractError(f"unterminated quoted value for parameter {field!r}")
         value = _unquote(value[1:-1])
     elif _TOKEN_RE.fullmatch(value) is None:
-        raise MediaTypeContractError(
-            f"invalid value for media-type parameter {field!r}"
-        )
+        raise MediaTypeContractError(f"invalid value for media-type parameter {field!r}")
     normalized = value.strip().lower()
     if not normalized or "\x00" in normalized:
-        raise MediaTypeContractError(
-            f"invalid value for media-type parameter {field!r}"
-        )
+        raise MediaTypeContractError(f"invalid value for media-type parameter {field!r}")
     return normalized
 
 
@@ -614,113 +598,111 @@ def _normalize_suffix(value: str) -> str:
     return normalized
 
 
-ROLE_MEDIA_TYPE_POLICIES: Final[Mapping[str, RoleMediaTypePolicy]] = (
-    MappingProxyType(
-        {
-            "machine_summary": _policy(
-                "machine_summary",
+ROLE_MEDIA_TYPE_POLICIES: Final[Mapping[str, RoleMediaTypePolicy]] = MappingProxyType(
+    {
+        "machine_summary": _policy(
+            "machine_summary",
+            APPLICATION_JSON,
+            (APPLICATION_JSON,),
+            _JSON_SUFFIXES,
+        ),
+        "human_summary": _policy(
+            "human_summary",
+            TEXT_MARKDOWN_UTF8,
+            (TEXT_MARKDOWN_UTF8,),
+            _MARKDOWN_SUFFIXES,
+        ),
+        "ai_handoff": _policy(
+            "ai_handoff",
+            TEXT_MARKDOWN_UTF8,
+            (TEXT_MARKDOWN_UTF8,),
+            _MARKDOWN_SUFFIXES,
+        ),
+        "top_errors": _policy(
+            "top_errors",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8,),
+            _TEXT_SUFFIXES,
+        ),
+        "master_log": _policy(
+            "master_log",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8,),
+            _TEXT_SUFFIXES,
+        ),
+        "aggregate_log": _policy(
+            "aggregate_log",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8,),
+            _TEXT_SUFFIXES,
+        ),
+        "scan_log": _policy(
+            "scan_log",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8,),
+            _TEXT_SUFFIXES,
+        ),
+        "compile_stdout": _policy(
+            "compile_stdout",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8,),
+            _TEXT_SUFFIXES,
+        ),
+        "compile_stderr": _policy(
+            "compile_stderr",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8,),
+            _TEXT_SUFFIXES,
+        ),
+        "scenario_stdout": _policy(
+            "scenario_stdout",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8,),
+            _TEXT_SUFFIXES,
+        ),
+        "scenario_stderr": _policy(
+            "scenario_stderr",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8,),
+            _TEXT_SUFFIXES,
+        ),
+        "scenario_output": _policy(
+            "scenario_output",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8,),
+            _TEXT_SUFFIXES,
+        ),
+        "detail": _policy(
+            "detail",
+            TEXT_PLAIN_UTF8,
+            (TEXT_PLAIN_UTF8, TEXT_MARKDOWN_UTF8),
+            _DETAIL_SUFFIXES,
+        ),
+        "gfo": _policy(
+            "gfo",
+            APPLICATION_OCTET_STREAM,
+            (APPLICATION_OCTET_STREAM,),
+            _GFO_SUFFIXES,
+        ),
+        "pgf": _policy(
+            "pgf",
+            APPLICATION_OCTET_STREAM,
+            (APPLICATION_OCTET_STREAM,),
+            _PGF_SUFFIXES,
+        ),
+        "other": _policy(
+            "other",
+            None,
+            (
                 APPLICATION_JSON,
-                (APPLICATION_JSON,),
-                _JSON_SUFFIXES,
-            ),
-            "human_summary": _policy(
-                "human_summary",
                 TEXT_MARKDOWN_UTF8,
-                (TEXT_MARKDOWN_UTF8,),
-                _MARKDOWN_SUFFIXES,
-            ),
-            "ai_handoff": _policy(
-                "ai_handoff",
-                TEXT_MARKDOWN_UTF8,
-                (TEXT_MARKDOWN_UTF8,),
-                _MARKDOWN_SUFFIXES,
-            ),
-            "top_errors": _policy(
-                "top_errors",
                 TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8,),
-                _TEXT_SUFFIXES,
-            ),
-            "master_log": _policy(
-                "master_log",
-                TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8,),
-                _TEXT_SUFFIXES,
-            ),
-            "aggregate_log": _policy(
-                "aggregate_log",
-                TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8,),
-                _TEXT_SUFFIXES,
-            ),
-            "scan_log": _policy(
-                "scan_log",
-                TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8,),
-                _TEXT_SUFFIXES,
-            ),
-            "compile_stdout": _policy(
-                "compile_stdout",
-                TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8,),
-                _TEXT_SUFFIXES,
-            ),
-            "compile_stderr": _policy(
-                "compile_stderr",
-                TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8,),
-                _TEXT_SUFFIXES,
-            ),
-            "scenario_stdout": _policy(
-                "scenario_stdout",
-                TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8,),
-                _TEXT_SUFFIXES,
-            ),
-            "scenario_stderr": _policy(
-                "scenario_stderr",
-                TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8,),
-                _TEXT_SUFFIXES,
-            ),
-            "scenario_output": _policy(
-                "scenario_output",
-                TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8,),
-                _TEXT_SUFFIXES,
-            ),
-            "detail": _policy(
-                "detail",
-                TEXT_PLAIN_UTF8,
-                (TEXT_PLAIN_UTF8, TEXT_MARKDOWN_UTF8),
-                _DETAIL_SUFFIXES,
-            ),
-            "gfo": _policy(
-                "gfo",
                 APPLICATION_OCTET_STREAM,
-                (APPLICATION_OCTET_STREAM,),
-                _GFO_SUFFIXES,
             ),
-            "pgf": _policy(
-                "pgf",
-                APPLICATION_OCTET_STREAM,
-                (APPLICATION_OCTET_STREAM,),
-                _PGF_SUFFIXES,
-            ),
-            "other": _policy(
-                "other",
-                None,
-                (
-                    APPLICATION_JSON,
-                    TEXT_MARKDOWN_UTF8,
-                    TEXT_PLAIN_UTF8,
-                    APPLICATION_OCTET_STREAM,
-                ),
-                (),
-                require_known=False,
-            ),
-        }
-    )
+            (),
+            require_known=False,
+        ),
+    }
 )
 
 CANONICAL_MEDIA_TYPES: Final[frozenset[str]] = frozenset(
@@ -728,17 +710,11 @@ CANONICAL_MEDIA_TYPES: Final[frozenset[str]] = frozenset(
 )
 
 MEDIA_TYPE_BY_ROLE: Final[Mapping[str, str | None]] = MappingProxyType(
-    {
-        role: policy.canonical_media_type
-        for role, policy in ROLE_MEDIA_TYPE_POLICIES.items()
-    }
+    {role: policy.canonical_media_type for role, policy in ROLE_MEDIA_TYPE_POLICIES.items()}
 )
 
 ALLOWED_MEDIA_TYPES_BY_ROLE: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
-    {
-        role: policy.allowed_media_types
-        for role, policy in ROLE_MEDIA_TYPE_POLICIES.items()
-    }
+    {role: policy.allowed_media_types for role, policy in ROLE_MEDIA_TYPE_POLICIES.items()}
 )
 
 
@@ -746,18 +722,18 @@ __all__ = (
     "ALLOWED_MEDIA_TYPES_BY_ROLE",
     "APPLICATION_JSON",
     "APPLICATION_OCTET_STREAM",
-    "ArtifactMediaType",
     "CANONICAL_MEDIA_TYPES",
     "MANIFEST_MEDIA_TYPE_INVALID",
     "MANIFEST_ROLE_UNKNOWN",
     "MEDIA_TYPE_BY_ROLE",
+    "ROLE_MEDIA_TYPE_POLICIES",
+    "TEXT_MARKDOWN_UTF8",
+    "TEXT_PLAIN_UTF8",
+    "ArtifactMediaType",
     "MediaTypeContractError",
     "MediaTypeFamily",
     "ParsedMediaType",
-    "ROLE_MEDIA_TYPE_POLICIES",
     "RoleMediaTypePolicy",
-    "TEXT_MARKDOWN_UTF8",
-    "TEXT_PLAIN_UTF8",
     "allowed_media_types_for_role",
     "artifact_suffix",
     "canonical_media_type_for_role",

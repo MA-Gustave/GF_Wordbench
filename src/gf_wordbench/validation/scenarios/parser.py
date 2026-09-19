@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from hashlib import sha256
 from pathlib import Path
+import re
 from typing import Final
 
 from gf_wordbench.kernel.errors import ProjectConfigurationError
@@ -118,7 +118,6 @@ class ScenarioMarkerPhase(StrEnum):
     END = "END"
 
 
-
 def _require_bool(name: str, value: object) -> bool:
     if type(value) is not bool:
         raise TypeError(f"{name} must be a bool")
@@ -172,9 +171,7 @@ class ScenarioParserPolicy:
         )
 
 
-DEFAULT_SCENARIO_PARSER_POLICY: Final[ScenarioParserPolicy] = (
-    ScenarioParserPolicy()
-)
+DEFAULT_SCENARIO_PARSER_POLICY: Final[ScenarioParserPolicy] = ScenarioParserPolicy()
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,9 +188,7 @@ class ScenarioScriptIssue:
             self.severity,
             ScenarioScriptIssueSeverity,
         ):
-            raise TypeError(
-                "severity must be a ScenarioScriptIssueSeverity"
-            )
+            raise TypeError("severity must be a ScenarioScriptIssueSeverity")
         if not isinstance(self.code, ScenarioScriptIssueCode):
             raise TypeError("code must be a ScenarioScriptIssueCode")
         _require_non_empty_text("message", self.message)
@@ -260,9 +255,7 @@ class ScenarioScriptLine:
             raise TypeError("markers must be a tuple")
         for index, marker in enumerate(self.markers):
             if not isinstance(marker, ScenarioMarkerLiteral):
-                raise TypeError(
-                    f"markers[{index}] must be a ScenarioMarkerLiteral"
-                )
+                raise TypeError(f"markers[{index}] must be a ScenarioMarkerLiteral")
 
 
 class ScenarioScriptParseError(ProjectConfigurationError):
@@ -293,10 +286,7 @@ class ParsedScenarioScript:
                 raise TypeError("source_path must be pathlib.Path or None")
             if "\x00" in str(self.source_path):
                 raise ValueError("source_path must not contain NUL")
-        if (
-            not isinstance(self.sha256, str)
-            or re.fullmatch(r"[0-9a-f]{64}", self.sha256) is None
-        ):
+        if not isinstance(self.sha256, str) or re.fullmatch(r"[0-9a-f]{64}", self.sha256) is None:
             raise ValueError("sha256 must be a lowercase SHA-256 digest")
         _require_non_negative_int("size_bytes", self.size_bytes)
         _require_non_negative_int("line_count", self.line_count)
@@ -330,17 +320,13 @@ class ParsedScenarioScript:
     @property
     def errors(self) -> tuple[ScenarioScriptIssue, ...]:
         return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is ScenarioScriptIssueSeverity.ERROR
+            issue for issue in self.issues if issue.severity is ScenarioScriptIssueSeverity.ERROR
         )
 
     @property
     def warnings(self) -> tuple[ScenarioScriptIssue, ...]:
         return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is ScenarioScriptIssueSeverity.WARNING
+            issue for issue in self.issues if issue.severity is ScenarioScriptIssueSeverity.WARNING
         )
 
     @property
@@ -373,20 +359,9 @@ class ParsedScenarioScript:
         if self.valid:
             return self
 
-        details = "; ".join(
-            _format_issue(issue)
-            for issue in self.errors
-        )
-        subject = (
-            str(self.source_path)
-            if self.source_path is not None
-            else str(self.scenario_id)
-        )
-        evidence_paths = (
-            ()
-            if self.source_path is None
-            else (str(self.source_path),)
-        )
+        details = "; ".join(_format_issue(issue) for issue in self.errors)
+        subject = str(self.source_path) if self.source_path is not None else str(self.scenario_id)
+        evidence_paths = () if self.source_path is None else (str(self.source_path),)
 
         raise ScenarioScriptParseError(
             "scenario source failed preflight parsing",
@@ -463,7 +438,7 @@ def parse_scenario_text(
 
     try:
         data = text.encode("utf-8", errors="strict")
-    except UnicodeEncodeError as exc:
+    except UnicodeEncodeError:
         validated_id = validate_scenario_id(scenario_id)
         digest = sha256(text.encode("utf-8", errors="replace")).hexdigest()
         issue = ScenarioScriptIssue(
@@ -515,9 +490,7 @@ def parse_scenario_bytes(
             ScenarioScriptIssue(
                 severity=ScenarioScriptIssueSeverity.ERROR,
                 code=ScenarioScriptIssueCode.FILE_TOO_LARGE,
-                message=(
-                    f"scenario source exceeds {policy.max_bytes} bytes"
-                ),
+                message=(f"scenario source exceeds {policy.max_bytes} bytes"),
             )
         )
 
@@ -531,10 +504,7 @@ def parse_scenario_bytes(
                 message="scenario source is not valid UTF-8",
                 line=None,
                 column=None,
-                excerpt=(
-                    f"byte offset {exc.start}: "
-                    f"{_bounded_hex_excerpt(data, exc.start)}"
-                ),
+                excerpt=(f"byte offset {exc.start}: {_bounded_hex_excerpt(data, exc.start)}"),
             )
         )
         return ParsedScenarioScript(
@@ -564,11 +534,7 @@ def parse_scenario_bytes(
             )
         )
 
-    if (
-        policy.require_final_newline
-        and data
-        and not data.endswith(b"\n")
-    ):
+    if policy.require_final_newline and data and not data.endswith(b"\n"):
         issues.append(
             ScenarioScriptIssue(
                 severity=ScenarioScriptIssueSeverity.ERROR,
@@ -604,10 +570,7 @@ def parse_scenario_bytes(
                 ScenarioScriptIssue(
                     severity=ScenarioScriptIssueSeverity.ERROR,
                     code=ScenarioScriptIssueCode.LINE_TOO_LONG,
-                    message=(
-                        "scenario line exceeds "
-                        f"{policy.max_line_chars} characters"
-                    ),
+                    message=(f"scenario line exceeds {policy.max_line_chars} characters"),
                     line=line_number,
                     column=policy.max_line_chars + 1,
                     excerpt=_bounded_excerpt(raw_line),
@@ -673,10 +636,7 @@ def parse_scenario_bytes(
                         ScenarioScriptIssue(
                             severity=ScenarioScriptIssueSeverity.ERROR,
                             code=ScenarioScriptIssueCode.MULTIPLE_TERMINATION,
-                            message=(
-                                "scenario contains more than one "
-                                "termination command"
-                            ),
+                            message=("scenario contains more than one termination command"),
                             line=line_number,
                             column=_first_non_space_column(code_text),
                             excerpt=_bounded_excerpt(raw_line),
@@ -687,10 +647,7 @@ def parse_scenario_bytes(
                     ScenarioScriptIssue(
                         severity=ScenarioScriptIssueSeverity.ERROR,
                         code=ScenarioScriptIssueCode.COMMAND_AFTER_TERMINATION,
-                        message=(
-                            "scenario command appears after "
-                            "the termination command"
-                        ),
+                        message=("scenario command appears after the termination command"),
                         line=line_number,
                         column=_first_non_space_column(code_text),
                         excerpt=_bounded_excerpt(raw_line),
@@ -728,10 +685,7 @@ def parse_scenario_bytes(
             )
         )
 
-    if (
-        policy.require_explicit_termination
-        and termination_line is None
-    ):
+    if policy.require_explicit_termination and termination_line is None:
         issues.append(
             ScenarioScriptIssue(
                 severity=ScenarioScriptIssueSeverity.ERROR,
@@ -867,9 +821,7 @@ def _parse_line_markers(
         )
     ]
     covered_positions = {
-        position
-        for match in matches
-        for position in range(match.start(), match.end())
+        position for match in matches for position in range(match.start(), match.end())
     }
 
     for position in reserved_positions:
@@ -918,10 +870,7 @@ def _advance_marker_state(
                     ScenarioScriptIssue(
                         severity=ScenarioScriptIssueSeverity.ERROR,
                         code=ScenarioScriptIssueCode.DUPLICATE_BEGIN_MARKER,
-                        message=(
-                            f"section {section_id!r} has more than one "
-                            "begin marker"
-                        ),
+                        message=(f"section {section_id!r} has more than one begin marker"),
                         line=marker.line,
                         column=marker.column,
                         excerpt=marker.literal,
@@ -938,10 +887,7 @@ def _advance_marker_state(
                 ScenarioScriptIssue(
                     severity=ScenarioScriptIssueSeverity.ERROR,
                     code=ScenarioScriptIssueCode.DUPLICATE_END_MARKER,
-                    message=(
-                        f"section {section_id!r} has more than one "
-                        "end marker"
-                    ),
+                    message=(f"section {section_id!r} has more than one end marker"),
                     line=marker.line,
                     column=marker.column,
                     excerpt=marker.literal,
@@ -953,10 +899,7 @@ def _advance_marker_state(
                 ScenarioScriptIssue(
                     severity=ScenarioScriptIssueSeverity.ERROR,
                     code=ScenarioScriptIssueCode.END_WITHOUT_BEGIN,
-                    message=(
-                        f"section {section_id!r} ends without "
-                        "an open begin marker"
-                    ),
+                    message=(f"section {section_id!r} ends without an open begin marker"),
                     line=marker.line,
                     column=marker.column,
                     excerpt=marker.literal,
@@ -967,10 +910,7 @@ def _advance_marker_state(
                 ScenarioScriptIssue(
                     severity=ScenarioScriptIssueSeverity.ERROR,
                     code=ScenarioScriptIssueCode.MISMATCHED_END_MARKER,
-                    message=(
-                        f"section {section_id!r} ends while "
-                        f"{state.open_section!r} is open"
-                    ),
+                    message=(f"section {section_id!r} ends while {state.open_section!r} is open"),
                     line=marker.line,
                     column=marker.column,
                     excerpt=marker.literal,
@@ -996,49 +936,35 @@ def _inspect_security(
             ScenarioScriptIssue(
                 severity=ScenarioScriptIssueSeverity.ERROR,
                 code=ScenarioScriptIssueCode.PROHIBITED_SHELL_ESCAPE,
-                message=(
-                    "scenario contains a prohibited operating-system "
-                    "shell or pipe construct"
-                ),
+                message=("scenario contains a prohibited operating-system shell or pipe construct"),
                 line=line_number,
                 column=_first_non_space_column(command),
                 excerpt=_bounded_excerpt(command),
             )
         )
 
-    if (
-        policy.reject_machine_absolute_paths
-        and (
-            _WINDOWS_ABSOLUTE_PATH_RE.search(command)
-            or _POSIX_MACHINE_PATH_RE.search(command)
-        )
+    if policy.reject_machine_absolute_paths and (
+        _WINDOWS_ABSOLUTE_PATH_RE.search(command) or _POSIX_MACHINE_PATH_RE.search(command)
     ):
         issues.append(
             ScenarioScriptIssue(
                 severity=ScenarioScriptIssueSeverity.ERROR,
                 code=ScenarioScriptIssueCode.MACHINE_LOCAL_ABSOLUTE_PATH,
-                message=(
-                    "scenario contains a machine-local absolute path"
-                ),
+                message=("scenario contains a machine-local absolute path"),
                 line=line_number,
                 column=_first_machine_path_column(command),
                 excerpt=_bounded_excerpt(command),
             )
         )
 
-    if (
-        policy.reject_environment_references
-        and _ENVIRONMENT_REFERENCE_RE.search(command)
-    ):
+    if policy.reject_environment_references and _ENVIRONMENT_REFERENCE_RE.search(command):
         match = _ENVIRONMENT_REFERENCE_RE.search(command)
         assert match is not None
         issues.append(
             ScenarioScriptIssue(
                 severity=ScenarioScriptIssueSeverity.ERROR,
                 code=ScenarioScriptIssueCode.ENVIRONMENT_REFERENCE,
-                message=(
-                    "scenario contains an environment-variable reference"
-                ),
+                message=("scenario contains an environment-variable reference"),
                 line=line_number,
                 column=match.start() + 1,
                 excerpt=_bounded_excerpt(command),
@@ -1069,10 +995,7 @@ def _inspect_generation_bound(
         ScenarioScriptIssue(
             severity=ScenarioScriptIssueSeverity.ERROR,
             code=ScenarioScriptIssueCode.UNBOUNDED_GENERATION,
-            message=(
-                "generation command has no explicit category, depth, "
-                "number, or limit bound"
-            ),
+            message=("generation command has no explicit category, depth, number, or limit bound"),
             line=line_number,
             column=_first_non_space_column(command),
             excerpt=_bounded_excerpt(command),
@@ -1086,10 +1009,7 @@ def _contains_shell_escape(command: str) -> bool:
         return True
 
     command_name = _command_name(stripped)
-    if (
-        command_name is not None
-        and command_name.casefold() in _PROHIBITED_COMMAND_NAMES
-    ):
+    if command_name is not None and command_name.casefold() in _PROHIBITED_COMMAND_NAMES:
         return True
 
     in_string = False
@@ -1273,6 +1193,7 @@ def _first_machine_path_column(value: str) -> int:
         return _first_non_space_column(value)
     return min(match.start() for match in matches) + 1
 
+
 def _require_non_negative_int(name: str, value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an integer")
@@ -1314,9 +1235,7 @@ def _require_tuple_members(
         raise TypeError(f"{name} must be a tuple")
     for index, value in enumerate(values):
         if not isinstance(value, expected):
-            raise TypeError(
-                f"{name}[{index}] must be {expected.__name__}"
-            )
+            raise TypeError(f"{name}[{index}] must be {expected.__name__}")
 
 
 __all__ = (

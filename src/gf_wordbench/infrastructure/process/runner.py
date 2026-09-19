@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import logging
-import os
-import stat
-import tempfile
-import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import logging
+import os
 from pathlib import Path
+import stat
+import tempfile
+import time
 from types import MappingProxyType
 from typing import BinaryIO, Final, Literal, Protocol, cast
 
@@ -55,7 +55,6 @@ _TerminalCause = Literal[
     "cancelled",
     "output_limit",
 ]
-
 
 
 class CaptureSession(Protocol):
@@ -228,11 +227,7 @@ class _ExecutionFacts:
 
     @property
     def termination_attempted(self) -> bool:
-        return (
-            self.soft_termination_attempted
-            or self.forced_termination_attempted
-        )
-
+        return self.soft_termination_attempted or self.forced_termination_attempted
 
 
 def _build_environment(request: ProcessRequest) -> PreparedEnvironment:
@@ -245,10 +240,7 @@ def _build_environment(request: ProcessRequest) -> PreparedEnvironment:
             sensitive_keys=request.sensitive_env_keys,
         )
 
-    removed = {
-        key.upper() if os.name == "nt" else key
-        for key in request.env_removals
-    }
+    removed = {key.upper() if os.name == "nt" else key for key in request.env_removals}
     parent = {
         key: value
         for key, value in os.environ.items()
@@ -294,9 +286,7 @@ def run_process(
         if _is_cancelled(cancellation_token):
             facts = _ExecutionFacts(
                 execution_state=ExecutionState.CANCELLED,
-                cancellation_reason=_cancellation_reason(
-                    cancellation_token
-                ),
+                cancellation_reason=_cancellation_reason(cancellation_token),
             )
         else:
             facts = _launch_and_monitor(
@@ -319,8 +309,7 @@ def run_process(
     _reconcile_capture_limit(facts, capture_result.output_limit_exceeded)
 
     observations = tuple(
-        _observe_artifact(expectation)
-        for expectation in request.expected_artifacts
+        _observe_artifact(expectation) for expectation in request.expected_artifacts
     )
 
     result = ProcessResult(
@@ -360,9 +349,7 @@ def run_process(
         details={
             "stdout_size_bytes": capture_result.stdout.size_bytes,
             "stderr_size_bytes": capture_result.stderr.size_bytes,
-            "output_limit_exceeded": (
-                capture_result.output_limit_exceeded
-            ),
+            "output_limit_exceeded": (capture_result.output_limit_exceeded),
             "capture_complete": capture_result.capture_complete,
             "capture_failure_count": len(capture_result.failures),
         },
@@ -395,8 +382,7 @@ def _launch_and_monitor(
             kind, message = _classify_launch_error(exc)
 
             _LOGGER.warning(
-                "process launch failed "
-                "operation_id=%s kind=%s error=%s",
+                "process launch failed operation_id=%s kind=%s error=%s",
                 request.operation_id,
                 kind.value,
                 message,
@@ -421,9 +407,7 @@ def _launch_and_monitor(
                 pid=process.pid,
                 details={
                     "containment_kind": containment.kind.value,
-                    "process_tree_contained": (
-                        containment.process_tree_contained
-                    ),
+                    "process_tree_contained": (containment.process_tree_contained),
                 },
             )
 
@@ -440,9 +424,7 @@ def _launch_and_monitor(
                     execution_state=ExecutionState.COMPLETED,
                     exit_code=process.wait(),
                     pid=process.pid,
-                    process_tree_contained=(
-                        containment.process_tree_contained
-                    ),
+                    process_tree_contained=(containment.process_tree_contained),
                 )
             else:
                 facts = _terminate_for_cause(
@@ -464,18 +446,10 @@ def _launch_and_monitor(
                 execution_state=facts.execution_state,
                 details={
                     "exit_code": facts.exit_code,
-                    "soft_termination_attempted": (
-                        facts.soft_termination_attempted
-                    ),
-                    "forced_termination_attempted": (
-                        facts.forced_termination_attempted
-                    ),
-                    "termination_succeeded": (
-                        facts.termination_succeeded
-                    ),
-                    "process_tree_contained": (
-                        facts.process_tree_contained
-                    ),
+                    "soft_termination_attempted": (facts.soft_termination_attempted),
+                    "forced_termination_attempted": (facts.forced_termination_attempted),
+                    "termination_succeeded": (facts.termination_succeeded),
+                    "process_tree_contained": (facts.process_tree_contained),
                     "termination_error": facts.termination_error,
                 },
             )
@@ -488,7 +462,6 @@ def _launch_and_monitor(
                 containment=containment,
             )
             raise
-
 
 
 def _start_capture(capture: CaptureSession) -> None:
@@ -547,9 +520,7 @@ def _terminate_for_cause(
         output_limit_exceeded = True
     else:
         execution_state = ExecutionState.CANCELLED
-        cancellation_reason = _cancellation_reason(
-            cancellation_token
-        )
+        cancellation_reason = _cancellation_reason(cancellation_token)
         output_limit_exceeded = False
 
     _emit_event(
@@ -587,8 +558,7 @@ def _terminate_for_cause(
 
     if outcome.termination_error is not None:
         _LOGGER.warning(
-            "process termination reported errors "
-            "operation_id=%s pid=%s error=%s",
+            "process termination reported errors operation_id=%s pid=%s error=%s",
             request.operation_id,
             process.pid,
             outcome.termination_error,
@@ -611,12 +581,8 @@ def _facts_from_termination(
         exit_code=exit_code,
         pid=pid,
         cancellation_reason=cancellation_reason,
-        soft_termination_attempted=(
-            outcome.soft_termination_attempted
-        ),
-        forced_termination_attempted=(
-            outcome.forced_termination_attempted
-        ),
+        soft_termination_attempted=(outcome.soft_termination_attempted),
+        forced_termination_attempted=(outcome.forced_termination_attempted),
         termination_succeeded=outcome.termination_succeeded,
         process_tree_contained=outcome.process_tree_contained,
         termination_error=outcome.termination_error,
@@ -641,17 +607,13 @@ def _contain_after_internal_failure(
         )
     except Exception:
         _LOGGER.exception(
-            "process containment failed after internal error "
-            "operation_id=%s pid=%s",
+            "process containment failed after internal error operation_id=%s pid=%s",
             request.operation_id,
             process.pid,
         )
         return
 
-    if (
-        not outcome.termination_succeeded
-        or outcome.termination_error is not None
-    ):
+    if not outcome.termination_succeeded or outcome.termination_error is not None:
         _LOGGER.error(
             "process containment incomplete after internal error "
             "operation_id=%s pid=%s "
@@ -676,11 +638,9 @@ def _open_standard_input(
             raise ValueError("text process input requires text content")
 
         with tempfile.TemporaryFile(mode="w+b") as stream:
-            stream.write(
-                process_input.text.encode(process_input.encoding)
-            )
+            stream.write(process_input.text.encode(process_input.encoding))
             stream.seek(0)
-            yield stream
+            yield cast(BinaryIO, stream)
 
         return
 
@@ -721,9 +681,7 @@ def _classify_launch_error(
     if isinstance(error, FileNotFoundError):
         message = "executable or launch dependency was not found"
     elif isinstance(error, PermissionError):
-        message = (
-            "permission was denied while launching the executable"
-        )
+        message = "permission was denied while launching the executable"
     else:
         message = str(error).strip() or type(error).__name__
 
@@ -733,10 +691,7 @@ def _classify_launch_error(
     ).strip()
 
     if len(message) > _MAX_ERROR_MESSAGE_CHARS:
-        message = (
-            message[: _MAX_ERROR_MESSAGE_CHARS - 1]
-            + "…"
-        )
+        message = message[: _MAX_ERROR_MESSAGE_CHARS - 1] + "…"
 
     return ProcessErrorKind.LAUNCH, message
 
@@ -752,9 +707,7 @@ def _reconcile_capture_limit(
 
     if facts.execution_state is ExecutionState.COMPLETED:
         facts.execution_state = ExecutionState.CANCELLED
-        facts.cancellation_reason = (
-            CancellationReason.OUTPUT_LIMIT
-        )
+        facts.cancellation_reason = CancellationReason.OUTPUT_LIMIT
 
 
 def _observe_artifact(
@@ -771,11 +724,7 @@ def _observe_artifact(
 
         if expectation.kind is ArtifactKind.FILE:
             kind_matches = stat.S_ISREG(metadata.st_mode)
-            size_bytes = (
-                metadata.st_size
-                if kind_matches
-                else None
-            )
+            size_bytes = metadata.st_size if kind_matches else None
         else:
             kind_matches = stat.S_ISDIR(metadata.st_mode)
             size_bytes = None
@@ -808,8 +757,7 @@ def _cancellation_reason(
         return CancellationReason(reason)
     except ValueError:
         _LOGGER.warning(
-            "unknown cancellation reason %r; "
-            "using controller_policy",
+            "unknown cancellation reason %r; using controller_policy",
             reason,
         )
         return CancellationReason.CONTROLLER_POLICY
@@ -819,18 +767,10 @@ def _termination_details(
     outcome: TerminationOutcome,
 ) -> Mapping[str, object]:
     return {
-        "soft_termination_attempted": (
-            outcome.soft_termination_attempted
-        ),
-        "forced_termination_attempted": (
-            outcome.forced_termination_attempted
-        ),
-        "termination_succeeded": (
-            outcome.termination_succeeded
-        ),
-        "process_tree_contained": (
-            outcome.process_tree_contained
-        ),
+        "soft_termination_attempted": (outcome.soft_termination_attempted),
+        "forced_termination_attempted": (outcome.forced_termination_attempted),
+        "termination_succeeded": (outcome.termination_succeeded),
+        "process_tree_contained": (outcome.process_tree_contained),
         "termination_error": outcome.termination_error,
     }
 
@@ -864,13 +804,12 @@ def _emit_event(
             emitter(event)
         else:
             cast(
-                Callable[[ProcessEvent], None],
+                "Callable[[ProcessEvent], None]",
                 sink,
             )(event)
     except Exception:
         _LOGGER.exception(
-            "process event sink failed "
-            "operation_id=%s event=%s",
+            "process event sink failed operation_id=%s event=%s",
             request.operation_id,
             name,
         )
@@ -880,15 +819,11 @@ def _log_start(request: ProcessRequest) -> None:
     command = render_command_for_display(
         request.executable,
         request.args,
-        sensitive_arg_indexes=(
-            request.sensitive_arg_indexes
-        ),
+        sensitive_arg_indexes=(request.sensitive_arg_indexes),
     )
 
     _LOGGER.info(
-        "starting process "
-        "operation_id=%s operation_kind=%s "
-        "cwd=%s command=%s",
+        "starting process operation_id=%s operation_kind=%s cwd=%s command=%s",
         request.operation_id,
         request.operation_kind,
         request.cwd,

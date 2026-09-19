@@ -10,13 +10,16 @@ import os
 from pathlib import Path
 import re
 import shlex
-import subprocess
 from typing import TYPE_CHECKING, Final
 
 from gf_wordbench.kernel.errors import ContractViolationError, PathSecurityError
 
 if TYPE_CHECKING:
-    from gf_wordbench.infrastructure.process.models import ProcessRequest
+    from gf_wordbench.infrastructure.process.models import (
+        ArtifactExpectation,
+        ProcessInput,
+        ProcessRequest,
+    )
 
 __all__ = ["render_command_for_display", "validate_process_request"]
 
@@ -47,6 +50,7 @@ _MUTABILITY_CLASSES: Final = frozenset(
 _NETWORK_POLICIES: Final = frozenset({"denied", "loopback_only", "approved_endpoints"})
 _PROHIBITED_EXECUTABLE_SUFFIXES: Final = frozenset({".bat", ".cmd"})
 
+
 def validate_process_request(request: ProcessRequest) -> None:
     """Validate a complete process request before any capture file is opened."""
 
@@ -72,21 +76,22 @@ def validate_process_request(request: ProcessRequest) -> None:
     if not isinstance(request.args, tuple):
         raise ContractViolationError("args must be an ordered tuple of argument strings.")
     _validate_arguments(request.args)
+    _validate_positive_finite(request.timeout_sec, "timeout_sec")
+    _validate_non_negative_finite(request.termination_grace_sec, "termination_grace_sec")
+    _validate_positive_integer(request.output_limit_bytes, "output_limit_bytes")
+    # Validate input before touching or rejecting capture destinations so a bad
+    # stdin contract is reported deterministically and cannot modify captures.
+    _validate_input(request.stdin, read_roots=read_roots)
     _validate_capture_paths(
         stdout_path,
         stderr_path,
         write_roots=write_roots,
     )
-    _validate_positive_finite(request.timeout_sec, "timeout_sec")
-    _validate_non_negative_finite(request.termination_grace_sec, "termination_grace_sec")
-    _validate_positive_integer(request.output_limit_bytes, "output_limit_bytes")
-    _validate_input(request.stdin, read_roots=read_roots)
 
     environment_policy = _enum_text(request.environment_policy, "environment_policy")
     if environment_policy not in _ENVIRONMENT_POLICIES:
         raise ContractViolationError(
-            f"Process request {request_id!r} has unknown environment policy "
-            f"{environment_policy!r}."
+            f"Process request {request_id!r} has unknown environment policy {environment_policy!r}."
         )
 
     _validate_environment(
@@ -107,8 +112,7 @@ def validate_process_request(request: ProcessRequest) -> None:
     mutability_class = _enum_text(request.mutability_class, "mutability_class")
     if mutability_class not in _MUTABILITY_CLASSES:
         raise ContractViolationError(
-            f"Process request {request_id!r} has unknown mutability class "
-            f"{mutability_class!r}."
+            f"Process request {request_id!r} has unknown mutability class {mutability_class!r}."
         )
 
     network_policy = _enum_text(request.network_policy, "network_policy")
@@ -118,6 +122,7 @@ def validate_process_request(request: ProcessRequest) -> None:
         )
 
     _require_nonempty_text(request.evidence_policy, "evidence_policy")
+
 
 def render_command_for_display(
     executable: Path,
@@ -134,8 +139,42 @@ def render_command_for_display(
     command = [str(executable_path), *rendered_args]
 
     if os.name == "nt":
-        return subprocess.list2cmdline(command)
+        return _windows_list2cmdline(command)
     return shlex.join(command)
+
+
+def _windows_list2cmdline(arguments: list[str]) -> str:
+    """Render arguments using the Microsoft C runtime command-line rules."""
+
+    result: list[str] = []
+    for index, argument in enumerate(arguments):
+        if index:
+            result.append(" ")
+        needs_quotes = not argument or " " in argument or "\t" in argument
+        if needs_quotes:
+            result.append('"')
+
+        backslashes: list[str] = []
+        for character in argument:
+            if character == "\\":
+                backslashes.append(character)
+                continue
+            if character == '"':
+                result.append("".join(backslashes * 2))
+                backslashes.clear()
+                result.append('\\"')
+                continue
+            if backslashes:
+                result.extend(backslashes)
+                backslashes.clear()
+            result.append(character)
+
+        if backslashes:
+            result.append("".join(backslashes * (2 if needs_quotes else 1)))
+        if needs_quotes:
+            result.append('"')
+    return "".join(result)
+
 
 def _require_identifier(value: object, field: str) -> str:
     text = _require_nonempty_text(value, field)
@@ -145,6 +184,7 @@ def _require_identifier(value: object, field: str) -> str:
         )
     return text
 
+
 def _require_tool_id(value: object) -> str:
     text = _require_nonempty_text(value, "tool_id")
     if _TOOL_ID_PATTERN.fullmatch(text) is None:
@@ -152,6 +192,7 @@ def _require_tool_id(value: object) -> str:
             "tool_id must use 1-128 lowercase ASCII letters, digits, or hyphens."
         )
     return text
+
 
 def _require_nonempty_text(value: object, field: str) -> str:
     text = _enum_text(value, field)
@@ -163,11 +204,13 @@ def _require_nonempty_text(value: object, field: str) -> str:
         raise ContractViolationError(f"{field} must not contain NUL or control characters.")
     return text
 
+
 def _enum_text(value: object, field: str) -> str:
     raw = value.value if isinstance(value, Enum) else value
     if not isinstance(raw, str):
         raise ContractViolationError(f"{field} must be a string or string-valued enum.")
     return raw
+
 
 def _require_absolute_path(value: object, field: str) -> Path:
     if not isinstance(value, Path):
@@ -179,6 +222,7 @@ def _require_absolute_path(value: object, field: str) -> Path:
     if ".." in value.parts:
         raise PathSecurityError(f"{field} must not contain parent traversal segments.")
     return value
+
 
 def _validate_executable(executable: Path) -> None:
     suffix = executable.suffix.casefold()
@@ -195,6 +239,7 @@ def _validate_executable(executable: Path) -> None:
     if os.name != "nt" and not os.access(resolved, os.X_OK):
         raise ContractViolationError(f"Executable permission is missing: {resolved}")
 
+
 def _validate_working_directory(
     cwd: Path,
     *,
@@ -209,6 +254,7 @@ def _validate_working_directory(
         raise ContractViolationError(f"Working directory is not a directory: {resolved}")
     _require_contained(resolved, (*read_roots, *write_roots), "working directory")
 
+
 def _validate_arguments(args: Sequence[str]) -> None:
     if isinstance(args, (str, bytes)):
         raise ContractViolationError("args must be an ordered sequence of argument strings.")
@@ -217,6 +263,7 @@ def _validate_arguments(args: Sequence[str]) -> None:
             raise ContractViolationError(f"args[{index}] must be a string.")
         if _NUL in argument:
             raise ContractViolationError(f"args[{index}] must not contain a NUL character.")
+
 
 def _validate_capture_paths(
     stdout_path: Path,
@@ -235,7 +282,12 @@ def _validate_capture_paths(
     if stderr_path.exists():
         raise ContractViolationError(f"stderr_path already exists: {stderr_path}")
 
-def _validate_input(process_input: object, *, read_roots: tuple[Path, ...]) -> None:
+
+def _validate_input(
+    process_input: ProcessInput,
+    *,
+    read_roots: tuple[Path, ...],
+) -> None:
     kind = _enum_text(process_input.kind, "stdin.kind")
     if kind not in _INPUT_KINDS:
         raise ContractViolationError(f"Unknown stdin kind: {kind!r}.")
@@ -278,6 +330,7 @@ def _validate_input(process_input: object, *, read_roots: tuple[Path, ...]) -> N
         raise ContractViolationError(f"stdin path is not a regular file: {resolved}")
     _require_contained(resolved, read_roots, "stdin file")
 
+
 def _validate_environment(
     overrides: Mapping[str, str],
     removals: Collection[str],
@@ -309,6 +362,7 @@ def _validate_environment(
             "An environment key cannot be both overridden and removed in one request."
         )
 
+
 def _validate_environment_key_collection(values: Collection[str], field: str) -> set[str]:
     if isinstance(values, (str, bytes)):
         raise ContractViolationError(f"{field} must be a collection of environment keys.")
@@ -325,6 +379,7 @@ def _validate_environment_key_collection(values: Collection[str], field: str) ->
         result.add(value)
     return result
 
+
 def _validate_environment_key(value: object, field: str) -> None:
     if (
         not isinstance(value, str)
@@ -335,12 +390,12 @@ def _validate_environment_key(value: object, field: str) -> None:
             f"{field} must be a non-empty string without '=', NUL, or control characters."
         )
 
+
 def _validate_sensitive_argument_indexes(indexes: Collection[int], argument_count: int) -> None:
     _validated_sensitive_indexes(indexes, argument_count)
 
-def _validated_sensitive_indexes(
-    indexes: Collection[int], argument_count: int
-) -> frozenset[int]:
+
+def _validated_sensitive_indexes(indexes: Collection[int], argument_count: int) -> frozenset[int]:
     if isinstance(indexes, (str, bytes)):
         raise ContractViolationError("sensitive_arg_indexes must be a collection of integers.")
     validated: set[int] = set()
@@ -354,8 +409,9 @@ def _validated_sensitive_indexes(
         validated.add(index)
     return frozenset(validated)
 
+
 def _validate_expected_artifacts(
-    expectations: Iterable[object],
+    expectations: Iterable[ArtifactExpectation],
     *,
     write_roots: tuple[Path, ...],
     capture_paths: tuple[Path, Path],
@@ -366,20 +422,21 @@ def _validate_expected_artifacts(
     seen_paths: list[Path] = []
     resolved_captures = tuple(_resolve_for_containment(path) for path in capture_paths)
     for index, expectation in enumerate(expectations):
-        path = _require_absolute_path(expectation.path, f"expected_artifacts[{index}].path")
+        # Scalar contract errors outrank path containment errors; this makes
+        # diagnostics stable when more than one field is malformed.
         role = _require_nonempty_text(expectation.role, f"expected_artifacts[{index}].role")
         kind = _enum_text(expectation.kind, f"expected_artifacts[{index}].kind")
         if kind not in _ARTIFACT_KINDS:
-            raise ContractViolationError(
-                f"Expected artifact {role!r} has unknown kind {kind!r}."
-            )
+            raise ContractViolationError(f"Expected artifact {role!r} has unknown kind {kind!r}.")
         if not isinstance(expectation.required, bool):
-            raise ContractViolationError(
-                f"expected_artifacts[{index}].required must be a boolean."
-            )
+            raise ContractViolationError(f"expected_artifacts[{index}].required must be a boolean.")
         _validate_non_negative_integer(
             expectation.minimum_size_bytes,
             f"expected_artifacts[{index}].minimum_size_bytes",
+        )
+        path = _require_absolute_path(
+            expectation.path,
+            f"expected_artifacts[{index}].path",
         )
 
         resolved = _resolve_for_containment(path)
@@ -396,6 +453,7 @@ def _validate_expected_artifacts(
             )
         seen_paths.append(resolved)
 
+
 def _validate_metadata(metadata: Mapping[str, str]) -> None:
     if not isinstance(metadata, Mapping):
         raise ContractViolationError("metadata must be a mapping of strings to strings.")
@@ -405,6 +463,7 @@ def _validate_metadata(metadata: Mapping[str, str]) -> None:
             raise ContractViolationError(f"Metadata value for {key!r} must be a string.")
         if _NUL in value:
             raise ContractViolationError(f"Metadata value for {key!r} contains a NUL character.")
+
 
 def _validate_roots(values: Iterable[Path], field: str) -> tuple[Path, ...]:
     if isinstance(values, (str, bytes, Path)):
@@ -426,6 +485,7 @@ def _validate_roots(values: Iterable[Path], field: str) -> tuple[Path, ...]:
         raise ContractViolationError(f"{field} must contain at least one approved root.")
     return tuple(resolved_roots)
 
+
 def _require_contained(path: Path, roots: tuple[Path, ...], label: str) -> None:
     if any(_is_relative_to(path, root) for root in roots):
         return
@@ -433,6 +493,7 @@ def _require_contained(path: Path, roots: tuple[Path, ...], label: str) -> None:
     raise PathSecurityError(
         f"{label.capitalize()} escapes approved roots: {path}; roots: {rendered_roots}"
     )
+
 
 def _resolve_for_containment(path: Path) -> Path:
     missing_parts: list[str] = []
@@ -453,6 +514,7 @@ def _resolve_for_containment(path: Path) -> Path:
         resolved /= part
     return resolved
 
+
 def _is_relative_to(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -460,10 +522,12 @@ def _is_relative_to(path: Path, root: Path) -> bool:
         return False
     return True
 
+
 def _same_path(left: Path, right: Path) -> bool:
     return os.path.normcase(os.path.normpath(str(left))) == os.path.normcase(
         os.path.normpath(str(right))
     )
+
 
 def _validate_positive_finite(value: object, field: str) -> None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -472,6 +536,7 @@ def _validate_positive_finite(value: object, field: str) -> None:
     if not math.isfinite(number) or number <= 0:
         raise ContractViolationError(f"{field} must be a finite number greater than zero.")
 
+
 def _validate_non_negative_finite(value: object, field: str) -> None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ContractViolationError(f"{field} must be a finite non-negative number.")
@@ -479,13 +544,16 @@ def _validate_non_negative_finite(value: object, field: str) -> None:
     if not math.isfinite(number) or number < 0:
         raise ContractViolationError(f"{field} must be a finite non-negative number.")
 
+
 def _validate_positive_integer(value: object, field: str) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ContractViolationError(f"{field} must be a positive integer.")
 
+
 def _validate_non_negative_integer(value: object, field: str) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ContractViolationError(f"{field} must be a non-negative integer.")
+
 
 def _contains_control(value: str) -> bool:
     return any(ord(character) < 32 or ord(character) == 127 for character in value)

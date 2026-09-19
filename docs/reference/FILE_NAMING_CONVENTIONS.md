@@ -8,10 +8,25 @@
 **Canonical package/distribution name:** `gf-wordbench`  
 **Canonical CLI name:** `gf-wordbench`  
 **Canonical path:** `docs/reference/FILE_NAMING_CONVENTIONS.md`  
-**Last structural review:** 2026-07-24
+**Last structural review:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines how files and directories are named throughout GF Wordbench.
@@ -59,10 +74,10 @@ docs/operations/RUN_DIRECTORY_LIFECYCLE.md
 docs/decisions/ADR-0010-RUN-BUDGET-AND-FINALIZATION.md
 docs/reference/SCHEMA_INDEX.md
 docs/reference/STATUS_VALUES.md
-project/project.toml
-project/docs/INTERFILE_CONTRACT_LOCK.md
-templates/project/project.toml
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/project.toml
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
+templates/validation-profile/project.toml
+templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Authority boundaries:
@@ -133,7 +148,7 @@ branch names unless a release process depends on them
 - **LEGACY NAME**: older accepted name read only for compatibility.
 - **PUBLIC NAME**: name referenced by users, automation, schemas, reports, or another file.
 - **PRIVATE NAME**: implementation detail with no external consumer.
-- **PROJECT-RELATIVE PATH**: path relative to the active project root.
+- **PROFILE-RELATIVE PATH**: path relative to an explicitly loaded validation-profile root.
 - **RUN-RELATIVE PATH**: path relative to one run directory.
 - **SAFE KEY**: filename-safe deterministic identifier derived from a logical subject.
 - **BASENAME**: filename without parent directories.
@@ -266,7 +281,7 @@ Canonical persisted paths use:
 Examples:
 
 ```text
-project/validation/scenarios/parse.gfs
+<validation-profile-root>/validation/scenarios/parse.gfs
 raw/compile/GrammarEng.stderr.txt
 lib/src/english/GrammarEng.gf
 ```
@@ -301,9 +316,9 @@ Examples:
 
 | Path | Base |
 |---|---|
-| `project/project.toml` | repository root |
-| `file_results[].file_path` | project root |
-| `scenario_results[].script_path` | project root |
+| `<validation-profile-root>/project.toml` | validation-profile root |
+| `file_results[].file_path` | resolved source root |
+| `scenario_results[].script_path` | validation-profile root when profile-owned |
 | `artifacts.summary_json` | run root |
 | `metadata.gf_executable` | environment absolute |
 | `metadata.rgl_root` | environment absolute |
@@ -689,14 +704,13 @@ test_<behavior>_<condition>_<expected_result>
 Examples:
 
 ```python
-def test_compile_timeout_returns_error():
-    ...
+def test_compile_timeout_returns_error(): ...
 
-def test_missing_required_gold_does_not_write_file():
-    ...
 
-def test_legacy_mode_all_migrates_to_diagnostic():
-    ...
+def test_missing_required_gold_does_not_write_file(): ...
+
+
+def test_legacy_mode_all_migrates_to_diagnostic(): ...
 ```
 
 Names should describe behavior rather than implementation steps.
@@ -882,13 +896,13 @@ docs/PERSISTED_SCHEMA_LOCK.md
 Canonical project lock:
 
 ```text
-project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Canonical template lock:
 
 ```text
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Rules:
@@ -905,94 +919,40 @@ Rules:
 
 # 24. Active project directory names
 
-Canonical active project root:
+There is no canonical root `project/` directory in the current runtime model.
+
+Canonical path categories are:
 
 ```text
-project/
+<source-root>/                         selected language sources, read in place
+<validation-profile-root>/             optional policy assets
+<output-root>/<language-key>/run_<id>/ run outputs
+templates/validation-profile/          reusable profile template
 ```
 
-Canonical children:
-
-```text
-project/docs/
-project/validation/
-project/validation/scenarios/
-project/validation/inputs/
-project/validation/gold/
-```
-
-Optional project-controlled source root example:
-
-```text
-project/lib/src/<language-directory>/
-```
-
-Rules:
-
-- one GF Wordbench workspace contains exactly one active `project/`;
-- do not name active projects `project1`, `current_project`, or language-specific top-level alternatives;
-- clone/reset operations replace or recreate the content under `project/`;
-- language identity comes from `project/project.toml`, not the directory name;
-- `projects/<id>/`, `workspaces/<id>/`, and selectable language-profile directories are not Wordbench runtime models;
-- multi-workspace and multilingual aggregation belong to the independent `gf-portfolio` product;
-- GF Wordbench filenames and paths do not expose private `gf-portfolio` storage, configuration, or registry identities.
-
----
+A run must never create or maintain a copied language tree under the Wordbench repository.
 
 # 25. Project configuration filename
 
-Canonical:
+Canonical validation-profile template file:
 
 ```text
-project/project.toml
+templates/validation-profile/project.toml
 ```
 
-Template:
-
-```text
-templates/project/project.toml
-```
-
-Rules:
-
-- lowercase filename;
-- no language suffix;
-- one authoritative configuration file;
-- do not create `project.json`, `config.toml`, or `settings.toml` as competing project identities;
-- environment-specific application state remains separate.
-
----
+An explicit profile may retain the basename `project.toml` for compatibility. The file is optional, profile-relative and does not own the selected source path or language identity. A root `project/project.toml` is legacy input only.
 
 # 26. Active project documentation filenames
 
-Canonical project docs:
+Validation-profile documentation is optional and profile-relative.
+
+Canonical template location:
 
 ```text
-00_PROJECT_START_HERE.md
-INTERFILE_CONTRACT_LOCK.md
-LANGUAGE_OVERVIEW.md
-LANGUAGE_ARCHITECTURE.md
-MODULE_DEPENDENCY_MAP.md
-CATEGORY_AND_LINCAT_CONTRACT.md
-MORPHOLOGY_SPEC.md
-SYNTAX_AND_CONSTRUCTOR_RULES.md
-VALIDATION_SPEC.md
-TEST_COVERAGE_MATRIX.md
-DECISION_LOG.md
-KNOWN_ISSUES.md
-RELEASE_CRITERIA.md
-RESEARCH_EVIDENCE.md
+templates/validation-profile/docs/
 ```
 
-Rules:
-
-- active project and template use the same required filenames;
-- template content may contain placeholders;
-- active project content must not retain unresolved required placeholders;
-- do not add the language code to each filename;
-- document role is identified by filename and directory.
-
----
+Profile documents describe non-derivable validation and release policy. They must not redefine the resolved source root, language identity, GF executable or output root.
 
 # 27. Project README names
 
@@ -1000,10 +960,10 @@ Canonical:
 
 ```text
 project/README.md
-project/validation/README.md
-project/validation/scenarios/README.md
-project/validation/inputs/README.md
-project/validation/gold/README.md
+<validation-profile-root>/validation/README.md
+<validation-profile-root>/validation/scenarios/README.md
+<validation-profile-root>/validation/inputs/README.md
+<validation-profile-root>/validation/gold/README.md
 ```
 
 Every directory requiring maintainer guidance may use `README.md`.
@@ -2749,7 +2709,7 @@ Examples:
 summary.json
 manifest.json
 AI_READY.md
-project/project.toml
+<validation-profile-root>/project.toml
 <scenario-id>.gold
 ```
 
@@ -2896,7 +2856,7 @@ This preserves framework tooling and template assumptions.
 Canonical template root:
 
 ```text
-templates/project/
+templates/validation-profile/
 ```
 
 The template mirrors active project structure.
@@ -3461,7 +3421,7 @@ only when they are not the canonical active files.
 Templates use the canonical filename inside the template directory:
 
 ```text
-templates/project/project.toml
+templates/validation-profile/project.toml
 ```
 
 Do not put an example file beside the canonical active project where discovery may confuse them.
@@ -4651,11 +4611,11 @@ Generated reports belong in run directories.
 Examples:
 
 ```text
-project/docs/RESEARCH_EVIDENCE.md
+<validation-profile-root>/docs/RESEARCH_EVIDENCE.md
 run_<id>/summary.md
 ```
 
-Do not write generated audit reports into `project/docs/` automatically.
+Do not write generated audit reports into `<validation-profile-root>/docs/` automatically.
 
 ---
 
@@ -4664,7 +4624,7 @@ Do not write generated audit reports into `project/docs/` automatically.
 Supporting source documents may use:
 
 ```text
-project/docs/research/
+<validation-profile-root>/docs/research/
 ```
 
 if the project needs multiple files.
@@ -4749,7 +4709,7 @@ Assertion-only expectations belong in scenario configuration or markers, not amb
 Canonical project release criteria:
 
 ```text
-project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 Framework release policy:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -233,9 +233,7 @@ FIXED_ARTIFACT_WRITER_MODULES: Final[Mapping[str, frozenset[str]]] = {
 def _repository_root() -> Path:
     candidate = Path(__file__).resolve()
     for parent in candidate.parents:
-        if (parent / "pyproject.toml").is_file() and (
-            parent / "src" / "gf_wordbench"
-        ).is_dir():
+        if (parent / "pyproject.toml").is_file() and (parent / "src" / "gf_wordbench").is_dir():
             return parent
     raise AssertionError("cannot locate GF Wordbench repository root")
 
@@ -275,10 +273,7 @@ def _extract_exports(tree: ast.Module) -> frozenset[str]:
             if values is not None:
                 exports = list(values)
         elif isinstance(statement, ast.AnnAssign):
-            if not (
-                isinstance(statement.target, ast.Name)
-                and statement.target.id == "__all__"
-            ):
+            if not (isinstance(statement.target, ast.Name) and statement.target.id == "__all__"):
                 continue
             if statement.value is None:
                 continue
@@ -367,10 +362,7 @@ def _definitions_by_symbol(
     for module, module_fact in facts.items():
         for symbol in module_fact.definitions:
             owners[symbol].append(module)
-    return {
-        symbol: tuple(sorted(modules))
-        for symbol, modules in owners.items()
-    }
+    return {symbol: tuple(sorted(modules)) for symbol, modules in owners.items()}
 
 
 def _called_name(node: ast.Call) -> str | None:
@@ -386,8 +378,7 @@ def _string_literals(node: ast.AST) -> frozenset[str]:
     return frozenset(
         child.value
         for child in ast.walk(node)
-        if isinstance(child, ast.Constant)
-        and isinstance(child.value, str)
+        if isinstance(child, ast.Constant) and isinstance(child.value, str)
     )
 
 
@@ -427,22 +418,16 @@ def test_owned_writer_modules_exist_and_export_their_contracts(
     for contract in OWNED_WRITERS:
         owner = module_facts.get(contract.owner_module)
         if owner is None:
-            failures.append(
-                f"{contract.artifact}: missing owner module "
-                f"{contract.owner_module}"
-            )
+            failures.append(f"{contract.artifact}: missing owner module {contract.owner_module}")
             continue
 
         if not owner.exports:
-            failures.append(
-                f"{contract.owner_module}: owner module has no explicit __all__"
-            )
+            failures.append(f"{contract.owner_module}: owner module has no explicit __all__")
 
         for symbol in contract.symbols:
             if symbol not in owner.definitions:
                 failures.append(
-                    f"{contract.artifact}: {contract.owner_module} does not "
-                    f"define {symbol}"
+                    f"{contract.artifact}: {contract.owner_module} does not define {symbol}"
                 )
             if symbol not in owner.exports:
                 failures.append(
@@ -478,12 +463,9 @@ def test_reporting_public_is_a_pure_registered_facade(
     facade = module_facts.get(REPORTING_FACADE)
     assert facade is not None, f"missing facade module {REPORTING_FACADE}"
 
-    forbidden_definitions = sorted(
-        facade.definitions.intersection(REPORTING_FACADE_EXPORTS)
-    )
-    assert not forbidden_definitions, (
-        f"{REPORTING_FACADE} redefines owned symbols: "
-        + ", ".join(forbidden_definitions)
+    forbidden_definitions = sorted(facade.definitions.intersection(REPORTING_FACADE_EXPORTS))
+    assert not forbidden_definitions, f"{REPORTING_FACADE} redefines owned symbols: " + ", ".join(
+        forbidden_definitions
     )
 
     assert facade.exports == frozenset(REPORTING_FACADE_EXPORTS), (
@@ -496,10 +478,7 @@ def test_reporting_public_is_a_pure_registered_facade(
     for local_name, expected_import in REPORTING_FACADE_EXPORTS.items():
         actual = facade.imports.get(local_name)
         if actual != expected_import:
-            failures.append(
-                f"{local_name}: imported from {actual!r}; "
-                f"expected {expected_import!r}"
-            )
+            failures.append(f"{local_name}: imported from {actual!r}; expected {expected_import!r}")
 
     assert not failures, "\n".join(failures)
 
@@ -514,8 +493,7 @@ def test_registered_cross_file_models_have_one_owner(
         actual = definitions.get(symbol, ())
         if actual != (expected_owner,):
             failures.append(
-                f"{symbol}: definitions are {actual!r}; "
-                f"expected only {(expected_owner,)!r}"
+                f"{symbol}: definitions are {actual!r}; expected only {(expected_owner,)!r}"
             )
 
     assert not failures, "\n".join(failures)
@@ -530,9 +508,7 @@ def test_forbidden_competing_modules_do_not_define_owned_models(
         for module in sorted(forbidden_modules):
             facts = module_facts.get(module)
             if facts is not None and symbol in facts.definitions:
-                failures.append(
-                    f"{module} illegally defines owner symbol {symbol}"
-                )
+                failures.append(f"{module} illegally defines owner symbol {symbol}")
 
     assert not failures, "\n".join(failures)
 
@@ -562,9 +538,7 @@ def test_fixed_artifact_literals_are_not_written_by_observers(
 def test_manifest_is_not_registered_as_its_own_payload(
     module_facts: Mapping[str, ModuleFacts],
 ) -> None:
-    declarations = module_facts.get(
-        "gf_wordbench.reporting.manifest.declarations"
-    )
+    declarations = module_facts.get("gf_wordbench.reporting.manifest.declarations")
     builder = module_facts.get("gf_wordbench.reporting.manifest.builder")
 
     assert declarations is not None, "missing manifest declarations module"
@@ -575,8 +549,7 @@ def test_manifest_is_not_registered_as_its_own_payload(
 
     declaration_guard = (
         "manifest.json must not be declared" in declaration_source
-        or "manifest.json cannot be an artifact declaration"
-        in declaration_source
+        or "manifest.json cannot be an artifact declaration" in declaration_source
     )
     builder_guard = (
         "manifest.json must not include itself" in builder_source
@@ -584,12 +557,9 @@ def test_manifest_is_not_registered_as_its_own_payload(
     )
 
     assert declaration_guard, (
-        "manifest declarations must explicitly reject manifest.json as a "
-        "catalogued artifact"
+        "manifest declarations must explicitly reject manifest.json as a catalogued artifact"
     )
-    assert builder_guard, (
-        "manifest builder must explicitly reject manifest self-inclusion"
-    )
+    assert builder_guard, "manifest builder must explicitly reject manifest self-inclusion"
 
 
 def test_path_model_owns_canonical_run_artifact_locations(
@@ -616,6 +586,5 @@ def test_path_model_owns_canonical_run_artifact_locations(
     actual_literals = _string_literals(factory_module.tree)
     missing = sorted(required_literals.difference(actual_literals))
     assert not missing, (
-        "run-path construction does not own every canonical artifact path: "
-        + ", ".join(missing)
+        "run-path construction does not own every canonical artifact path: " + ", ".join(missing)
     )

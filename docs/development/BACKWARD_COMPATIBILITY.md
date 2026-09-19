@@ -13,6 +13,19 @@
 
 ---
 
+
+## ADR-0015 alignment — interpretation of legacy project material
+
+The current runtime starts from a user-selected GF source file or RGL language directory and constructs a `ResolvedLanguageContext`. A root `project/` directory and `project/project.toml` are not required.
+
+This document may retain `project/`, `templates/validation-profile/`, “active project” or project-owned path examples only when describing a legacy source layout, a migration fixture or a deprecated contract. Their current replacements are:
+
+- selected language sources remain in their original RGL or GF source tree;
+- optional validation policy lives in an explicitly loaded validation profile;
+- the reusable profile template lives under `templates/validation-profile/`;
+- run outputs live under the configured output root and never own or copy the source language tree.
+
+---
 ## 1. Purpose
 
 This document defines what GF Wordbench preserves across releases and how incompatible historical inputs are handled.
@@ -1032,7 +1045,7 @@ Dependency updates are compatible only when documented behavior, platform ranges
 ## 28. Project template
 
 ```text
-templates/project/
+templates/validation-profile/
 ```
 
 defines the generic starting structure.

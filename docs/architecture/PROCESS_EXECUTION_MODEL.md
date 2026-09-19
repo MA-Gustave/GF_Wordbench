@@ -1985,15 +1985,13 @@ def run_process(
     *,
     cancellation_token: CancellationToken | None = None,
     event_sink: ProcessEventSink | None = None,
-) -> ProcessResult:
-    ...
+) -> ProcessResult: ...
 ```
 
 Supporting helpers:
 
 ```python
-def validate_process_request(request: ProcessRequest) -> None:
-    ...
+def validate_process_request(request: ProcessRequest) -> None: ...
 ```
 
 ```python
@@ -2002,8 +2000,7 @@ def render_command_for_display(
     args: Sequence[str],
     *,
     sensitive_arg_indexes: Collection[int] = (),
-) -> str:
-    ...
+) -> str: ...
 ```
 
 The public API remains small.
@@ -2071,9 +2068,10 @@ def run_process(request, *, cancellation_token=None, event_sink=None):
     started_clock = monotonic_now()
 
     try:
-        with open_binary_capture(request.stdout_path) as stdout_sink, \
-             open_binary_capture(request.stderr_path) as stderr_sink:
-
+        with (
+            open_binary_capture(request.stdout_path) as stdout_sink,
+            open_binary_capture(request.stderr_path) as stderr_sink,
+        ):
             if cancellation_token and cancellation_token.is_cancelled():
                 return build_prelaunch_cancelled_result(...)
 
@@ -2206,8 +2204,7 @@ def run_process_with_timeout(
     stderr_path,
     timeout_sec,
     env=None,
-) -> LegacyProcessRunResult:
-    ...
+) -> LegacyProcessRunResult: ...
 ```
 
 The wrapper:

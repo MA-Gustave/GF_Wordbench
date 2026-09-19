@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Final, Protocol, runtime_checkable
 
 from gf_wordbench.infrastructure.process import (
@@ -62,7 +63,7 @@ class CompilationPreflight:
         message = _bounded_text(
             self.message,
             field="message",
-            allow_empty=self.succeeded,
+            allow_empty=True,
         )
         detail = _bounded_text(
             self.detail,
@@ -73,22 +74,14 @@ class CompilationPreflight:
 
         if self.succeeded:
             if self.error_kind is not ErrorKind.OK:
-                raise ValueError(
-                    "successful preflight must use ErrorKind.OK"
-                )
+                raise ValueError("successful preflight must use ErrorKind.OK")
             if message:
-                raise ValueError(
-                    "successful preflight must not contain an error message"
-                )
+                raise ValueError("successful preflight must not contain an error message")
         else:
             if self.error_kind is ErrorKind.OK:
-                raise ValueError(
-                    "failed preflight must not use ErrorKind.OK"
-                )
+                raise ValueError("failed preflight must not use ErrorKind.OK")
             if not message:
-                raise ValueError(
-                    "failed preflight requires a message"
-                )
+                raise ValueError("failed preflight requires a message")
 
         object.__setattr__(self, "message", message)
         object.__setattr__(self, "detail", detail)
@@ -128,8 +121,7 @@ class CompilationPreflightValidator(Protocol):
     def validate(
         self,
         plan: CompilePlan,
-    ) -> CompilationPreflight:
-        ...
+    ) -> CompilationPreflight: ...
 
 
 @runtime_checkable
@@ -139,8 +131,7 @@ class CompilationRequestBuilder(Protocol):
         target: CompileTarget,
         *,
         clean_build: bool,
-    ) -> CompileRequest:
-        ...
+    ) -> CompileRequest: ...
 
 
 @runtime_checkable
@@ -150,8 +141,7 @@ class CompilationExecutor(Protocol):
         request: CompileRequest,
         *,
         cancellation_token: CancellationToken | None = None,
-    ) -> ProcessResult:
-        ...
+    ) -> ProcessResult: ...
 
 
 @runtime_checkable
@@ -161,8 +151,7 @@ class CompilationSummaryFactory(Protocol):
         target: CompileTarget,
         request: CompileRequest,
         process_result: ProcessResult,
-    ) -> CompileSummary:
-        ...
+    ) -> CompileSummary: ...
 
     def from_exception(
         self,
@@ -170,8 +159,7 @@ class CompilationSummaryFactory(Protocol):
         error: Exception,
         *,
         request: CompileRequest | None,
-    ) -> CompileSummary:
-        ...
+    ) -> CompileSummary: ...
 
     def preflight_error(
         self,
@@ -180,39 +168,35 @@ class CompilationSummaryFactory(Protocol):
         error_kind: ErrorKind,
         message: str,
         detail: str,
-    ) -> CompileSummary:
-        ...
+    ) -> CompileSummary: ...
 
     def skipped(
         self,
         target: CompileTarget,
         *,
         reason: str,
-    ) -> CompileSummary:
-        ...
+    ) -> CompileSummary: ...
 
 
+@runtime_checkable
 class CompilationObserver(Protocol):
     def plan_started(
         self,
         plan: CompilePlan,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def preflight_completed(
         self,
         plan: CompilePlan,
         result: CompilationPreflight,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def target_started(
         self,
         target: CompileTarget,
         index: int,
         total: int,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def target_completed(
         self,
@@ -220,15 +204,13 @@ class CompilationObserver(Protocol):
         summary: CompileSummary,
         index: int,
         total: int,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def plan_completed(
         self,
         plan: CompilePlan,
         summaries: tuple[CompileSummary, ...],
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,33 +226,22 @@ class CompilationService:
             self.preflight_validator,
             CompilationPreflightValidator,
         ):
-            raise TypeError(
-                "preflight_validator must satisfy "
-                "CompilationPreflightValidator"
-            )
+            raise TypeError("preflight_validator must satisfy CompilationPreflightValidator")
         if not isinstance(
             self.request_builder,
             CompilationRequestBuilder,
         ):
-            raise TypeError(
-                "request_builder must satisfy "
-                "CompilationRequestBuilder"
-            )
+            raise TypeError("request_builder must satisfy CompilationRequestBuilder")
         if not isinstance(
             self.executor,
             CompilationExecutor,
         ):
-            raise TypeError(
-                "executor must satisfy CompilationExecutor"
-            )
+            raise TypeError("executor must satisfy CompilationExecutor")
         if not isinstance(
             self.summary_factory,
             CompilationSummaryFactory,
         ):
-            raise TypeError(
-                "summary_factory must satisfy "
-                "CompilationSummaryFactory"
-            )
+            raise TypeError("summary_factory must satisfy CompilationSummaryFactory")
 
     def validate_plan(
         self,
@@ -279,10 +250,7 @@ class CompilationService:
         _validate_plan(plan)
         result = self.preflight_validator.validate(plan)
         if not isinstance(result, CompilationPreflight):
-            raise TypeError(
-                "preflight validator must return "
-                "CompilationPreflight"
-            )
+            raise TypeError("preflight validator must return CompilationPreflight")
         _notify(
             self.observer,
             "preflight_completed",
@@ -311,26 +279,26 @@ class CompilationService:
 
         preflight = self.validate_plan(plan)
         if not preflight.succeeded:
-            summaries = tuple(
+            preflight_summaries = tuple(
                 self._preflight_error_summary(
                     target,
                     preflight,
                 )
                 for target in plan.targets
             )
-            self._complete_plan(plan, summaries)
-            return summaries
+            self._complete_plan(plan, preflight_summaries)
+            return preflight_summaries
 
         if no_compile:
-            summaries = tuple(
+            skipped_summaries = tuple(
                 self._skipped_summary(
                     target,
                     reason="no_compile",
                 )
                 for target in plan.targets
             )
-            self._complete_plan(plan, summaries)
-            return summaries
+            self._complete_plan(plan, skipped_summaries)
+            return skipped_summaries
 
         summaries: list[CompileSummary] = []
         total = len(plan.targets)
@@ -384,8 +352,7 @@ class CompilationService:
             if (
                 plan.fail_fast
                 and _target_is_required(target)
-                and _summary_status(summary)
-                in _FAIL_FAST_STATUSES
+                and _summary_status(summary) in _FAIL_FAST_STATUSES
             ):
                 stop_reason = "fail_fast"
 
@@ -519,9 +486,7 @@ class CompilationService:
                     process_result,
                     ProcessResult,
                 ):
-                    raise TypeError(
-                        "executor must return a ProcessResult"
-                    )
+                    raise TypeError("executor must return a ProcessResult")
 
                 summary = self.summary_factory.from_process(
                     target,
@@ -597,10 +562,7 @@ class CompilationService:
             summary,
         )
         if _summary_status(summary) is not ValidationStatus.SKIPPED:
-            raise ValueError(
-                "summary_factory.skipped must return "
-                "ValidationStatus.SKIPPED"
-            )
+            raise ValueError("summary_factory.skipped must return ValidationStatus.SKIPPED")
         return summary
 
     def _complete_plan(
@@ -629,9 +591,7 @@ def _validate_plan(
     if not isinstance(plan.fail_fast, bool):
         raise TypeError("plan.fail_fast must be a boolean")
     if not isinstance(plan.gf_version_required, bool):
-        raise TypeError(
-            "plan.gf_version_required must be a boolean"
-        )
+        raise TypeError("plan.gf_version_required must be a boolean")
 
     seen: set[str] = set()
     previous_order: int | None = None
@@ -640,20 +600,12 @@ def _validate_plan(
         _validate_target(target)
         target_id = _target_id(target)
         if target_id in seen:
-            raise ValueError(
-                f"duplicate compile target ID: {target_id}"
-            )
+            raise ValueError(f"duplicate compile target ID: {target_id}")
         seen.add(target_id)
 
         declared_order = _declared_order(target)
-        if (
-            previous_order is not None
-            and declared_order < previous_order
-        ):
-            raise ValueError(
-                "compile targets must preserve deterministic "
-                "declared order"
-            )
+        if previous_order is not None and declared_order < previous_order:
+            raise ValueError("compile targets must preserve deterministic declared order")
         previous_order = declared_order
 
 
@@ -666,9 +618,7 @@ def _validate_target(
     _target_id(target)
     kind = _target_kind(target)
     if kind not in _COMPILE_TARGET_KINDS:
-        raise ValueError(
-            f"unsupported compile target kind: {kind}"
-        )
+        raise ValueError(f"unsupported compile target kind: {kind}")
     _declared_order(target)
     _target_is_required(target)
 
@@ -678,20 +628,15 @@ def _validate_request_identity(
     request: CompileRequest,
 ) -> None:
     if not isinstance(request, CompileRequest):
-        raise TypeError(
-            "request_builder must return a CompileRequest"
-        )
+        raise TypeError("request_builder must return a CompileRequest")
 
     request_target = getattr(request, "target", None)
     if request_target is not None:
         if not isinstance(request_target, CompileTarget):
-            raise TypeError(
-                "CompileRequest.target must be a CompileTarget"
-            )
+            raise TypeError("CompileRequest.target must be a CompileTarget")
         if _target_id(request_target) != _target_id(target):
             raise ValueError(
-                "compile request target identity does not match "
-                "the requested compile target"
+                "compile request target identity does not match the requested compile target"
             )
 
     request_target_id = getattr(
@@ -702,8 +647,7 @@ def _validate_request_identity(
     if request_target_id is not None:
         if request_target_id != _target_id(target):
             raise ValueError(
-                "compile request target_id does not match "
-                "the requested compile target"
+                "compile request target_id does not match the requested compile target"
             )
 
 
@@ -712,9 +656,7 @@ def _validate_summary_identity(
     summary: CompileSummary,
 ) -> None:
     if not isinstance(summary, CompileSummary):
-        raise TypeError(
-            "summary factory must return a CompileSummary"
-        )
+        raise TypeError("summary factory must return a CompileSummary")
 
     summary_target_id = getattr(
         summary,
@@ -723,10 +665,7 @@ def _validate_summary_identity(
     )
     if summary_target_id is not None:
         if summary_target_id != _target_id(target):
-            raise ValueError(
-                "compile summary target_id does not match "
-                "the compile target"
-            )
+            raise ValueError("compile summary target_id does not match the compile target")
 
     _summary_status(summary)
 
@@ -738,9 +677,7 @@ def _validate_result_set(
     if not isinstance(summaries, tuple):
         raise TypeError("summaries must be a tuple")
     if len(summaries) != len(plan.targets):
-        raise ValueError(
-            "compile result count must equal compile target count"
-        )
+        raise ValueError("compile result count must equal compile target count")
 
     for target, summary in zip(
         plan.targets,
@@ -767,8 +704,8 @@ def _target_id(
 def _target_kind(
     target: CompileTarget,
 ) -> str:
-    value = getattr(target, "kind", None)
-    if hasattr(value, "value"):
+    value: object = getattr(target, "kind", None)
+    if isinstance(value, Enum):
         value = value.value
     return _bounded_text(
         value,
@@ -784,10 +721,7 @@ def _require_target_kind(
     _validate_target(target)
     actual = _target_kind(target)
     if actual != expected:
-        raise ValueError(
-            f"compile target kind must be {expected!r}, "
-            f"got {actual!r}"
-        )
+        raise ValueError(f"compile target kind must be {expected!r}, got {actual!r}")
 
 
 def _declared_order(
@@ -795,13 +729,9 @@ def _declared_order(
 ) -> int:
     value = getattr(target, "declared_order", None)
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(
-            "target.declared_order must be an integer"
-        )
+        raise TypeError("target.declared_order must be an integer")
     if value < 0:
-        raise ValueError(
-            "target.declared_order must be non-negative"
-        )
+        raise ValueError("target.declared_order must be non-negative")
     return value
 
 
@@ -810,9 +740,7 @@ def _target_is_required(
 ) -> bool:
     value = getattr(target, "required", None)
     if not isinstance(value, bool):
-        raise TypeError(
-            "target.required must be a boolean"
-        )
+        raise TypeError("target.required must be a boolean")
     return value
 
 
@@ -822,13 +750,12 @@ def _summary_status(
     value = getattr(summary, "status", None)
     if isinstance(value, ValidationStatus):
         return value
+    if not isinstance(value, str):
+        raise ValueError("compile summary status must be a canonical ValidationStatus")
     try:
         return ValidationStatus(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError(
-            "compile summary status must be a canonical "
-            "ValidationStatus"
-        ) from exc
+        raise ValueError("compile summary status must be a canonical ValidationStatus") from exc
 
 
 def _validate_cancellation_token(
@@ -836,16 +763,10 @@ def _validate_cancellation_token(
 ) -> None:
     if token is None:
         return
-    if not callable(
-        getattr(token, "is_cancelled", None)
-    ):
-        raise TypeError(
-            "cancellation_token must expose is_cancelled()"
-        )
+    if not callable(getattr(token, "is_cancelled", None)):
+        raise TypeError("cancellation_token must expose is_cancelled()")
     if not callable(getattr(token, "reason", None)):
-        raise TypeError(
-            "cancellation_token must expose reason()"
-        )
+        raise TypeError("cancellation_token must expose reason()")
 
 
 def _is_cancelled(
@@ -855,9 +776,7 @@ def _is_cancelled(
         return False
     value = token.is_cancelled()
     if not isinstance(value, bool):
-        raise TypeError(
-            "CancellationToken.is_cancelled() must return bool"
-        )
+        raise TypeError("CancellationToken.is_cancelled() must return bool")
     return value
 
 
@@ -867,9 +786,7 @@ def _validate_warnings(
     if not isinstance(warnings, tuple):
         raise TypeError("warnings must be a tuple")
     if len(warnings) > _MAX_PREFLIGHT_WARNINGS:
-        raise ValueError(
-            "warnings exceeds the bounded preflight limit"
-        )
+        raise ValueError("warnings exceeds the bounded preflight limit")
 
     normalized: list[str] = []
     seen: set[str] = set()
@@ -880,9 +797,7 @@ def _validate_warnings(
             allow_empty=False,
         )
         if value in seen:
-            raise ValueError(
-                "warnings must not contain duplicate values"
-            )
+            raise ValueError("warnings must not contain duplicate values")
         seen.add(value)
         normalized.append(value)
 
@@ -898,20 +813,13 @@ def _bounded_text(
     if not isinstance(value, str):
         raise TypeError(f"{field} must be a string")
     if "\x00" in value:
-        raise ValueError(
-            f"{field} must not contain NUL"
-        )
+        raise ValueError(f"{field} must not contain NUL")
 
     normalized = value.strip()
     if not allow_empty and not normalized:
-        raise ValueError(
-            f"{field} must not be empty"
-        )
+        raise ValueError(f"{field} must not be empty")
     if len(normalized) > _MAX_TEXT_LENGTH:
-        raise ValueError(
-            f"{field} must not exceed "
-            f"{_MAX_TEXT_LENGTH} characters"
-        )
+        raise ValueError(f"{field} must not exceed {_MAX_TEXT_LENGTH} characters")
     return normalized
 
 
@@ -924,7 +832,5 @@ def _notify(
         return
     method = getattr(observer, method_name, None)
     if not callable(method):
-        raise TypeError(
-            f"observer must expose {method_name}()"
-        )
+        raise TypeError(f"observer must expose {method_name}()")
     method(*args)

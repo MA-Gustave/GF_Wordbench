@@ -39,21 +39,9 @@ def test_project_paths_from_root_derives_the_canonical_layout(
         readme_file=project_root / PROJECT_README_FILENAME,
         docs_dir=project_root / PROJECT_DOCS_DIRECTORY,
         validation_dir=project_root / PROJECT_VALIDATION_DIRECTORY,
-        scenarios_dir=(
-            project_root
-            / PROJECT_VALIDATION_DIRECTORY
-            / PROJECT_SCENARIOS_DIRECTORY
-        ),
-        gold_dir=(
-            project_root
-            / PROJECT_VALIDATION_DIRECTORY
-            / PROJECT_GOLD_DIRECTORY
-        ),
-        inputs_dir=(
-            project_root
-            / PROJECT_VALIDATION_DIRECTORY
-            / PROJECT_INPUTS_DIRECTORY
-        ),
+        scenarios_dir=(project_root / PROJECT_VALIDATION_DIRECTORY / PROJECT_SCENARIOS_DIRECTORY),
+        gold_dir=(project_root / PROJECT_VALIDATION_DIRECTORY / PROJECT_GOLD_DIRECTORY),
+        inputs_dir=(project_root / PROJECT_VALIDATION_DIRECTORY / PROJECT_INPUTS_DIRECTORY),
     )
 
 
@@ -94,9 +82,7 @@ def test_resolve_project_relative_path_joins_portable_segments(
         "validation/scenarios/generation-smoke.gfs",
     )
 
-    assert resolved == (
-        project_root / "validation" / "scenarios" / "generation-smoke.gfs"
-    )
+    assert resolved == (project_root / "validation" / "scenarios" / "generation-smoke.gfs")
 
 
 def test_resolve_project_relative_path_accepts_native_path_object(
@@ -114,9 +100,7 @@ def test_resolve_project_relative_path_accepts_windows_runtime_path(
     tmp_path: Path,
 ) -> None:
     project_root = tmp_path / "project"
-    declaration = PureWindowsPath(
-        r"validation\scenarios\generation-smoke.gfs"
-    )
+    declaration = PureWindowsPath(r"validation\scenarios\generation-smoke.gfs")
 
     assert resolve_project_relative_path(project_root, declaration) == (
         project_root / "validation" / "scenarios" / "generation-smoke.gfs"
@@ -146,10 +130,7 @@ def test_resolve_project_relative_path_rejects_root_by_default(
 def test_resolve_project_relative_path_can_explicitly_return_root(
     tmp_path: Path,
 ) -> None:
-    assert (
-        resolve_project_relative_path(tmp_path, ".", allow_root=True)
-        == tmp_path
-    )
+    assert resolve_project_relative_path(tmp_path, ".", allow_root=True) == tmp_path
 
 
 @pytest.mark.parametrize(
@@ -191,9 +172,7 @@ def test_project_paths_resolve_project_path_delegates_to_canonical_rule(
 ) -> None:
     paths = ProjectPaths.from_root(tmp_path)
 
-    assert paths.resolve_project_path("docs/reference.md") == (
-        tmp_path / "docs" / "reference.md"
-    )
+    assert paths.resolve_project_path("docs/reference.md") == (tmp_path / "docs" / "reference.md")
 
 
 def test_project_paths_relative_path_returns_portable_identity(
@@ -202,9 +181,7 @@ def test_project_paths_relative_path_returns_portable_identity(
     paths = ProjectPaths.from_root(tmp_path)
     candidate = tmp_path / "validation" / "gold" / "français.json"
 
-    assert paths.relative_path(candidate) == PurePosixPath(
-        "validation/gold/français.json"
-    )
+    assert paths.relative_path(candidate) == PurePosixPath("validation/gold/français.json")
 
 
 def test_project_paths_relative_path_can_forbid_root_identity(
@@ -273,10 +250,13 @@ def test_resolve_source_root_accepts_windows_runtime_path(
 ) -> None:
     project_root = tmp_path / "project"
 
-    assert resolve_source_root(
-        project_root,
-        PureWindowsPath(r"lib\src\french"),
-    ) == project_root / "lib" / "src" / "french"
+    assert (
+        resolve_source_root(
+            project_root,
+            PureWindowsPath(r"lib\src\french"),
+        )
+        == project_root / "lib" / "src" / "french"
+    )
 
 
 def test_resolve_source_root_rejects_project_root_as_source_directory(
@@ -291,10 +271,13 @@ def test_resolve_source_relative_path_uses_source_root_as_base(
 ) -> None:
     source_root = tmp_path / "project" / "src"
 
-    assert resolve_source_relative_path(
-        source_root,
-        "concrete/French.gf",
-    ) == source_root / "concrete" / "French.gf"
+    assert (
+        resolve_source_relative_path(
+            source_root,
+            "concrete/French.gf",
+        )
+        == source_root / "concrete" / "French.gf"
+    )
 
 
 def test_resolve_source_relative_path_accepts_windows_runtime_path(
@@ -302,10 +285,13 @@ def test_resolve_source_relative_path_accepts_windows_runtime_path(
 ) -> None:
     source_root = tmp_path / "project" / "src"
 
-    assert resolve_source_relative_path(
-        source_root,
-        PureWindowsPath(r"concrete\French.gf"),
-    ) == source_root / "concrete" / "French.gf"
+    assert (
+        resolve_source_relative_path(
+            source_root,
+            PureWindowsPath(r"concrete\French.gf"),
+        )
+        == source_root / "concrete" / "French.gf"
+    )
 
 
 def test_resolve_module_path_accepts_case_insensitive_gf_suffix(
@@ -314,9 +300,7 @@ def test_resolve_module_path_accepts_case_insensitive_gf_suffix(
     source_root = tmp_path / "src"
 
     assert resolve_module_path(source_root, "Main.gf") == source_root / "Main.gf"
-    assert resolve_module_path(source_root, "Legacy.GF") == (
-        source_root / "Legacy.GF"
-    )
+    assert resolve_module_path(source_root, "Legacy.GF") == (source_root / "Legacy.GF")
 
 
 def test_resolve_module_path_accepts_windows_runtime_path(
@@ -324,10 +308,13 @@ def test_resolve_module_path_accepts_windows_runtime_path(
 ) -> None:
     source_root = tmp_path / "src"
 
-    assert resolve_module_path(
-        source_root,
-        PureWindowsPath(r"concrete\Main.gf"),
-    ) == source_root / "concrete" / "Main.gf"
+    assert (
+        resolve_module_path(
+            source_root,
+            PureWindowsPath(r"concrete\Main.gf"),
+        )
+        == source_root / "concrete" / "Main.gf"
+    )
 
 
 def test_resolve_module_path_rejects_raw_backslashes(

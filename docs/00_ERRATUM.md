@@ -10,6 +10,19 @@
 
 ---
 
+
+## ADR-0015 alignment — interpretation of legacy project material
+
+The current runtime starts from a user-selected GF source file or RGL language directory and constructs a `ResolvedLanguageContext`. A root `project/` directory and `project/project.toml` are not required.
+
+This document may retain `project/`, `templates/validation-profile/`, “active project” or project-owned path examples only when describing a legacy source layout, a migration fixture or a deprecated contract. Their current replacements are:
+
+- selected language sources remain in their original RGL or GF source tree;
+- optional validation policy lives in an explicitly loaded validation profile;
+- the reusable profile template lives under `templates/validation-profile/`;
+- run outputs live under the configured output root and never own or copy the source language tree.
+
+---
 ## 1. Purpose
 
 This erratum centralizes known corrections and omissions discovered after assembly of the GF Wordbench documentation tree.
@@ -41,8 +54,8 @@ The following files were absent from the original assembled snapshot and were la
 
 ```text
 project/validation/scenarios/README.md
-templates/project/validation/README.md
-templates/project/validation/gold/README.md
+templates/validation-profile/validation/README.md
+templates/validation-profile/validation/gold/README.md
 ```
 
 They must be included in the next repository snapshot and checked for:
@@ -169,7 +182,7 @@ docs/decisions/README.md
 
 ---
 
-### 5.4 `templates/project/docs/KNOWN_ISSUES.md`
+### 5.4 `templates/validation-profile/docs/KNOWN_ISSUES.md`
 
 Incorrect:
 
@@ -203,7 +216,7 @@ docs/REPOSITORY_STRUCTURE.md
 
 ---
 
-### 5.6 `templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md`
+### 5.6 `templates/validation-profile/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md`
 
 Incorrect:
 
@@ -223,7 +236,7 @@ docs/projects/CREATING_A_PROJECT.md
 
 ---
 
-### 5.7 `templates/project/README.md`
+### 5.7 `templates/validation-profile/README.md`
 
 Incorrect:
 
@@ -243,7 +256,7 @@ docs/projects/PROJECT_COMPLETION_CHECKLIST.md
 
 ---
 
-### 5.8 `templates/project/validation/inputs/README.md`
+### 5.8 `templates/validation-profile/validation/inputs/README.md`
 
 Incorrect:
 

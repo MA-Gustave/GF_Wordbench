@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 from typing import Final
 
 import pytest
 
+from gf_wordbench.kernel.ids import ProjectId, ScenarioId
 from gf_wordbench.kernel.errors import (
     GFWordbenchError,
     ProjectConfigurationError,
@@ -22,9 +24,11 @@ from gf_wordbench.projects.models import (
     ProjectConfig,
     ProjectDiagnosticSeverity,
     ProjectIdentity,
+    ProjectValidationResult,
     SourceConfig,
     ValidationPolicy,
 )
+from gf_wordbench.projects.ports import TreeEntry
 from gf_wordbench.projects.paths import (
     ProjectPaths,
     resolve_module_path,
@@ -41,8 +45,8 @@ from gf_wordbench.projects.validator import (
 _PROJECT_FILE: Final = Path("project.toml")
 _ENTRYPOINT: Final = Path("GrammarFixture.gf")
 _CHECKPOINT: Final = Path("CoreFixture.gf")
-_REQUIRED_SCENARIO: Final = "smoke"
-_OPTIONAL_SCENARIO: Final = "optional"
+_REQUIRED_SCENARIO: Final[ScenarioId] = ScenarioId("smoke")
+_OPTIONAL_SCENARIO: Final[ScenarioId] = ScenarioId("optional")
 
 
 def _absolute(path: Path) -> Path:
@@ -98,12 +102,7 @@ class _MemoryProjectFilesystem:
         tuple[tuple[str, str], ...],
     ]:
         return (
-            tuple(
-                sorted(
-                    (path.as_posix(), content)
-                    for path, content in self.files.items()
-                )
-            ),
+            tuple(sorted((path.as_posix(), content) for path, content in self.files.items())),
             tuple(sorted(path.as_posix() for path in self.directories)),
             tuple(
                 sorted(
@@ -174,6 +173,45 @@ class _MemoryProjectFilesystem:
         except KeyError as error:
             raise FileNotFoundError(normalized) from error
 
+    def inspect_tree(self, root: Path) -> tuple[TreeEntry, ...]:
+        self._record("inspect_tree", root)
+        return ()
+
+    def create_empty_directory(self, path: Path) -> None:
+        self.add_directory(path)
+
+    def copy_tree(
+        self,
+        source: Path,
+        destination: Path,
+        *,
+        preserved_links: Sequence[Path] = (),
+    ) -> None:
+        raise NotImplementedError
+
+    def atomic_replace_directory(
+        self, *, staged: Path, active: Path, rollback: Path
+    ) -> None:
+        raise NotImplementedError
+
+    def restore_directory(self, *, rollback: Path, active: Path) -> None:
+        raise NotImplementedError
+
+    def remove_tree(self, path: Path) -> None:
+        raise NotImplementedError
+
+    def write_text_atomic(
+        self,
+        path: Path,
+        content: str,
+        *,
+        encoding: str = "utf-8",
+        overwrite: bool = False,
+    ) -> None:
+        if not overwrite and self.exists(path):
+            raise FileExistsError(path)
+        self.add_file(path, content)
+
 
 def _project(root: Path) -> ProjectConfig:
     project_root = _absolute(root)
@@ -182,7 +220,7 @@ def _project(root: Path) -> ProjectConfig:
         schema_id=PROJECT_SCHEMA_ID,
         schema_version=PROJECT_SCHEMA_VERSION,
         identity=ProjectIdentity(
-            id="fixture",
+            id=ProjectId("fixture"),
             name="Fixture Language",
             language_code="fx",
             root=Path("."),
@@ -239,8 +277,8 @@ def _complete_filesystem(project: ProjectConfig) -> _MemoryProjectFilesystem:
     return filesystem
 
 
-def _diagnostic_codes(result: object) -> tuple[str, ...]:
-    diagnostics = getattr(result, "diagnostics")
+def _diagnostic_codes(result: ProjectValidationResult) -> tuple[str, ...]:
+    diagnostics = result.diagnostics
     return tuple(item.code for item in diagnostics)
 
 
@@ -421,9 +459,7 @@ def test_placeholder_inspection_follows_strict_and_release_policy(
     )
 
     placeholders = tuple(
-        item
-        for item in result.diagnostics
-        if item.code == "PROJECT_PLACEHOLDER_UNRESOLVED"
+        item for item in result.diagnostics if item.code == "PROJECT_PLACEHOLDER_UNRESOLVED"
     )
     assert bool(placeholders) is expected_error
     if expected_error:
@@ -450,8 +486,7 @@ def test_module_resolution_escape_is_reported_as_structured_error(
     matching = tuple(
         item
         for item in result.errors
-        if item.code == "PROJECT_SOURCE_ROOT_OUTSIDE"
-        and item.field == "modules.entrypoints[0]"
+        if item.code == "PROJECT_SOURCE_ROOT_OUTSIDE" and item.field == "modules.entrypoints[0]"
     )
     assert len(matching) == 1
     assert matching[0].subject == entrypoint
@@ -478,8 +513,7 @@ def test_filesystem_failures_become_bounded_diagnostics(
     matching = tuple(
         item
         for item in result.errors
-        if item.code == "PROJECT_FILESYSTEM_ERROR"
-        and item.field == "project_file"
+        if item.code == "PROJECT_FILESYSTEM_ERROR" and item.field == "project_file"
     )
     assert len(matching) == 1
     diagnostic = matching[0]

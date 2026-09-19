@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-import inspect
+from collections.abc import Callable, Sequence
 from dataclasses import FrozenInstanceError, dataclass, replace
+import inspect
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import cast
 
 import pytest
 
-import gf_wordbench.validation.scenarios.service as service
+from gf_wordbench.config.models import RunConfig
+from gf_wordbench.infrastructure.process.termination import CancellationToken
 from gf_wordbench.kernel.errors import ScenarioExecutionError
 from gf_wordbench.kernel.statuses import (
     DiagnosticClass,
@@ -18,6 +20,13 @@ from gf_wordbench.kernel.statuses import (
     ExecutionState,
     ValidationStatus,
 )
+from gf_wordbench.runs.models.paths import RunPaths
+from gf_wordbench.validation.scenarios.models import (
+    ScenarioAssertionResult,
+    ScenarioResult,
+    ScenarioSpec,
+)
+import gf_wordbench.validation.scenarios.service as service
 
 
 @dataclass(slots=True)
@@ -220,6 +229,36 @@ class _CancellationToken:
         return False
 
 
+def _call_run_scenario(
+    spec: object,
+    run_config: object,
+    run_paths: object,
+    *,
+    cancellation_token: object | None = None,
+) -> ScenarioResult:
+    return service.run_scenario(
+        cast("ScenarioSpec", spec),
+        cast("RunConfig", run_config),
+        cast("RunPaths", run_paths),
+        cancellation_token=cast("CancellationToken | None", cancellation_token),
+    )
+
+
+def _call_run_scenarios(
+    specs: object,
+    run_config: object,
+    run_paths: object,
+    *,
+    cancellation_token: object | None = None,
+) -> list[ScenarioResult]:
+    return service.run_scenarios(
+        cast("Sequence[ScenarioSpec]", specs),
+        cast("RunConfig", run_config),
+        cast("RunPaths", run_paths),
+        cancellation_token=cast("CancellationToken | None", cancellation_token),
+    )
+
+
 class _StageHarness:
     def __init__(
         self,
@@ -230,9 +269,7 @@ class _StageHarness:
     ) -> None:
         self.execution = execution
         self.markers = markers
-        self.assertions: tuple[_Assertion, ...] = (
-            _Assertion(True, True, "Assertion passed."),
-        )
+        self.assertions: tuple[_Assertion, ...] = (_Assertion(True, True, "Assertion passed."),)
         self.gold = _Gold(True, None, "Gold comparison passed.")
         self.artifacts = _Artifacts(records=("artifact",))
         self.normalized_output_path = normalized_output_path
@@ -352,9 +389,7 @@ def _execution(
         "stdout_path": run_paths.run_dir / "raw/scenarios/basic.stdout.txt",
         "stderr_path": run_paths.run_dir / "raw/scenarios/basic.stderr.txt",
         "stdout_text": (
-            "GF_WORDBENCH_BEGIN parse-basic\n"
-            "parse result\n"
-            "GF_WORDBENCH_END parse-basic\n"
+            "GF_WORDBENCH_BEGIN parse-basic\nparse result\nGF_WORDBENCH_END parse-basic\n"
         ),
         "stderr_text": "",
     }
@@ -408,9 +443,7 @@ def _ready_harness(
     harness = _StageHarness(
         execution=_execution(spec, run_paths),
         markers=_markers(),
-        normalized_output_path=(
-            run_paths.run_dir / "raw/scenarios/scenario-basic.out"
-        ),
+        normalized_output_path=(run_paths.run_dir / "raw/scenarios/scenario-basic.out"),
     )
     registry = _Registry()
     normalization = _Normalization(registry)
@@ -453,13 +486,14 @@ def test_public_api_matches_the_canonical_runner_contract() -> None:
 )
 def test_stage_bundle_requires_one_callable_owner(field_name: str) -> None:
     callback: Callable[..., object] = lambda *args, **kwargs: None
+    output_callback: Callable[..., Path | None] = lambda *args, **kwargs: None
     values: dict[str, object] = {
         "execute": callback,
         "evaluate_markers": callback,
         "evaluate_assertions": callback,
         "compare_gold": callback,
         "verify_artifacts": callback,
-        "write_normalized_output": callback,
+        "write_normalized_output": output_callback,
     }
     values[field_name] = object()
 
@@ -469,13 +503,14 @@ def test_stage_bundle_requires_one_callable_owner(field_name: str) -> None:
 
 def test_stage_bundle_is_immutable() -> None:
     callback: Callable[..., object] = lambda *args, **kwargs: None
+    output_callback: Callable[..., Path | None] = lambda *args, **kwargs: None
     stages = service.ScenarioStageFunctions(
         execute=callback,
         evaluate_markers=callback,
         evaluate_assertions=callback,
         compare_gold=callback,
         verify_artifacts=callback,
-        write_normalized_output=callback,
+        write_normalized_output=output_callback,
     )
 
     with pytest.raises(FrozenInstanceError):
@@ -487,24 +522,17 @@ def test_default_stage_loader_binds_the_canonical_stage_owners() -> None:
 
     assert stages.execute.__module__.endswith(".scenarios.execution")
     assert stages.evaluate_markers.__module__.endswith(".scenarios.markers")
-    assert stages.evaluate_assertions.__module__.endswith(
-        ".scenarios.assertions"
-    )
+    assert stages.evaluate_assertions.__module__.endswith(".scenarios.assertions")
     assert stages.compare_gold.__module__.endswith(".scenarios.gold_compare")
     assert stages.verify_artifacts.__module__.endswith(".scenarios.artifacts")
-    assert stages.write_normalized_output.__module__.endswith(
-        ".scenarios.artifacts"
-    )
+    assert stages.write_normalized_output.__module__.endswith(".scenarios.artifacts")
 
 
 def test_run_scenarios_preserves_order_and_forwards_cancellation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    specs = tuple(
-        _spec(tmp_path, scenario_id=f"scenario-{index}")
-        for index in range(3)
-    )
+    specs = tuple(_spec(tmp_path, scenario_id=f"scenario-{index}") for index in range(3))
     run_config = _RunConfig()
     run_paths = _run_paths(tmp_path)
     token = _CancellationToken()
@@ -529,11 +557,14 @@ def test_run_scenarios_preserves_order_and_forwards_cancellation(
 
     monkeypatch.setattr(service, "run_scenario", fake_run_scenario)
 
-    results = service.run_scenarios(
-        specs,
-        run_config,
-        run_paths,
-        cancellation_token=token,
+    results = cast(
+        "list[str]",
+        _call_run_scenarios(
+            specs,
+            run_config,
+            run_paths,
+            cancellation_token=token,
+        ),
     )
 
     assert results == ["scenario-0", "scenario-1", "scenario-2"]
@@ -550,7 +581,7 @@ def test_run_scenarios_preserves_order_and_forwards_cancellation(
 @pytest.mark.parametrize("invalid", ["scenario", b"scenario"])
 def test_run_scenarios_rejects_scalar_sequences(invalid: object) -> None:
     with pytest.raises(TypeError, match="specs must be a sequence"):
-        service.run_scenarios(  # type: ignore[arg-type]
+        _call_run_scenarios(
             invalid,
             object(),
             object(),
@@ -575,14 +606,14 @@ def test_run_scenarios_rejects_duplicate_ids_before_execution(
     )
 
     with pytest.raises(ValueError, match="duplicate scenario ID"):
-        service.run_scenarios(specs, object(), object())
+        _call_run_scenarios(specs, object(), object())
 
     assert calls == 0
 
 
 def test_run_scenarios_validates_id_type_and_batch_bound() -> None:
     with pytest.raises(TypeError, match=r"specs\[0\].scenario_id"):
-        service.run_scenarios(
+        _call_run_scenarios(
             (SimpleNamespace(scenario_id=1),),
             object(),
             object(),
@@ -593,7 +624,7 @@ def test_run_scenarios_validates_id_type_and_batch_bound() -> None:
         for index in range(service._MAX_BATCH_SIZE + 1)
     )
     with pytest.raises(ValueError, match="maximum batch size"):
-        service.run_scenarios(too_many, object(), object())
+        _call_run_scenarios(too_many, object(), object())
 
 
 def test_input_contract_is_checked_before_stage_loading(
@@ -612,7 +643,7 @@ def test_input_contract_is_checked_before_stage_loading(
     monkeypatch.setattr(service, "_load_stage_functions", stage_loader)
 
     with pytest.raises(TypeError, match="must expose required"):
-        service.run_scenario(spec, _RunConfig(), _run_paths(tmp_path))
+        _call_run_scenario(spec, _RunConfig(), _run_paths(tmp_path))
 
     assert loaded is False
 
@@ -653,7 +684,7 @@ def test_successful_scenario_runs_each_owner_in_canonical_order(
     ) = _ready_harness(tmp_path, monkeypatch)
     token = _CancellationToken()
 
-    result = service.run_scenario(
+    result = _call_run_scenario(
         spec,
         run_config,
         run_paths,
@@ -691,7 +722,10 @@ def test_successful_scenario_runs_each_owner_in_canonical_order(
     assert result.stderr_path == harness.execution.stderr_path
     assert result.normalized_output_path == harness.normalized_output_path
     assert result.gold_match is True
-    assert result.assertions == harness.assertions
+    assert result.assertions == cast(
+        "tuple[ScenarioAssertionResult, ...]",
+        harness.assertions,
+    )
     assert result.artifacts == harness.artifacts.records
     assert len(result.sections) == 1
 
@@ -713,7 +747,7 @@ def test_configured_normalization_registry_overrides_default(
     )
     configured = _Registry()
 
-    service.run_scenario(
+    _call_run_scenario(
         spec,
         _RunConfig(normalization_registry=configured),
         run_paths,
@@ -738,16 +772,14 @@ def test_missing_completion_marker_is_behavioral_fail(
         message="Required section parse-basic did not complete.",
     )
 
-    result = service.run_scenario(spec, run_config, run_paths)
+    result = _call_run_scenario(spec, run_config, run_paths)
 
     assert harness.calls == ["execute", "markers", "artifacts"]
     assert normalization.calls == []
     assert result.status is ValidationStatus.FAIL
     assert result.diagnostic_class is DiagnosticClass.DIRECT
     assert result.error_kind is ErrorKind.SCRIPT
-    assert result.primary_message == (
-        "Required section parse-basic did not complete."
-    )
+    assert result.primary_message == ("Required section parse-basic did not complete.")
 
 
 @pytest.mark.parametrize(
@@ -797,7 +829,7 @@ def test_process_failures_become_structured_error_results(
         cancelled=cancelled,
     )
 
-    result = service.run_scenario(spec, run_config, run_paths)
+    result = _call_run_scenario(spec, run_config, run_paths)
 
     assert result.status is ValidationStatus.ERROR
     assert result.diagnostic_class is DiagnosticClass.AMBIGUOUS
@@ -831,7 +863,7 @@ def test_completed_execution_honors_declared_exit_codes(
     spec.expected_exit_codes = expected
     harness.execution = replace(harness.execution, exit_code=exit_code)
 
-    result = service.run_scenario(spec, run_config, run_paths)
+    result = _call_run_scenario(spec, run_config, run_paths)
 
     assert result.status is status
     if status is ValidationStatus.FAIL:
@@ -872,7 +904,7 @@ def test_assertion_aggregation_preserves_error_fail_ok_precedence(
     )
     harness.assertions = (assertion,)
 
-    result = service.run_scenario(spec, run_config, run_paths)
+    result = _call_run_scenario(spec, run_config, run_paths)
 
     assert result.status is status
     assert result.diagnostic_class is diagnostic_class
@@ -895,7 +927,7 @@ def test_gold_mismatch_is_a_direct_validation_failure(
         run_paths.run_dir / "raw/scenarios/scenario-basic.gold.diff",
     )
 
-    result = service.run_scenario(spec, run_config, run_paths)
+    result = _call_run_scenario(spec, run_config, run_paths)
 
     assert result.status is ValidationStatus.FAIL
     assert result.diagnostic_class is DiagnosticClass.DIRECT
@@ -938,7 +970,7 @@ def test_artifact_outcomes_are_not_silently_ignored(
     )
     harness.artifacts = artifacts
 
-    result = service.run_scenario(spec, run_config, run_paths)
+    result = _call_run_scenario(spec, run_config, run_paths)
 
     assert result.status is status
     assert result.diagnostic_class is diagnostic_class
@@ -971,7 +1003,7 @@ def test_operational_stage_exceptions_become_structured_errors(
     else:
         harness.failures[stage] = RuntimeError(f"{stage} unavailable")
 
-    result = service.run_scenario(spec, run_config, run_paths)
+    result = _call_run_scenario(spec, run_config, run_paths)
 
     assert result.status is ValidationStatus.ERROR
     assert result.diagnostic_class is DiagnosticClass.AMBIGUOUS
@@ -1001,7 +1033,7 @@ def test_contract_exceptions_are_not_reclassified_as_validation_results(
     normalization.failure = failure
 
     with pytest.raises(type(failure), match=str(failure)):
-        service.run_scenario(spec, run_config, run_paths)
+        _call_run_scenario(spec, run_config, run_paths)
 
 
 @pytest.mark.parametrize(
@@ -1034,8 +1066,8 @@ def test_execution_evidence_contract_is_strict(
 
     with pytest.raises(error, match=message):
         service._validate_execution_evidence(
-            execution,
-            run_paths=run_paths,
+            cast("service._ExecutionEvidence", execution),
+            run_paths=cast("RunPaths", run_paths),
         )
 
 
@@ -1050,8 +1082,8 @@ def test_execution_evidence_paths_must_be_run_owned(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="owned by the run"):
         service._validate_execution_evidence(
-            execution,
-            run_paths=run_paths,
+            cast("service._ExecutionEvidence", execution),
+            run_paths=cast("RunPaths", run_paths),
         )
 
 
@@ -1064,7 +1096,9 @@ def test_marker_evidence_requires_unique_sections_and_string_fields() -> None:
         ),
     )
     with pytest.raises(ValueError, match="duplicate marker section ID"):
-        service._validate_marker_evaluation(duplicate)
+        service._validate_marker_evaluation(
+            cast("service._MarkerEvaluation", duplicate)
+        )
 
     invalid_text = SimpleNamespace(
         complete=True,
@@ -1078,7 +1112,9 @@ def test_marker_evidence_requires_unique_sections_and_string_fields() -> None:
         message="",
     )
     with pytest.raises(TypeError, match="section text must be a string"):
-        service._validate_marker_evaluation(invalid_text)
+        service._validate_marker_evaluation(
+            cast("service._MarkerEvaluation", invalid_text)
+        )
 
 
 def test_exit_code_contract_accepts_only_non_empty_integer_sets(
@@ -1123,7 +1159,7 @@ def test_section_results_use_the_canonical_model_vocabulary() -> None:
 
     results = service._build_section_results(
         models=SimpleNamespace(ScenarioSectionResult=CanonicalSection),
-        marker_sections=(marker,),
+        marker_sections=cast("Sequence[service._MarkerSection]", (marker,)),
         normalized_sections=(normalized,),
     )
 
@@ -1159,9 +1195,11 @@ def test_result_construction_supplies_canonical_execution_invariants(
 
     monkeypatch.setattr(service, "_construct_model", capture_construct)
 
-    service.run_scenario(spec, run_config, run_paths)
+    _call_run_scenario(spec, run_config, run_paths)
 
     result_values = captured[-1]
+    assert harness.execution.stdout_path is not None
+    assert harness.execution.stderr_path is not None
     assert result_values["script_sha256"] == harness.execution.script_sha256
     assert result_values["cancelled"] is False
     assert result_values["timed_out"] is False
@@ -1203,7 +1241,7 @@ def test_result_construction_failure_preserves_subject_and_evidence(
     )
 
     with pytest.raises(ScenarioExecutionError) as captured:
-        service.run_scenario(spec, run_config, run_paths)
+        _call_run_scenario(spec, run_config, run_paths)
 
     error = captured.value
     assert error.subject == "scenario-basic"

@@ -10,6 +10,7 @@ from gf_wordbench.kernel.errors import (
     ContractViolationError,
     PathSecurityError,
 )
+from gf_wordbench.kernel.ids import validate_run_id
 from gf_wordbench.kernel.statuses import OverallStatus
 from gf_wordbench.runs.budgets import (
     BudgetDenialReason,
@@ -147,7 +148,7 @@ def test_run_paths_are_canonical_absolute_contained_and_immutable(
     assert resolve_run_relative_path(paths, relative) == paths.master_log
 
     with pytest.raises(FrozenInstanceError):
-        setattr(paths, "run_id", "20260724_125946")
+        paths.run_id = "20260724_125946"  # type: ignore[misc]
 
 
 def test_run_paths_reject_identity_mismatch_and_escape(tmp_path: Path) -> None:
@@ -350,7 +351,7 @@ def test_run_totals_enforce_conservation_invariants() -> None:
 def test_run_port_models_reject_unsafe_or_inconsistent_evidence(
     tmp_path: Path,
 ) -> None:
-    run_id = "20260724_125945"
+    run_id = validate_run_id("20260724_125945")
     absolute_file = (tmp_path / "manifest.json").resolve()
 
     entry = RunTreeEntry(

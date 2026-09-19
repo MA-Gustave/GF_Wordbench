@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import inspect
-import os
-import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+import os
 from pathlib import Path, PurePosixPath
+import sys
 from typing import Final, Never
 
 _REPOSITORY_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
@@ -53,9 +52,7 @@ from gf_wordbench.projects.toml_adapter import (  # noqa: E402
 )
 
 _PROFILE_FILENAME: Final[str] = "project.toml"
-_TEMPLATE_DIRECTORY: Final[PurePosixPath] = PurePosixPath(
-    "templates/validation-profile"
-)
+_TEMPLATE_DIRECTORY: Final[PurePosixPath] = PurePosixPath("templates/validation-profile")
 _SOURCE_DIRECTORY: Final[PurePosixPath] = PurePosixPath("src/gf_wordbench")
 
 _TEXT_SUFFIXES: Final[frozenset[str]] = frozenset(
@@ -95,18 +92,14 @@ class _FilesystemTemplateSource:
     def __post_init__(self) -> None:
         root = self.filesystem.resolve(self.root)
         if not self.filesystem.is_directory(root):
-            raise _ArgumentError(
-                f"canonical validation-profile template is missing: {root}"
-            )
+            raise _ArgumentError(f"canonical validation-profile template is missing: {root}")
         object.__setattr__(self, "root", root)
         self.inventory()
 
     def inventory(self) -> tuple[TreeEntry, ...]:
         entries = self.filesystem.inspect_tree(self.root)
         if not entries:
-            raise _ArgumentError(
-                f"canonical validation-profile template is empty: {self.root}"
-            )
+            raise _ArgumentError(f"canonical validation-profile template is empty: {self.root}")
         return entries
 
     def materialize(
@@ -177,8 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(
         prog="init_project.py",
         description=(
-            "Initialize an optional external validation profile from "
-            "templates/validation-profile/."
+            "Initialize an optional external validation profile from templates/validation-profile/."
         ),
     )
     parser.add_argument(
@@ -248,7 +240,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         arguments = _arguments_from_namespace(namespace)
         result = _initialize(arguments)
     except SystemExit as error:
-        return int(error.code)
+        if isinstance(error.code, int):
+            return error.code
+        return EXIT_OK if error.code is None else EXIT_USAGE_ERROR
     except KeyboardInterrupt:
         print("Validation-profile initialization cancelled.", file=sys.stderr)
         return EXIT_CANCELLED
@@ -288,9 +282,7 @@ def _arguments_from_namespace(namespace: argparse.Namespace) -> _Arguments:
     if type(strict_placeholders) is not bool:
         raise _ArgumentError("--strict-placeholders must be boolean")
     if type(allow_existing_empty_profile) is not bool:
-        raise _ArgumentError(
-            "--allow-existing-empty-profile must be boolean"
-        )
+        raise _ArgumentError("--allow-existing-empty-profile must be boolean")
 
     replacements = _parse_replacements(namespace.replacement_values)
     return _Arguments(
@@ -308,9 +300,7 @@ def _initialize(arguments: _Arguments) -> ProjectInitializationResult:
 
     filesystem = ProjectFilesystemAdapter()
     repository_root = filesystem.resolve(arguments.repository_root)
-    template_root = filesystem.resolve(
-        repository_root.joinpath(*_TEMPLATE_DIRECTORY.parts)
-    )
+    template_root = filesystem.resolve(repository_root.joinpath(*_TEMPLATE_DIRECTORY.parts))
     destination_root = filesystem.resolve(arguments.destination_root)
     profile_file = destination_root / _PROFILE_FILENAME
 
@@ -325,10 +315,7 @@ def _initialize(arguments: _Arguments) -> ProjectInitializationResult:
         arguments.config_file,
         profile_file=profile_file,
     )
-    replacements = (
-        _automatic_replacements(config)
-        | dict(arguments.replacements)
-    )
+    replacements = _automatic_replacements(config) | dict(arguments.replacements)
 
     template_source: ProjectTemplateSource = _FilesystemTemplateSource(
         root=template_root,
@@ -342,9 +329,7 @@ def _initialize(arguments: _Arguments) -> ProjectInitializationResult:
         config=config,
         replacements=replacements,
         strict_placeholders=arguments.strict_placeholders,
-        allow_existing_empty_profile=(
-            arguments.allow_existing_empty_profile
-        ),
+        allow_existing_empty_profile=(arguments.allow_existing_empty_profile),
     )
 
     return initialize_project(
@@ -364,56 +349,16 @@ def _build_initialization_request(
     strict_placeholders: bool,
     allow_existing_empty_profile: bool,
 ) -> ProjectInitializationRequest:
-    """Build against the remediated initializer while retaining narrow aliases."""
+    """Build the canonical project-initialization request."""
 
-    parameters = inspect.signature(
-        ProjectInitializationRequest
-    ).parameters
-    values: dict[str, object] = {
-        "config": config,
-        "template_values": replacements,
-        "require_resolved_placeholders": strict_placeholders,
-    }
-
-    if "repository_root" in parameters:
-        values["repository_root"] = repository_root
-    elif "workspace_root" in parameters:
-        values["workspace_root"] = repository_root
-    else:
-        raise _ArgumentError(
-            "ProjectInitializationRequest has no repository-root field."
-        )
-
-    destination_field = next(
-        (
-            name
-            for name in (
-                "destination_root",
-                "validation_profile_root",
-                "profile_root",
-            )
-            if name in parameters
-        ),
-        None,
+    return ProjectInitializationRequest(
+        workspace_root=repository_root,
+        project_root=destination_root,
+        config=config,
+        template_values=replacements,
+        require_resolved_placeholders=strict_placeholders,
+        allow_existing_empty_project=allow_existing_empty_profile,
     )
-    if destination_field is None:
-        raise _ArgumentError(
-            "projects/initializer.py must be updated before this command can "
-            "publish an external validation profile: "
-            "ProjectInitializationRequest has no explicit destination field."
-        )
-    values[destination_field] = destination_root
-
-    if "allow_existing_empty_profile" in parameters:
-        values["allow_existing_empty_profile"] = (
-            allow_existing_empty_profile
-        )
-    elif "allow_existing_empty_project" in parameters:
-        values["allow_existing_empty_project"] = (
-            allow_existing_empty_profile
-        )
-
-    return ProjectInitializationRequest(**values)
 
 
 def _validate_external_inputs(
@@ -450,8 +395,7 @@ def _validate_external_inputs(
     destination_parent = destination_root.parent
     if not destination_parent.is_dir():
         raise NotADirectoryError(
-            f"validation-profile destination parent does not exist: "
-            f"{destination_parent}"
+            f"validation-profile destination parent does not exist: {destination_parent}"
         )
 
 
@@ -461,9 +405,7 @@ def _load_initialization_config(
     profile_file: Path,
 ) -> ProjectConfig:
     if not config_file.is_file():
-        raise FileNotFoundError(
-            f"initialization config not found: {config_file}"
-        )
+        raise FileNotFoundError(f"initialization config not found: {config_file}")
 
     document = read_project_toml(config_file)
     validated = validate_project_schema(document, source=config_file)
@@ -494,27 +436,13 @@ def _project_document(config: ProjectConfig) -> ProjectDocument:
             "minimum_version": config.gf.minimum_version,
         },
         modules={
-            "entrypoints": [
-                path.as_posix()
-                for path in config.modules.entrypoints
-            ],
-            "checkpoints": [
-                path.as_posix()
-                for path in config.modules.checkpoints
-            ],
+            "entrypoints": [path.as_posix() for path in config.modules.entrypoints],
+            "checkpoints": [path.as_posix() for path in config.modules.checkpoints],
         },
         validation={
-            "required_scenarios": [
-                str(value)
-                for value in config.validation.required_scenarios
-            ],
-            "optional_scenarios": [
-                str(value)
-                for value in config.validation.optional_scenarios
-            ],
-            "release_requires_pgf": (
-                config.validation.release_requires_pgf
-            ),
+            "required_scenarios": [str(value) for value in config.validation.required_scenarios],
+            "optional_scenarios": [str(value) for value in config.validation.optional_scenarios],
+            "release_requires_pgf": (config.validation.release_requires_pgf),
         },
     )
 
@@ -522,22 +450,10 @@ def _project_document(config: ProjectConfig) -> ProjectDocument:
 def _automatic_replacements(
     config: ProjectConfig,
 ) -> dict[str, str]:
-    entrypoints = tuple(
-        path.as_posix()
-        for path in config.modules.entrypoints
-    )
-    checkpoints = tuple(
-        path.as_posix()
-        for path in config.modules.checkpoints
-    )
-    required_scenarios = tuple(
-        str(value)
-        for value in config.validation.required_scenarios
-    )
-    optional_scenarios = tuple(
-        str(value)
-        for value in config.validation.optional_scenarios
-    )
+    entrypoints = tuple(path.as_posix() for path in config.modules.entrypoints)
+    checkpoints = tuple(path.as_posix() for path in config.modules.checkpoints)
+    required_scenarios = tuple(str(value) for value in config.validation.required_scenarios)
+    optional_scenarios = tuple(str(value) for value in config.validation.optional_scenarios)
 
     primary_entrypoint = entrypoints[0]
     primary_entrypoint_path = PurePosixPath(primary_entrypoint)
@@ -560,23 +476,15 @@ def _automatic_replacements(
         "<ENTRYPOINT>": primary_entrypoint,
         "<ENTRYPOINTS>": _render_values(entrypoints),
         "<CHECKPOINTS>": _render_values(checkpoints),
-        "<REQUIRED_SCENARIOS>": _render_values(
-            required_scenarios
-        ),
-        "<OPTIONAL_SCENARIOS>": _render_values(
-            optional_scenarios
-        ),
+        "<REQUIRED_SCENARIOS>": _render_values(required_scenarios),
+        "<OPTIONAL_SCENARIOS>": _render_values(optional_scenarios),
         "<PROJECT_SCHEMA_VERSION>": config.schema_version,
     }
 
     if config.gf.path_parts:
-        replacements["<SOURCE_PATH_PART>"] = (
-            config.gf.path_parts[0]
-        )
+        replacements["<SOURCE_PATH_PART>"] = config.gf.path_parts[0]
     if config.gf.minimum_version:
-        replacements["<GF_MINIMUM_VERSION>"] = (
-            config.gf.minimum_version
-        )
+        replacements["<GF_MINIMUM_VERSION>"] = config.gf.minimum_version
 
     return replacements
 
@@ -599,9 +507,7 @@ def _parse_replacements(values: object) -> Mapping[str, str]:
         if not token.startswith("<"):
             token = f"<{token}>"
         if not replacement:
-            raise _ArgumentError(
-                f"replacement for {token} must not be empty"
-            )
+            raise _ArgumentError(f"replacement for {token} must not be empty")
 
         replacements[token] = replacement
 
@@ -620,10 +526,7 @@ def _validate_repository(repository_root: Path) -> None:
     missing = tuple(path for path in required if not path.exists())
     if missing:
         rendered = ", ".join(os.fspath(path) for path in missing)
-        raise _ArgumentError(
-            "workspace is not a complete GF Wordbench repository: "
-            f"{rendered}"
-        )
+        raise _ArgumentError(f"workspace is not a complete GF Wordbench repository: {rendered}")
 
 
 def _absolute_normalized(
@@ -632,9 +535,7 @@ def _absolute_normalized(
     base: Path | None = None,
 ) -> Path:
     if not isinstance(value, Path):
-        raise _ArgumentError(
-            "path arguments must be pathlib.Path values"
-        )
+        raise _ArgumentError("path arguments must be pathlib.Path values")
 
     path = value.expanduser()
     if not path.is_absolute():
@@ -645,9 +546,8 @@ def _absolute_normalized(
 def _paths_overlap(first: Path, second: Path) -> bool:
     first_resolved = first.resolve(strict=False)
     second_resolved = second.resolve(strict=False)
-    return (
-        _is_relative_to(first_resolved, second_resolved)
-        or _is_relative_to(second_resolved, first_resolved)
+    return _is_relative_to(first_resolved, second_resolved) or _is_relative_to(
+        second_resolved, first_resolved
     )
 
 
@@ -684,8 +584,7 @@ def _print_result(result: ProjectInitializationResult) -> None:
 
     if result.unresolved_placeholders:
         print(
-            "Unresolved placeholders: "
-            f"{len(result.unresolved_placeholders)}",
+            f"Unresolved placeholders: {len(result.unresolved_placeholders)}",
             file=sys.stderr,
         )
         for placeholder in result.unresolved_placeholders:

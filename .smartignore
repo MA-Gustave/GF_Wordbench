@@ -1,0 +1,6 @@
+# Snapshot-only exclusions.
+# These paths remain eligible for Git; they are omitted only from AI/code snapshots.
+# Syntax: gitignore-style patterns, relative to the repository root.
+#
+# No Wordbench source/docs/tests are excluded by default yet.
+# Add only intentionally versioned material that creates low-value AI context.

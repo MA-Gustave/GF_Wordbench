@@ -5,7 +5,7 @@ from dataclasses import FrozenInstanceError, fields, replace
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 import sys
-from typing import Final
+from typing import Any, Final, cast
 
 import pytest
 
@@ -33,11 +33,7 @@ from gf_wordbench.kernel.statuses import ExecutionState
 pytestmark = pytest.mark.contract
 
 _PROCESS_PACKAGE: Final[Path] = (
-    Path(__file__).resolve().parents[2]
-    / "src"
-    / "gf_wordbench"
-    / "infrastructure"
-    / "process"
+    Path(__file__).resolve().parents[2] / "src" / "gf_wordbench" / "infrastructure" / "process"
 )
 
 
@@ -81,7 +77,7 @@ def _request(tmp_path: Path, **changes: object) -> ProcessRequest:
         mutability_class="run_artifacts_only",
         network_policy="denied",
     )
-    return replace(request, **changes)
+    return cast(ProcessRequest, cast(Any, replace)(request, **changes))
 
 
 def _result(

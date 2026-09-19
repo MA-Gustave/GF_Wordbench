@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import math
-from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum, unique
+import math
 from pathlib import Path
 from typing import Generic, Protocol, TypeVar
 
@@ -185,19 +184,13 @@ class PublicationBatch:
 
         for index, outcome in enumerate(self.outcomes):
             if not isinstance(outcome, ArtifactPublicationOutcome):
-                raise TypeError(
-                    f"outcomes[{index}] must be an ArtifactPublicationOutcome"
-                )
+                raise TypeError(f"outcomes[{index}] must be an ArtifactPublicationOutcome")
             if outcome.artifact_id in ids:
-                raise ValueError(
-                    f"duplicate artifact_id: {outcome.artifact_id!r}"
-                )
+                raise ValueError(f"duplicate artifact_id: {outcome.artifact_id!r}")
 
             path_key = _path_key(outcome.path)
             if path_key in paths:
-                raise ValueError(
-                    f"duplicate artifact path: {outcome.path}"
-                )
+                raise ValueError(f"duplicate artifact path: {outcome.path}")
 
             ids.add(outcome.artifact_id)
             paths.add(path_key)
@@ -213,9 +206,7 @@ class PublicationBatch:
     @property
     def required_failed(self) -> tuple[ArtifactPublicationOutcome, ...]:
         return tuple(
-            outcome
-            for outcome in self.outcomes
-            if outcome.required and not outcome.success
+            outcome for outcome in self.outcomes if outcome.required and not outcome.success
         )
 
     @property
@@ -271,9 +262,7 @@ class FinalizationRequest(Generic[RunResultT]):
             or self.max_consistency_passes < 1
             or self.max_consistency_passes > 4
         ):
-            raise ValueError(
-                "max_consistency_passes must be an integer from 1 through 4"
-            )
+            raise ValueError("max_consistency_passes must be an integer from 1 through 4")
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,9 +303,7 @@ class FinalizationOutcome(Generic[RunResultT]):
             raise TypeError("failures must be a tuple")
         for index, failure in enumerate(self.failures):
             if not isinstance(failure, FinalizationFailure):
-                raise TypeError(
-                    f"failures[{index}] must be a FinalizationFailure"
-                )
+                raise TypeError(f"failures[{index}] must be a FinalizationFailure")
 
         if (
             isinstance(self.consistency_passes, bool)
@@ -329,13 +316,9 @@ class FinalizationOutcome(Generic[RunResultT]):
 
         if self.disposition is FinalizationDisposition.FINALIZED:
             if self.manifest_path is None or not self.manifest_verified:
-                raise ValueError(
-                    "finalized disposition requires a verified manifest"
-                )
+                raise ValueError("finalized disposition requires a verified manifest")
             if any(failure.required for failure in self.failures):
-                raise ValueError(
-                    "finalized disposition cannot contain required failures"
-                )
+                raise ValueError("finalized disposition cannot contain required failures")
 
     @property
     def finalized(self) -> bool:
@@ -377,13 +360,13 @@ class FinalizationOperations(Protocol[RunResultT]):
         current: RunResultT,
         failures: tuple[FinalizationFailure, ...],
         finished_at: datetime,
-    ) -> PreparedResult[RunResultT]: ...
+    ) -> object: ...
 
     def publish_artifacts(
         self,
         request: FinalizationRequest[RunResultT],
         result: RunResultT,
-    ) -> PublicationBatch: ...
+    ) -> object: ...
 
     def close_non_manifest_writers(
         self,
@@ -964,10 +947,7 @@ def _validate_manifest_path(
         valid = False
 
     manifest_key = _path_key(manifest_path)
-    if any(
-        _path_key(outcome.path) == manifest_key
-        for outcome in publications.outcomes
-    ):
+    if any(_path_key(outcome.path) == manifest_key for outcome in publications.outcomes):
         _append_failure(
             failures,
             _contract_failure(
@@ -1108,11 +1088,7 @@ def _failure_from_exception(
         message = exc.message
         detail = exc.detail or detail
 
-    evidence_paths = list(
-        exc.evidence_paths
-        if isinstance(exc, GFWordbenchError)
-        else ()
-    )
+    evidence_paths = list(exc.evidence_paths if isinstance(exc, GFWordbenchError) else ())
     if artifact_path is not None:
         rendered = str(artifact_path)
         if rendered not in evidence_paths:
@@ -1126,11 +1102,7 @@ def _failure_from_exception(
         stage="finalization",
         operation=step.value,
         subject=None if artifact_path is None else str(artifact_path),
-        retryable=(
-            exc.retryable
-            if isinstance(exc, GFWordbenchError)
-            else False
-        ),
+        retryable=(exc.retryable if isinstance(exc, GFWordbenchError) else False),
         evidence_paths=tuple(evidence_paths),
         cause_type=type(exc).__name__,
     )

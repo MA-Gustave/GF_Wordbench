@@ -74,8 +74,7 @@ class _EventSink:
     def one(self, name: str) -> ProcessEvent:
         matches = [event for event in self.events if event.name == name]
         assert len(matches) == 1, (
-            f"expected one {name!r} event, received "
-            f"{[event.name for event in self.events]!r}"
+            f"expected one {name!r} event, received {[event.name for event in self.events]!r}"
         )
         return matches[0]
 
@@ -245,8 +244,7 @@ def test_termination_is_scoped_to_the_owned_process_tree(
         assert result.termination_attempted, evidence
         assert result.termination_succeeded, evidence
         assert unrelated.poll() is None, (
-            "termination escaped the owned process tree and stopped an "
-            "unrelated process"
+            "termination escaped the owned process tree and stopped an unrelated process"
         )
     finally:
         _stop_subprocess(unrelated)

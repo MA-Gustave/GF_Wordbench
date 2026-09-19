@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from pathlib import PurePosixPath, PureWindowsPath
+from collections.abc import Iterable, Mapping
+from pathlib import PurePath, PurePosixPath, PureWindowsPath
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -102,7 +103,7 @@ def test_normalize_blocker_identities_requires_collection(
     values: str | bytes | PurePosixPath,
 ) -> None:
     with pytest.raises(TypeError, match="must be an iterable"):
-        normalize_blocker_identities(values)
+        normalize_blocker_identities(cast("Iterable[str | PurePath]", values))
 
 
 def test_validate_blocked_by_requires_at_least_one_non_self_blocker() -> None:
@@ -217,12 +218,8 @@ def test_external_blocker_is_a_terminal_root() -> None:
     )
 
     assert resolution.external_blockers == ("toolchain/gf",)
-    assert resolution.immediate_blockers["validation/scenario"] == (
-        "toolchain/gf",
-    )
-    assert resolution.root_blockers["validation/scenario"] == (
-        "toolchain/gf",
-    )
+    assert resolution.immediate_blockers["validation/scenario"] == ("toolchain/gf",)
+    assert resolution.root_blockers["validation/scenario"] == ("toolchain/gf",)
     assert resolution.unknown_references["validation/scenario"] == ()
 
 
@@ -323,9 +320,7 @@ def test_case_insensitive_graph_preserves_canonical_spelling_and_lookup() -> Non
     assert resolution.subjects == ("Src/App.gf", "src/root.gf")
     assert resolution.immediate_blockers["Src/App.gf"] == ("src/root.gf",)
     assert resolution.roots_for("SRC/APP.GF") == ("src/root.gf",)
-    assert resolution.resolution_for(PureWindowsPath("src\\APP.gf")).subject_id == (
-        "Src/App.gf"
-    )
+    assert resolution.resolution_for(PureWindowsPath("src\\APP.gf")).subject_id == ("Src/App.gf")
 
 
 def test_case_insensitive_subject_collision_is_rejected() -> None:
@@ -360,15 +355,13 @@ def test_unknown_subject_lookup_raises_specific_error() -> None:
 
 
 def test_collapse_blocker_roots_matches_full_resolution() -> None:
-    graph = {
+    graph: Mapping[str | PurePath, Iterable[str | PurePath]] = {
         "src/App.gf": ("src/Concrete.gf",),
         "src/Concrete.gf": ("src/Abstract.gf",),
         "src/Abstract.gf": (),
     }
 
-    assert collapse_blocker_roots("src/App.gf", graph) == (
-        "src/Abstract.gf",
-    )
+    assert collapse_blocker_roots("src/App.gf", graph) == ("src/Abstract.gf",)
 
 
 def test_resolution_mappings_are_immutable() -> None:

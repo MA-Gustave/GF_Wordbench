@@ -8,9 +8,9 @@ conditions that prevent construction of a reliable result.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+import re
 from typing import Final
 
 from .statuses import ErrorKind
@@ -92,15 +92,11 @@ def _validate_error_code(code: str) -> str:
     match = _ERROR_CODE_PATTERN.fullmatch(code)
 
     if match is None:
-        raise ValueError(
-            "code must use the canonical form GF-WB-<DOMAIN>-<NNN>"
-        )
+        raise ValueError("code must use the canonical form GF-WB-<DOMAIN>-<NNN>")
 
     domain = match.group("domain")
     if domain not in _ERROR_CODE_DOMAINS:
-        raise ValueError(
-            f"unsupported GF Wordbench error-code domain: {domain}"
-        )
+        raise ValueError(f"unsupported GF Wordbench error-code domain: {domain}")
 
     return code
 
@@ -122,9 +118,7 @@ def _normalize_evidence_paths(paths: Iterable[str]) -> tuple[str, ...]:
     try:
         normalized = tuple(paths)
     except TypeError as exc:
-        raise TypeError(
-            "evidence_paths must be an iterable of path strings"
-        ) from exc
+        raise TypeError("evidence_paths must be an iterable of path strings") from exc
 
     for index, path in enumerate(normalized):
         _validate_text(f"evidence_paths[{index}]", path, required=True)

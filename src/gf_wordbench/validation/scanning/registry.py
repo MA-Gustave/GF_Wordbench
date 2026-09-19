@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
+import re
 from types import MappingProxyType
-from typing import Final, Literal, Mapping, NewType
+from typing import Final, Literal, NewType
 
 ScanRuleId = NewType("ScanRuleId", str)
 ScanCountField = Literal[
@@ -30,9 +30,7 @@ _VERSION_RE: Final[re.Pattern[str]] = re.compile(
     r"(?P<minor>0|[1-9][0-9]*)\."
     r"(?P<patch>0|[1-9][0-9]*)$"
 )
-_RULE_SET_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
-)
+_RULE_SET_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
 
 _CANONICAL_COUNT_FIELDS: Final[tuple[ScanCountField, ...]] = (
     "single_slash_eq",
@@ -76,10 +74,7 @@ def validate_scan_rule_id(value: object) -> ScanRuleId:
     if not isinstance(value, str):
         raise TypeError("scan rule ID must be a string")
     if _RULE_ID_RE.fullmatch(value) is None:
-        raise ValueError(
-            "scan rule ID must match "
-            "SCAN-(NOTATION|RUNTIME|PATTERN|STYLE)-NNN"
-        )
+        raise ValueError("scan rule ID must match SCAN-(NOTATION|RUNTIME|PATTERN|STYLE)-NNN")
     return ScanRuleId(value)
 
 
@@ -98,10 +93,8 @@ def _validate_count_field(value: object) -> ScanCountField:
         raise TypeError("count_field must be a string")
     if value not in _CANONICAL_COUNT_FIELDS:
         expected = ", ".join(_CANONICAL_COUNT_FIELDS)
-        raise ValueError(
-            f"unsupported ScanCounts field {value!r}; expected one of {expected}"
-        )
-    return value  # type: ignore[return-value]
+        raise ValueError(f"unsupported ScanCounts field {value!r}; expected one of {expected}")
+    return value
 
 
 def _normalize_views(
@@ -191,9 +184,7 @@ class ScanRuleSet:
             field_name="rule_set_id",
         )
         if _RULE_SET_ID_RE.fullmatch(rule_set_id) is None:
-            raise ValueError(
-                "rule_set_id must use lowercase dot- or hyphen-separated tokens"
-            )
+            raise ValueError("rule_set_id must use lowercase dot- or hyphen-separated tokens")
         version = _validate_text(self.version, field_name="version")
         if _VERSION_RE.fullmatch(version) is None:
             raise ValueError("version must use MAJOR.MINOR.PATCH")
@@ -275,9 +266,7 @@ class ScanRuleSet:
         try:
             return self._by_count_field[canonical]
         except KeyError as exc:
-            raise KeyError(
-                f"unregistered ScanCounts field: {canonical}"
-            ) from exc
+            raise KeyError(f"unregistered ScanCounts field: {canonical}") from exc
 
     def __iter__(self) -> Iterator[ScanRuleDefinition]:
         return iter(self.rules)
@@ -330,9 +319,7 @@ BUILTIN_RULES: Final[tuple[ScanRuleDefinition, ...]] = (
             ScanTextView.COMMENT_STRIPPED,
         ),
         default_severity=ScanRuleSeverity.WARNING,
-        interpretation=(
-            "case string-concatenation pattern without explicit : Str > form"
-        ),
+        interpretation=("case string-concatenation pattern without explicit : Str > form"),
         order=3,
     ),
     ScanRuleDefinition(
@@ -345,9 +332,7 @@ BUILTIN_RULES: Final[tuple[ScanRuleDefinition, ...]] = (
             ScanTextView.COMMENT_STRIPPED,
         ),
         default_severity=ScanRuleSeverity.WARNING,
-        interpretation=(
-            "table string-concatenation pattern without explicit : Str > form"
-        ),
+        interpretation=("table string-concatenation pattern without explicit : Str > form"),
         order=4,
     ),
     ScanRuleDefinition(
@@ -367,6 +352,13 @@ BUILTIN_RULE_REGISTRY: Final[ScanRuleSet] = ScanRuleSet(
     version=BUILTIN_RULE_SET_VERSION,
     rules=BUILTIN_RULES,
 )
+
+
+# Canonical service-facing names.  The concrete rule-set implementation remains
+# owned by this module; aliases keep the service contract stable.
+ScanRule = ScanRuleDefinition
+ScanRuleRegistry = ScanRuleSet
+CANONICAL_SCAN_RULE_REGISTRY = BUILTIN_RULE_REGISTRY
 
 
 def iter_builtin_rules() -> Iterator[ScanRuleDefinition]:
@@ -395,9 +387,7 @@ def require_builtin_rule_by_count_field(
 
 def validate_builtin_registry() -> None:
     if BUILTIN_RULE_REGISTRY.count_fields != _CANONICAL_COUNT_FIELDS:
-        raise RuntimeError(
-            "built-in rule order must match the canonical ScanCounts field order"
-        )
+        raise RuntimeError("built-in rule order must match the canonical ScanCounts field order")
     if len(BUILTIN_RULE_REGISTRY) != 6:
         raise RuntimeError("the canonical built-in scanner nucleus has six rules")
 
@@ -405,10 +395,10 @@ def validate_builtin_registry() -> None:
 validate_builtin_registry()
 
 __all__ = (
+    "BUILTIN_RULES",
     "BUILTIN_RULE_REGISTRY",
     "BUILTIN_RULE_SET_ID",
     "BUILTIN_RULE_SET_VERSION",
-    "BUILTIN_RULES",
     "ScanCountField",
     "ScanCountUnit",
     "ScanRuleDefinition",

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
-import re
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from enum import Enum
+import hashlib
+import re
 from types import MappingProxyType
 from typing import Final
 
@@ -16,15 +16,9 @@ from gf_wordbench.kernel.statuses import DiagnosticClass, ErrorKind
 
 from .models import EvidenceRef, Finding
 
-_FINDING_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^finding-[a-f0-9]{24}$"
-)
-_RULE_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$"
-)
-_KIND_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$"
-)
+_FINDING_ID_RE: Final[re.Pattern[str]] = re.compile(r"^finding-[a-f0-9]{24}$")
+_RULE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$")
+_KIND_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$")
 _SEVERITIES: Final[tuple[str, ...]] = (
     "fatal",
     "error",
@@ -87,13 +81,9 @@ def build_finding(
 
     if normalized_kind == "static_scan":
         if error_kind not in (None, ErrorKind.OK):
-            raise ValueError(
-                "static scan findings must not claim a GF error kind"
-            )
+            raise ValueError("static scan findings must not claim a GF error kind")
         if diagnostic_class not in (None, DiagnosticClass.OK, DiagnosticClass.NOISE):
-            raise ValueError(
-                "static scan findings must not claim direct or downstream causality"
-            )
+            raise ValueError("static scan findings must not claim direct or downstream causality")
 
     canonical_id = (
         _normalize_finding_id(finding_id)
@@ -220,11 +210,7 @@ def merge_findings(*groups: Iterable[Finding]) -> tuple[Finding, ...]:
 def blocking_findings(findings: Iterable[Finding]) -> tuple[Finding, ...]:
     """Return canonically ordered findings that are explicitly blocking."""
 
-    return tuple(
-        finding
-        for finding in sort_findings(findings)
-        if finding.blocking
-    )
+    return tuple(finding for finding in sort_findings(findings) if finding.blocking)
 
 
 def findings_by_target(
@@ -249,7 +235,7 @@ def finding_counts(
     """Return deterministic counts by severity and blocking policy."""
 
     prepared = _prepare_findings(findings)
-    values = {severity: 0 for severity in _SEVERITIES}
+    values = dict.fromkeys(_SEVERITIES, 0)
     values["blocking"] = 0
     values["total"] = len(prepared)
     for finding in prepared:
@@ -336,9 +322,7 @@ def _evidence_signature_parts(reference: EvidenceRef) -> tuple[str, ...]:
 
 
 def _merge_duplicate_pair(left: Finding, right: Finding) -> Finding:
-    evidence = _normalize_evidence_refs(
-        (*left.evidence_refs, *right.evidence_refs)
-    )
+    evidence = _normalize_evidence_refs((*left.evidence_refs, *right.evidence_refs))
     metadata = dict(left.metadata)
     for key, value in right.metadata.items():
         metadata.setdefault(key, value)
@@ -359,10 +343,7 @@ def _merge_duplicate_pair(left: Finding, right: Finding) -> Finding:
 
 
 def _finding_sort_key(finding: Finding) -> tuple[object, ...]:
-    evidence_key = tuple(
-        _evidence_sort_key(reference)
-        for reference in finding.evidence_refs
-    )
+    evidence_key = tuple(_evidence_sort_key(reference) for reference in finding.evidence_refs)
     return (
         _SEVERITY_RANK[_normalize_severity(finding.severity)],
         0 if finding.blocking else 1,
@@ -391,8 +372,6 @@ def _evidence_sort_key(reference: EvidenceRef) -> tuple[object, ...]:
 def _normalize_evidence_refs(
     references: Iterable[EvidenceRef],
 ) -> tuple[EvidenceRef, ...]:
-    if isinstance(references, (str, bytes)):
-        raise TypeError("evidence_refs must be an iterable of EvidenceRef")
     prepared = tuple(references)
     unique: dict[tuple[str, ...], EvidenceRef] = {}
     for reference in prepared:
@@ -432,8 +411,6 @@ def _normalize_metadata(
 
 
 def _prepare_findings(findings: Iterable[Finding]) -> tuple[Finding, ...]:
-    if isinstance(findings, (str, bytes)):
-        raise TypeError("findings must be an iterable of Finding objects")
     prepared = tuple(findings)
     if len(prepared) > _MAX_FINDINGS:
         raise ValueError("finding count exceeds the supported limit")

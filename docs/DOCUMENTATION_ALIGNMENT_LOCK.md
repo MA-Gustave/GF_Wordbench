@@ -1,13 +1,13 @@
 # GF Wordbench — Documentation Alignment Lock
 
-**Document ID:** `GF-WB-DOC-ALIGNMENT-LOCK`  
-**Status:** Normative  
-**Contract version:** `2.0.0`  
-**Applies to:** all GF Wordbench documentation, framework contracts, path-resolved language startup, optional validation profiles, project templates and documentation correction work  
-**Does not govern:** private implementation details that do not affect a documented contract; the independent `gf-portfolio` repository except at the public interoperability boundary  
-**Owner:** GF Wordbench maintainers  
-**Last reviewed:** `2026-07-30`  
-**Change authority:** `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`  
+**Document ID:** `GF-WB-DOC-ALIGNMENT-LOCK`
+**Status:** Normative
+**Contract version:** `2.0.0`
+**Applies to:** all GF Wordbench documentation, framework contracts, path-resolved language startup, optional validation profiles, project templates and documentation correction work
+**Does not govern:** private implementation details that do not affect a documented contract; the independent `gf-portfolio` repository except at the public interoperability boundary
+**Owner:** GF Wordbench maintainers
+**Last reviewed:** `2026-07-30`
+**Change authority:** `ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md`
 **Change policy:** coordinated update of every affected owner document and lock
 
 ---
@@ -39,7 +39,7 @@ docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
 project/docs/INTERFILE_CONTRACT_LOCK.md
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Supersession must be applied before general precedence. In particular:
@@ -164,6 +164,8 @@ The path-resolved startup service may classify filename candidates and coordinat
 
 ### 3.5 Native scenarios and golds
 
+Native `.gfs` scenarios remain the scenario execution format.
+
 Native `.gfs` scenarios remain the scenario execution format when an explicit scenario profile is loaded.
 
 Raw tool evidence is preserved before normalization. Stable markers, normalization profiles and reviewed gold files are validation-profile-owned contracts.
@@ -247,7 +249,7 @@ The language probe does not bypass the diagnostic registry, external-tool bounda
 | Optional validation profile | The explicitly selected profile and its owner |
 | Existing `project/project.toml` | Optional repository-local validation profile |
 | Profile-owned scenarios, inputs, golds and release policy | Explicit validation profile |
-| Reusable validation-profile initialization structure | `templates/project/` |
+| Reusable validation-profile initialization structure | `templates/validation-profile/` |
 | Public versioned run artifacts | GF Wordbench |
 | Registry of several Wordbench workspaces | `gf-portfolio` |
 | Cross-workspace or multilingual aggregation | `gf-portfolio` |
@@ -285,7 +287,7 @@ resolved language context:
 repository-local optional profile: project/project.toml
 repository-local optional profile docs: project/docs/
 repository-local optional profile validation: project/validation/
-reusable optional profile template: templates/project/
+reusable optional profile template: templates/validation-profile/
 ```
 
 These paths remain canonical for the bundled example/profile layout. They are not mandatory startup paths and do not own a language selected elsewhere.
@@ -386,7 +388,7 @@ A correction MUST NOT introduce or normalize any of the following inside Wordben
 | File selection ownership | `docs/validation/FILE_SELECTION.md` |
 | GUI language-open workflow | `docs/usage/GUI_REFERENCE.md` |
 | CLI language-path workflow | `docs/usage/CLI_REFERENCE.md`, command registry |
-| Generic optional-profile initialization structure | `templates/project/` |
+| Generic optional-profile initialization structure | `templates/validation-profile/` |
 | Documentation correction state | `docs/DOCUMENTATION_CORRECTION_LEDGER.md` |
 
 An overview may summarize an owner document but MUST NOT create a second independently maintained normative definition.

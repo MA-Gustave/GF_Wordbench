@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -13,6 +14,7 @@ from gf_wordbench.config.models import (
     RunConfig,
     ValidationTarget,
 )
+from gf_wordbench.kernel.ids import ProjectId, ScenarioId, SchemaId
 from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
 from gf_wordbench.projects.models import (
     GFProjectConfig,
@@ -29,7 +31,6 @@ from gf_wordbench.runs.planner import (
     StageRequirement,
     resolve_execution_plan,
 )
-
 
 _STAGE_ORDER = (
     StageId.CONFIGURATION,
@@ -78,10 +79,10 @@ def _project_config(tmp_path: Path) -> ProjectConfig:
     project_root = (tmp_path / "project").resolve()
     source_root = project_root / "src"
     return ProjectConfig(
-        schema_id="gf-wordbench.project",
+        schema_id=SchemaId("gf-wordbench.project"),
         schema_version="1.0",
         identity=ProjectIdentity(
-            id="example-language",
+            id=ProjectId("example-language"),
             name="Example Language",
             language_code="eng",
             root=Path("."),
@@ -101,8 +102,8 @@ def _project_config(tmp_path: Path) -> ProjectConfig:
             checkpoints=(Path("MorphoEng.gf"),),
         ),
         validation=ValidationPolicy(
-            required_scenarios=("load",),
-            optional_scenarios=("smoke",),
+            required_scenarios=(ScenarioId("load"),),
+            optional_scenarios=(ScenarioId("smoke"),),
             release_requires_pgf=True,
         ),
         project_file=project_root / "project.toml",
@@ -138,22 +139,14 @@ def _run_config(
         )
     if selected_checkpoints is None:
         selected_checkpoints = (
-            (source_root / "MorphoEng.gf",)
-            if mode is ValidationMode.CHECKPOINT
-            else ()
+            (source_root / "MorphoEng.gf",) if mode is ValidationMode.CHECKPOINT else ()
         )
     if selected_entrypoints is None:
         selected_entrypoints = (
-            (source_root / "GrammarEng.gf",)
-            if mode is ValidationMode.RELEASE
-            else ()
+            (source_root / "GrammarEng.gf",) if mode is ValidationMode.RELEASE else ()
         )
     if selected_scenarios is None:
-        selected_scenarios = (
-            ("load",)
-            if mode is ValidationMode.RELEASE
-            else ()
-        )
+        selected_scenarios = ("load",) if mode is ValidationMode.RELEASE else ()
 
     rgl_root = (tmp_path / "rgl").resolve()
     return RunConfig(
@@ -462,19 +455,14 @@ def test_quick_plan_is_bounded_and_not_release_eligible(
     assert plan.build_pgf is False
     assert plan.compare_previous is False
     assert plan.evidence_level == "bounded"
-    assert plan.warnings == (
-        "quick mode cannot establish release eligibility",
-    )
+    assert plan.warnings == ("quick mode cannot establish release eligibility",)
     assert requirements[StageId.VERSION_PROBE] is StageRequirement.REQUIRED
     assert requirements[StageId.COMPILE_SOURCES] is StageRequirement.REQUIRED
     assert requirements[StageId.COMPILE_CHECKPOINTS] is StageRequirement.SKIPPED
     assert requirements[StageId.COMPILE_ENTRYPOINTS] is StageRequirement.SKIPPED
     assert requirements[StageId.RUN_SCENARIOS] is StageRequirement.SKIPPED
     assert requirements[StageId.BUILD_PGF] is StageRequirement.SKIPPED
-    assert (
-        requirements[StageId.EVALUATE_RELEASE_GATES]
-        is StageRequirement.SKIPPED
-    )
+    assert requirements[StageId.EVALUATE_RELEASE_GATES] is StageRequirement.SKIPPED
 
 
 @pytest.mark.parametrize(
@@ -525,11 +513,9 @@ def test_quick_plan_rejects_weakening_or_expanding_options(
     if "selected_checkpoints" in changes:
         changes = {
             **changes,
-            "selected_checkpoints": (
-                (tmp_path / "project" / "src" / "MorphoEng.gf").resolve(),
-            ),
+            "selected_checkpoints": ((tmp_path / "project" / "src" / "MorphoEng.gf").resolve(),),
         }
-    request = replace(request, **changes)
+    request = cast(Any, replace)(request, **changes)
 
     with pytest.raises(ValueError, match=message):
         resolve_execution_plan(request)
@@ -552,10 +538,7 @@ def test_checkpoint_plan_requires_checkpoint_compile_and_scenario_evidence(
     requirements = _requirements(plan)
 
     assert requirements[StageId.COMPILE_SOURCES] is StageRequirement.REQUIRED
-    assert (
-        requirements[StageId.COMPILE_CHECKPOINTS]
-        is StageRequirement.REQUIRED
-    )
+    assert requirements[StageId.COMPILE_CHECKPOINTS] is StageRequirement.REQUIRED
     for stage_id in (
         StageId.RUN_SCENARIOS,
         StageId.NORMALIZE_OUTPUTS,
@@ -644,8 +627,7 @@ def test_release_plan_requires_complete_release_evidence(
     )
     assert plan.selected_scenarios == ("load", "syntax")
     assert all(
-        requirements[stage_id] is StageRequirement.REQUIRED
-        for stage_id in expected_required
+        requirements[stage_id] is StageRequirement.REQUIRED for stage_id in expected_required
     )
 
 
@@ -689,7 +671,7 @@ def test_release_plan_rejects_weakened_contract(
     message: str,
 ) -> None:
     request = _run_config(tmp_path, mode=ValidationMode.RELEASE)
-    request = replace(request, **changes)
+    request = cast(Any, replace)(request, **changes)
 
     with pytest.raises(ValueError, match=message):
         resolve_execution_plan(request)
@@ -847,12 +829,8 @@ def test_skipped_stage_prerequisites_are_removed_from_plan_graph(
     plan = resolve_execution_plan(request)
 
     assert plan.stage(StageId.BUILD_PGF).prerequisites == ()
-    assert plan.stage(StageId.NORMALIZE_OUTPUTS).prerequisites == (
-        StageId.RUN_SCENARIOS,
-    )
-    assert plan.stage(StageId.WRITE_MANIFEST).prerequisites == (
-        StageId.WRITE_REPORTS,
-    )
+    assert plan.stage(StageId.NORMALIZE_OUTPUTS).prerequisites == (StageId.RUN_SCENARIOS,)
+    assert plan.stage(StageId.WRITE_MANIFEST).prerequisites == (StageId.WRITE_REPORTS,)
 
 
 def test_compatibility_warnings_keep_order_and_are_deduplicated(

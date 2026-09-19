@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -16,10 +17,8 @@ from gf_wordbench.kernel.serialization import ProducerInfo
 from gf_wordbench.kernel.statuses import ValidationMode
 from gf_wordbench.state import schema
 from gf_wordbench.state.models import (
-    AppState,
     EnvironmentState,
     LastRunState,
-    SelectionState,
 )
 from gf_wordbench.state.schema import (
     APP_STATE_SCHEMA_ID,
@@ -39,12 +38,14 @@ _EXPECTED_PUBLIC_NAMES = (
     "APP_STATE_FILENAME",
     "APP_STATE_SCHEMA_ID",
     "APP_STATE_SCHEMA_VERSION",
-    "AppStateDocument",
     "CANONICAL_MODES",
-    "EnvironmentDocument",
+    "DEFAULT_LAST_SELECTED_LANGUAGE_PATH",
     "LEGACY_APP_STATE_FILENAME",
-    "LastRunDocument",
+    "LEGACY_APP_STATE_SCHEMA_VERSION",
     "MAX_STATE_WARNINGS",
+    "AppStateDocument",
+    "EnvironmentDocument",
+    "LastRunDocument",
     "ProducerDocument",
     "SelectionDocument",
     "StateSchemaResult",
@@ -69,18 +70,20 @@ _BOOLEAN_FIELDS = (
 
 
 def _persisted_document() -> dict[str, object]:
-    document: dict[str, object] = deepcopy(default_app_state_document())
+    document = cast(dict[str, object], deepcopy(default_app_state_document()))
     document["producer"] = producer_document("1.2.3")
     return document
 
 
-def _selection(document: dict[str, object]) -> dict[str, object]:
+def _selection(document: object) -> dict[str, object]:
+    assert isinstance(document, dict)
     selection = document["selection"]
     assert isinstance(selection, dict)
     return selection
 
 
-def _environment(document: dict[str, object]) -> dict[str, object]:
+def _environment(document: object) -> dict[str, object]:
+    assert isinstance(document, dict)
     environment = document["environment"]
     assert isinstance(environment, dict)
     return environment
@@ -93,11 +96,9 @@ def test_schema_module_exposes_only_the_canonical_public_surface() -> None:
 
 def test_schema_identity_defaults_and_warning_bound_are_stable() -> None:
     assert APP_STATE_SCHEMA_ID == "gf-wordbench.app-state"
-    assert APP_STATE_SCHEMA_VERSION == "1.0"
+    assert APP_STATE_SCHEMA_VERSION == "2.0"
     assert MAX_STATE_WARNINGS == 32
-    assert schema.CANONICAL_MODES == frozenset(
-        mode.value for mode in ValidationMode
-    )
+    assert frozenset(mode.value for mode in ValidationMode) == schema.CANONICAL_MODES
 
 
 def test_default_state_is_fresh_immutable_and_disposable() -> None:
@@ -113,7 +114,7 @@ def test_default_state_is_fresh_immutable_and_disposable() -> None:
     assert first.selection.mode is ValidationMode.DIAGNOSTIC
     assert first.selection.timeout_sec == 60
     assert first.selection.max_files == 0
-    assert first.environment == EnvironmentState(None, None, None, None)
+    assert first.environment == EnvironmentState(None, None, None, None, None)
     assert first.last_run == LastRunState(None, None, "")
 
     with pytest.raises(AttributeError):
@@ -140,7 +141,7 @@ def test_default_document_is_fresh_and_contains_no_producer_metadata() -> None:
     (
         ([], SchemaValidationError, r"\$: expected a JSON object"),
         (
-            {"schema_id": "wrong", "schema_version": "1.0"},
+            {"schema_id": "wrong", "schema_version": "2.0"},
             SchemaValidationError,
             r"\$\.schema_id: state identity is unsupported",
         ),
@@ -160,10 +161,10 @@ def test_default_document_is_fresh_and_contains_no_producer_metadata() -> None:
         (
             {
                 "schema_id": APP_STATE_SCHEMA_ID,
-                "schema_version": "2.0",
+                "schema_version": "3.0",
             },
             UnsupportedVersionError,
-            r"schema major 2 is unsupported",
+            r"schema major 3 is unsupported",
         ),
     ),
 )
@@ -242,11 +243,11 @@ def test_environment_path_recovery_is_safe_and_portable(
     warning_code: str | None,
 ) -> None:
     document = default_app_state_document()
-    _environment(document)["project_root"] = value
+    _environment(document)["last_selected_language_path"] = value
 
     result = recover_app_state_document(document)
 
-    assert result.document["environment"]["project_root"] == expected
+    assert result.document["environment"]["last_selected_language_path"] == expected
     codes = {warning.code for warning in result.warnings}
     if warning_code is None:
         assert not codes
@@ -308,18 +309,14 @@ def test_integer_preferences_require_exact_integer_types_and_bounds(
     result = recover_app_state_document(document)
 
     assert result.document["selection"][field] == expected
-    invalid = not (
-        type(value) is int
-        and (
-            value > 0
-            if field == "timeout_sec"
-            else value >= 0
+    invalid = not (type(value) is int and (value > 0 if field == "timeout_sec" else value >= 0))
+    assert (
+        any(
+            warning.code == "invalid_integer" and warning.field.endswith(field)
+            for warning in result.warnings
         )
+        is invalid
     )
-    assert any(
-        warning.code == "invalid_integer" and warning.field.endswith(field)
-        for warning in result.warnings
-    ) is invalid
 
 
 @pytest.mark.parametrize("field", _BOOLEAN_FIELDS)
@@ -339,9 +336,7 @@ def test_boolean_preferences_accept_only_json_booleans(
 
     result = recover_app_state_document(document)
 
-    assert result.document["selection"][field] == (
-        value if is_valid else default
-    )
+    assert result.document["selection"][field] == (value if is_valid else default)
     assert any(
         warning.code == "invalid_boolean" and warning.field.endswith(field)
         for warning in result.warnings
@@ -370,7 +365,7 @@ def test_missing_or_malformed_groups_default_every_known_field() -> None:
 
 def test_future_minor_recovers_known_fields_but_blocks_automatic_rewrite() -> None:
     document = default_app_state_document()
-    document["schema_version"] = "1.999"
+    document["schema_version"] = "2.999"
     _selection(document)["mode"] = "release"
 
     result = recover_app_state_document(document)
@@ -378,7 +373,7 @@ def test_future_minor_recovers_known_fields_but_blocks_automatic_rewrite() -> No
 
     assert result.compatible is True
     assert result.rewrite_safe is False
-    assert result.source_schema_version == "1.999"
+    assert result.source_schema_version == "2.999"
     assert result.document["schema_version"] == APP_STATE_SCHEMA_VERSION
     assert state.selection.mode is ValidationMode.RELEASE
     assert warnings == (
@@ -396,10 +391,10 @@ def test_strict_parser_requires_exact_nested_shapes() -> None:
         parse_app_state(unknown, strict=True)
 
     missing = _persisted_document()
-    del _environment(missing)["rgl_root"]
+    del _environment(missing)["last_rgl_root"]
     with pytest.raises(
         SchemaValidationError,
-        match=r"\$\.environment: missing required fields: rgl_root",
+        match=r"\$\.environment: missing required fields: last_rgl_root",
     ):
         canonicalize_app_state_document(missing)
 
@@ -414,18 +409,18 @@ def test_strict_parser_requires_exact_nested_shapes() -> None:
 
 def test_strict_schema_distinguishes_future_minor_and_major_versions() -> None:
     future_minor = _persisted_document()
-    future_minor["schema_version"] = "1.1"
+    future_minor["schema_version"] = "2.1"
     with pytest.raises(
         SchemaValidationError,
-        match=r"\$\.schema_version: must be '1.0'",
+        match=r"\$\.schema_version: must be '2.0'",
     ):
         canonicalize_app_state_document(future_minor)
 
     future_major = _persisted_document()
-    future_major["schema_version"] = "2.0"
+    future_major["schema_version"] = "3.0"
     with pytest.raises(
         UnsupportedVersionError,
-        match=r"\$\.schema_version: schema major 2 is unsupported",
+        match=r"\$\.schema_version: schema major 3 is unsupported",
     ):
         canonicalize_app_state_document(future_major)
 
@@ -449,8 +444,9 @@ def test_serialization_normalizes_paths_and_producer_override_wins() -> None:
         default_app_state(),
         producer=ProducerInfo(name="gf-wordbench", version="old"),
         environment=EnvironmentState(
-            project_root=r"C:\workspace\GF Wordbench",
-            rgl_root=None,
+            last_selected_language_path=r"C:\workspace\GF Wordbench",
+            last_selected_validation_profile=None,
+            last_rgl_root=None,
             gf_executable=r"C:\Program Files\GF\gf.exe",
             output_root=r"D:\runs",
         ),
@@ -473,15 +469,14 @@ def test_serialization_normalizes_paths_and_producer_override_wins() -> None:
         "version": "new",
     }
     assert document["environment"] == {
-        "project_root": "C:/workspace/GF Wordbench",
-        "rgl_root": None,
+        "last_selected_language_path": "C:/workspace/GF Wordbench",
+        "last_selected_validation_profile": None,
+        "last_rgl_root": None,
         "gf_executable": "C:/Program Files/GF/gf.exe",
         "output_root": "D:/runs",
     }
     assert document["selection"]["target_file"] == "src/Grammar.gf"
-    assert document["last_run"]["summary_path"] == (
-        "D:/runs/run_20260725_120000/summary.json"
-    )
+    assert document["last_run"]["summary_path"] == ("D:/runs/run_20260725_120000/summary.json")
     assert document["last_run"]["status_message"] == "Terminé — 日本語"
 
 
@@ -499,8 +494,9 @@ def test_serialization_rejects_wrong_producer_and_unsafe_paths() -> None:
     unsafe_path = replace(
         default_app_state(),
         environment=EnvironmentState(
-            project_root="${HOME}/workspace",
-            rgl_root=None,
+            last_selected_language_path="${HOME}/workspace",
+            last_selected_validation_profile=None,
+            last_rgl_root=None,
             gf_executable=None,
             output_root=None,
         ),
@@ -542,6 +538,4 @@ def test_strict_error_messages_include_the_declared_source_path(
     with pytest.raises(SchemaValidationError) as caught:
         canonicalize_app_state_document(document, source=source)
 
-    assert str(caught.value) == (
-        f"{source}: $.selection.timeout_sec: defaulted to 60"
-    )
+    assert str(caught.value) == (f"{source}: $.selection.timeout_sec: defaulted to 60")

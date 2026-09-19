@@ -1298,8 +1298,7 @@ def compile_file(
     file_path: Path,
     run_config: RunConfig,
     run_paths: RunPaths,
-) -> CompileResult:
-    ...
+) -> CompileResult: ...
 ```
 
 Related responsibilities may include:

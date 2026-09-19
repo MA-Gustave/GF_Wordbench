@@ -27,24 +27,18 @@ _OUTPUT_LIMIT_BYTES: Final[int] = 64 * 1024
 def _configured_gf_executable() -> Path:
     raw_value = os.environ.get(_GF_EXECUTABLE_ENV)
     if not raw_value:
-        pytest.skip(
-            f"{_GF_EXECUTABLE_ENV} is not configured for the real-GF suite"
-        )
+        pytest.skip(f"{_GF_EXECUTABLE_ENV} is not configured for the real-GF suite")
 
     candidate = Path(raw_value).expanduser()
     try:
         executable = candidate.resolve(strict=True)
     except OSError as exc:
         pytest.fail(
-            f"{_GF_EXECUTABLE_ENV} does not resolve to an existing file: "
-            f"{candidate!s}: {exc}"
+            f"{_GF_EXECUTABLE_ENV} does not resolve to an existing file: {candidate!s}: {exc}"
         )
 
     if not executable.is_file():
-        pytest.fail(
-            f"{_GF_EXECUTABLE_ENV} must identify a GF executable file: "
-            f"{executable}"
-        )
+        pytest.fail(f"{_GF_EXECUTABLE_ENV} must identify a GF executable file: {executable}")
     return executable
 
 
@@ -166,9 +160,7 @@ def test_real_gf_version_probe_is_repeatable_and_read_only(
     assert versions[0] == versions[1]
 
     generated = {
-        path.relative_to(workspace).as_posix()
-        for path in workspace.rglob("*")
-        if path.is_file()
+        path.relative_to(workspace).as_posix() for path in workspace.rglob("*") if path.is_file()
     }
     assert generated == {
         "attempt-1/stderr.txt",

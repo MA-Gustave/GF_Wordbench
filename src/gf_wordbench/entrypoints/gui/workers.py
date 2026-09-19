@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import traceback
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum, unique
-from pathlib import Path
 from threading import Event, Lock
+import traceback
 from typing import Final, Protocol, TypeAlias, TypeVar, runtime_checkable
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot
+from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
 
 from gf_wordbench.kernel.errors import (
     CancellationRequested,
@@ -259,10 +258,7 @@ class WorkerCancellationRequest:
 
     def wait(self, timeout_sec: float | None = None) -> bool:
         if timeout_sec is not None:
-            if (
-                isinstance(timeout_sec, bool)
-                or not isinstance(timeout_sec, (int, float))
-            ):
+            if isinstance(timeout_sec, bool) or not isinstance(timeout_sec, (int, float)):
                 raise TypeError("timeout_sec must be a number or None")
             if timeout_sec < 0:
                 raise ValueError("timeout_sec cannot be negative")
@@ -332,9 +328,7 @@ class RunWorker(QObject):
             cancellation,
             WorkerCancellationRequest,
         ):
-            raise TypeError(
-                "cancellation must be WorkerCancellationRequest or None"
-            )
+            raise TypeError("cancellation must be WorkerCancellationRequest or None")
         self._request = request
         self._cancellation = cancellation or WorkerCancellationRequest()
         self._lock = Lock()
@@ -381,9 +375,7 @@ class RunWorker(QObject):
                 self._state = WorkerState.FINISHED
             self.finished.emit(result)
         except CancellationRequested as exception:
-            reason = self._cancellation.reason() or _reason_from_exception(
-                exception
-            )
+            reason = self._cancellation.reason() or _reason_from_exception(exception)
             outcome = WorkerCancellation(
                 occurred_at=datetime.now(UTC),
                 run_id=self.run_id,
@@ -408,9 +400,7 @@ class RunWorker(QObject):
 
     def _emit_progress(self, event: WorkerEvent) -> None:
         if not isinstance(event, (ProgressEvent, LifecycleEvent)):
-            raise TypeError(
-                "event_sink accepts only ProgressEvent or LifecycleEvent"
-            )
+            raise TypeError("event_sink accepts only ProgressEvent or LifecycleEvent")
         self.progress.emit(event)
 
 
@@ -454,7 +444,7 @@ class RunWorkerHandle(QObject):
             name = thread.objectName()
             prefix = "gf-wordbench-run-"
             if name.startswith(prefix):
-                return name[len(prefix):]
+                return name[len(prefix) :]
         raise RuntimeError("worker handle has already been cleaned up")
 
     def is_running(self) -> bool:
@@ -501,15 +491,44 @@ class RunWorkerHandle(QObject):
         assert worker is not None
 
         thread.started.connect(worker.run)
-        worker.started.connect(self.started)
-        worker.progress.connect(self.progress)
-        worker.finished.connect(self.finished)
-        worker.cancelled.connect(self.cancelled)
-        worker.failed.connect(self.failed)
+
+        # Do not forward worker-thread signals signal-to-signal.  A Python
+        # callable connected downstream to such a forwarded signal can then be
+        # invoked synchronously on the worker thread, which is unsafe for Qt
+        # widgets and can leave the GUI apparently stuck after the run itself
+        # has completed.  Queue every public event through slots owned by this
+        # GUI-affine handle first; the handle then re-emits from the GUI thread.
+        queued = Qt.ConnectionType.QueuedConnection
+        worker.started.connect(self._forward_started, queued)
+        worker.progress.connect(self._forward_progress, queued)
+        worker.finished.connect(self._forward_finished, queued)
+        worker.cancelled.connect(self._forward_cancelled, queued)
+        worker.failed.connect(self._forward_failed, queued)
+
         worker.stopped.connect(worker.deleteLater)
         worker.stopped.connect(thread.quit)
         thread.finished.connect(self._on_thread_finished)
         thread.finished.connect(thread.deleteLater)
+
+    @Slot(str)
+    def _forward_started(self, run_id: str) -> None:
+        self.started.emit(run_id)
+
+    @Slot(object)
+    def _forward_progress(self, event: object) -> None:
+        self.progress.emit(event)
+
+    @Slot(object)
+    def _forward_finished(self, result: object) -> None:
+        self.finished.emit(result)
+
+    @Slot(object)
+    def _forward_cancelled(self, outcome: object) -> None:
+        self.cancelled.emit(outcome)
+
+    @Slot(object)
+    def _forward_failed(self, failure: object) -> None:
+        self.failed.emit(failure)
 
     @Slot()
     def _on_thread_finished(self) -> None:
@@ -561,7 +580,7 @@ def _reason_from_exception(exception: CancellationRequested) -> str:
     detail = exception.detail
     prefix = "reason="
     if detail.startswith(prefix):
-        candidate = detail[len(prefix):].strip()
+        candidate = detail[len(prefix) :].strip()
         if candidate in _ALLOWED_CANCELLATION_REASONS:
             return candidate
     return "controller_policy"
@@ -576,8 +595,7 @@ def _cancellation_reason(value: object) -> str:
     if canonical not in _ALLOWED_CANCELLATION_REASONS:
         allowed = ", ".join(sorted(_ALLOWED_CANCELLATION_REASONS))
         raise ValueError(
-            f"unsupported cancellation reason {canonical!r}; "
-            f"expected one of: {allowed}"
+            f"unsupported cancellation reason {canonical!r}; expected one of: {allowed}"
         )
     return canonical
 

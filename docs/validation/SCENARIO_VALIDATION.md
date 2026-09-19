@@ -9,13 +9,28 @@
 **Canonical path:** `docs/validation/SCENARIO_VALIDATION.md`  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Specification version:** `1.1`  
-**Last reviewed:** `2026-07-24`  
+**Last reviewed:** 2026-08-05  
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
-This document defines how GF Wordbench validates an active language project through native Grammatical Framework scenarios.
+This document defines how GF Wordbench validates an selected language context through native Grammatical Framework scenarios.
 
 Scenario validation proves behavior that individual source-file compilation cannot prove reliably, including:
 
@@ -39,7 +54,7 @@ GF Wordbench coordinates execution, captures evidence, validates scenario comple
 
 > GF Wordbench executes native GF scenarios; it does not implement a second GF shell.
 
-A scenario is a project-owned `.gfs` file.
+A scenario is a profile-owned `.gfs` file.
 
 The scenario runner must not:
 
@@ -72,8 +87,8 @@ docs/scenarios/OUTPUT_NORMALIZATION.md
 docs/scenarios/GOLDEN_TESTS.md
 docs/scenarios/UPDATING_GOLD_FILES.md
 docs/DOCUMENTATION_CORRECTION_LEDGER.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md
 ```
 
 Priority when rules overlap:
@@ -118,7 +133,7 @@ This specification governs:
 This specification does not define:
 
 - GF command syntax;
-- the linguistic architecture of the active project;
+- the linguistic architecture of the selected language context;
 - which example sentences are linguistically correct;
 - the exact output normalization rules;
 - the exact gold file text format;
@@ -135,13 +150,13 @@ This specification does not define:
 Language-specific expectations belong to:
 
 ```text
-project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
-project/validation/scenarios/
-project/validation/inputs/
-project/validation/gold/
+<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+<validation-profile-root>/validation/scenarios/
+<validation-profile-root>/validation/inputs/
+<validation-profile-root>/validation/gold/
 ```
 
-One Wordbench run resolves scenarios for exactly one active project and one normative language target. The independent `gf-portfolio` product may consume completed public Wordbench artifacts, but it does not select, execute, mutate, or aggregate scenarios through Wordbench's private runtime.
+One Wordbench run resolves scenarios for exactly one selected language context and one normative language target. The independent `gf-portfolio` product may consume completed public Wordbench artifacts, but it does not select, execute, mutate, or aggregate scenarios through Wordbench's private runtime.
 
 ---
 
@@ -204,15 +219,15 @@ The scenario runner owns:
 
 ### 7.2 Active-project owners
 
-The active project owns:
+The selected language context owns:
 
 ```text
-project/project.toml
-project/validation/scenarios/*.gfs
-project/validation/inputs/
-project/validation/gold/*.gold
-project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/project.toml
+<validation-profile-root>/validation/scenarios/*.gfs
+<validation-profile-root>/validation/inputs/
+<validation-profile-root>/validation/gold/*.gold
+<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 The framework must not silently rewrite these assets during normal validation.
@@ -296,7 +311,7 @@ linearize-clitics
 
 Rules:
 
-- unique inside one active project;
+- unique inside one selected language context;
 - stable across runs;
 - not derived from display text;
 - safe for logs and artifact filenames after canonical sanitization;
@@ -318,8 +333,8 @@ A different filename may be supported only through explicit project configuratio
 The authoritative registry is resolved from:
 
 ```text
-project/project.toml
-project/validation/scenarios/
+<validation-profile-root>/project.toml
+<validation-profile-root>/validation/scenarios/
 ```
 
 At minimum, project configuration distinguishes:
@@ -371,18 +386,18 @@ This model defines the resolved information required by scenario validation.
 | Field | Requirement |
 |---|---|
 | `scenario_id` | Unique stable identifier |
-| `script_path` | Existing project-owned `.gfs` file |
+| `script_path` | Existing profile-owned `.gfs` file |
 | `required` | Explicit boolean |
 | `enabled_modes` | Deterministic supported-mode set |
 | `working_directory` | Existing contained directory |
 | `timeout_sec` | Finite positive timeout |
 | `output_limit_bytes` | Finite positive limit |
-| `gold_path` | Project-owned `.gold` or `null` |
+| `gold_path` | Profile-owned `.gold` or `null` |
 | `comparison_policy` | Registered policy |
 | `normalization_version` | Supported version |
 | `expected_sections` | Ordered unique section IDs |
 | `expected_artifacts` | Explicit artifact expectations |
-| `input_paths` | Validated project-owned inputs |
+| `input_paths` | Validated profile-owned inputs |
 | `tags` | Optional stable metadata |
 
 Missing required scenario metadata is a configuration error.
@@ -486,7 +501,7 @@ Purpose:
 
 These families are recommendations, not mandatory hardcoded scenario IDs.
 
-The active project defines its actual registry.
+The selected language context defines its actual registry.
 
 ---
 
@@ -662,7 +677,7 @@ Input data must not be interpolated into an operating-system shell command.
 
 A `.gfs` file is executable input for GF.
 
-Project scenarios are trusted only to the degree the active project is trusted.
+Project scenarios are trusted only to the degree the selected language context is trusted.
 
 The framework must reject or prohibit by default scenario behavior capable of invoking unrestricted operating-system commands.
 
@@ -1448,13 +1463,13 @@ The normalized file uses:
 Canonical path:
 
 ```text
-project/validation/gold/<scenario-id>.gold
+<validation-profile-root>/validation/gold/<scenario-id>.gold
 ```
 
 A gold file is:
 
 - reviewed source material;
-- project-owned;
+- profile-owned;
 - version-controlled when required;
 - associated with one scenario identity;
 - normalized under one declared version;
@@ -2053,9 +2068,9 @@ Version control review remains necessary.
 
 | Artifact | Owner |
 |---|---|
-| `.gfs` scenario | active project maintainer |
-| scenario input | active project maintainer |
-| `.gold` | active project maintainer through explicit update |
+| `.gfs` scenario | selected language context maintainer |
+| scenario input | selected language context maintainer |
+| `.gold` | selected language context maintainer through explicit update |
 | raw stdout | process runner |
 | raw stderr | process runner |
 | normalized `.out` | scenario runner/normalizer |
@@ -2332,8 +2347,8 @@ temporarily optional
 The known issue must also appear in:
 
 ```text
-project/docs/KNOWN_ISSUES.md
-project/docs/STATUS_LEDGER__PROJECT_DOCS.md
+<validation-profile-root>/docs/KNOWN_ISSUES.md
+<validation-profile-root>/docs/STATUS_LEDGER__PROJECT_DOCS.md
 ```
 
 Expected-failure scenarios should not conceal newly different errors.
@@ -2576,7 +2591,7 @@ and report serialization use the contracts defined in this specification.
 
 Inherited callers may be adapted only when they:
 
-1. resolve one active project and one ordered scenario registry;
+1. resolve one selected language context and one ordered scenario registry;
 2. construct canonical `ScenarioSpec` values;
 3. execute through the shared process boundary;
 4. preserve raw evidence before interpretation;
@@ -2631,8 +2646,7 @@ def run_scenario(
     run_paths: RunPaths,
     *,
     cancellation_token: CancellationToken | None = None,
-) -> ScenarioResult:
-    ...
+) -> ScenarioResult: ...
 ```
 
 Canonical batch coordinator:
@@ -2644,8 +2658,7 @@ def run_scenarios(
     run_paths: RunPaths,
     *,
     cancellation_token: CancellationToken | None = None,
-) -> list[ScenarioResult]:
-    ...
+) -> list[ScenarioResult]: ...
 ```
 
 Batch results preserve input registry order.
@@ -2706,10 +2719,10 @@ Every required scenario should map to:
 Recommended references:
 
 ```text
-project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
-project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
-project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+<validation-profile-root>/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 A required scenario with no documented objective indicates documentation drift.
@@ -2936,7 +2949,7 @@ Requires:
 24. Scenario results are immutable after construction.
 25. Reports consume results and never rerun scenarios.
 26. Release requires every mandatory scenario to pass.
-27. Project-specific expectations remain in the active project.
+27. Project-specific expectations remain in the selected language context.
 28. Framework code remains language-neutral.
 29. Scenario changes, inputs, gold, and documentation form one review unit.
 30. Complexity is added only for a stable assertion, evidence, or safety requirement.
@@ -2947,7 +2960,7 @@ Requires:
 
 Scenario validation must answer one clear question:
 
-> Did GF execute the project-owned scenario completely, safely, and with the reviewed result required by the active project?
+> Did GF execute the profile-owned scenario completely, safely, and with the reviewed result required by the selected language context?
 
 The evidence chain is:
 

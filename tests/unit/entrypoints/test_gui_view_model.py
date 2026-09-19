@@ -9,7 +9,6 @@ from dataclasses import (
     replace,
 )
 from datetime import UTC, datetime, timedelta
-import inspect
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Final
@@ -62,9 +61,7 @@ def _state() -> AppState:
             version="1.0.0",
         ),
         environment=EnvironmentState(
-            last_selected_language_path=(
-                "C:/gf/gf-rgl/src/example/GrammarEx.gf"
-            ),
+            last_selected_language_path=("C:/gf/gf-rgl/src/example/GrammarEx.gf"),
             last_selected_validation_profile=None,
             rgl_root="C:/gf/gf-rgl",
             gf_executable="C:/gf/bin/gf.exe",
@@ -83,9 +80,7 @@ def _state() -> AppState:
         ),
         last_run=LastRunState(
             run_dir="C:/work/GF_Wordbench/runs/run_previous",
-            summary_path=(
-                "C:/work/GF_Wordbench/runs/run_previous/summary.json"
-            ),
+            summary_path=("C:/work/GF_Wordbench/runs/run_previous/summary.json"),
             status_message="Validation completed with failures",
         ),
     )
@@ -171,9 +166,7 @@ def _required_dataclass_kwargs(
             values[name] = total
         elif "warning" in lowered or "failure" in lowered:
             values[name] = 1
-        elif lowered in {"ok", "fail", "error", "skipped"}:
-            values[name] = 0
-        elif lowered in {"direct", "downstream", "ambiguous"}:
+        elif lowered in {"ok", "fail", "error", "skipped"} or lowered in {"direct", "downstream", "ambiguous"}:
             values[name] = 0
         elif lowered == "stage":
             values[name] = "compile"
@@ -194,86 +187,42 @@ def _required_dataclass_kwargs(
         elif lowered in {"metadata", "details"}:
             values[name] = MappingProxyType({})
         else:
-            raise AssertionError(
-                f"test fixture has no value for required "
-                f"{cls.__name__}.{name}"
-            )
+            raise AssertionError(f"test fixture has no value for required {cls.__name__}.{name}")
     return values
 
 
 def _progress(*, total: int | None = 4) -> ProgressView:
     return ProgressView(
-        **_required_dataclass_kwargs(
-            ProgressView,
-            total=total,
-        )
+        message="Compiling GrammarEx.gf",
+        completed=2 if total is not None else 0,
+        total=total,
+        warnings=1,
+        failures=1,
+        started_at=_FIXED_TIME,
+        updated_at=_FIXED_TIME + timedelta(seconds=5),
+        stage="compile",
+        subject="GrammarEx.gf",
     )
 
 
 def _view_model(state: AppState) -> GuiViewModel:
-    signature = inspect.signature(GuiViewModel)
-    positional: list[object] = []
-    keywords: dict[str, object] = {}
-
-    for parameter in signature.parameters.values():
-        if parameter.name in {"state", "app_state", "initial_state"}:
-            value: object = state
-        elif parameter.name in {"clock", "now", "utc_now"}:
-            value = lambda: _FIXED_TIME
-        elif parameter.name in {
-            "activity_limit",
-            "max_activity_items",
-            "maximum_activity_items",
-        }:
-            value = 3
-        elif parameter.default is not inspect.Parameter.empty:
-            continue
-        else:
-            raise AssertionError(
-                "unsupported required GuiViewModel constructor parameter: "
-                f"{parameter.name}"
-            )
-
-        if parameter.kind is inspect.Parameter.POSITIONAL_ONLY:
-            positional.append(value)
-        else:
-            keywords[parameter.name] = value
-
-    return GuiViewModel(*positional, **keywords)
+    return GuiViewModel(
+        state,
+        clock=lambda: _FIXED_TIME,
+        activity_limit=3,
+    )
 
 
 def _call_begin_run(model: GuiViewModel) -> None:
-    signature = inspect.signature(model.begin_run)
-    positional: list[object] = []
-    keywords: dict[str, object] = {}
-
-    for parameter in signature.parameters.values():
-        if parameter.name == "run_id":
-            value: object = "run_20260731T100000Z_example"
-        elif parameter.name in {"started_at", "timestamp", "now"}:
-            value = _FIXED_TIME
-        elif parameter.name in {"message", "status_message"}:
-            value = "Validation started"
-        elif parameter.default is not inspect.Parameter.empty:
-            continue
-        else:
-            raise AssertionError(
-                "unsupported required begin_run parameter: "
-                f"{parameter.name}"
-            )
-
-        if parameter.kind is inspect.Parameter.POSITIONAL_ONLY:
-            positional.append(value)
-        else:
-            keywords[parameter.name] = value
-
-    model.begin_run(*positional, **keywords)
+    model.begin_run(_FIXED_TIME)
 
 
 def _flatten_dataclass(value: object) -> tuple[object, ...]:
+    dataclass_fields = getattr(value, "__dataclass_fields__", None)
+    assert isinstance(dataclass_fields, dict)
     flattened: list[object] = []
-    for item in fields(value):
-        member = getattr(value, item.name)
+    for name in dataclass_fields:
+        member = getattr(value, name)
         if isinstance(member, Mapping):
             flattened.extend(member.keys())
             flattened.extend(member.values())
@@ -300,9 +249,7 @@ def test_gui_request_round_trips_only_permitted_application_state() -> None:
         "available_entrypoints",
         "capability_statuses",
     }
-    assert forbidden_language_truth.isdisjoint(
-        {item.name for item in fields(request)}
-    )
+    assert forbidden_language_truth.isdisjoint({item.name for item in fields(request)})
 
     for item in fields(request):
         value = getattr(request, item.name)
@@ -319,9 +266,7 @@ def test_gui_request_is_immutable_and_normalizes_state_paths() -> None:
         request.target_file = "changed.gf"  # type: ignore[misc]
 
     environment = request.environment_state()
-    assert environment.last_selected_language_path == (
-        "C:/gf/gf-rgl/src/example/GrammarEx.gf"
-    )
+    assert environment.last_selected_language_path == ("C:/gf/gf-rgl/src/example/GrammarEx.gf")
     assert environment.last_selected_validation_profile is None
     assert environment.gf_executable == "C:/gf/bin/gf.exe"
     assert environment.rgl_root == "C:/gf/gf-rgl"
@@ -368,7 +313,7 @@ def test_presentation_value_objects_are_frozen_and_slotted() -> None:
 
     for cls in public_values:
         assert is_dataclass(cls)
-        parameters = cls.__dataclass_params__
+        parameters = getattr(cls, "__dataclass_params__")
         assert parameters.frozen
         assert hasattr(cls, "__slots__")
 
@@ -395,21 +340,27 @@ def test_language_view_comes_only_from_resolved_language_context(
     assert context.language_key in flattened
     assert context.module_suffix in flattened
     assert any(
-        value in {
+        value
+        in {
             context.language_directory,
             context.language_directory.as_posix(),
         }
         for value in flattened
     )
     assert any(
-        value in {
+        value
+        in {
             context.rgl_source_root,
             context.rgl_source_root.as_posix(),
         }
         for value in flattened
     )
     for entrypoint in context.available_entrypoints:
-        assert entrypoint in flattened or entrypoint.as_posix() in flattened
+        assert (
+            entrypoint in flattened
+            or entrypoint.file_path in flattened
+            or entrypoint.file_path.as_posix() in flattened
+        )
 
 
 def test_initial_snapshot_is_idle_without_loaded_language() -> None:
@@ -455,9 +406,7 @@ def test_request_and_language_changes_are_allowed_only_while_idle(
     assert running.progress is not None
 
     with pytest.raises(RuntimeError):
-        model.update_request(
-            replace(updated, target_file="OtherEx.gf")
-        )
+        model.update_request(replace(updated, target_file="OtherEx.gf"))
 
     with pytest.raises(RuntimeError):
         model.clear_language_context()
@@ -494,11 +443,7 @@ def test_structured_progress_updates_snapshot_and_bounded_activity(
             ProgressEvent(
                 timestamp=_FIXED_TIME + timedelta(seconds=index + 1),
                 message=f"Compiled subject {index}",
-                severity=(
-                    EventLevel.WARN
-                    if index == 3
-                    else EventLevel.INFO
-                ),
+                severity=(EventLevel.WARN if index == 3 else EventLevel.INFO),
                 run_id="run_20260731T100000Z_example",
                 stage="compile",
                 subject=f"Module{index}.gf",
@@ -517,10 +462,7 @@ def test_structured_progress_updates_snapshot_and_bounded_activity(
     assert snapshot.progress.total == 5
     assert len(snapshot.activity) == 3
     assert snapshot.activity[-1].message == "Compiled subject 4"
-    assert any(
-        item.level is EventLevel.WARN
-        for item in snapshot.activity
-    )
+    assert any(item.level is EventLevel.WARN for item in snapshot.activity)
 
 
 def test_cancellation_request_is_idempotent_and_disables_repeat_request(

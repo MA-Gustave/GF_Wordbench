@@ -127,9 +127,7 @@ class BlockerGraphResolution:
             case_sensitive=self.case_sensitive,
         )
         if subject is None:
-            raise UnknownBlockerSubjectError(
-                f"unknown blocker subject: {subject_id!r}"
-            )
+            raise UnknownBlockerSubjectError(f"unknown blocker subject: {subject_id!r}")
         cycle_members: tuple[str, ...] = ()
         for cycle in self.cycles:
             if subject in cycle.members:
@@ -171,9 +169,7 @@ def normalize_blocker_identity(value: BlockerIdentityLike) -> str:
         raise BlockerGraphError("blocker identity must be project-relative")
     portable = raw.replace("\\", "/")
     if portable.startswith(("/", "~", "$")) or "%" in portable or "${" in portable:
-        raise BlockerGraphError(
-            "blocker identity must not be absolute or environment-dependent"
-        )
+        raise BlockerGraphError("blocker identity must not be absolute or environment-dependent")
     parts: list[str] = []
     for part in portable.split("/"):
         if part in ("", "."):
@@ -335,9 +331,7 @@ def resolve_blocker_graph(
         values: list[str] = []
         for blocker in graph[subject]:
             component = component_for.get(blocker)
-            values.extend(
-                (blocker,) if component is None else roots_by_component[component]
-            )
+            values.extend((blocker,) if component is None else roots_by_component[component])
         roots[subject] = normalize_blocker_identities(
             values,
             subject_id=subject,
@@ -348,9 +342,7 @@ def resolve_blocker_graph(
         BlockerCycle(
             members=component,
             root_blockers=tuple(
-                root
-                for root in roots_by_component[index]
-                if root not in component
+                root for root in roots_by_component[index] if root not in component
             ),
         )
         for index, component in enumerate(components)
@@ -425,9 +417,7 @@ def _components(
         if node not in index:
             visit(node)
     found.sort(
-        key=lambda values: tuple(
-            _key(value, case_sensitive=case_sensitive) for value in values
-        )
+        key=lambda values: tuple(_key(value, case_sensitive=case_sensitive) for value in values)
     )
     component_for = {
         member: component_index
@@ -504,15 +494,13 @@ def _index_identities(
         key = _key(identity, case_sensitive=case_sensitive)
         previous = result.get(key)
         if previous is not None and previous != identity:
-            raise DuplicateBlockerIdentityError(
-                f"{field} collision: {previous!r} and {identity!r}"
-            )
+            raise DuplicateBlockerIdentityError(f"{field} collision: {previous!r} and {identity!r}")
         result[key] = identity
     return result
 
 
 def _freeze_map(
-    values: Mapping[BlockerIdentityLike, Iterable[BlockerIdentityLike]],
+    values: Mapping[str, Iterable[BlockerIdentityLike]],
     field: str,
 ) -> Mapping[str, tuple[str, ...]]:
     if not isinstance(values, Mapping):
@@ -571,15 +559,12 @@ __all__ = (
     "BlockerCycle",
     "BlockerGraphError",
     "BlockerGraphInput",
-    "BlockerGraphResolution",
     "BlockerIdentity",
     "BlockerIdentityLike",
     "BlockerResolution",
     "DuplicateBlockerIdentityError",
     "UnknownBlockerSubjectError",
     "collapse_blocker_roots",
-    "normalize_blocker_identities",
-    "normalize_blocker_identity",
     "resolve_blocker_graph",
     "validate_blocked_by",
 )

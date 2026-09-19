@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import ast
 import importlib
+from collections.abc import MutableMapping
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 import pytest
 
@@ -52,9 +53,7 @@ _EXPECTED_SCHEMA_IDS: Final[tuple[str, ...]] = (
     "gf-wordbench.scenario-output",
 )
 
-_EXPECTED_RELEASE_GATE_IDS: Final[tuple[str, ...]] = tuple(
-    f"RG-{index:02d}" for index in range(15)
-)
+_EXPECTED_RELEASE_GATE_IDS: Final[tuple[str, ...]] = tuple(f"RG-{index:02d}" for index in range(15))
 
 _EXPECTED_SCAN_RULE_IDS: Final[tuple[str, ...]] = (
     "SCAN-NOTATION-001",
@@ -149,14 +148,10 @@ def test_extension_registry_uses_explicit_static_registration(
 
 
 def test_diagnostic_tool_registry_is_static_immutable_and_empty_by_default() -> None:
-    registry = importlib.import_module(
-        "gf_wordbench.diagnostics.tools.registry"
-    )
+    registry = importlib.import_module("gf_wordbench.diagnostics.tools.registry")
 
     assert registry.DEFAULT_TOOL_SPECS == ()
-    assert registry.DEFAULT_TOOL_REGISTRY.catalog_version == (
-        registry.CATALOG_VERSION
-    )
+    assert registry.DEFAULT_TOOL_REGISTRY.catalog_version == (registry.CATALOG_VERSION)
     assert tuple(registry.DEFAULT_TOOL_REGISTRY) == ()
     assert registry.DEFAULT_TOOL_REGISTRY.tool_ids == ()
     assert registry.registered_tool_ids() == ()
@@ -172,7 +167,11 @@ def test_diagnostic_tool_registry_is_static_immutable_and_empty_by_default() -> 
 
     assert isinstance(registry.DEFAULT_TOOL_REGISTRY.mapping, MappingProxyType)
     with pytest.raises(TypeError):
-        registry.DEFAULT_TOOL_REGISTRY.mapping["unreviewed-tool"] = object()
+        mutable_mapping = cast(
+            MutableMapping[str, object],
+            registry.DEFAULT_TOOL_REGISTRY.mapping,
+        )
+        mutable_mapping["unreviewed-tool"] = object()
 
     assert registry.normalize_tool_id("tool-1") == "tool-1"
     for invalid in ("", "Tool", "tool_name", "tool name", "../tool"):
@@ -184,9 +183,7 @@ def test_diagnostic_tool_registry_is_static_immutable_and_empty_by_default() -> 
 
 
 def test_schema_registry_is_versioned_deterministic_and_immutable() -> None:
-    registry = importlib.import_module(
-        "gf_wordbench.reporting.schemas.registry"
-    )
+    registry = importlib.import_module("gf_wordbench.reporting.schemas.registry")
 
     definitions = registry.CANONICAL_SCHEMA_DEFINITIONS
     assert tuple(registry.SCHEMA_REGISTRY) == definitions
@@ -194,10 +191,7 @@ def test_schema_registry_is_versioned_deterministic_and_immutable() -> None:
     assert len(registry.CANONICAL_SCHEMA_KEYS) == len(definitions)
     assert len(set(registry.CANONICAL_SCHEMA_KEYS)) == len(definitions)
 
-    paths = tuple(
-        definition.canonical_path_pattern
-        for definition in definitions
-    )
+    paths = tuple(definition.canonical_path_pattern for definition in definitions)
     assert len(paths) == len(set(path.casefold() for path in paths))
 
     for definition in definitions:
@@ -213,23 +207,16 @@ def test_schema_registry_is_versioned_deterministic_and_immutable() -> None:
     assert set(snapshot.values()) == set(definitions)
 
     with pytest.raises(TypeError):
-        snapshot["gf-wordbench.unreviewed/1.0"] = definitions[0]
+        mutable_snapshot = cast(MutableMapping[str, object], snapshot)
+        mutable_snapshot["gf-wordbench.unreviewed/1.0"] = definitions[0]
 
 
 def test_release_gate_registry_preserves_canonical_prefix_and_decision_owner() -> None:
-    registry = importlib.import_module(
-        "gf_wordbench.validation.release.registry"
-    )
+    registry = importlib.import_module("gf_wordbench.validation.release.registry")
 
-    assert registry.CANONICAL_RELEASE_GATE_IDS == (
-        _EXPECTED_RELEASE_GATE_IDS
-    )
-    assert tuple(registry.iter_release_gates()) == (
-        registry.CANONICAL_RELEASE_GATES
-    )
-    assert tuple(registry.CANONICAL_RELEASE_GATE_BY_ID) == (
-        _EXPECTED_RELEASE_GATE_IDS
-    )
+    assert registry.CANONICAL_RELEASE_GATE_IDS == (_EXPECTED_RELEASE_GATE_IDS)
+    assert tuple(registry.iter_release_gates()) == (registry.CANONICAL_RELEASE_GATES)
+    assert tuple(registry.CANONICAL_RELEASE_GATE_BY_ID) == (_EXPECTED_RELEASE_GATE_IDS)
 
     decision = registry.decision_gate_definition()
     assert decision.gate_id == "RG-14"
@@ -244,18 +231,13 @@ def test_release_gate_registry_preserves_canonical_prefix_and_decision_owner() -
         name="Contract-test project gate",
         applicability=registry.ReleaseGateApplicability.REQUIRED,
         owner="Project release policy",
-        purpose=(
-            "Prove that project extensions are explicit, typed, and "
-            "append-only."
-        ),
+        purpose=("Prove that project extensions are explicit, typed, and append-only."),
     )
     combined = registry.build_release_gate_registry((extension,))
 
     assert combined[:-1] == registry.CANONICAL_RELEASE_GATES
     assert combined[-1] is extension
-    assert registry.index_release_gate_registry(combined)[
-        extension.gate_id
-    ] is extension
+    assert registry.index_release_gate_registry(combined)[extension.gate_id] is extension
 
     with pytest.raises(ValueError):
         registry.validate_release_gate_registry(
@@ -268,9 +250,7 @@ def test_release_gate_registry_preserves_canonical_prefix_and_decision_owner() -
 
 
 def test_scan_rule_registry_is_explicit_ordered_and_total() -> None:
-    registry = importlib.import_module(
-        "gf_wordbench.validation.scanning.registry"
-    )
+    registry = importlib.import_module("gf_wordbench.validation.scanning.registry")
 
     registry.validate_builtin_registry()
 
@@ -290,39 +270,25 @@ def test_scan_rule_registry_is_explicit_ordered_and_total() -> None:
 
     for rule in rule_set:
         assert registry.require_builtin_rule(rule.rule_id) is rule
-        assert (
-            registry.require_builtin_rule_by_count_field(rule.count_field)
-            is rule
-        )
+        assert registry.require_builtin_rule_by_count_field(rule.count_field) is rule
         assert rule.source_views
         assert rule.interpretation
 
 
 def test_assertion_registry_requires_complete_explicit_evaluator_binding() -> None:
-    registry = importlib.import_module(
-        "gf_wordbench.validation.scenarios.assertion_registry"
-    )
+    registry = importlib.import_module("gf_wordbench.validation.scenarios.assertion_registry")
 
     descriptors = registry.CANONICAL_ASSERTION_TYPES
-    assert tuple(descriptor.type_id for descriptor in descriptors) == (
-        _EXPECTED_ASSERTION_TYPE_IDS
-    )
-    assert tuple(registry.CANONICAL_ASSERTION_TYPE_BY_ID) == (
-        _EXPECTED_ASSERTION_TYPE_IDS
-    )
+    assert tuple(descriptor.type_id for descriptor in descriptors) == (_EXPECTED_ASSERTION_TYPE_IDS)
+    assert tuple(registry.CANONICAL_ASSERTION_TYPE_BY_ID) == (_EXPECTED_ASSERTION_TYPE_IDS)
 
     orders = tuple(descriptor.order for descriptor in descriptors)
     assert orders == tuple(sorted(orders))
     assert len(orders) == len(set(orders))
-    assert len(_EXPECTED_ASSERTION_TYPE_IDS) == len(
-        set(_EXPECTED_ASSERTION_TYPE_IDS)
-    )
+    assert len(_EXPECTED_ASSERTION_TYPE_IDS) == len(set(_EXPECTED_ASSERTION_TYPE_IDS))
 
     for descriptor in descriptors:
-        assert (
-            registry.canonical_assertion_descriptor(descriptor.type_id)
-            is descriptor
-        )
+        assert registry.canonical_assertion_descriptor(descriptor.type_id) is descriptor
         assert descriptor.input_sources
         assert descriptor.serialization_name
         assert descriptor.report_label
@@ -330,18 +296,16 @@ def test_assertion_registry_requires_complete_explicit_evaluator_binding() -> No
     def evaluator(spec: object, context: object) -> object:
         return (spec, context)
 
-    evaluators = {
-        type_id: evaluator
-        for type_id in reversed(_EXPECTED_ASSERTION_TYPE_IDS)
-    }
+    evaluators = dict.fromkeys(reversed(_EXPECTED_ASSERTION_TYPE_IDS), evaluator)
     bound = registry.bind_canonical_assertion_registry(evaluators)
 
     assert bound.type_ids == _EXPECTED_ASSERTION_TYPE_IDS
     assert bound.descriptors == descriptors
     assert len(bound.fingerprint) == 64
-    assert bound.fingerprint == registry.bind_canonical_assertion_registry(
-        dict(evaluators)
-    ).fingerprint
+    assert (
+        bound.fingerprint
+        == registry.bind_canonical_assertion_registry(dict(evaluators)).fingerprint
+    )
 
     with pytest.raises(registry.AssertionEvaluatorBindingError):
         registry.bind_canonical_assertion_registry({})
@@ -351,7 +315,7 @@ def test_assertion_registry_requires_complete_explicit_evaluator_binding() -> No
             {**evaluators, "unreviewed.assertion": evaluator}
         )
 
-    invalid = dict(evaluators)
+    invalid: dict[str, object] = dict(evaluators)
     invalid[_EXPECTED_ASSERTION_TYPE_IDS[0]] = object()
     with pytest.raises(registry.AssertionEvaluatorBindingError):
         registry.bind_canonical_assertion_registry(invalid)
@@ -393,11 +357,7 @@ def test_registry_contracts_expose_no_runtime_mutator_api() -> None:
     for module_name, class_name in registry_classes:
         module = importlib.import_module(module_name)
         registry_class = getattr(module, class_name)
-        public_names = {
-            name
-            for name in vars(registry_class)
-            if not name.startswith("_")
-        }
+        public_names = {name for name in vars(registry_class) if not name.startswith("_")}
         assert public_names.isdisjoint(forbidden)
 
 

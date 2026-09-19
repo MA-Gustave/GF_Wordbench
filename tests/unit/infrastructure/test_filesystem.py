@@ -125,7 +125,7 @@ def test_copy_requires_absolute_source_and_destination(tmp_path: Path) -> None:
 
 def test_paths_reject_bytes_and_nul(tmp_path: Path) -> None:
     with pytest.raises(TypeError, match="text, not bytes"):
-        resolve_existing(cast(Any, os.fsencode(tmp_path)))
+        resolve_existing(cast("Any", os.fsencode(tmp_path)))
 
     with pytest.raises(ValueError, match="NUL"):
         resolve_for_output(str(tmp_path / "invalid\x00name"))
@@ -343,7 +343,7 @@ def test_read_limit_validation(
     source.write_bytes(b"x")
 
     with pytest.raises(error_type):
-        read_bytes(source, max_bytes=cast(Any, value))
+        read_bytes(source, max_bytes=cast("Any", value))
 
 
 def test_read_text_uses_strict_utf8_without_newline_conversion(
@@ -390,7 +390,7 @@ def test_write_text_uses_utf8_and_preserves_newlines(tmp_path: Path) -> None:
     assert not destination.read_bytes().startswith(b"\xef\xbb\xbf")
 
     with pytest.raises(TypeError, match="text must be str"):
-        write_text(tmp_path / "invalid.txt", cast(Any, b"bytes"))
+        write_text(tmp_path / "invalid.txt", cast("Any", b"bytes"))
 
 
 def test_write_collision_and_parent_creation_are_explicit(
@@ -403,12 +403,15 @@ def test_write_collision_and_parent_creation_are_explicit(
     with pytest.raises(FileNotFoundError):
         write_bytes(destination, b"first", root=root)
 
-    assert write_bytes(
-        destination,
-        b"first",
-        create_parents=True,
-        root=root,
-    ) == destination.resolve()
+    assert (
+        write_bytes(
+            destination,
+            b"first",
+            create_parents=True,
+            root=root,
+        )
+        == destination.resolve()
+    )
 
     with pytest.raises(FileExistsError) as caught:
         write_bytes(destination, b"second", root=root)

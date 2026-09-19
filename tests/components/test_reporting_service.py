@@ -1,36 +1,39 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import json
 from pathlib import Path
-from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
+from gf_wordbench.config.models import ResolvedEnvironment
 from gf_wordbench.kernel.statuses import OverallStatus, ValidationMode
 from gf_wordbench.reporting.summary.json_writer import write_summary_json
 from gf_wordbench.reporting.summary.markdown_writer import write_summary_md
+from gf_wordbench.runs.models.paths import RunPaths
 from gf_wordbench.runs.models.results import RunResult, RunTotals
 from gf_wordbench.runs.paths import build_run_paths
+from tests.helpers.builders import make_project_config, make_run_config
 
 
 @dataclass(frozen=True, slots=True)
 class _ReportingRunPaths:
-    """Expose canonical run paths plus locked writer compatibility names."""
+    """Expose canonical paths plus the locked writer compatibility aliases."""
 
-    canonical: object
+    canonical: RunPaths
 
     def __getattr__(self, name: str) -> object:
         return getattr(self.canonical, name)
 
     @property
     def summary_json_path(self) -> Path:
-        return Path(getattr(self.canonical, "summary_json"))
+        return self.canonical.summary_json
 
     @property
     def summary_md_path(self) -> Path:
-        return Path(getattr(self.canonical, "summary_md"))
+        return self.canonical.summary_md
 
 
 @pytest.fixture
@@ -53,47 +56,36 @@ def completed_run_result(tmp_path: Path) -> RunResult:
         directory.mkdir(parents=True, exist_ok=True)
     gf_executable.write_bytes(b"")
 
-    canonical_paths = build_run_paths(run_id, run_dir)
-    run_paths = _ReportingRunPaths(canonical_paths)
-
-    identity = SimpleNamespace(
-        id="demo-project",
-        name="Demo Project",
-        language_code="Demo",
-    )
-    sources = SimpleNamespace(
-        directory=Path("lib/src"),
-        glob="**/*.gf",
-    )
-    project = SimpleNamespace(
-        identity=identity,
-        sources=sources,
+    run_paths = _ReportingRunPaths(build_run_paths(run_id, run_dir))
+    project = make_project_config(
         project_root=project_root,
-        schema_version="1.0",
+        project_id="demo-project",
+        project_name="Demo Project",
+        language_code="demo",
+        source_directory=Path("lib/src"),
+        source_glob="**/*.gf",
+        entrypoints=(),
+        checkpoints=(),
+        required_scenarios=(),
+        optional_scenarios=(),
+        release_requires_pgf=False,
     )
-    environment = SimpleNamespace(
+    environment = ResolvedEnvironment(
         project_root=project_root,
         rgl_root=rgl_root,
         gf_executable=gf_executable,
         output_root=output_root,
-        gf_path=(rgl_root,),
+        gf_path=(project.source_root, rgl_root),
     )
-    run_config = SimpleNamespace(
+    run_config = make_run_config(
         project=project,
         environment=environment,
         mode=ValidationMode.DIAGNOSTIC,
-        target=None,
-        timeout_sec=60,
-        max_files=0,
-        keep_ok_details=False,
-        diff_previous=True,
-        skip_version_probe=False,
-        no_compile=False,
-        emit_cpu_stats=False,
         selected_checkpoints=(),
         selected_entrypoints=(),
         selected_scenarios=(),
-        compatibility_warnings=(),
+        release_requires_pgf=False,
+        evidence_level="standard",
     )
 
     started_at = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
@@ -120,7 +112,7 @@ def completed_run_result(tmp_path: Path) -> RunResult:
     )
     return RunResult(
         run_config=run_config,
-        run_paths=run_paths,
+        run_paths=cast(RunPaths, run_paths),
         started_at=started_at,
         finished_at=finished_at,
         duration_ms=125,
@@ -194,7 +186,6 @@ def test_reporting_service_is_deterministic_and_does_not_mutate_run_result(
         tuple(completed_run_result.diff_entries),
         tuple(completed_run_result.top_errors),
     ) == original_lists
-
 
 
 def test_reporting_writer_failure_is_explicit_and_independent(

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
 import re
 from types import MappingProxyType
-from typing import Final, TypeAlias, cast
+from typing import Final, Never, TypeAlias, cast
 
 from gf_wordbench.config.defaults import DEFAULT_VALIDATION_MODE
 from gf_wordbench.kernel.ids import validate_scenario_id
@@ -56,7 +56,7 @@ class CliUsageError(ValueError):
 class CliArgumentParser(argparse.ArgumentParser):
     """Argument parser that reports usage errors to the CLI application layer."""
 
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> Never:
         raise CliUsageError(message, usage=self.format_usage().rstrip())
 
 
@@ -100,6 +100,15 @@ class CliRequest:
         return dict(self.arguments)
 
     @property
+    def validation_profile_overrides(self) -> Mapping[str, ArgumentValue]:
+        """Return immutable migration-only validation-profile overrides."""
+
+        value = self.arguments.get("legacy_overrides", MappingProxyType({}))
+        if not isinstance(value, Mapping):
+            raise TypeError("legacy_overrides must be a mapping")
+        return cast("Mapping[str, ArgumentValue]", value)
+
+    @property
     def project_overrides(self) -> Mapping[str, ArgumentValue]:
         """Return migration-only legacy project overrides.
 
@@ -108,10 +117,7 @@ class CliRequest:
         inputs are migrated by the application layer.
         """
 
-        value = self.arguments.get("legacy_overrides", MappingProxyType({}))
-        if not isinstance(value, Mapping):
-            raise TypeError("legacy_overrides must be a mapping")
-        return cast(Mapping[str, ArgumentValue], value)
+        return self.validation_profile_overrides
 
 
 def build_parser(*, prog: str = _PROG) -> CliArgumentParser:
@@ -170,13 +176,9 @@ def parse_cli_request(
     """Parse one invocation into a canonical immutable CLI request."""
 
     namespace = parse_cli_namespace(argv, prog=prog)
-    command = cast(CliCommand, namespace._command)
+    command = cast("CliCommand", namespace._command)
     warnings = tuple(namespace._compatibility_warnings)
-    values = {
-        key: value
-        for key, value in vars(namespace).items()
-        if not key.startswith("_")
-    }
+    values = {key: value for key, value in vars(namespace).items() if not key.startswith("_")}
     return CliRequest(
         command=command,
         arguments=values,
@@ -195,7 +197,7 @@ def parse_args(
 
 
 def _add_language_parser(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[CliArgumentParser],
 ) -> None:
     language = commands.add_parser(
         "language",
@@ -225,6 +227,7 @@ def _add_language_parser(
     )
     probe.add_argument(
         "--profile",
+        "--validation-profile",
         dest="validation_profile",
         type=_path_value,
         default=None,
@@ -232,7 +235,10 @@ def _add_language_parser(
         help="optional explicit validation profile",
     )
     probe.add_argument(
+        "--probe-gf",
         "--verify-gf",
+        "--verify-with-gf",
+        dest="probe_gf",
         action="store_true",
         help="request capability verification through the normal GF boundary",
     )
@@ -241,7 +247,7 @@ def _add_language_parser(
     _add_environment_paths(probe, include_output=False)
 
 
-def _add_validate_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def _add_validate_parser(commands: argparse._SubParsersAction[CliArgumentParser]) -> None:
     parser = commands.add_parser(
         "validate",
         help="run validation and create one complete run directory",
@@ -323,7 +329,7 @@ def _add_validate_parser(commands: argparse._SubParsersAction[argparse.ArgumentP
     _add_validate_legacy_options(parser)
 
 
-def _add_project_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def _add_project_parser(commands: argparse._SubParsersAction[CliArgumentParser]) -> None:
     project = commands.add_parser(
         "project",
         help="explicit validation-profile contract operations",
@@ -337,10 +343,16 @@ def _add_project_parser(commands: argparse._SubParsersAction[argparse.ArgumentPa
     )
     check.set_defaults(_command=CliCommand.PROJECT_CHECK)
     check.add_argument("--strict", action="store_true")
-    check.add_argument("--probe-gf", action="store_true")
+    check.add_argument(
+        "--probe-gf",
+        "--verify-with-gf",
+        dest="probe_gf",
+        action="store_true",
+    )
     _add_language_selection_options(check, allow_last_language=False)
     check.add_argument(
         "--profile",
+        "--validation-profile",
         dest="validation_profile",
         type=_path_value,
         default=None,
@@ -352,7 +364,7 @@ def _add_project_parser(commands: argparse._SubParsersAction[argparse.ArgumentPa
     _add_legacy_project_root_option(check)
 
 
-def _add_scenarios_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def _add_scenarios_parser(commands: argparse._SubParsersAction[CliArgumentParser]) -> None:
     scenarios = commands.add_parser(
         "scenarios",
         help="registered scenario contract operations",
@@ -391,7 +403,7 @@ def _add_scenarios_parser(commands: argparse._SubParsersAction[argparse.Argument
     _add_legacy_project_root_option(check)
 
 
-def _add_gold_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def _add_gold_parser(commands: argparse._SubParsersAction[CliArgumentParser]) -> None:
     gold = commands.add_parser(
         "gold",
         help="reviewed gold-output operations",
@@ -410,7 +422,7 @@ def _add_gold_parser(commands: argparse._SubParsersAction[argparse.ArgumentParse
         type=_scenario_id,
         metavar="SCENARIO-ID",
     )
-    update.add_argument("--all", dest="all_scenarios", action="store_true")
+    update.add_argument("--all", dest="all_scenarios", action="count", default=0)
     update.add_argument("--yes", action="store_true")
     update.add_argument("--strict", action="store_true")
     update.add_argument("--show-diff", action="store_true")
@@ -434,7 +446,7 @@ def _add_gold_parser(commands: argparse._SubParsersAction[argparse.ArgumentParse
     _add_legacy_project_root_option(update)
 
 
-def _add_schemas_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def _add_schemas_parser(commands: argparse._SubParsersAction[CliArgumentParser]) -> None:
     schemas = commands.add_parser(
         "schemas",
         help="persisted-schema operations",
@@ -458,7 +470,7 @@ def _add_schemas_parser(commands: argparse._SubParsersAction[argparse.ArgumentPa
     check.add_argument("--project-root", type=_path_value, default=None, metavar="PATH")
 
 
-def _add_reports_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def _add_reports_parser(commands: argparse._SubParsersAction[CliArgumentParser]) -> None:
     reports = commands.add_parser(
         "reports",
         help="completed-run report and integrity operations",
@@ -612,18 +624,17 @@ def _normalize_namespace(
         if getattr(namespace, "validation_profile", None) is None:
             _usage_error(parser, "project check requires --profile")
     elif namespace._command is CliCommand.SCENARIOS_CHECK:
-        _require_language_startup_input(namespace, parser)
-        if getattr(namespace, "validation_profile", None) is None:
-            _usage_error(parser, "scenarios check requires --profile")
         _validate_unique_ids(namespace.scenario_ids, option="--scenario")
+        namespace.scenario_ids = tuple(namespace.scenario_ids)
+        namespace.scenarios = namespace.scenario_ids
     elif namespace._command is CliCommand.GOLD_UPDATE:
-        _require_language_startup_input(namespace, parser)
-        if getattr(namespace, "validation_profile", None) is None:
-            _usage_error(parser, "gold update requires --profile")
         _normalize_gold_update(namespace, parser)
+        namespace.scenario_ids = tuple(namespace.scenario_ids)
+        namespace.scenarios = namespace.scenario_ids
     elif namespace._command is CliCommand.REPORTS_CHECK and namespace.strict:
         namespace.verify_hashes = True
 
+    namespace.command = namespace._command
     namespace._compatibility_warnings = _compatibility_warnings(aliases)
     return namespace
 
@@ -637,19 +648,12 @@ def _normalize_language_inputs(
     if legacy_root is None:
         return
 
-    profile = legacy_root / "project" / "project.toml"
-    existing = getattr(namespace, "validation_profile", None)
-    if existing is not None and existing != profile:
-        _usage_error(
-            parser,
-            "--project-root conflicts with --profile",
-        )
-    namespace.validation_profile = profile
+    existing = getattr(namespace, "language_path", None)
+    if existing is not None and existing != legacy_root:
+        _usage_error(parser, "--project-root conflicts with --language-path")
+    namespace.language_path = legacy_root
     namespace.legacy_project_root = legacy_root
-    aliases.append(
-        "--project-root -> --profile <root>/project/project.toml "
-        "(migration compatibility)"
-    )
+    aliases.append("--project-root -> --language-path (migration compatibility)")
     delattr(namespace, "_legacy_project_root")
 
 
@@ -660,6 +664,9 @@ def _normalize_language_probe(
     language_path = getattr(namespace, "language_path", None)
     if language_path is None:
         _usage_error(parser, "language probe requires LANGUAGE-PATH")
+    probe_gf = bool(getattr(namespace, "probe_gf", False))
+    namespace.probe_gf = probe_gf
+    namespace.verify_with_gf = probe_gf
 
 
 def _require_language_startup_input(
@@ -683,8 +690,17 @@ def _normalize_validate(
     aliases: list[str],
     parser: argparse.ArgumentParser,
 ) -> None:
-    _require_language_startup_input(namespace, parser)
     raw_mode = namespace.mode
+    if (
+        getattr(namespace, "language_path", None) is None
+        and not bool(getattr(namespace, "use_last_language", False))
+        and getattr(namespace, "legacy_project_root", None) is None
+        and raw_mode is None
+        and getattr(namespace, "target", None) is None
+        and not tuple(getattr(namespace, "scenario_ids", ()))
+        and getattr(namespace, "validation_profile", None) is None
+    ):
+        _require_language_startup_input(namespace, parser)
     if raw_mode in _LEGACY_MODE_ALIASES:
         canonical_mode = _LEGACY_MODE_ALIASES[raw_mode]
         aliases.append(f"--mode {raw_mode} -> --mode {canonical_mode.value}")
@@ -732,9 +748,7 @@ def _normalize_validate(
 
     if effective_mode is ValidationMode.QUICK and namespace.target is None:
         language_path = getattr(namespace, "language_path", None)
-        if isinstance(language_path, Path) and language_path.suffix.casefold() == ".gf":
-            namespace.target = language_path
-        else:
+        if not (isinstance(language_path, Path) and language_path.suffix.casefold() == ".gf"):
             _usage_error(
                 parser,
                 "--target is required in quick mode unless --language-path is a .gf file",
@@ -753,16 +767,18 @@ def _normalize_validate(
         if namespace.compare_previous is False:
             _usage_error(parser, "--baseline conflicts with --no-compare-previous")
         namespace.compare_previous = True
-    if (
-        effective_mode is ValidationMode.RELEASE
-        and namespace.strict
-        and namespace.no_version_probe
-    ):
+    if effective_mode is ValidationMode.RELEASE and namespace.strict and namespace.no_version_probe:
         _usage_error(parser, "strict release mode does not permit --no-version-probe")
     if effective_mode is ValidationMode.RELEASE and namespace.strict and legacy_overrides:
         _usage_error(parser, "strict release mode rejects migration-only legacy overrides")
 
     _validate_unique_ids(namespace.scenario_ids, option="--scenario")
+    namespace.scenario_ids = tuple(namespace.scenario_ids)
+    namespace.scenarios = namespace.scenario_ids
+    namespace.checkpoints = () if namespace.checkpoint is None else (namespace.checkpoint,)
+    namespace.skip_version_probe = namespace.no_version_probe
+    namespace.emit_cpu_stats = namespace.cpu_stats
+    namespace.diff_previous = namespace.compare_previous
     _remove_legacy_attributes(namespace)
 
 
@@ -771,11 +787,17 @@ def _normalize_gold_update(
     parser: argparse.ArgumentParser,
 ) -> None:
     scenario_ids = tuple(namespace.scenario_ids)
-    if namespace.all_scenarios and scenario_ids:
+    all_count = namespace.all_scenarios
+    if type(all_count) is not int or all_count < 0:
+        _usage_error(parser, "gold update received an invalid --all selection")
+    if all_count > 1:
+        _usage_error(parser, "gold update accepts --all only once")
+    if all_count and scenario_ids:
         _usage_error(parser, "gold update accepts scenario IDs or --all, not both")
-    if not namespace.all_scenarios and not scenario_ids:
+    if not all_count and not scenario_ids:
         _usage_error(parser, "gold update requires scenario IDs or --all")
     _validate_unique_ids(scenario_ids, option="SCENARIO-ID")
+    namespace.all_scenarios = bool(all_count)
     namespace.scenario_ids = scenario_ids
 
 
@@ -815,6 +837,8 @@ def _collect_legacy_project_overrides(
     for canonical, attribute, label in mapping:
         value = getattr(namespace, attribute)
         if value not in (None, ()):
+            if canonical in {"include_regex", "exclude_regex"} and isinstance(value, tuple):
+                value = value[0] if len(value) == 1 else value
             values[canonical] = value
             aliases.append(f"{label} -> migration-only project override")
     return MappingProxyType(values)
@@ -833,9 +857,7 @@ def _apply_legacy_scalar(
         return
     canonical_value = getattr(namespace, canonical)
     if canonical_value is not None and canonical_value != legacy_value:
-        raise CliUsageError(
-            f"{legacy_label} conflicts with its canonical replacement"
-        )
+        raise CliUsageError(f"{legacy_label} conflicts with its canonical replacement")
     setattr(namespace, canonical, legacy_value)
     aliases.append(f"{legacy_label} -> --{canonical.replace('_', '-')}")
 
@@ -894,9 +916,7 @@ def _scenario_id(value: str) -> str:
 def _canonical_id(value: str) -> str:
     checked = _require_argument_text(value, field="identifier")
     if _ID_RE.fullmatch(checked) is None:
-        raise argparse.ArgumentTypeError(
-            "identifier must be lowercase kebab case"
-        )
+        raise argparse.ArgumentTypeError("identifier must be lowercase kebab case")
     return checked
 
 
@@ -951,10 +971,7 @@ def _freeze_argument_value(value: object) -> object:
         return tuple(_freeze_argument_value(item) for item in value)
     if isinstance(value, Mapping):
         return MappingProxyType(
-            {
-                str(key): _freeze_argument_value(item)
-                for key, item in value.items()
-            }
+            {str(key): _freeze_argument_value(item) for key, item in value.items()}
         )
     return value
 

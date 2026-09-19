@@ -8,6 +8,9 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
+from gf_wordbench.infrastructure.filesystem import (
+    create_directory as create_directory_boundary,
+)
 from gf_wordbench.kernel.errors import ContractViolationError, PathSecurityError
 from gf_wordbench.runs import paths as paths_module
 from gf_wordbench.runs.identity import (
@@ -258,7 +261,7 @@ def test_allocation_rolls_back_empty_directories_after_layout_failure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    original_create_directory = paths_module.create_directory
+    original_create_directory = create_directory_boundary
     calls = 0
 
     def fail_during_layout(path: Path, **kwargs: object) -> Path:

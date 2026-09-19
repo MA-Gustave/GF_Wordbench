@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import re
-import sys
-import traceback
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Protocol, TextIO, runtime_checkable
+import re
+import sys
+import traceback
+from typing import TYPE_CHECKING, Final, Literal, Protocol, TextIO, overload, runtime_checkable
 
 from gf_wordbench.version import __version__
 
@@ -214,7 +214,7 @@ class RunResultLike(Protocol):
 
 
 class ConsolePresenter:
-    __slots__ = ("_streams", "_verbosity", "_redactor", "_flush")
+    __slots__ = ("_flush", "_redactor", "_streams", "_verbosity")
 
     def __init__(
         self,
@@ -387,10 +387,7 @@ class ConsolePresenter:
     def progress(self, event: object) -> None:
         severity = _event_severity(event)
         warning_or_error = severity in {"WARN", "WARNING", "ERROR", "FATAL"}
-        if (
-            self._verbosity is not ConsoleVerbosity.VERBOSE
-            and not warning_or_error
-        ):
+        if self._verbosity is not ConsoleVerbosity.VERBOSE and not warning_or_error:
             return
         line = format_progress_event(event)
         if warning_or_error:
@@ -401,10 +398,7 @@ class ConsolePresenter:
     def lifecycle(self, event: object) -> None:
         severity = _event_severity(event, level_field="level")
         warning_or_error = severity in {"WARN", "WARNING", "ERROR", "FATAL"}
-        if (
-            self._verbosity is not ConsoleVerbosity.VERBOSE
-            and not warning_or_error
-        ):
+        if self._verbosity is not ConsoleVerbosity.VERBOSE and not warning_or_error:
             return
         line = format_lifecycle_event(event)
         if warning_or_error:
@@ -531,7 +525,6 @@ def present_run_summary(
     )
 
 
-
 def format_result(
     result: object,
     *,
@@ -574,15 +567,9 @@ def present_result(
     """Present a command result using request verbosity when available."""
 
     request_quiet, request_verbose = _request_verbosity(request)
-    resolved_quiet = (
-        request_quiet
-        if quiet is None
-        else _require_bool(quiet, field="quiet")
-    )
+    resolved_quiet = request_quiet if quiet is None else _require_bool(quiet, field="quiet")
     resolved_verbose = (
-        request_verbose
-        if verbose is None
-        else _require_bool(verbose, field="verbose")
+        request_verbose if verbose is None else _require_bool(verbose, field="verbose")
     )
     presenter = _presenter(
         quiet=resolved_quiet,
@@ -597,6 +584,7 @@ def present_result(
         application_version=application_version,
         existing_artifacts_only=existing_artifacts_only,
     )
+
 
 def format_error(
     error: object,
@@ -622,9 +610,7 @@ def format_error(
         max_length=_MAX_CONSOLE_MESSAGE,
     )
     normalized_category = (
-        _optional_label(category, field="category")
-        or _error_category(error)
-        or "ERROR"
+        _optional_label(category, field="category") or _error_category(error) or "ERROR"
     )
     lines = [f"Error [{normalized_category}]: {message}"]
 
@@ -635,9 +621,7 @@ def format_error(
     if run_dir is not None:
         lines.append(f"Run directory: {_require_path(run_dir, field='run_dir')}")
     if summary_path is not None:
-        lines.append(
-            f"Summary: {_require_path(summary_path, field='summary_path')}"
-        )
+        lines.append(f"Summary: {_require_path(summary_path, field='summary_path')}")
 
     normalized_remediation = _optional_text(
         remediation,
@@ -749,11 +733,7 @@ def present_progress(
             _stream_or_default(stdout, sys.stdout),
             _stream_or_default(stderr, sys.stderr),
         ),
-        verbosity=(
-            ConsoleVerbosity.VERBOSE
-            if verbose
-            else ConsoleVerbosity.NORMAL
-        ),
+        verbosity=(ConsoleVerbosity.VERBOSE if verbose else ConsoleVerbosity.NORMAL),
         redactor=redactor,
     ).progress(event)
 
@@ -771,11 +751,7 @@ def present_lifecycle_event(
             _stream_or_default(stdout, sys.stdout),
             _stream_or_default(stderr, sys.stderr),
         ),
-        verbosity=(
-            ConsoleVerbosity.VERBOSE
-            if verbose
-            else ConsoleVerbosity.NORMAL
-        ),
+        verbosity=(ConsoleVerbosity.VERBOSE if verbose else ConsoleVerbosity.NORMAL),
         redactor=redactor,
     ).lifecycle(event)
 
@@ -792,11 +768,7 @@ def build_progress_sink(
             _stream_or_default(stdout, sys.stdout),
             _stream_or_default(stderr, sys.stderr),
         ),
-        verbosity=(
-            ConsoleVerbosity.VERBOSE
-            if verbose
-            else ConsoleVerbosity.NORMAL
-        ),
+        verbosity=(ConsoleVerbosity.VERBOSE if verbose else ConsoleVerbosity.NORMAL),
         redactor=redactor,
     )
     return presenter.progress
@@ -814,11 +786,7 @@ def build_lifecycle_sink(
             _stream_or_default(stdout, sys.stdout),
             _stream_or_default(stderr, sys.stderr),
         ),
-        verbosity=(
-            ConsoleVerbosity.VERBOSE
-            if verbose
-            else ConsoleVerbosity.NORMAL
-        ),
+        verbosity=(ConsoleVerbosity.VERBOSE if verbose else ConsoleVerbosity.NORMAL),
         redactor=redactor,
     )
     return presenter.lifecycle
@@ -856,11 +824,7 @@ def format_lifecycle_event(event: object) -> str:
     status = _optional_event_text(event, "status")
     subject = _optional_event_text(event, "subject")
 
-    prefix_parts = [
-        value
-        for value in (stage, subject, status)
-        if value is not None
-    ]
+    prefix_parts = [value for value in (stage, subject, status) if value is not None]
     prefix = f"[{' / '.join(prefix_parts)}] " if prefix_parts else ""
     return safe_console_text(
         f"{prefix}{message}",
@@ -901,16 +865,63 @@ def safe_console_text(
     return f"{text[: max_length - 3]}..."
 
 
-def print_error(error: object, **kwargs: object) -> None:
-    present_error(error, **kwargs)
+def print_error(
+    error: object,
+    *,
+    category: str | None = None,
+    command: str | None = None,
+    run_dir: Path | None = None,
+    summary_path: Path | None = None,
+    remediation: str | None = None,
+    cancelled: bool | None = None,
+    debug: bool = False,
+    traceback_text: str | None = None,
+    stderr: TextIO | None = None,
+    redactor: TextRedactor | None = None,
+) -> None:
+    present_error(
+        error,
+        category=category,
+        command=command,
+        run_dir=run_dir,
+        summary_path=summary_path,
+        remediation=remediation,
+        cancelled=cancelled,
+        debug=debug,
+        traceback_text=traceback_text,
+        stderr=stderr,
+        redactor=redactor,
+    )
 
 
-def print_warning(message: object, **kwargs: object) -> None:
-    present_warning(message, **kwargs)
+def print_warning(
+    message: object,
+    *,
+    stderr: TextIO | None = None,
+    redactor: TextRedactor | None = None,
+) -> None:
+    present_warning(message, stderr=stderr, redactor=redactor)
 
 
-def print_failure(message: object, **kwargs: object) -> None:
-    present_failure(message, **kwargs)
+def print_failure(
+    message: object,
+    *,
+    command: str | None = None,
+    run_dir: Path | None = None,
+    summary_path: Path | None = None,
+    remediation: str | None = None,
+    stderr: TextIO | None = None,
+    redactor: TextRedactor | None = None,
+) -> None:
+    present_failure(
+        message,
+        command=command,
+        run_dir=run_dir,
+        summary_path=summary_path,
+        remediation=remediation,
+        stderr=stderr,
+        redactor=redactor,
+    )
 
 
 def _presenter(
@@ -967,17 +978,37 @@ def _count_attribute(value: object, name: str) -> int:
     return _require_count(getattr(value, name), field=f"totals.{name}")
 
 
+@overload
+def _path_attribute(
+    value: object,
+    name: str,
+    *,
+    required: Literal[True],
+) -> Path: ...
+
+
+@overload
+def _path_attribute(
+    value: object,
+    name: str,
+    *,
+    required: Literal[False],
+) -> Path | None: ...
+
+
 def _path_attribute(
     value: object,
     name: str,
     *,
     required: bool,
-) -> Path:
+) -> Path | None:
     if not hasattr(value, name):
         raise TypeError(f"run_paths must expose {name}")
     candidate = getattr(value, name)
-    if candidate is None and not required:
-        return candidate
+    if candidate is None:
+        if required:
+            raise TypeError(f"run_paths.{name} must not be None")
+        return None
     return _require_path(candidate, field=f"run_paths.{name}")
 
 
@@ -1074,11 +1105,7 @@ def _string_sequence(value: object, *, field: str) -> tuple[str, ...]:
         raise TypeError(f"{field} must be a sequence, not one string")
     if not isinstance(value, Sequence):
         raise TypeError(f"{field} must be a sequence of strings")
-    return tuple(
-        _require_text(item, field=f"{field} item")
-        for item in value
-    )
-
+    return tuple(_require_text(item, field=f"{field} item") for item in value)
 
 
 def _request_verbosity(request: object | None) -> tuple[bool, bool]:
@@ -1142,10 +1169,7 @@ def _mapping_lines(
         ):
             lines.append(f"{_label(key)}: {len(value)}")
             if verbose:
-                lines.extend(
-                    f"  - {_detail_text(item)}"
-                    for item in value[:_MAX_RESULT_ITEMS]
-                )
+                lines.extend(f"  - {_detail_text(item)}" for item in value[:_MAX_RESULT_ITEMS])
         elif isinstance(value, Mapping):
             lines.append(f"{_label(key)}: {len(value)}")
     if not lines:
@@ -1162,10 +1186,7 @@ def _sequence_lines(
         return ()
     if not verbose:
         return (f"Items: {len(result)}",)
-    return tuple(
-        _detail_text(item)
-        for item in result[:_MAX_RESULT_ITEMS]
-    )
+    return tuple(_detail_text(item) for item in result[:_MAX_RESULT_ITEMS])
 
 
 def _object_lines(
@@ -1214,10 +1235,7 @@ def _object_lines(
             continue
         lines.append(f"{_label(field_name)}: {len(value)}")
         if verbose:
-            lines.extend(
-                f"  - {_detail_text(item)}"
-                for item in value[:_MAX_RESULT_ITEMS]
-            )
+            lines.extend(f"  - {_detail_text(item)}" for item in value[:_MAX_RESULT_ITEMS])
     return tuple(lines)
 
 
@@ -1232,7 +1250,9 @@ def _result_uses_stderr(result: object) -> bool:
 
 def _first_attribute(result: object, *names: str) -> object | None:
     for name in names:
-        value = getattr(result, name, None)
+        if not hasattr(result, name):
+            continue
+        value = object.__getattribute__(result, name)
         if value is not None:
             return value
     return None
@@ -1281,6 +1301,7 @@ def _optional_bool(value: object, *, field: str) -> bool:
     if value is None:
         return False
     return _require_bool(value, field=field)
+
 
 def _coerce_verbosity(
     value: ConsoleVerbosity | str,
@@ -1349,7 +1370,6 @@ def _strip_terminal_controls(
         else:
             result.append(character)
     return "".join(result)
-
 
 
 __all__ = (

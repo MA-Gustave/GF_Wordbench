@@ -7,10 +7,25 @@
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Canonical path:** `docs/validation/VALIDATION_MODES.md`  
 **Contract version:** `1.0.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines the canonical validation modes of GF Wordbench.
@@ -73,13 +88,13 @@ A missing required capability is a mode failure, not permission to skip it.
 
 ### 2.1 Workspace and product boundary
 
-One GF Wordbench workspace contains exactly one active GF language project at `project/`.
-Every validation run resolves exactly one active project and one normative language target.
+One GF Wordbench workspace contains exactly one selected GF language context at `project/`.
+Every validation run resolves exactly one selected language context and one normative language target.
 
 Validation modes do not provide:
 
 - a multi-project registry;
-- simultaneous validation of several active projects in one run;
+- simultaneous validation of several selected language contexts in one run;
 - cross-workspace orchestration;
 - multilingual portfolio aggregation.
 
@@ -197,7 +212,7 @@ It is development evidence, not release evidence.
 
 Purpose:
 
-> Produce complete, reproducible evidence that the active project satisfies its declared release contract.
+> Produce complete, reproducible evidence that the selected language context satisfies its declared release contract.
 
 Typical use:
 
@@ -301,10 +316,10 @@ Every mode must begin with common preflight validation.
 
 ## 8.1 Project configuration
 
-The run must load one authoritative active project from:
+The run must load one authoritative selected language context from:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 Required project information must be validated before GF execution.
@@ -354,7 +369,7 @@ Every run must receive:
 - unique run ID;
 - start timestamp;
 - selected mode;
-- resolved project identity;
+- resolved resolved language identity;
 - resolved environment;
 - owned run directory.
 
@@ -548,7 +563,7 @@ extend
 grammar_entry
 ```
 
-Actual IDs are project-owned.
+Actual IDs are profile-owned.
 
 Each checkpoint should define:
 
@@ -718,7 +733,7 @@ Prohibited:
 It should answer:
 
 ```text
-Does the active project satisfy every declared release requirement with reproducible evidence?
+Does the selected language context satisfy every declared release requirement with reproducible evidence?
 ```
 
 ## 11.2 Release authority
@@ -726,11 +741,11 @@ Does the active project satisfy every declared release requirement with reproduc
 Release requirements are defined by:
 
 ```text
-project/project.toml
-project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
-project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
-project/docs/KNOWN_ISSUES.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/project.toml
+<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+<validation-profile-root>/docs/KNOWN_ISSUES.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Machine-enforced requirements must have a structured representation.
@@ -1344,7 +1359,7 @@ Example conceptual mapping:
 | bounded generation | No | Optional | Optional/required by policy | Common |
 | morphology introspection | No | Optional | Optional | Common |
 
-The active project owns the actual mapping.
+The selected language context owns the actual mapping.
 
 Framework defaults must not hardcode one language’s scenario IDs.
 
@@ -1481,7 +1496,7 @@ Comparison requires compatible structured summaries.
 At minimum, comparison must consider:
 
 - schema compatibility;
-- project identity;
+- resolved language identity;
 - subject identity;
 - relevant mode or target context.
 
@@ -1703,7 +1718,7 @@ A project may configure content for each mode.
 
 It must not redefine the meaning so radically that the same mode name becomes incompatible.
 
-## 26.2 Project-owned content
+## 26.2 Profile-owned content
 
 The project owns:
 

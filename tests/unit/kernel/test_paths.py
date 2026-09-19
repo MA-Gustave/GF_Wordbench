@@ -128,9 +128,7 @@ def test_portable_path_requires_text_pathlike_input(value: object) -> None:
 
 
 def test_serialize_portable_path_returns_canonical_text() -> None:
-    assert serialize_portable_path(r"raw\scenario.stdout.txt") == (
-        "raw/scenario.stdout.txt"
-    )
+    assert serialize_portable_path(r"raw\scenario.stdout.txt") == ("raw/scenario.stdout.txt")
     assert isinstance(serialize_portable_path("summary.json"), str)
 
 
@@ -148,7 +146,7 @@ def test_serialize_portable_path_returns_canonical_text() -> None:
         "line\nbreak",
         "delete\x7fcharacter",
         "question?.txt",
-        "quote\".txt",
+        'quote".txt',
         "colon:name",
         "pipe|name",
         "star*.txt",
@@ -202,10 +200,13 @@ def test_relative_environment_path_requires_explicit_base(tmp_path: Path) -> Non
     with pytest.raises(ContractViolationError, match="explicit resolution base"):
         normalize_environment_path("relative/file.txt")
 
-    assert normalize_environment_path(
-        "relative/./file.txt",
-        base=tmp_path,
-    ) == tmp_path / "relative" / "file.txt"
+    assert (
+        normalize_environment_path(
+            "relative/./file.txt",
+            base=tmp_path,
+        )
+        == tmp_path / "relative" / "file.txt"
+    )
 
 
 def test_environment_path_base_must_be_absolute() -> None:
@@ -233,10 +234,13 @@ def test_environment_path_home_expansion_is_explicit(
     with pytest.raises(ContractViolationError, match="not explicitly enabled"):
         normalize_environment_path("~/artifact.txt")
 
-    assert normalize_environment_path(
-        "~/artifact.txt",
-        expand_user=True,
-    ) == tmp_path / "artifact.txt"
+    assert (
+        normalize_environment_path(
+            "~/artifact.txt",
+            expand_user=True,
+        )
+        == tmp_path / "artifact.txt"
+    )
 
 
 def test_environment_path_rejects_drive_relative_form() -> None:
@@ -245,9 +249,9 @@ def test_environment_path_rejects_drive_relative_form() -> None:
 
 
 def test_environment_path_trims_outer_whitespace(tmp_path: Path) -> None:
-    assert normalize_environment_path(
-        f"  {tmp_path / 'artifact.txt'}  "
-    ) == tmp_path / "artifact.txt"
+    assert (
+        normalize_environment_path(f"  {tmp_path / 'artifact.txt'}  ") == tmp_path / "artifact.txt"
+    )
 
 
 def test_serialize_environment_path_requires_absolute_path(tmp_path: Path) -> None:
@@ -262,9 +266,7 @@ def test_serialize_environment_path_requires_absolute_path(tmp_path: Path) -> No
 def test_join_portable_path_joins_without_filesystem_access(tmp_path: Path) -> None:
     root = tmp_path / "run_20260725_120000"
 
-    assert join_portable_path(root, r"raw\master.log") == (
-        root / "raw" / "master.log"
-    )
+    assert join_portable_path(root, r"raw\master.log") == (root / "raw" / "master.log")
     assert join_portable_path(root, ".") == root
 
 
@@ -281,9 +283,7 @@ def test_join_portable_path_can_forbid_root_equality(tmp_path: Path) -> None:
 def test_path_identity_key_normalizes_absolute_paths(tmp_path: Path) -> None:
     equivalent = tmp_path / "a" / ".." / "artifact.txt"
 
-    assert path_identity_key(equivalent) == path_identity_key(
-        tmp_path / "artifact.txt"
-    )
+    assert path_identity_key(equivalent) == path_identity_key(tmp_path / "artifact.txt")
     assert path_identity_key(tmp_path / "artifact.txt") == os.path.normcase(
         os.path.normpath(str(tmp_path / "artifact.txt"))
     )
@@ -296,14 +296,20 @@ def test_path_identity_key_requires_absolute_path() -> None:
 
 def test_portable_identity_key_has_explicit_case_policy() -> None:
     assert portable_identity_key("Sources/Main.gf") == "Sources/Main.gf"
-    assert portable_identity_key(
-        "Sources/Main.gf",
-        case_sensitive=False,
-    ) == "sources/main.gf"
-    assert portable_identity_key(
-        "Straße.gf",
-        case_sensitive=False,
-    ) == "strasse.gf"
+    assert (
+        portable_identity_key(
+            "Sources/Main.gf",
+            case_sensitive=False,
+        )
+        == "sources/main.gf"
+    )
+    assert (
+        portable_identity_key(
+            "Straße.gf",
+            case_sensitive=False,
+        )
+        == "strasse.gf"
+    )
 
 
 def test_lexical_containment_accepts_descendants_and_optional_root_equality(

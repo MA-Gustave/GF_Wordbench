@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import hashlib
-import inspect
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import hashlib
 from importlib import import_module
+import inspect
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Final, TypeVar, Unpack, cast
 
 from gf_wordbench.config.defaults import (
     DEFAULT_AGGREGATE_LOGS,
@@ -31,6 +31,7 @@ from gf_wordbench.config.defaults import (
     SUPPORTED_PROJECT_SCHEMA_MAJOR,
     SUPPORTED_RUN_SUMMARY_SCHEMA_MAJOR,
 )
+from gf_wordbench.diagnostics.models import TopError
 from gf_wordbench.config.models import (
     AppConfig,
     OutputDefaults,
@@ -68,6 +69,7 @@ from gf_wordbench.projects.models import (
 )
 from gf_wordbench.runs.models.paths import RunPaths
 from gf_wordbench.runs.models.results import FileResult, RunResult, RunTotals
+from gf_wordbench.validation.regression.models import DiffEntry
 from gf_wordbench.validation.scanning.models import ScanCounts
 from gf_wordbench.version import __version__
 
@@ -77,10 +79,8 @@ if TYPE_CHECKING:
         ProcessRequest,
         ProcessResult,
     )
-    from gf_wordbench.validation.compilation.models import (
-        CompileSummary,
-        SourceFingerprint,
-    )
+    from tests.helpers.fake_processes import ProcessResultOverrides
+    from gf_wordbench.validation.compilation.models import CompileSummary
     from gf_wordbench.validation.scenarios.models import (
         ScenarioAssertionResult,
         ScenarioResult,
@@ -250,7 +250,7 @@ def make_app_config(
             emit_cpu_stats=emit_cpu_stats,
         ),
         output_defaults=OutputDefaults(
-            evidence_level=cast(Any, evidence_level),
+            evidence_level=cast("Any", evidence_level),
             generate_manifest=generate_manifest,
             generate_ai_ready=generate_ai_ready,
             aggregate_logs=aggregate_logs,
@@ -288,9 +288,7 @@ def make_project_config(
 ) -> ProjectConfig:
     """Build one valid active-project configuration without touching disk."""
 
-    root = _absolute_path(
-        project_root if project_root is not None else _default_root() / "project"
-    )
+    root = _absolute_path(project_root if project_root is not None else _default_root() / "project")
     source_directory_path = Path(source_directory)
     source_root = _absolute_path(root / source_directory_path)
 
@@ -318,12 +316,8 @@ def make_project_config(
             checkpoints=tuple(Path(path) for path in checkpoints),
         ),
         validation=ValidationPolicy(
-            required_scenarios=tuple(
-                validate_scenario_id(value) for value in required_scenarios
-            ),
-            optional_scenarios=tuple(
-                validate_scenario_id(value) for value in optional_scenarios
-            ),
+            required_scenarios=tuple(validate_scenario_id(value) for value in required_scenarios),
+            optional_scenarios=tuple(validate_scenario_id(value) for value in optional_scenarios),
             release_requires_pgf=release_requires_pgf,
         ),
         project_file=root / "project.toml",
@@ -373,9 +367,7 @@ def make_run_config(
         gf_path=tuple(
             _absolute_path(path)
             for path in (
-                gf_path
-                if gf_path is not None
-                else (active_project.source_root, resolved_rgl)
+                gf_path if gf_path is not None else (active_project.source_root, resolved_rgl)
             )
         ),
     )
@@ -440,7 +432,7 @@ def make_run_config(
             if release_requires_pgf is None
             else release_requires_pgf
         ),
-        evidence_level=cast(Any, evidence_level),
+        evidence_level=cast("Any", evidence_level),
         compatibility_warnings=tuple(compatibility_warnings),
     )
 
@@ -456,8 +448,7 @@ def make_run_paths(
     directory = (
         _absolute_path(run_dir)
         if run_dir is not None
-        else _absolute_path(output_root or _default_root() / "runs")
-        / f"run_{run_id}"
+        else _absolute_path(output_root or _default_root() / "runs") / f"run_{run_id}"
     )
     return RunPaths(
         run_id=run_id,
@@ -484,7 +475,7 @@ def make_run_paths(
 
 def make_process_result(
     request: ProcessRequest | None = None,
-    **overrides: object,
+    **overrides: Unpack[ProcessResultOverrides],
 ) -> ProcessResult:
     """Delegate to the canonical deterministic process-result factory."""
 
@@ -500,7 +491,7 @@ def make_compile_summary(
     status: ValidationStatus = ValidationStatus.OK,
     command: Iterable[str] | None = None,
     working_directory: Path | str | None = None,
-    exit_code: int | None | object = _UNSET,
+    exit_code: int | object | None = _UNSET,
     launched: bool | object = _UNSET,
     timed_out: bool = False,
     cancelled: bool = False,
@@ -508,8 +499,8 @@ def make_compile_summary(
     error_kind: ErrorKind | object = _UNSET,
     first_error: str | object = _UNSET,
     error_detail: str = "",
-    stdout_path: Path | str | None | object = _UNSET,
-    stderr_path: Path | str | None | object = _UNSET,
+    stdout_path: Path | str | object | None = _UNSET,
+    stderr_path: Path | str | object | None = _UNSET,
     expected_artifacts: Iterable[Path | str] | None = None,
     produced_artifacts: Iterable[Path | str] | None = None,
     artifact_checks_passed: bool | object = _UNSET,
@@ -535,31 +526,15 @@ def make_compile_summary(
     )
     normalized_exit_code = defaults["exit_code"] if exit_code is _UNSET else exit_code
     normalized_launched = defaults["launched"] if launched is _UNSET else launched
-    normalized_error_kind = (
-        defaults["error_kind"]
-        if error_kind is _UNSET
-        else error_kind
-    )
-    normalized_first_error = (
-        defaults["first_error"]
-        if first_error is _UNSET
-        else first_error
-    )
+    normalized_error_kind = defaults["error_kind"] if error_kind is _UNSET else error_kind
+    normalized_first_error = defaults["first_error"] if first_error is _UNSET else first_error
     normalized_artifact_check = (
         defaults["artifact_checks_passed"]
         if artifact_checks_passed is _UNSET
         else artifact_checks_passed
     )
-    normalized_stdout = (
-        defaults["stdout_path"]
-        if stdout_path is _UNSET
-        else stdout_path
-    )
-    normalized_stderr = (
-        defaults["stderr_path"]
-        if stderr_path is _UNSET
-        else stderr_path
-    )
+    normalized_stdout = defaults["stdout_path"] if stdout_path is _UNSET else stdout_path
+    normalized_stderr = defaults["stderr_path"] if stderr_path is _UNSET else stderr_path
     produced = tuple(
         Path(path)
         for path in (
@@ -588,14 +563,10 @@ def make_compile_summary(
         "cancelled": cancelled,
         "duration_ms": duration_ms,
         "error_kind": _enum(normalized_error_kind, ErrorKind, field="error_kind"),
-        "first_error": cast(str, normalized_first_error),
+        "first_error": cast("str", normalized_first_error),
         "error_detail": error_detail,
-        "stdout_path": (
-            None if normalized_stdout is None else Path(cast(Any, normalized_stdout))
-        ),
-        "stderr_path": (
-            None if normalized_stderr is None else Path(cast(Any, normalized_stderr))
-        ),
+        "stdout_path": (None if normalized_stdout is None else Path(cast("Any", normalized_stdout))),
+        "stderr_path": (None if normalized_stderr is None else Path(cast("Any", normalized_stderr))),
         "expected_artifacts": expected,
         "produced_artifacts": produced,
         "artifact_checks_passed": normalized_artifact_check,
@@ -612,9 +583,9 @@ def make_file_result(
     is_direct: bool | None = None,
     blocked_by: Iterable[str] = (),
     scan_counts: ScanCounts | None = None,
-    fingerprint: SourceFingerprint | None = None,
+    fingerprint: object | None = None,
     compile_summary: CompileSummary | None = None,
-    scan_log_path: Path | str | None | object = _UNSET,
+    scan_log_path: Path | str | object | None = _UNSET,
     artifacts: Iterable[object] = (),
     source_bytes: bytes = _DEFAULT_SOURCE_BYTES,
     last_modified_utc: datetime = DEFAULT_STARTED_AT,
@@ -628,11 +599,7 @@ def make_file_result(
     blockers = tuple(blocked_by)
     if classification is DiagnosticClass.DOWNSTREAM and not blockers:
         blockers = ("upstream-subject",)
-    direct = (
-        classification is DiagnosticClass.DIRECT
-        if is_direct is None
-        else is_direct
-    )
+    direct = classification is DiagnosticClass.DIRECT if is_direct is None else is_direct
     summary = compile_summary or make_compile_summary(
         target_id=name,
         status=normalized_status,
@@ -646,7 +613,7 @@ def make_file_result(
         if scan_log_path is _UNSET
         else None
         if scan_log_path is None
-        else Path(scan_log_path)
+        else Path(cast("Path | str", scan_log_path))
     )
 
     return FileResult(
@@ -657,7 +624,7 @@ def make_file_result(
         is_direct=direct,
         blocked_by=list(blockers),
         scan_counts=scan_counts or ScanCounts(),
-        fingerprint=fingerprint_value,
+        fingerprint=cast("Any", fingerprint_value),
         compile_summary=summary,
         scan_log_path=log_path,
         artifacts=list(artifacts),
@@ -672,16 +639,16 @@ def make_scenario_result(
     script_sha256: str | None = None,
     required: bool = True,
     status: ValidationStatus = ValidationStatus.OK,
-    execution_state: ExecutionState | None | object = _UNSET,
+    execution_state: ExecutionState | object | None = _UNSET,
     command: Iterable[str] | None = None,
     working_directory: Path | str | None = None,
-    exit_code: int | None | object = _UNSET,
+    exit_code: int | object | None = _UNSET,
     timed_out: bool = False,
     cancelled: bool = False,
     duration_ms: int = DEFAULT_DURATION_MS,
-    stdout_path: Path | str | None | object = _UNSET,
-    stderr_path: Path | str | None | object = _UNSET,
-    normalized_output_path: Path | str | None | object = _UNSET,
+    stdout_path: Path | str | object | None = _UNSET,
+    stderr_path: Path | str | object | None = _UNSET,
+    normalized_output_path: Path | str | object | None = _UNSET,
     gold_path: Path | str | None = None,
     gold_match: bool | None = None,
     gold_diff_path: Path | str | None = None,
@@ -701,18 +668,14 @@ def make_scenario_result(
         timed_out=timed_out,
         cancelled=cancelled,
     )
-    state = (
-        defaults["execution_state"]
-        if execution_state is _UNSET
-        else execution_state
-    )
+    state = defaults["execution_state"] if execution_state is _UNSET else execution_state
     normalized_exit_code = defaults["exit_code"] if exit_code is _UNSET else exit_code
     classification = diagnostic_class or _default_diagnostic_class(normalized_status)
     blockers = tuple(blocked_by)
     if classification is DiagnosticClass.DOWNSTREAM and not blockers:
         blockers = ("upstream-scenario",)
-    kind = error_kind or cast(ErrorKind, defaults["error_kind"])
-    message = primary_message or cast(str, defaults["primary_message"])
+    kind = error_kind or cast("ErrorKind", defaults["error_kind"])
+    message = primary_message or cast("str", defaults["primary_message"])
     script = Path(script_path or Path("scenarios") / f"{scenario_id}.gfs")
     stdout = defaults["stdout_path"] if stdout_path is _UNSET else stdout_path
     stderr = defaults["stderr_path"] if stderr_path is _UNSET else stderr_path
@@ -733,22 +696,15 @@ def make_scenario_result(
         "required": required,
         "status": normalized_status,
         "execution_state": state,
-        "command": tuple(
-            command
-            or (() if state is None else ("gf", "-run", scenario_id))
-        ),
-        "working_directory": _absolute_path(
-            working_directory or _default_root() / "project"
-        ),
+        "command": tuple(command or (() if state is None else ("gf", "-run", scenario_id))),
+        "working_directory": _absolute_path(working_directory or _default_root() / "project"),
         "exit_code": normalized_exit_code,
         "timed_out": timed_out,
         "cancelled": cancelled,
         "duration_ms": duration_ms,
-        "stdout_path": None if stdout is None else Path(cast(Any, stdout)),
-        "stderr_path": None if stderr is None else Path(cast(Any, stderr)),
-        "normalized_output_path": (
-            None if normalized is None else Path(cast(Any, normalized))
-        ),
+        "stdout_path": None if stdout is None else Path(cast("Any", stdout)),
+        "stderr_path": None if stderr is None else Path(cast("Any", stderr)),
+        "normalized_output_path": (None if normalized is None else Path(cast("Any", normalized))),
         "gold_path": None if gold_path is None else Path(gold_path),
         "gold_match": gold_match,
         "gold_diff_path": None if gold_diff_path is None else Path(gold_diff_path),
@@ -773,8 +729,8 @@ def make_run_result(
     gf_version: str = "3.12",
     file_results: Iterable[FileResult] | None = None,
     scenario_results: Iterable[ScenarioResult] = (),
-    diff_entries: Iterable[object] = (),
-    top_errors: Iterable[object] = (),
+    diff_entries: Iterable[DiffEntry] = (),
+    top_errors: Iterable[TopError] = (),
     totals: RunTotals | None = None,
     overall_status: OverallStatus | None = None,
     files_seen: int | None = None,
@@ -858,7 +814,7 @@ def _enum(value: object, enum_type: type[_T], *, field: str) -> _T:
     if isinstance(value, enum_type):
         return value
     try:
-        return enum_type(value)  # type: ignore[call-arg,return-value]
+        return cast("_T", enum_type(value))
     except (TypeError, ValueError) as exc:
         raise ValueError(f"invalid {field}: {value!r}") from exc
 
@@ -876,7 +832,7 @@ def _optional_model(module_name: str, name: str, fallback: type[_T]) -> type[_T]
     value = getattr(module, name, fallback)
     if not isinstance(value, type):
         raise TypeError(f"{module_name}.{name} must be a class")
-    return cast(type[_T], value)
+    return cast("type[_T]", value)
 
 
 def _required_model(module_name: str, name: str) -> type[Any]:
@@ -890,8 +846,7 @@ def _required_model(module_name: str, name: str) -> type[Any]:
 def _construct_supported(model: type[_T], candidates: Mapping[str, object]) -> _T:
     parameters = inspect.signature(model).parameters
     accepts_keywords = any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
+        parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
     )
     values = (
         dict(candidates)
@@ -906,8 +861,7 @@ def _construct_supported(model: type[_T], candidates: Mapping[str, object]) -> _
         name
         for name, parameter in parameters.items()
         if name not in {"self", "cls"}
-        and parameter.kind
-        not in {inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD}
+        and parameter.kind not in {inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD}
         and parameter.default is inspect.Parameter.empty
         and name not in values
     )
@@ -923,7 +877,7 @@ def _make_source_fingerprint(
     content: bytes,
     *,
     last_modified_utc: datetime,
-) -> SourceFingerprint:
+) -> object:
     if not isinstance(content, bytes):
         raise TypeError("source_bytes must be bytes")
     model = _optional_model(
@@ -931,20 +885,17 @@ def _make_source_fingerprint(
         "SourceFingerprint",
         _SourceFingerprintFallback,
     )
-    return cast(
-        "SourceFingerprint",
-        _construct_supported(
-            model,
-            {
-                "size_bytes": len(content),
-                "hash_algorithm": "sha256",
-                "hash": hashlib.sha256(content).hexdigest(),
-                "last_modified_utc": _aware_utc(
-                    last_modified_utc,
-                    field="last_modified_utc",
-                ),
-            },
-        ),
+    return _construct_supported(
+        model,
+        {
+            "size_bytes": len(content),
+            "hash_algorithm": "sha256",
+            "hash": hashlib.sha256(content).hexdigest(),
+            "last_modified_utc": _aware_utc(
+                last_modified_utc,
+                field="last_modified_utc",
+            ),
+        },
     )
 
 
@@ -1106,10 +1057,7 @@ def _derive_overall_status(
         *(result.status for result in files),
         *(result.status for result in scenarios if result.required),
     ]
-    if any(
-        status in {ValidationStatus.ERROR, ValidationStatus.SKIPPED}
-        for status in statuses
-    ):
+    if any(status in {ValidationStatus.ERROR, ValidationStatus.SKIPPED} for status in statuses):
         return OverallStatus.ERROR
     if any(status is ValidationStatus.FAIL for status in statuses):
         return OverallStatus.FAIL
@@ -1160,14 +1108,13 @@ def _run_totals(
         scenarios_error=scenario_statuses[ValidationStatus.ERROR],
         scenarios_skipped=scenario_statuses[ValidationStatus.SKIPPED],
         required_scenario_fail=sum(
-            result.required and result.status is ValidationStatus.FAIL
-            for result in scenarios
+            result.required and result.status is ValidationStatus.FAIL for result in scenarios
         ),
         overall_status=terminal,
     )
 
 
-def _diff_sort_key(entry: object) -> tuple[int, str, str, str, str]:
+def _diff_sort_key(entry: DiffEntry) -> tuple[int, str, str, str, str]:
     order = {
         ChangeKind.REGRESSED: 0,
         ChangeKind.NEW: 1,
@@ -1175,19 +1122,19 @@ def _diff_sort_key(entry: object) -> tuple[int, str, str, str, str]:
         ChangeKind.REMOVED: 3,
         ChangeKind.UNCHANGED: 4,
     }
-    kind = _enum(getattr(entry, "change_kind"), ChangeKind, field="change_kind")
+    kind = _enum(entry.change_kind, ChangeKind, field="change_kind")
     return (
         order[kind],
-        str(getattr(entry, "subject_kind")),
-        str(getattr(entry, "subject_id")),
-        str(getattr(entry, "previous_status")),
-        str(getattr(entry, "current_status")),
+        str(entry.subject_kind),
+        str(entry.subject_id),
+        str(entry.previous_status),
+        str(entry.current_status),
     )
 
 
-def _top_error_sort_key(entry: object) -> tuple[int, str, str, str]:
-    count = getattr(entry, "count")
-    message = str(getattr(entry, "message"))
-    kind = getattr(entry, "error_kind")
+def _top_error_sort_key(entry: TopError) -> tuple[int, str, str, str]:
+    count = entry.count
+    message = str(entry.message)
+    kind = entry.error_kind
     kind_text = kind.value if isinstance(kind, ErrorKind) else str(kind)
     return (-int(count), kind_text, message.casefold(), message)

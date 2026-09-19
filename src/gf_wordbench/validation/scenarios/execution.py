@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
-import math
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+import hashlib
+import math
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final
@@ -63,13 +63,10 @@ class ScenarioScriptInput:
             raise ValueError("size_bytes must be non-negative")
         if not isinstance(self.sha256, str):
             raise TypeError("sha256 must be a string")
-        if (
-            len(self.sha256) != 64
-            or any(character not in "0123456789abcdef" for character in self.sha256)
+        if len(self.sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in self.sha256
         ):
-            raise ValueError(
-                "sha256 must contain 64 lowercase hexadecimal characters"
-            )
+            raise ValueError("sha256 must contain 64 lowercase hexadecimal characters")
         if type(self.has_utf8_bom) is not bool:
             raise TypeError("has_utf8_bom must be a bool")
 
@@ -233,9 +230,7 @@ def build_scenario_process_request(
                 field_name="sensitive_env_keys",
             )
         ),
-        sensitive_arg_indexes=frozenset(
-            _normalize_indexes(sensitive_arg_indexes)
-        ),
+        sensitive_arg_indexes=frozenset(_normalize_indexes(sensitive_arg_indexes)),
         termination_grace_sec=normalized_grace,
         output_limit_bytes=normalized_limit,
         expected_artifacts=_normalize_artifacts(expected_artifacts),
@@ -340,20 +335,13 @@ def _validate_scenario_process_request(request: ProcessRequest) -> None:
     if (
         script_sha256 is None
         or len(script_sha256) != 64
-        or any(
-            character not in "0123456789abcdef"
-            for character in script_sha256
-        )
+        or any(character not in "0123456789abcdef" for character in script_sha256)
     ):
-        raise ValueError(
-            "request metadata must include a lowercase SHA-256 digest"
-        )
+        raise ValueError("request metadata must include a lowercase SHA-256 digest")
 
     encoded = request.stdin.text.encode("utf-8")
     if hashlib.sha256(encoded).hexdigest() != script_sha256:
-        raise ValueError(
-            "scenario stdin no longer matches the recorded script SHA-256"
-        )
+        raise ValueError("scenario stdin no longer matches the recorded script SHA-256")
 
     recorded_size = request.metadata.get("script_size_bytes")
     if recorded_size is None:
@@ -361,13 +349,9 @@ def _validate_scenario_process_request(request: ProcessRequest) -> None:
     try:
         expected_size = int(recorded_size, 10)
     except ValueError as exc:
-        raise ValueError(
-            "request metadata script_size_bytes must be an integer"
-        ) from exc
+        raise ValueError("request metadata script_size_bytes must be an integer") from exc
     if expected_size < 0 or expected_size != len(encoded):
-        raise ValueError(
-            "scenario stdin no longer matches the recorded script size"
-        )
+        raise ValueError("scenario stdin no longer matches the recorded script size")
 
     if request.stdout_path == request.stderr_path:
         raise ValueError("scenario stdout and stderr paths must be distinct")
@@ -413,26 +397,18 @@ def _normalize_paths(
 def _normalize_artifacts(
     values: Sequence[ArtifactExpectation],
 ) -> tuple[ArtifactExpectation, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "expected_artifacts must be a sequence of ArtifactExpectation values"
-        )
+    raw_values: object = values
+    if isinstance(raw_values, (str, bytes)):
+        raise TypeError("expected_artifacts must be a sequence of ArtifactExpectation values")
     normalized = tuple(values)
-    if not all(
-        isinstance(value, ArtifactExpectation)
-        for value in normalized
-    ):
-        raise TypeError(
-            "expected_artifacts must contain ArtifactExpectation values"
-        )
+    if not all(isinstance(value, ArtifactExpectation) for value in normalized):
+        raise TypeError("expected_artifacts must contain ArtifactExpectation values")
 
     seen: set[tuple[str, str]] = set()
     for value in normalized:
         key = (str(value.path).casefold(), value.role)
         if key in seen:
-            raise ValueError(
-                "expected_artifacts contains a duplicate path and role"
-            )
+            raise ValueError("expected_artifacts contains a duplicate path and role")
         seen.add(key)
     return normalized
 
@@ -458,20 +434,14 @@ def _normalize_strings(
 
 def _normalize_indexes(values: Collection[int]) -> tuple[int, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "sensitive_arg_indexes must be a collection of integers"
-        )
+        raise TypeError("sensitive_arg_indexes must be a collection of integers")
 
     normalized: set[int] = set()
     for value in values:
         if isinstance(value, bool) or not isinstance(value, int):
-            raise TypeError(
-                "sensitive_arg_indexes must contain integers"
-            )
+            raise TypeError("sensitive_arg_indexes must contain integers")
         if value < 0:
-            raise ValueError(
-                "sensitive_arg_indexes must contain non-negative integers"
-            )
+            raise ValueError("sensitive_arg_indexes must contain non-negative integers")
         normalized.add(value)
     return tuple(sorted(normalized))
 
@@ -491,13 +461,9 @@ def _normalize_string_mapping(
             field_name=f"{field_name} key",
         )
         if not isinstance(value, str):
-            raise TypeError(
-                f"{field_name}[{normalized_key!r}] must be a string"
-            )
+            raise TypeError(f"{field_name}[{normalized_key!r}] must be a string")
         if "\x00" in value:
-            raise ValueError(
-                f"{field_name}[{normalized_key!r}] must not contain NUL"
-            )
+            raise ValueError(f"{field_name}[{normalized_key!r}] must not contain NUL")
         normalized[normalized_key] = value
     return normalized
 
@@ -517,9 +483,7 @@ def _non_empty_text(value: object, *, field_name: str) -> str:
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a string")
     if not value or "\x00" in value:
-        raise ValueError(
-            f"{field_name} must be non-empty and contain no NUL"
-        )
+        raise ValueError(f"{field_name} must be non-empty and contain no NUL")
     return value
 
 
@@ -549,9 +513,7 @@ def _non_negative_number(
         raise TypeError(f"{field_name} must be a number")
     normalized = float(value)
     if not math.isfinite(normalized) or normalized < 0:
-        raise ValueError(
-            f"{field_name} must be finite and non-negative"
-        )
+        raise ValueError(f"{field_name} must be finite and non-negative")
     return normalized
 
 

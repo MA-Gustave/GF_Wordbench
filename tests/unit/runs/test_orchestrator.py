@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, timezone
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import pytest
 
@@ -172,9 +173,7 @@ class _Harness:
             preflight_is_fatal=self.preflight_is_fatal,
             execute=self.execute,
             build_completed_result=self.build_completed_result,
-            build_preflight_failure_result=(
-                self.build_preflight_failure_result
-            ),
+            build_preflight_failure_result=(self.build_preflight_failure_result),
             build_cancelled_result=self.build_cancelled_result,
             build_fatal_result=self.build_fatal_result,
             finalize=self.finalize,
@@ -409,10 +408,7 @@ def test_phase_exceptions_become_finalizable_fatal_results(
     assert failure.cancelled is False
     assert isinstance(failure.exception, RuntimeError)
 
-    event = next(
-        item for item in events
-        if item.event == "run_orchestration_failed"
-    )
+    event = next(item for item in events if item.event == "run_orchestration_failed")
     assert event.level is EventLevel.FATAL
     assert event.stage == expected_phase
     assert event.status == "ERROR"
@@ -421,15 +417,17 @@ def test_phase_exceptions_become_finalizable_fatal_results(
 def test_non_boolean_preflight_decision_is_a_contract_failure() -> None:
     harness = _Harness()
     services = harness.services()
+    invalid_preflight_is_fatal = cast(
+        "Callable[[object], bool]",
+        lambda value: 1,
+    )
     invalid = RunOrchestrationServices(
         plan=services.plan,
         preflight=services.preflight,
-        preflight_is_fatal=lambda value: 1,  # type: ignore[return-value]
+        preflight_is_fatal=invalid_preflight_is_fatal,
         execute=services.execute,
         build_completed_result=services.build_completed_result,
-        build_preflight_failure_result=(
-            services.build_preflight_failure_result
-        ),
+        build_preflight_failure_result=(services.build_preflight_failure_result),
         build_cancelled_result=services.build_cancelled_result,
         build_fatal_result=services.build_fatal_result,
         finalize=services.finalize,
@@ -455,9 +453,7 @@ def test_cancelled_result_builder_failure_preserves_both_errors() -> None:
         _orchestrator(harness).run(
             object(),
             _Paths(),
-            cancellation_check=lambda: (_ for _ in ()).throw(
-                CancellationRequested("cancelled")
-            ),
+            cancellation_check=lambda: (_ for _ in ()).throw(CancellationRequested("cancelled")),
         )
 
     group = captured.value
@@ -561,9 +557,7 @@ def test_failure_messages_are_nul_safe_and_bounded() -> None:
         preflight_is_fatal=services.preflight_is_fatal,
         execute=services.execute,
         build_completed_result=services.build_completed_result,
-        build_preflight_failure_result=(
-            services.build_preflight_failure_result
-        ),
+        build_preflight_failure_result=(services.build_preflight_failure_result),
         build_cancelled_result=services.build_cancelled_result,
         build_fatal_result=services.build_fatal_result,
         finalize=services.finalize,
@@ -576,11 +570,7 @@ def test_failure_messages_are_nul_safe_and_bounded() -> None:
     ).run(object(), _Paths(), event_sink=events.append)
 
     assert result == "fatal:final"
-    message = next(
-        event.message
-        for event in events
-        if event.event == "run_orchestration_failed"
-    )
+    message = next(event.message for event in events if event.event == "run_orchestration_failed")
     assert len(message) == 1_024
     assert "\x00" not in message
     assert "�" in message
@@ -718,15 +708,13 @@ def test_services_require_every_callback_to_be_callable(
     field_name: str,
 ) -> None:
     harness = _Harness()
-    values = {
+    values: dict[str, object] = {
         "plan": harness.plan,
         "preflight": harness.preflight,
         "preflight_is_fatal": harness.preflight_is_fatal,
         "execute": harness.execute,
         "build_completed_result": harness.build_completed_result,
-        "build_preflight_failure_result": (
-            harness.build_preflight_failure_result
-        ),
+        "build_preflight_failure_result": (harness.build_preflight_failure_result),
         "build_cancelled_result": harness.build_cancelled_result,
         "build_fatal_result": harness.build_fatal_result,
         "finalize": harness.finalize,

@@ -30,7 +30,7 @@ _EXPECTED_PUBLIC_NAMES = (
 
 
 def _validator(value: object) -> ProjectValidator:
-    return cast(ProjectValidator, value)
+    return cast("ProjectValidator", value)
 
 
 def _valid_document() -> dict[str, object]:
@@ -146,7 +146,7 @@ def test_loader_uses_the_normative_pipeline_order(
     project_file = tmp_path / "project.toml"
     document = _valid_document()
     events: list[str] = []
-    expected_project = cast(ProjectConfig, object())
+    expected_project = cast("ProjectConfig", object())
 
     class Reader:
         def read(self, source: Path) -> Mapping[str, object]:
@@ -221,7 +221,7 @@ def test_loader_rejects_non_path_before_using_services() -> None:
 
     with pytest.raises(TypeError, match="project_file must be pathlib.Path"):
         ProjectLoader(reader=reader, validator=_validator(validator)).load(
-            cast(Path, "/workspace/project/project.toml")
+            cast("Path", "/workspace/project/project.toml")
         )
 
     assert reader.calls == []

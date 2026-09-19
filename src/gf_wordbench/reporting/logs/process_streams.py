@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import hashlib
-import os
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import hashlib
+import os
 from pathlib import Path
 from typing import Final, Protocol, runtime_checkable
 
@@ -247,9 +247,7 @@ def inspect_process_streams(
             if artifact.state is ProcessStreamState.MISSING
         )
         if missing:
-            raise ReportError(
-                "required process stream evidence is missing: " + ", ".join(missing)
-            )
+            raise ReportError("required process stream evidence is missing: " + ", ".join(missing))
     return ProcessStreamWriteResult(
         paths=paths,
         stdout=stdout,
@@ -290,10 +288,11 @@ def stream_paths_from_capture(capture: object) -> StreamPaths:
     direct_stderr = _member(capture, "stderr_path")
     if direct_stdout is not None or direct_stderr is not None:
         if direct_stdout is None or direct_stderr is None:
-            raise ContractViolationError(
-                "capture must provide both stdout_path and stderr_path"
-            )
-        return StreamPaths(Path(direct_stdout), Path(direct_stderr))
+            raise ContractViolationError("capture must provide both stdout_path and stderr_path")
+        return StreamPaths(
+            _coerce_absolute_path(direct_stdout, "stdout_path"),
+            _coerce_absolute_path(direct_stderr, "stderr_path"),
+        )
     stdout = _member(capture, "stdout")
     stderr = _member(capture, "stderr")
     if stdout is None or stderr is None:
@@ -304,7 +303,10 @@ def stream_paths_from_capture(capture: object) -> StreamPaths:
     stderr_path = _member(stderr, "path")
     if stdout_path is None or stderr_path is None:
         raise ContractViolationError("stream summaries must provide paths")
-    return StreamPaths(Path(stdout_path), Path(stderr_path))
+    return StreamPaths(
+        _coerce_absolute_path(stdout_path, "stdout.path"),
+        _coerce_absolute_path(stderr_path, "stderr.path"),
+    )
 
 
 def validate_stream_paths(
@@ -330,9 +332,7 @@ def _copy_pair_atomic(
         inspect_process_stream(ProcessStreamName.STDOUT, sources.stdout),
         inspect_process_stream(ProcessStreamName.STDERR, sources.stderr),
     )
-    if require_both and any(
-        item.state is ProcessStreamState.MISSING for item in source_states
-    ):
+    if require_both and any(item.state is ProcessStreamState.MISSING for item in source_states):
         raise ReportError("cannot publish missing required process stream evidence")
     for source, destination in zip(source_states, destinations.as_tuple(), strict=True):
         if source.state is ProcessStreamState.MISSING:
@@ -348,18 +348,15 @@ def _copy_file_atomic(source: Path, destination: Path, *, sync: bool) -> None:
     if _path_key(source) == _path_key(destination):
         return
     try:
-        with source.open("rb") as input_stream:
-            with atomic_binary_writer(
-                destination,
-                sync=sync,
-                preserve_existing_mode=True,
-            ) as output_stream:
-                while block := input_stream.read(_COPY_CHUNK_SIZE):
-                    output_stream.write(block)
+        with source.open("rb") as input_stream, atomic_binary_writer(
+            destination,
+            sync=sync,
+            preserve_existing_mode=True,
+        ) as output_stream:
+            while block := input_stream.read(_COPY_CHUNK_SIZE):
+                output_stream.write(block)
     except OSError as exc:
-        raise ReportError(
-            f"could not publish process stream {source} to {destination}"
-        ) from exc
+        raise ReportError(f"could not publish process stream {source} to {destination}") from exc
 
 
 def _verify_declared_sizes(
@@ -392,9 +389,7 @@ def _declared_size(
     if direct is None:
         return None
     if type(direct) is not int or direct < 0:
-        raise ContractViolationError(
-            f"declared {stream.value} size must be a non-negative integer"
-        )
+        raise ContractViolationError(f"declared {stream.value} size must be a non-negative integer")
     return direct
 
 
@@ -407,7 +402,7 @@ def _resolve_run_root(
         return _coerce_absolute_path(explicit, "run_root")
     candidate = _member(result, "run_root")
     if candidate is not None:
-        return _coerce_absolute_path(Path(candidate), "run_root")
+        return _coerce_absolute_path(candidate, "run_root")
     paths = destinations if destinations is not None else stream_paths_from_capture(result)
     return Path(os.path.commonpath((paths.stdout.parent, paths.stderr.parent))).resolve()
 
@@ -417,9 +412,7 @@ def _require_contained_pair(paths: StreamPaths, run_root: Path) -> None:
         try:
             path.relative_to(run_root)
         except ValueError as exc:
-            raise ContractViolationError(
-                f"process stream path escapes run root: {path}"
-            ) from exc
+            raise ContractViolationError(f"process stream path escapes run root: {path}") from exc
 
 
 def _sha256_file(path: Path) -> str:

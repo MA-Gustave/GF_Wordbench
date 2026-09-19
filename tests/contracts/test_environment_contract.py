@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping
 import inspect
 import os
-from collections.abc import Mapping
-from types import MappingProxyType
+from types import MappingProxyType, ModuleType
 from typing import cast
 
 import pytest
@@ -18,23 +18,29 @@ from gf_wordbench.infrastructure import environment as process_environment
 pytestmark = pytest.mark.contract
 
 _CANONICAL_VARIABLES = (
-    "GF_WORDBENCH_PROJECT_ROOT",
     "GF_WORDBENCH_GF_EXE",
     "GF_WORDBENCH_RGL_ROOT",
     "GF_WORDBENCH_OUTPUT_ROOT",
     "GF_WORDBENCH_STATE_PATH",
 )
+_LEGACY_VARIABLES = ("GF_WORDBENCH_PROJECT_ROOT",)
 
 
 def test_canonical_environment_namespace_is_exact_and_stable() -> None:
     assert config_environment.ENVIRONMENT_PREFIX == "GF_WORDBENCH_"
     assert config_environment.CANONICAL_ENVIRONMENT_VARIABLES == _CANONICAL_VARIABLES
-    assert config_environment.PROJECT_ROOT_ENV == _CANONICAL_VARIABLES[0]
-    assert config_environment.GF_EXECUTABLE_ENV == _CANONICAL_VARIABLES[1]
-    assert config_environment.RGL_ROOT_ENV == _CANONICAL_VARIABLES[2]
-    assert config_environment.OUTPUT_ROOT_ENV == _CANONICAL_VARIABLES[3]
-    assert config_environment.STATE_PATH_ENV == _CANONICAL_VARIABLES[4]
-    assert len(set(config_environment.CANONICAL_ENVIRONMENT_VARIABLES)) == 5
+    assert _CANONICAL_VARIABLES[0] == config_environment.GF_EXECUTABLE_ENV
+    assert _CANONICAL_VARIABLES[1] == config_environment.RGL_ROOT_ENV
+    assert _CANONICAL_VARIABLES[2] == config_environment.OUTPUT_ROOT_ENV
+    assert _CANONICAL_VARIABLES[3] == config_environment.STATE_PATH_ENV
+    assert config_environment.LEGACY_ENVIRONMENT_VARIABLES == _LEGACY_VARIABLES
+    assert config_environment.PROJECT_ROOT_ENV == _LEGACY_VARIABLES[0]
+    assert config_environment.LEGACY_PROJECT_ROOT_ENV == _LEGACY_VARIABLES[0]
+    assert config_environment.KNOWN_ENVIRONMENT_VARIABLES == (
+        *_CANONICAL_VARIABLES,
+        *_LEGACY_VARIABLES,
+    )
+    assert len(set(config_environment.KNOWN_ENVIRONMENT_VARIABLES)) == 5
 
 
 def test_config_environment_public_surface_has_one_owner() -> None:
@@ -42,6 +48,9 @@ def test_config_environment_public_surface_has_one_owner() -> None:
         "CANONICAL_ENVIRONMENT_VARIABLES",
         "ENVIRONMENT_PREFIX",
         "GF_EXECUTABLE_ENV",
+        "KNOWN_ENVIRONMENT_VARIABLES",
+        "LEGACY_ENVIRONMENT_VARIABLES",
+        "LEGACY_PROJECT_ROOT_ENV",
         "OUTPUT_ROOT_ENV",
         "PROJECT_ROOT_ENV",
         "RGL_ROOT_ENV",
@@ -102,9 +111,7 @@ def test_read_environment_returns_only_documented_raw_overrides() -> None:
     ),
 )
 def test_raw_environment_reader_does_not_expand_path_expressions(raw: str) -> None:
-    overrides = config_environment.read_environment(
-        {config_environment.RGL_ROOT_ENV: raw}
-    )
+    overrides = config_environment.read_environment({config_environment.RGL_ROOT_ENV: raw})
 
     assert overrides.rgl_root == raw
 
@@ -144,23 +151,21 @@ def test_unknown_reserved_variables_are_reported_deterministically() -> None:
 
 def test_environment_readers_reject_invalid_mapping_entries() -> None:
     with pytest.raises(TypeError, match="mapping"):
-        config_environment.read_environment(cast(Mapping[str, str], object()))
+        config_environment.read_environment(cast("Mapping[str, str]", object()))
 
-    malformed_name = cast(Mapping[str, str], {1: "value"})
+    malformed_name = cast("Mapping[str, str]", {1: "value"})
     with pytest.raises(TypeError, match="names must be strings"):
         config_environment.find_unknown_environment_variables(malformed_name)
 
     malformed_value = cast(
-        Mapping[str, str],
+        "Mapping[str, str]",
         {config_environment.PROJECT_ROOT_ENV: 1},
     )
     with pytest.raises(TypeError, match="must contain a string"):
         config_environment.read_environment(malformed_value)
 
     with pytest.raises(ValueError, match="NUL"):
-        config_environment.read_environment(
-            {config_environment.PROJECT_ROOT_ENV: "bad\x00path"}
-        )
+        config_environment.read_environment({config_environment.PROJECT_ROOT_ENV: "bad\x00path"})
 
 
 def test_controlled_child_environment_preserves_os_context_and_removes_ambient_gf_path() -> None:
@@ -295,11 +300,11 @@ def test_environment_builder_rejects_unsupported_policy() -> None:
 
 def test_environment_builder_rejects_invalid_environment_entries() -> None:
     invalid_cases: tuple[tuple[Mapping[str, str], type[Exception], str], ...] = (
-        (cast(Mapping[str, str], {1: "value"}), TypeError, "keys must be strings"),
+        (cast("Mapping[str, str]", {1: "value"}), TypeError, "keys must be strings"),
         ({"": "value"}, ValueError, "must not be empty"),
         ({"BAD=KEY": "value"}, ValueError, "must not contain '='"),
         ({"BAD\x00KEY": "value"}, ValueError, "NUL"),
-        (cast(Mapping[str, str], {"KEY": 1}), TypeError, "must be a string"),
+        (cast("Mapping[str, str]", {"KEY": 1}), TypeError, "must be a string"),
         ({"KEY": "bad\x00value"}, ValueError, "NUL"),
     )
 
@@ -312,7 +317,7 @@ def test_environment_builder_requires_frozen_sensitive_key_set() -> None:
     with pytest.raises(TypeError, match="frozenset"):
         process_environment.build_child_environment(
             parent={},
-            sensitive_keys=cast(frozenset[str], {"TOKEN"}),
+            sensitive_keys=cast("frozenset[str]", {"TOKEN"}),
         )
 
     with pytest.raises(ValueError, match="must not contain '='"):
@@ -322,7 +327,7 @@ def test_environment_builder_requires_frozen_sensitive_key_set() -> None:
         )
 
 
-def _imported_modules(module: object) -> set[str]:
+def _imported_modules(module: ModuleType) -> set[str]:
     tree = ast.parse(inspect.getsource(module))
     imports: set[str] = set()
 

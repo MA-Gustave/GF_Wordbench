@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias, cast
 
@@ -37,9 +37,7 @@ _VERSION_RE: Final[re.Pattern[str]] = re.compile(
 _RUN_DIRECTORY_RE: Final[re.Pattern[str]] = re.compile(
     r"^run_(?P<run_id>[0-9]{8}_[0-9]{6}(?:_(?:0[2-9]|[1-9][0-9]+))?)$"
 )
-_WINDOWS_ABSOLUTE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?:[A-Za-z]:[\\/]|\\\\)"
-)
+_WINDOWS_ABSOLUTE_RE: Final[re.Pattern[str]] = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\)")
 
 _REQUIRED_ROOT_FIELDS: Final[tuple[str, ...]] = (
     "schema_id",
@@ -151,9 +149,7 @@ _MODE_ALIASES: Final[dict[str, str]] = {
 
 FrozenJsonScalar: TypeAlias = None | bool | int | float | str
 FrozenJsonValue: TypeAlias = (
-    FrozenJsonScalar
-    | tuple["FrozenJsonValue", ...]
-    | Mapping[str, "FrozenJsonValue"]
+    FrozenJsonScalar | tuple["FrozenJsonValue", ...] | Mapping[str, "FrozenJsonValue"]
 )
 
 
@@ -293,9 +289,7 @@ class SummaryLoadAttempt:
 
     def __post_init__(self) -> None:
         if (self.summary is None) == (self.warning is None):
-            raise ValueError(
-                "exactly one of summary and warning must be present"
-            )
+            raise ValueError("exactly one of summary and warning must be present")
 
 
 def load_previous_summary(
@@ -347,7 +341,7 @@ def load_previous_summary(
     )
 
     frozen = cast(
-        Mapping[str, FrozenJsonValue],
+        "Mapping[str, FrozenJsonValue]",
         _freeze_json(canonical),
     )
     return LoadedRunSummary(
@@ -432,10 +426,7 @@ def resolve_summary_path(
         raise PathSecurityError(
             "Regression baseline escapes the approved output root",
             code="GF-WB-PATH-001",
-            detail=(
-                f"candidate={exc.candidate!s}; "
-                f"approved_root={exc.root!s}"
-            ),
+            detail=(f"candidate={exc.candidate!s}; approved_root={exc.root!s}"),
             stage="regression",
             operation="load-baseline",
             subject=os.fspath(candidate),
@@ -617,9 +608,7 @@ def _migrate_nested_summary(
         "legacy-summary",
         "Loaded unversioned nested run summary through in-memory migration",
     )
-    metadata = _copy_json_object(
-        _require_object(document.get("metadata"), field="metadata")
-    )
+    metadata = _copy_json_object(_require_object(document.get("metadata"), field="metadata"))
     metadata.setdefault("run_dir", summary_path.parent.as_posix())
 
     producer = document.get("producer")
@@ -627,9 +616,7 @@ def _migrate_nested_summary(
         "schema_id": RUN_SUMMARY_SCHEMA_ID,
         "schema_version": "1.0",
         "metadata": metadata,
-        "totals": _copy_json_object(
-            _require_object(document.get("totals"), field="totals")
-        ),
+        "totals": _copy_json_object(_require_object(document.get("totals"), field="totals")),
         "artifacts": _copy_json_object(
             _require_object(document.get("artifacts"), field="artifacts")
         ),
@@ -792,10 +779,7 @@ def _validate_canonical_document(
         raise UnsupportedVersionError(
             "Unsupported run-summary schema major version",
             code="GF-WB-SCHEMA-001",
-            detail=(
-                f"supported major={SUPPORTED_RUN_SUMMARY_MAJOR}; "
-                f"baseline version={version}"
-            ),
+            detail=(f"supported major={SUPPORTED_RUN_SUMMARY_MAJOR}; baseline version={version}"),
             stage="regression",
             operation="load-baseline",
             subject=os.fspath(summary_path),
@@ -830,17 +814,17 @@ def _validate_canonical_document(
         strict=strict,
     )
     _validate_file_result_identities(
-        cast(list[JsonValue], document["file_results"]),
+        cast("list[JsonValue]", document["file_results"]),
         summary_path=summary_path,
         strict=strict,
         warnings=warnings,
     )
     _validate_scenario_result_identities(
-        cast(list[JsonValue], document["scenario_results"]),
+        cast("list[JsonValue]", document["scenario_results"]),
         summary_path=summary_path,
     )
     _validate_diff_entries(
-        cast(list[JsonValue], document["diff_entries"]),
+        cast("list[JsonValue]", document["diff_entries"]),
         summary_path=summary_path,
     )
 
@@ -854,11 +838,15 @@ def _validate_comparison_metadata(
     strict: bool,
     warnings: list[SummaryLoadWarning],
 ) -> None:
-    required = _REQUIRED_METADATA_FIELDS if strict else (
-        "run_id",
-        "mode",
-        "target_file",
-        "project_id",
+    required = (
+        _REQUIRED_METADATA_FIELDS
+        if strict
+        else (
+            "run_id",
+            "mode",
+            "target_file",
+            "project_id",
+        )
     )
     for field in required:
         if field not in metadata:
@@ -917,7 +905,7 @@ def _validate_comparison_metadata(
             field="metadata.target_file",
         )
         _validate_canonical_relative_path(
-            cast(str, target),
+            cast("str", target),
             field="metadata.target_file",
         )
 
@@ -963,9 +951,7 @@ def _normalize_totals(
     scenario_results: JsonValue | None,
     warnings: list[SummaryLoadWarning],
 ) -> JsonObject:
-    totals = _copy_json_object(
-        _require_object(value, field="totals")
-    )
+    totals = _copy_json_object(_require_object(value, field="totals"))
     aliases = {
         "ok": "files_ok",
         "fail": "files_fail",
@@ -1003,9 +989,7 @@ def _normalize_totals(
         "scenarios_fail": scenario_counts[ValidationStatus.FAIL.value],
         "scenarios_error": scenario_counts[ValidationStatus.ERROR.value],
         "scenarios_skipped": scenario_counts[ValidationStatus.SKIPPED.value],
-        "required_scenario_fail": _required_scenario_failure_count(
-            scenarios
-        ),
+        "required_scenario_fail": _required_scenario_failure_count(scenarios),
     }
     for field, default in defaults.items():
         if field not in totals:
@@ -1061,9 +1045,9 @@ def _validate_totals(
     if not strict:
         return
 
-    files_included = cast(int, totals["files_included"])
+    files_included = cast("int", totals["files_included"])
     file_sum = sum(
-        cast(int, totals[field])
+        cast("int", totals[field])
         for field in (
             "files_ok",
             "files_fail",
@@ -1079,22 +1063,19 @@ def _validate_totals(
             summary_path=summary_path,
         )
 
-    files_seen = cast(int, totals["files_seen"])
-    files_excluded = cast(int, totals["files_excluded"])
+    files_seen = cast("int", totals["files_seen"])
+    files_excluded = cast("int", totals["files_excluded"])
     if files_seen != files_included + files_excluded:
         raise _schema_error(
             "Run summary file inventory totals are inconsistent",
             field="totals.files_seen",
-            detail=(
-                f"declared={files_seen}; "
-                f"calculated={files_included + files_excluded}"
-            ),
+            detail=(f"declared={files_seen}; calculated={files_included + files_excluded}"),
             summary_path=summary_path,
         )
 
-    scenarios_seen = cast(int, totals["scenarios_seen"])
+    scenarios_seen = cast("int", totals["scenarios_seen"])
     scenario_sum = sum(
-        cast(int, totals[field])
+        cast("int", totals[field])
         for field in (
             "scenarios_ok",
             "scenarios_fail",
@@ -1118,9 +1099,7 @@ def _normalize_artifacts(
     summary_path: Path,
     warnings: list[SummaryLoadWarning],
 ) -> JsonObject:
-    source = _copy_json_object(
-        _require_object(value, field="artifacts")
-    )
+    source = _copy_json_object(_require_object(value, field="artifacts"))
     normalized: JsonObject = {}
 
     for canonical, aliases in _ARTIFACT_ALIASES.items():
@@ -1167,9 +1146,7 @@ def _normalize_file_results(
     normalized: list[JsonValue] = []
 
     for index, item in enumerate(items):
-        result = _copy_json_object(
-            _require_object(item, field=f"file_results[{index}]")
-        )
+        result = _copy_json_object(_require_object(item, field=f"file_results[{index}]"))
         result["file_path"] = _normalize_project_path(
             result.get("file_path"),
             field=f"file_results[{index}].file_path",
@@ -1192,16 +1169,13 @@ def _normalize_file_results(
         )
         normalized.append(result)
 
-    normalized.sort(
-        key=lambda item: cast(dict[str, JsonValue], item)[
-            "file_path"
-        ].casefold()
-        if isinstance(
-            cast(dict[str, JsonValue], item)["file_path"],
-            str,
-        )
-        else "",
-    )
+    def file_path_key(item: JsonValue) -> str:
+        if not isinstance(item, dict):
+            return ""
+        file_path = item.get("file_path")
+        return file_path.casefold() if isinstance(file_path, str) else ""
+
+    normalized.sort(key=file_path_key)
     return normalized
 
 
@@ -1263,9 +1237,7 @@ def _normalize_diff_entries(
     normalized: list[JsonValue] = []
 
     for index, item in enumerate(items):
-        entry = _copy_json_object(
-            _require_object(item, field=f"diff_entries[{index}]")
-        )
+        entry = _copy_json_object(_require_object(item, field=f"diff_entries[{index}]"))
         if "subject_id" not in entry and "file_path" in entry:
             entry["subject_kind"] = "file"
             entry["subject_id"] = entry["file_path"]
@@ -1320,8 +1292,8 @@ def _normalize_top_errors(
             records.append({"message": message, "count": count})
         records.sort(
             key=lambda item: (
-                -cast(int, cast(dict[str, JsonValue], item)["count"]),
-                cast(str, cast(dict[str, JsonValue], item)["message"]).casefold(),
+                -cast("int", cast("dict[str, JsonValue]", item)["count"]),
+                cast("str", cast("dict[str, JsonValue]", item)["message"]).casefold(),
             )
         )
         _warn(
@@ -1368,10 +1340,7 @@ def _validate_file_result_identities(
         folded_key = path.casefold()
         prior = folded.get(folded_key)
         if prior is not None and prior != path:
-            message = (
-                "File identities differ only by case: "
-                f"{prior!r} and {path!r}"
-            )
+            message = f"File identities differ only by case: {prior!r} and {path!r}"
             if strict:
                 raise _schema_error(
                     "Run summary contains case-ambiguous file identities",
@@ -1642,10 +1611,10 @@ def _relative_to_legacy_root(
             return None
         return PurePosixPath(*relative.parts).as_posix()
 
-    candidate = Path(value)
-    parent = Path(root)
+    path_candidate = Path(value)
+    path_parent = Path(root)
     try:
-        relative = candidate.relative_to(parent)
+        relative = path_candidate.relative_to(path_parent)
     except ValueError:
         return None
     return relative.as_posix()
@@ -1723,13 +1692,13 @@ def _required_scenario_failure_count(
 
 
 def _derive_overall_status(totals: JsonObject) -> str:
-    if cast(int, totals.get("files_error", 0)) > 0:
+    if cast("int", totals.get("files_error", 0)) > 0:
         return OverallStatus.ERROR.value
-    if cast(int, totals.get("scenarios_error", 0)) > 0:
+    if cast("int", totals.get("scenarios_error", 0)) > 0:
         return OverallStatus.ERROR.value
-    if cast(int, totals.get("files_fail", 0)) > 0:
+    if cast("int", totals.get("files_fail", 0)) > 0:
         return OverallStatus.FAIL.value
-    if cast(int, totals.get("required_scenario_fail", 0)) > 0:
+    if cast("int", totals.get("required_scenario_fail", 0)) > 0:
         return OverallStatus.FAIL.value
     return OverallStatus.OK.value
 
@@ -1831,9 +1800,7 @@ def _source_path(
     if candidate.is_absolute():
         return candidate
     if approved_root is None:
-        raise ValueError(
-            "relative regression baseline paths require approved_root"
-        )
+        raise ValueError("relative regression baseline paths require approved_root")
     return approved_root / candidate
 
 
@@ -1842,9 +1809,12 @@ def _coerce_path(
     *,
     field: str,
 ) -> Path:
-    raw = os.fspath(value)
-    if isinstance(raw, bytes):
+    raw_value: object = os.fspath(value)
+    if isinstance(raw_value, bytes):
         raise TypeError(f"{field} must be a text path")
+    if not isinstance(raw_value, str):
+        raise TypeError(f"{field} must resolve to a text path")
+    raw = raw_value
     if "\x00" in raw:
         raise ValueError(f"{field} must not contain NUL")
     return Path(raw).expanduser()
@@ -1901,7 +1871,7 @@ def _require_object(
             field=field,
             detail=type(value).__name__,
         )
-    return cast(JsonObject, value)
+    return cast("JsonObject", value)
 
 
 def _require_array(
@@ -1915,7 +1885,7 @@ def _require_array(
             field=field,
             detail=type(value).__name__,
         )
-    return cast(list[JsonValue], value)
+    return value
 
 
 def _require_non_empty_string(
@@ -1975,7 +1945,7 @@ def _require_non_negative_integer(
 def _require_bool(value: object, *, field: str) -> bool:
     if type(value) is not bool:
         raise TypeError(f"{field} must be a bool")
-    return cast(bool, value)
+    return value
 
 
 def _validate_max_bytes(value: int) -> int:
@@ -1987,10 +1957,7 @@ def _validate_max_bytes(value: int) -> int:
 
 
 def _copy_json_object(value: Mapping[str, JsonValue]) -> JsonObject:
-    return {
-        key: _copy_json_value(item)
-        for key, item in value.items()
-    }
+    return {key: _copy_json_value(item) for key, item in value.items()}
 
 
 def _copy_json_array(
@@ -1998,10 +1965,7 @@ def _copy_json_array(
     *,
     field: str,
 ) -> list[JsonValue]:
-    return [
-        _copy_json_value(item)
-        for item in _require_array(value, field=field)
-    ]
+    return [_copy_json_value(item) for item in _require_array(value, field=field)]
 
 
 def _copy_json_value(value: JsonValue) -> JsonValue:
@@ -2014,15 +1978,10 @@ def _copy_json_value(value: JsonValue) -> JsonValue:
 
 def _freeze_json(value: JsonValue | JsonObject) -> FrozenJsonValue:
     if isinstance(value, dict):
-        return MappingProxyType(
-            {
-                key: _freeze_json(item)
-                for key, item in value.items()
-            }
-        )
+        return MappingProxyType({key: _freeze_json(item) for key, item in value.items()})
     if isinstance(value, list):
         return tuple(_freeze_json(item) for item in value)
-    return cast(FrozenJsonScalar, value)
+    return value
 
 
 def _frozen_object(
@@ -2032,7 +1991,7 @@ def _frozen_object(
     item = value.get(field)
     if not isinstance(item, Mapping):
         raise TypeError(f"{field} must be an object")
-    return cast(Mapping[str, FrozenJsonValue], item)
+    return item
 
 
 def _frozen_object_array(
@@ -2046,7 +2005,7 @@ def _frozen_object_array(
     for index, element in enumerate(item):
         if not isinstance(element, Mapping):
             raise TypeError(f"{field}[{index}] must be an object")
-        result.append(cast(Mapping[str, FrozenJsonValue], element))
+        result.append(element)
     return tuple(result)
 
 
@@ -2126,10 +2085,10 @@ def _path_name(value: str) -> str:
 
 __all__ = (
     "DEFAULT_MAX_SUMMARY_BYTES",
-    "LoadedRunSummary",
     "RUN_SUMMARY_SCHEMA_ID",
     "SUMMARY_FILENAME",
     "SUPPORTED_RUN_SUMMARY_MAJOR",
+    "LoadedRunSummary",
     "SummaryForm",
     "SummaryLoadAttempt",
     "SummaryLoadWarning",

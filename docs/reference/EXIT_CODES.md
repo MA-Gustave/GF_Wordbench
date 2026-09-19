@@ -529,11 +529,7 @@ def determine_exit_code(
     runtime_error: bool = False,
     cancellation_error: bool = False,
 ) -> int:
-    if (
-        runtime_error
-        or cancellation_error
-        or command_result.overall_status == "ERROR"
-    ):
+    if runtime_error or cancellation_error or command_result.overall_status == "ERROR":
         return EXIT_RUNTIME_ERROR
     if cancelled:
         return EXIT_CANCELLED
@@ -1050,6 +1046,7 @@ A typed enum may wrap them:
 
 ```python
 from enum import IntEnum
+
 
 class ExitCode(IntEnum):
     OK = 0

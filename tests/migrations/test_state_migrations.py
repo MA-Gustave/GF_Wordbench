@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from copy import deepcopy
 from dataclasses import FrozenInstanceError
+import json
 from pathlib import Path
 from typing import cast
 
@@ -30,7 +30,7 @@ from gf_wordbench.state.schema import (
 
 
 def _defaults() -> dict[str, object]:
-    return deepcopy(default_app_state_document())
+    return cast("dict[str, object]", deepcopy(default_app_state_document()))
 
 
 def _warning_pairs(
@@ -112,9 +112,7 @@ def test_complete_supported_legacy_state_maps_to_path_resolved_shape() -> None:
         "summary_path": "C:/work/runs/run_001/summary.json",
         "status_message": "release validation completed",
     }
-    assert _warning_pairs(migration) == {
-        ("discarded_legacy_field", "selected_project_root")
-    }
+    assert _warning_pairs(migration) == {("discarded_legacy_field", "selected_project_root")}
     assert migration.discarded_fields == ("selected_project_root",)
     assert migration.unknown_fields == ()
     assert migration.consumed_fields == tuple(
@@ -136,12 +134,8 @@ def test_canonical_state_remembers_paths_without_restoring_language_truth() -> N
     assert isinstance(environment, dict)
     environment.update(
         {
-            "last_selected_language_path": (
-                "C:/gf/rgl/src/english/LangEng.gf"
-            ),
-            "last_selected_validation_profile": (
-                "C:/work/profiles/english/project.toml"
-            ),
+            "last_selected_language_path": ("C:/gf/rgl/src/english/LangEng.gf"),
+            "last_selected_validation_profile": ("C:/work/profiles/english/project.toml"),
             "last_rgl_root": "C:/gf/rgl",
         }
     )
@@ -149,10 +143,7 @@ def test_canonical_state_remembers_paths_without_restoring_language_truth() -> N
     state, warnings = parse_app_state(document, strict=False)
 
     assert warnings == ()
-    assert (
-        state.environment.last_selected_language_path
-        == "C:/gf/rgl/src/english/LangEng.gf"
-    )
+    assert state.environment.last_selected_language_path == "C:/gf/rgl/src/english/LangEng.gf"
     assert (
         state.environment.last_selected_validation_profile
         == "C:/work/profiles/english/project.toml"
@@ -219,9 +210,7 @@ def test_invalid_modes_fail_safe_to_diagnostic(
     selection = migration.payload["selection"]
     assert isinstance(selection, dict)
     assert selection["mode"] == "diagnostic"
-    assert _warning_pairs(migration) == {
-        (warning_code, "selected_mode")
-    }
+    assert _warning_pairs(migration) == {(warning_code, "selected_mode")}
 
 
 def test_integer_and_boolean_aliases_are_coerced_with_warnings() -> None:
@@ -320,9 +309,7 @@ def test_path_migration_preserves_local_paths_without_resolving_filesystem() -> 
     assert selection["target_file"] == ""
     assert last_run["run_dir"] == "run_001"
     assert last_run["summary_path"] == "run_001/summary.json"
-    assert _warning_pairs(migration) == {
-        ("discarded_legacy_field", "selected_project_root")
-    }
+    assert _warning_pairs(migration) == {("discarded_legacy_field", "selected_project_root")}
     assert migration.discarded_fields == ("selected_project_root",)
 
 
@@ -345,9 +332,7 @@ def test_invalid_legacy_paths_are_ignored(field: str) -> None:
     )
 
     assert migration.payload == defaults
-    assert _warning_pairs(migration) == {
-        ("invalid_legacy_path", field)
-    }
+    assert _warning_pairs(migration) == {("invalid_legacy_path", field)}
     assert migration.consumed_fields == (field,)
 
 
@@ -383,9 +368,7 @@ def test_status_message_is_normalized_and_bounded() -> None:
     last_run = migration.payload["last_run"]
     assert isinstance(last_run, dict)
     assert last_run["status_message"] == "alpha beta gamma"
-    assert _warning_pairs(migration) == {
-        ("truncated_legacy_status_message", "status_message")
-    }
+    assert _warning_pairs(migration) == {("truncated_legacy_status_message", "status_message")}
 
 
 def test_invalid_status_message_retains_default() -> None:
@@ -396,9 +379,7 @@ def test_invalid_status_message_retains_default() -> None:
     )
 
     assert migration.payload == defaults
-    assert _warning_pairs(migration) == {
-        ("invalid_legacy_status_message", "status_message")
-    }
+    assert _warning_pairs(migration) == {("invalid_legacy_status_message", "status_message")}
 
 
 def test_language_identity_runtime_and_evidence_fields_are_discarded() -> None:
@@ -440,9 +421,7 @@ def test_language_identity_runtime_and_evidence_fields_are_discarded() -> None:
     assert migration.unknown_fields == ("future_extension",)
     assert migration.consumed_fields == ("selected_mode",)
     assert {
-        warning.field
-        for warning in migration.warnings
-        if warning.code == "discarded_legacy_field"
+        warning.field for warning in migration.warnings if warning.code == "discarded_legacy_field"
     } == set(discarded)
 
     serialized = json.dumps(migration.payload, sort_keys=True)
@@ -489,9 +468,9 @@ def test_migration_result_and_warnings_are_immutable() -> None:
     assert isinstance(migration, LegacyStateMigration)
     assert isinstance(migration.warnings[0], StateMigrationWarning)
     with pytest.raises(FrozenInstanceError):
-        setattr(migration, "consumed_fields", ())
+        migration.consumed_fields = ()  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
-        setattr(migration.warnings[0], "code", "changed")
+        migration.warnings[0].code = "changed"  # type: ignore[misc]
 
 
 @pytest.mark.parametrize(
@@ -576,7 +555,7 @@ def test_status_message_limit_requires_an_integer(limit: object) -> None:
         migrate_legacy_state(
             {},
             canonical_defaults=_defaults(),
-            status_message_limit=cast(int, limit),
+            status_message_limit=cast("int", limit),
         )
 
 
@@ -620,10 +599,7 @@ def test_repository_migrates_once_publishes_canonical_and_preserves_source(
     assert result.state.environment.last_selected_validation_profile is None
     assert result.state.environment.last_rgl_root == "C:/gf/rgl"
     assert result.state.last_run.status_message == "migrated from legacy"
-    assert any(
-        diagnostic.code is StateDiagnosticCode.MIGRATED
-        for diagnostic in result.diagnostics
-    )
+    assert any(diagnostic.code is StateDiagnosticCode.MIGRATED for diagnostic in result.diagnostics)
     assert any(
         diagnostic.code is StateDiagnosticCode.PARTIALLY_DEFAULTED
         for diagnostic in result.diagnostics
@@ -651,10 +627,7 @@ def test_repository_migrates_once_publishes_canonical_and_preserves_source(
     assert second.migrated is False
     assert second.state.selection.mode is ValidationMode.QUICK
     assert second.state.last_run.status_message == "migrated from legacy"
-    assert any(
-        diagnostic.code is StateDiagnosticCode.LOADED
-        for diagnostic in second.diagnostics
-    )
+    assert any(diagnostic.code is StateDiagnosticCode.LOADED for diagnostic in second.diagnostics)
 
 
 def test_existing_canonical_state_has_precedence_over_legacy_state(
@@ -676,13 +649,9 @@ def test_existing_canonical_state_has_precedence_over_legacy_state(
     assert result.migrated is False
     assert result.state.selection.mode is ValidationMode.DIAGNOSTIC
     assert result.state.selection.timeout_sec == 60
-    assert any(
-        diagnostic.code is StateDiagnosticCode.LOADED
-        for diagnostic in result.diagnostics
-    )
+    assert any(diagnostic.code is StateDiagnosticCode.LOADED for diagnostic in result.diagnostics)
     assert not any(
-        diagnostic.code is StateDiagnosticCode.MIGRATED
-        for diagnostic in result.diagnostics
+        diagnostic.code is StateDiagnosticCode.MIGRATED for diagnostic in result.diagnostics
     )
 
 

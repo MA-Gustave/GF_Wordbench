@@ -45,9 +45,7 @@ def build_release_pgf(
 
     execution = build_pgf(request)
     if not isinstance(execution, PgfBuildExecution):
-        raise TypeError(
-            "GfToolPort.build_pgf must return PgfBuildExecution"
-        )
+        raise TypeError("GfToolPort.build_pgf must return PgfBuildExecution")
 
     return evaluate_pgf_build(request, execution)
 
@@ -85,10 +83,7 @@ def evaluate_pgf_build(
             request,
             execution,
             error_kind=ErrorKind.TIMEOUT,
-            first_error=(
-                execution.first_error
-                or "PGF construction exceeded its execution budget"
-            ),
+            first_error=(execution.first_error or "PGF construction exceeded its execution budget"),
         )
 
     if state is ExecutionState.CANCELLED:
@@ -99,16 +94,11 @@ def evaluate_pgf_build(
                 execution.error_kind,
                 fallback=ErrorKind.OTHER,
             ),
-            first_error=(
-                execution.first_error
-                or "PGF construction was cancelled"
-            ),
+            first_error=(execution.first_error or "PGF construction was cancelled"),
         )
 
     if state is not ExecutionState.COMPLETED:
-        raise ValueError(
-            f"unsupported PGF execution state: {state!r}"
-        )
+        raise ValueError(f"unsupported PGF execution state: {state!r}")
 
     if not process.capture_complete:
         return _error_result(
@@ -133,10 +123,7 @@ def evaluate_pgf_build(
             execution,
             status=status,
             error_kind=error_kind,
-            first_error=(
-                execution.first_error
-                or "GF reported a PGF construction failure"
-            ),
+            first_error=(execution.first_error or "GF reported a PGF construction failure"),
         )
 
     if execution.error_kind is not ErrorKind.OK:
@@ -151,8 +138,7 @@ def evaluate_pgf_build(
             status=status,
             error_kind=execution.error_kind,
             first_error=(
-                execution.first_error
-                or "PGF result interpretation returned a non-OK outcome"
+                execution.first_error or "PGF result interpretation returned a non-OK outcome"
             ),
         )
 
@@ -170,13 +156,9 @@ def evaluate_pgf_build(
 
     warnings = list(execution.warnings)
     if request.mode is ValidationMode.DIAGNOSTIC:
-        warnings.append(
-            "diagnostic PGF evidence does not establish release readiness"
-        )
+        warnings.append("diagnostic PGF evidence does not establish release readiness")
         if not request.optimize:
-            warnings.append(
-                "diagnostic PGF construction used non-release optimization"
-            )
+            warnings.append("diagnostic PGF construction used non-release optimization")
 
     return PgfBuildResult(
         request_id=request.request_id,
@@ -193,9 +175,7 @@ def evaluate_pgf_build(
         error_detail="",
         gf_version=execution.gf_version,
         release_evidence_eligible=(
-            request.mode is ValidationMode.RELEASE
-            and request.required
-            and request.optimize
+            request.mode is ValidationMode.RELEASE and request.required and request.optimize
         ),
         warnings=_ordered_warnings(warnings),
     )
@@ -239,33 +219,18 @@ def _validate_execution_identity(
 ) -> None:
     process = execution.process_result
 
-    if (
-        process.operation_kind
-        is not ProcessOperationKind.PGF_BUILD
-    ):
-        raise ValueError(
-            "PGF execution must use operation kind pgf_build"
-        )
+    if process.operation_kind is not ProcessOperationKind.PGF_BUILD:
+        raise ValueError("PGF execution must use operation kind pgf_build")
     if process.operation_id != request.request_id:
-        raise ValueError(
-            "process operation_id does not match request_id"
-        )
+        raise ValueError("process operation_id does not match request_id")
     if process.executable != request.gf_executable:
-        raise ValueError(
-            "process executable does not match the resolved GF executable"
-        )
+        raise ValueError("process executable does not match the resolved GF executable")
     if process.cwd != request.project_root:
-        raise ValueError(
-            "PGF process working directory must equal project_root"
-        )
+        raise ValueError("PGF process working directory must equal project_root")
     if process.stdout_path != request.stdout_path:
-        raise ValueError(
-            "process stdout_path does not match the request"
-        )
+        raise ValueError("process stdout_path does not match the request")
     if process.stderr_path != request.stderr_path:
-        raise ValueError(
-            "process stderr_path does not match the request"
-        )
+        raise ValueError("process stderr_path does not match the request")
 
 
 def _artifact_error(
@@ -293,10 +258,7 @@ def _artifact_error(
         return "the PGF artifact is stale or not attributable to this request"
     if not artifact.identity_matches:
         return "the PGF artifact does not match the configured release identity"
-    if (
-        request.runtime_verification_required
-        and artifact.runtime_verified is not True
-    ):
+    if request.runtime_verification_required and artifact.runtime_verified is not True:
         return "the required PGF runtime verification did not pass"
     if not artifact.catalogued:
         return "the PGF artifact was not registered for manifest publication"
@@ -316,13 +278,9 @@ def _failed_result(
         ValidationStatus.FAIL,
         ValidationStatus.ERROR,
     }:
-        raise ValueError(
-            "failed PGF result status must be FAIL or ERROR"
-        )
+        raise ValueError("failed PGF result status must be FAIL or ERROR")
     if error_kind is ErrorKind.OK:
-        raise ValueError(
-            "failed PGF result requires a non-OK error kind"
-        )
+        raise ValueError("failed PGF result requires a non-OK error kind")
 
     return PgfBuildResult(
         request_id=request.request_id,

@@ -161,14 +161,14 @@ class ElidingLabel(QLabel):
         self.setAccessibleName(checked)
         self._refresh_elision()
 
-    def setText(self, text: str) -> None:  # noqa: N802
+    def setText(self, text: str) -> None:
         self.set_full_text(text)
 
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+    def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         self._refresh_elision()
 
-    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+    def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
         if event.type() in {
             QEvent.Type.FontChange,
@@ -202,8 +202,12 @@ class SelectableValue(QLineEdit):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setText(text)
 
-    def setText(self, text: str) -> None:  # noqa: N802
-        checked = _require_text(text, field="text", allow_empty=True)
+    def setText(self, text: str | None) -> None:
+        checked = _require_text(
+            "" if text is None else text,
+            field="text",
+            allow_empty=True,
+        )
         super().setText(checked)
         self.setToolTip(checked if checked else "")
 
@@ -239,9 +243,7 @@ class StatusBadge(QFrame):
 
         self._text_label = QLabel(self)
         self._text_label.setObjectName("statusBadgeText")
-        self._text_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self._text_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self._text_label)
 
         self.set_status(status, text)
@@ -449,9 +451,7 @@ class InlineMessage(QFrame):
         self._title_label = QLabel(text_container)
         self._title_label.setObjectName("inlineMessageTitle")
         self._title_label.setWordWrap(True)
-        self._title_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self._title_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         text_layout.addWidget(self._title_label)
 
         self._message_label = QLabel(text_container)
@@ -466,9 +466,7 @@ class InlineMessage(QFrame):
         self._details_button = QToolButton(self)
         self._details_button.setText("Show details")
         self._details_button.setCheckable(True)
-        self._details_button.setToolButtonStyle(
-            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
-        )
+        self._details_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self._details_button.setArrowType(Qt.ArrowType.RightArrow)
         self._details_button.toggled.connect(self._toggle_details)
         root.addWidget(self._details_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -566,7 +564,7 @@ class BoundedActivityView(QPlainTextEdit):
     def maximum_lines(self) -> int:
         return self._maximum_lines
 
-    def setMaximumLines(self, maximum_lines: int) -> None:  # noqa: N802
+    def setMaximumLines(self, maximum_lines: int) -> None:
         checked = _require_positive_int(
             maximum_lines,
             field="maximum_lines",
@@ -627,12 +625,8 @@ class ProgressWidget(QWidget):
 
         self.elapsed_label = QLabel(self)
         self.elapsed_label.setObjectName("progressElapsedLabel")
-        self.elapsed_label.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        )
-        self.elapsed_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self.elapsed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.elapsed_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         header.addWidget(self.elapsed_label)
 
         self.progress_bar = QProgressBar(self)
@@ -651,12 +645,8 @@ class ProgressWidget(QWidget):
 
         self.counts_label = QLabel(self)
         self.counts_label.setObjectName("progressCountsLabel")
-        self.counts_label.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        )
-        self.counts_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self.counts_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.counts_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         footer.addWidget(self.counts_label)
 
         self.set_presentation(self._presentation)
@@ -688,13 +678,10 @@ class ProgressWidget(QWidget):
             self.progress_bar.setRange(0, presentation.total)
             self.progress_bar.setValue(presentation.completed)
             self.progress_bar.setFormat(f"{presentation.completed} / {presentation.total}")
-            progress_text = (
-                f"{presentation.completed} of {presentation.total} completed"
-            )
+            progress_text = f"{presentation.completed} of {presentation.total} completed"
 
         self.counts_label.setText(
-            f"Warnings: {presentation.warning_count}  "
-            f"Failures: {presentation.failure_count}"
+            f"Warnings: {presentation.warning_count}  Failures: {presentation.failure_count}"
         )
         accessible = "; ".join(
             (
@@ -721,12 +708,8 @@ class KeyValueView(QWidget):
         self._value_widgets: list[SelectableValue] = []
         self._layout = QFormLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.setFieldGrowthPolicy(
-            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
-        )
-        self._layout.setLabelAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
-        )
+        self._layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self._layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
     @property
     def items(self) -> tuple[KeyValueItem, ...]:
@@ -737,9 +720,7 @@ class KeyValueView(QWidget):
             raise TypeError("items must be an iterable of KeyValueItem values")
         prepared = tuple(items)
         if len(prepared) > _MAX_KEY_VALUE_ITEMS:
-            raise ValueError(
-                f"items exceeds the supported limit of {_MAX_KEY_VALUE_ITEMS}"
-            )
+            raise ValueError(f"items exceeds the supported limit of {_MAX_KEY_VALUE_ITEMS}")
         if not all(isinstance(item, KeyValueItem) for item in prepared):
             raise TypeError("items must contain KeyValueItem values")
 
@@ -781,9 +762,7 @@ class CollapsibleSection(QWidget):
         self.toggle_button.setObjectName("collapsibleSectionToggle")
         self.toggle_button.setText(self._title)
         self.toggle_button.setCheckable(True)
-        self.toggle_button.setToolButtonStyle(
-            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
-        )
+        self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.toggle_button.toggled.connect(self.set_expanded)
         root.addWidget(self.toggle_button)
 
@@ -850,18 +829,14 @@ class EmptyState(QWidget):
         self.title_label.setObjectName("emptyStateTitle")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setWordWrap(True)
-        self.title_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self.title_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         root.addWidget(self.title_label)
 
         self.message_label = QLabel(self)
         self.message_label.setObjectName("emptyStateMessage")
         self.message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.message_label.setWordWrap(True)
-        self.message_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self.message_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         root.addWidget(self.message_label)
 
         self.action_button = QPushButton(self)
@@ -894,9 +869,7 @@ class EmptyState(QWidget):
         self.message_label.setVisible(bool(checked_message))
         self.action_button.setText(checked_action)
         self.action_button.setVisible(bool(checked_action))
-        self.setAccessibleName(
-            ": ".join(part for part in (checked_title, checked_message) if part)
-        )
+        self.setAccessibleName(": ".join(part for part in (checked_title, checked_message) if part))
 
 
 def install_copy_shortcut(
@@ -959,6 +932,8 @@ def set_widgets_enabled(
 def _clear_layout(layout: QLayout) -> None:
     while layout.count():
         item = layout.takeAt(0)
+        if item is None:
+            break
         child_layout = item.layout()
         child_widget = item.widget()
         if child_layout is not None:

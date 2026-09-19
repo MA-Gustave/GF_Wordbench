@@ -1,131 +1,49 @@
-# GF Wordbench project template
+# GF Wordbench optional validation-profile template
 #
-# Canonical schema:
-#   schema_id      = "gf-wordbench.project"
-#   schema_version = "1.0"
+# This profile augments a language that Wordbench resolves directly from an
+# existing RGL source tree. It does not own the selected language path, RGL
+# root, source inventory, GF executable, output root, or run directory.
 #
-# This file is copied to:
-#   project/project.toml
+# The filename `project.toml` is retained for compatibility. New readers should
+# treat this document as a validation profile.
 #
-# It is intentionally generic and is not a runnable active-project
-# configuration until every required placeholder has been replaced.
-#
-# Initialization rules:
-# - keep one active GF project per GF Wordbench workspace;
-# - keep project-owned paths relative to `project.root`;
-# - use `/` as the canonical path separator;
-# - preserve the declared order of path parts, entrypoints, checkpoints
-#   and scenarios;
-# - do not store gf.exe, RGL installation or output-root locations here;
-# - do not copy local GUI or application-state preferences into this file;
-# - do not enable release PGF requirements until release entrypoints and
-#   validation criteria are explicitly documented.
-#
-# Required follow-up documents:
-#   docs/INTERFILE_CONTRACT_LOCK.md
-#   docs/LANGUAGE_ARCHITECTURE.md
-#   docs/MODULE_DEPENDENCY_MAP.md
-#   docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md
-#   docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md
+# All module paths below are relative to the resolved language directory.
+# All scenario/input/gold paths are relative to this profile directory.
+# Absolute machine-specific paths are forbidden.
 
 schema_id = "gf-wordbench.project"
 schema_version = "1.0"
 
-[project]
+[profile]
+id = "<PROFILE_ID>"
+name = "<PROFILE_NAME>"
 
-# Stable, lowercase and path-safe project identifier.
-# Replace before the project is considered initialized.
-id = "<PROJECT_ID>"
+[compatibility]
+# Optional guard only. It must match the language key already resolved by
+# Wordbench; it cannot select or rename the active language.
+expected_language_key = ""
 
-# Human-readable active GF project name.
-name = "<LANGUAGE_NAME>"
-
-# Stable project language identifier, normally an ISO language code when
-# one is appropriate for the project.
-language_code = "<LANGUAGE_CODE>"
-
-# Canonical v1 value. All project-relative paths below resolve from here.
-root = "."
-
-[sources]
-
-# Directory containing the active project's `.gf` sources.
-#
-# This must be project-relative in canonical project files. When the real
-# GF source tree is external to `project/`, initialization or environment
-# resolution must establish the documented project-relative relationship
-# without storing a machine-specific absolute path here.
-directory = "<SOURCE_DIRECTORY>"
-
-# Files considered by the project source inventory.
-glob = "*.gf"
-
-# Default language-neutral module filename rule.
-# Adjust only when the project's documented naming convention requires it.
-include_regex = '^[A-Z][A-Za-z0-9_]*\.gf$'
-
-# Default exclusions for backup, temporary, disabled and whitespace-bearing
-# source filenames. Keep this expression language-neutral.
-exclude_regex = '( - Copie\.gf$|\.bak\.gf$|\.tmp\.gf$|\.disabled\.gf$|\s)'
-
-[gf]
-
-# Ordered GF search-path components.
-#
-# Replace every placeholder. Include the active source directory exactly
-# once and add only project-relative paths or aliases explicitly supported
-# by the GF path resolver.
-#
-# Do not place:
-# - an absolute RGL installation path;
-# - an absolute gf.exe path;
-# - an output directory;
-# - shell syntax;
-# - environment-variable references.
-path_parts = [
-  "<SOURCE_PATH_PART>",
-  "<RGL_ABSTRACT_PATH_PART>",
-  "<RGL_COMMON_PATH_PART>",
-  "<RGL_PRELUDE_PATH_PART>",
-]
-
-# Optional project-level minimum GF version.
-# An empty value delegates compatibility to the framework policy.
-minimum_version = ""
+[selection]
+# Additional policy applied inside the resolved language directory.
+include = []
+exclude = []
 
 [modules]
+# Modules required for profiled validation.
+required_entrypoints = []
 
-# Ordered top-level GF modules used for loading, final compilation or PGF
-# construction. Schema v1 requires at least one entry.
-#
-# Replace the placeholder with a real project-relative `.gf` module path
-# before validation. Add additional entrypoints only when their ownership
-# and purpose are documented in the project contract lock.
-entrypoints = [
-  "<PRIMARY_ENTRYPOINT>.gf",
-]
+# Additional modules required specifically for release.
+release_entrypoints = []
 
-# Ordered modules proving coherent architectural layers.
-#
-# Empty is valid during bootstrap. Populate after the language architecture
-# and dependency map define the checkpoint sequence.
+# Ordered architectural proof points.
 checkpoints = []
 
 [validation]
-
-# Ordered scenario IDs that must pass for the project's declared validation
-# scope. Empty is valid only during bootstrap.
 required_scenarios = []
-
-# Ordered non-blocking or developmental scenario IDs.
 optional_scenarios = []
 
-# Safe bootstrap default.
-#
-# Set to true only after:
-# - the release entrypoint is documented;
-# - the expected PGF identity is locked;
-# - required checkpoints and scenarios exist;
-# - release criteria require a PGF;
-# - current-run PGF evidence can be verified.
-release_requires_pgf = false
+[release]
+requires_pgf = false
+pgf_targets = []
+required_artifacts = []
+required_gates = []

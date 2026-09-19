@@ -172,7 +172,7 @@ def test_expectation_rejects_relative_paths_and_invalid_fields() -> None:
     with pytest.raises(TypeError, match="minimum_size_bytes must be an integer"):
         _expectation(
             Path.cwd() / "Grammar.gfo",
-            minimum_size_bytes=True,  # type: ignore[arg-type]
+            minimum_size_bytes=True,
         )
 
     with pytest.raises(ValueError, match="operation_id must not have outer whitespace"):
@@ -186,7 +186,6 @@ def test_expectation_rejects_relative_paths_and_invalid_fields() -> None:
             Path.cwd() / "Grammar.gfo",
             source_fingerprint="abc",
         )
-
 
 
 def test_process_expectation_conversion_preserves_generic_contract(
@@ -208,7 +207,6 @@ def test_process_expectation_conversion_preserves_generic_contract(
     )
 
 
-
 def test_build_process_expectations_preserves_order_and_rejects_duplicates(
     tmp_path: Path,
 ) -> None:
@@ -221,7 +219,6 @@ def test_build_process_expectations_preserves_order_and_rejects_duplicates(
 
     with pytest.raises(ValueError, match="declared more than once"):
         build_process_artifact_expectations((first, first))
-
 
 
 def test_artifact_snapshot_missing_and_observation_conversion(
@@ -264,7 +261,6 @@ def test_artifact_snapshot_rejects_inconsistent_filesystem_facts(
         ArtifactSnapshot(path=tmp_path / "artifact", **kwargs)  # type: ignore[arg-type]
 
 
-
 def test_provenance_validates_and_normalizes_identity(
     tmp_path: Path,
 ) -> None:
@@ -291,7 +287,6 @@ def test_provenance_validates_and_normalizes_identity(
         )
 
 
-
 def test_issue_blocking_depends_only_on_severity(tmp_path: Path) -> None:
     error = ArtifactIssue(
         code=ArtifactIssueCode.MISSING,
@@ -307,7 +302,6 @@ def test_issue_blocking_depends_only_on_severity(tmp_path: Path) -> None:
 
     assert error.blocking is True
     assert warning.blocking is False
-
 
 
 def test_successful_verification_is_manifest_ready(
@@ -353,9 +347,7 @@ def test_successful_verification_is_manifest_ready(
 
     verification = check.artifacts[0]
     assert verification.run_relative_path is not None
-    assert verification.run_relative_path.as_posix() == (
-        "artifacts/gfo/Grammar.gfo"
-    )
+    assert verification.run_relative_path.as_posix() == ("artifacts/gfo/Grammar.gfo")
     assert verification.contained is True
     assert verification.exists is True
     assert verification.kind_matches is True
@@ -365,7 +357,6 @@ def test_successful_verification_is_manifest_ready(
     assert verification.sha256 == _SHA_B
     assert verification.retained is True
     assert verification.passed is True
-
 
 
 def test_identical_before_and_after_snapshot_is_stale(
@@ -390,7 +381,6 @@ def test_identical_before_and_after_snapshot_is_stale(
     assert ArtifactIssueCode.STALE in _codes(check)
 
 
-
 def test_changed_snapshot_is_current(tmp_path: Path) -> None:
     path = tmp_path / "Grammar.gfo"
     expectation = _expectation(path, request_isolated=False)
@@ -408,7 +398,6 @@ def test_changed_snapshot_is_current(tmp_path: Path) -> None:
     assert ArtifactIssueCode.FRESHNESS_UNKNOWN not in _codes(check)
 
 
-
 def test_nonisolated_artifact_without_evidence_has_unknown_freshness(
     tmp_path: Path,
 ) -> None:
@@ -423,7 +412,6 @@ def test_nonisolated_artifact_without_evidence_has_unknown_freshness(
 
     assert check.artifacts[0].freshness is ArtifactFreshness.UNKNOWN
     assert ArtifactIssueCode.FRESHNESS_UNKNOWN in _codes(check)
-
 
 
 def test_matching_provenance_proves_current_request(
@@ -455,7 +443,6 @@ def test_matching_provenance_proves_current_request(
     assert ArtifactIssueCode.PROVENANCE_MISMATCH not in _codes(check)
 
 
-
 def test_provenance_mismatch_is_blocking(tmp_path: Path) -> None:
     path = tmp_path / "Grammar.gfo"
     expectation = _expectation(
@@ -482,7 +469,6 @@ def test_provenance_mismatch_is_blocking(tmp_path: Path) -> None:
     assert check.artifacts[0].freshness is ArtifactFreshness.UNKNOWN
 
 
-
 def test_required_missing_artifact_is_blocking(tmp_path: Path) -> None:
     path = tmp_path / "Grammar.gfo"
 
@@ -497,7 +483,6 @@ def test_required_missing_artifact_is_blocking(tmp_path: Path) -> None:
     assert check.produced_artifacts == ()
     assert ArtifactIssueCode.OBSERVATION_MISSING in _codes(check)
     assert ArtifactIssueCode.MISSING in _codes(check)
-
 
 
 def test_optional_missing_artifact_only_emits_warning(
@@ -516,7 +501,6 @@ def test_optional_missing_artifact_only_emits_warning(
     assert check.required_checks_passed is True
     assert _codes(check) == (ArtifactIssueCode.OBSERVATION_MISSING,)
     assert check.issues[0].severity is ArtifactIssueSeverity.WARNING
-
 
 
 def test_observation_role_and_required_flag_must_match(
@@ -561,7 +545,6 @@ def test_kind_and_size_failures_are_classified(
     assert check.passed is False
 
 
-
 def test_expectation_outside_run_root_is_unsafe(
     tmp_path: Path,
 ) -> None:
@@ -577,7 +560,6 @@ def test_expectation_outside_run_root_is_unsafe(
         )
 
 
-
 def test_resolved_path_escape_is_unsafe(tmp_path: Path) -> None:
     run_root = tmp_path / "run"
     run_root.mkdir()
@@ -589,11 +571,8 @@ def test_resolved_path_escape_is_unsafe(tmp_path: Path) -> None:
             (_expectation(path),),
             (_observation(path),),
             run_root=run_root,
-            after_snapshots=(
-                _snapshot(path, resolved_path=escaped),
-            ),
+            after_snapshots=(_snapshot(path, resolved_path=escaped),),
         )
-
 
 
 def test_symlink_is_rejected_unless_explicitly_allowed(
@@ -622,7 +601,6 @@ def test_symlink_is_rejected_unless_explicitly_allowed(
     assert ArtifactIssueCode.SYMLINK_PROHIBITED not in _codes(allowed)
 
 
-
 def test_manifest_ready_requires_registration_and_hash(
     tmp_path: Path,
 ) -> None:
@@ -640,7 +618,6 @@ def test_manifest_ready_requires_registration_and_hash(
     assert check.manifest_ready is False
     assert ArtifactIssueCode.MANIFEST_REGISTRATION_MISSING in _codes(check)
     assert ArtifactIssueCode.HASH_REQUIRED in _codes(check)
-
 
 
 def test_unexpected_artifacts_are_retained_and_classified(
@@ -667,7 +644,6 @@ def test_unexpected_artifacts_are_retained_and_classified(
         )
 
 
-
 def test_duplicate_inputs_are_reported_without_losing_first_observation(
     tmp_path: Path,
 ) -> None:
@@ -687,7 +663,6 @@ def test_duplicate_inputs_are_reported_without_losing_first_observation(
     assert check.artifacts[0].observation is first
     assert check.artifacts[0].size_bytes == 8
     assert check.passed is False
-
 
 
 def test_artifact_paths_by_role_is_sorted_and_immutable(
@@ -723,7 +698,6 @@ def test_artifact_paths_by_role_is_sorted_and_immutable(
         grouped[CompileArtifactRole.GFO] = ()  # type: ignore[index]
 
 
-
 def test_issues_are_sorted_errors_before_warnings_and_by_path(
     tmp_path: Path,
 ) -> None:
@@ -742,14 +716,8 @@ def test_issues_are_sorted_errors_before_warnings_and_by_path(
 
     severities = [issue.severity for issue in check.issues]
     first_warning = severities.index(ArtifactIssueSeverity.WARNING)
-    assert all(
-        severity is ArtifactIssueSeverity.ERROR
-        for severity in severities[:first_warning]
-    )
-    error_paths = [
-        str(issue.path)
-        for issue in check.issues[:first_warning]
-    ]
+    assert all(severity is ArtifactIssueSeverity.ERROR for severity in severities[:first_warning])
+    error_paths = [str(issue.path) for issue in check.issues[:first_warning]]
     assert error_paths == sorted(error_paths)
 
 
@@ -777,7 +745,6 @@ def test_verifier_rejects_scalar_iterables(
 
     with pytest.raises(TypeError, match=message):
         verify_compile_artifacts(**kwargs)  # type: ignore[arg-type]
-
 
 
 def test_artifact_paths_by_role_requires_artifact_check() -> None:

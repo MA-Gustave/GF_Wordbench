@@ -18,6 +18,7 @@ from gf_wordbench.infrastructure.process.models import (
     ProcessRequest,
 )
 from gf_wordbench.infrastructure.process.runner import run_process
+from gf_wordbench.kernel.ids import SectionId, validate_section_id
 from gf_wordbench.kernel.statuses import ExecutionState
 from gf_wordbench.validation.compilation.commands import (
     GfCommand,
@@ -49,7 +50,7 @@ _OUTPUT_LIMIT_BYTES: Final[int] = 2 * 1024 * 1024
 _MODULE_NAME: Final[str] = "UnicodeRoundTrip"
 _CONCRETE_MODULE_NAME: Final[str] = f"{_MODULE_NAME}Eng"
 _SCENARIO_ID: Final[str] = "integration-unicode"
-_SECTION_ID: Final[str] = "unicode-roundtrip"
+_SECTION_ID: Final[SectionId] = validate_section_id("unicode-roundtrip")
 _EXPECTED_TEXT: Final[str] = "élève naïve — cœur · Ελληνικά 日本語 العربية"
 _UTF8_BOM: Final[bytes] = b"\xef\xbb\xbf"
 
@@ -57,31 +58,24 @@ _UTF8_BOM: Final[bytes] = b"\xef\xbb\xbf"
 def _resolve_test_gf_executable() -> Path:
     configured = os.environ.get(_GF_EXECUTABLE_ENV, "").strip()
     if not configured:
-        pytest.skip(
-            f"real GF integration requires {_GF_EXECUTABLE_ENV} to name the GF executable"
-        )
+        pytest.skip(f"real GF integration requires {_GF_EXECUTABLE_ENV} to name the GF executable")
 
     candidate = Path(os.path.expandvars(configured)).expanduser()
     if not candidate.is_absolute():
         discovered = shutil.which(configured)
         if discovered is None:
-            pytest.fail(
-                f"{_GF_EXECUTABLE_ENV}={configured!r} does not resolve to an executable"
-            )
+            pytest.fail(f"{_GF_EXECUTABLE_ENV}={configured!r} does not resolve to an executable")
         candidate = Path(discovered)
 
     try:
         executable = candidate.resolve(strict=True)
     except OSError as exc:
         pytest.fail(
-            f"{_GF_EXECUTABLE_ENV} does not resolve to an existing file: "
-            f"{candidate}: {exc}"
+            f"{_GF_EXECUTABLE_ENV} does not resolve to an existing file: {candidate}: {exc}"
         )
 
     if not executable.is_file():
-        pytest.fail(
-            f"{_GF_EXECUTABLE_ENV} must identify a regular file: {executable}"
-        )
+        pytest.fail(f"{_GF_EXECUTABLE_ENV} must identify a regular file: {executable}")
     if os.name != "nt" and not os.access(executable, os.X_OK):
         pytest.fail(f"configured GF executable is not executable: {executable}")
 
@@ -127,17 +121,11 @@ def _write_grammar(source_root: Path) -> tuple[Path, Path]:
 
 
 def _source_hashes(paths: tuple[Path, ...]) -> dict[Path, str]:
-    return {
-        path: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in paths
-    }
+    return {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
 
 
 def _assert_sources_unchanged(expected: dict[Path, str]) -> None:
-    assert {
-        path: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in expected
-    } == expected
+    assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in expected} == expected
 
 
 def _build_compile_command(
@@ -183,11 +171,7 @@ def _assert_unicode_command_paths(
     assert command.argv == (os.fspath(command.executable), *command.arguments)
     assert all("\x00" not in argument for argument in command.arguments)
     assert all(
-        not (
-            len(argument) >= 2
-            and argument[0] == argument[-1]
-            and argument[0] in {'"', "'"}
-        )
+        not (len(argument) >= 2 and argument[0] == argument[-1] and argument[0] in {'"', "'"})
         for argument in command.arguments
     )
 
@@ -332,9 +316,7 @@ def test_real_gf_preserves_linguistic_unicode_through_scenario_and_normalization
     executable = _resolve_test_gf_executable()
 
     source_root = (tmp_path / "scénarios-世界" / "grammaire-épreuve").resolve()
-    evidence_root = (
-        tmp_path / "preuves-entrée-sortie" / "δοκιμή-日本語" / "raw"
-    ).resolve()
+    evidence_root = (tmp_path / "preuves-entrée-sortie" / "δοκιμή-日本語" / "raw").resolve()
     source_root.mkdir(parents=True)
     evidence_root.mkdir(parents=True)
 
@@ -345,9 +327,7 @@ def test_real_gf_preserves_linguistic_unicode_through_scenario_and_normalization
     )
     stdout_path = evidence_root / "résultat-unicode.out.txt"
     stderr_path = evidence_root / "erreur-unicode.err.txt"
-    source_hashes = _source_hashes(
-        (abstract_path, concrete_path, script_path)
-    )
+    source_hashes = _source_hashes((abstract_path, concrete_path, script_path))
 
     script = ScenarioScriptInput.from_bytes(
         scenario_id=_SCENARIO_ID,
@@ -382,9 +362,7 @@ def test_real_gf_preserves_linguistic_unicode_through_scenario_and_normalization
     assert request.cwd == source_root
     assert request.metadata["scenario_id"] == _SCENARIO_ID
     assert request.metadata["script_path"] == script_path.as_posix()
-    assert request.metadata["script_sha256"] == hashlib.sha256(
-        script_path.read_bytes()
-    ).hexdigest()
+    assert request.metadata["script_sha256"] == hashlib.sha256(script_path.read_bytes()).hexdigest()
 
     result = execute_scenario_process(request)
 
@@ -435,9 +413,7 @@ def test_real_gf_preserves_linguistic_unicode_through_scenario_and_normalization
     assert normalized.changed is False
     assert normalized.source_size_bytes == len(extracted_text.encode("utf-8"))
     assert normalized.normalized_size_bytes == normalized.source_size_bytes
-    assert normalized.source_sha256 == hashlib.sha256(
-        extracted_text.encode("utf-8")
-    ).hexdigest()
+    assert normalized.source_sha256 == hashlib.sha256(extracted_text.encode("utf-8")).hexdigest()
     assert normalized.normalized_sha256 == normalized.source_sha256
 
     _assert_sources_unchanged(source_hashes)

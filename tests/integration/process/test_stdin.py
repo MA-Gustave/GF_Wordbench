@@ -10,7 +10,6 @@ capture-file creation.
 from __future__ import annotations
 
 from dataclasses import replace
-import os
 from pathlib import Path
 import sys
 
@@ -71,9 +70,7 @@ def _request(
         stderr_path=captures / "stderr.bin",
         timeout_sec=_TIMEOUT_SECONDS,
         approved_read_roots=(
-            approved_read_roots
-            if approved_read_roots is not None
-            else (root, executable.parent)
+            approved_read_roots if approved_read_roots is not None else (root, executable.parent)
         ),
         approved_write_roots=(root,),
         evidence_policy="retain-raw-streams-v1",
@@ -183,11 +180,7 @@ def test_stdin_metacharacters_are_data_not_shell_syntax(
     tmp_path: Path,
 ) -> None:
     marker = tmp_path / "must-not-exist"
-    text = (
-        f"; echo injected > {marker}\n"
-        f"$(touch {marker})\n"
-        f"& type nul > {marker}\n"
-    )
+    text = f"; echo injected > {marker}\n$(touch {marker})\n& type nul > {marker}\n"
     request = _request(tmp_path, stdin=ProcessInput.from_text(text))
 
     assert _assert_completed(request) == text.encode("utf-8")

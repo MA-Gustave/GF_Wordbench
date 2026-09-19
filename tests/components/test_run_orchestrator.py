@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import Final
+from typing import Any, Final, cast
 
 import pytest
 
@@ -81,16 +81,22 @@ class _Harness:
         self.finalizer_error: Exception | None = None
         self.cancelled_failure: OrchestrationFailure | None = None
         self.fatal_failure: OrchestrationFailure | None = None
-        self.cancelled_state: tuple[
-            _Plan | None,
-            _Preflight | None,
-            _Execution | None,
-        ] | None = None
-        self.fatal_state: tuple[
-            _Plan | None,
-            _Preflight | None,
-            _Execution | None,
-        ] | None = None
+        self.cancelled_state: (
+            tuple[
+                _Plan | None,
+                _Preflight | None,
+                _Execution | None,
+            ]
+            | None
+        ) = None
+        self.fatal_state: (
+            tuple[
+                _Plan | None,
+                _Preflight | None,
+                _Execution | None,
+            ]
+            | None
+        ) = None
 
     def plan(self, config: _Config, paths: _Paths) -> _Plan:
         assert config == _Config()
@@ -289,9 +295,7 @@ def test_completed_run_executes_each_phase_once_and_emits_ordered_events() -> No
         "run_completed",
     ]
     assert all(event.run_id == _Paths().run_id for event in events)
-    assert [event.timestamp for event in events] == sorted(
-        event.timestamp for event in events
-    )
+    assert [event.timestamp for event in events] == sorted(event.timestamp for event in events)
 
 
 def test_fatal_preflight_stops_execution_but_still_finalizes() -> None:
@@ -380,9 +384,7 @@ def test_execution_failure_becomes_a_fatal_result_with_partial_state() -> None:
     assert harness.fatal_failure is not None
     assert harness.fatal_failure.phase == "executing"
     assert harness.fatal_failure.exception is execution_error
-    failed_event = next(
-        event for event in events if event.event == "run_orchestration_failed"
-    )
+    failed_event = next(event for event in events if event.event == "run_orchestration_failed")
     assert failed_event.level is EventLevel.FATAL
     assert failed_event.stage == "executing"
     assert failed_event.status == "ERROR"
@@ -437,9 +439,7 @@ def test_finalization_failure_is_propagated_when_orchestration_succeeded() -> No
         )
 
     assert raised.value is finalizer_error
-    finalization_event = next(
-        event for event in events if event.event == "run_finalization_failed"
-    )
+    finalization_event = next(event for event in events if event.event == "run_finalization_failed")
     assert finalization_event.level is EventLevel.FATAL
     assert finalization_event.stage == "finalizing"
     assert "run_completed" not in _event_names(events)
@@ -528,7 +528,7 @@ def test_service_bundle_rejects_non_callable_members(
     services = _Harness().services()
 
     with pytest.raises(TypeError, match=rf"^{field_name} must be callable$"):
-        replace(services, **{field_name: replacement})
+        cast(Any, replace)(services, **{field_name: replacement})
 
 
 def test_orchestrator_rejects_invalid_callbacks_and_run_id() -> None:

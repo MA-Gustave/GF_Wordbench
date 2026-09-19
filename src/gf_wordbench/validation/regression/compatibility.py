@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+import re
 from types import MappingProxyType
 from typing import Final
 
@@ -157,8 +157,7 @@ class RunCompatibilityDescriptor:
         normalization_value = value.get("normalization_versions", ())
         if isinstance(normalization_value, Mapping):
             normalization_versions = tuple(
-                (str(key), str(item))
-                for key, item in normalization_value.items()
+                (str(key), str(item)) for key, item in normalization_value.items()
             )
         else:
             normalization_versions = tuple(normalization_value)  # type: ignore[arg-type]
@@ -184,24 +183,16 @@ class RunCompatibilityDescriptor:
             schema_id=str(value.get("schema_id", RUN_SUMMARY_SCHEMA_ID)),
             schema_version=_mapping_optional_text(value, "schema_version"),
             target_id=_mapping_optional_text(value, "target_id"),
-            selected_subject_ids=tuple(
-                str(item) for item in selected_subject_ids
-            ),
-            subject_identity=str(
-                value.get("subject_identity", SUBJECT_IDENTITY_V1)
-            ),
-            status_values=frozenset(
-                str(item) for item in status_values
-            ),
+            selected_subject_ids=tuple(str(item) for item in selected_subject_ids),
+            subject_identity=str(value.get("subject_identity", SUBJECT_IDENTITY_V1)),
+            status_values=frozenset(str(item) for item in status_values),
             gf_version=str(value.get("gf_version", "")),
             normalization_versions=normalization_versions,
             release_contract_id=_mapping_optional_text(
                 value,
                 "release_contract_id",
             ),
-            project_identity_inferred=bool(
-                value.get("project_identity_inferred", False)
-            ),
+            project_identity_inferred=bool(value.get("project_identity_inferred", False)),
             legacy_schema=bool(value.get("legacy_schema", False)),
         )
 
@@ -250,34 +241,25 @@ class CompatibilityResult:
 
     @property
     def compatible(self) -> bool:
-        return not any(
-            issue.severity is CompatibilitySeverity.ERROR
-            for issue in self.issues
-        )
+        return not any(issue.severity is CompatibilitySeverity.ERROR for issue in self.issues)
 
     @property
     def warnings(self) -> tuple[CompatibilityIssue, ...]:
         return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is CompatibilitySeverity.WARNING
+            issue for issue in self.issues if issue.severity is CompatibilitySeverity.WARNING
         )
 
     @property
     def errors(self) -> tuple[CompatibilityIssue, ...]:
         return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is CompatibilitySeverity.ERROR
+            issue for issue in self.issues if issue.severity is CompatibilitySeverity.ERROR
         )
 
     def require(self) -> CompatibilityResult:
         if self.compatible:
             return self
         detail = "; ".join(issue.message for issue in self.errors)
-        raise IncompatibleBaselineError(
-            f"Regression baseline is incompatible: {detail}"
-        )
+        raise IncompatibleBaselineError(f"Regression baseline is incompatible: {detail}")
 
 
 def normalize_validation_mode(
@@ -323,16 +305,14 @@ def check_run_compatibility(
         issues.append(
             _warning(
                 CompatibilityCode.LEGACY_MODE_ALIAS,
-                f"Baseline mode {previous.mode!r} was normalized to "
-                f"{previous_mode.value!r}",
+                f"Baseline mode {previous.mode!r} was normalized to {previous_mode.value!r}",
             )
         )
     if current_alias:
         issues.append(
             _warning(
                 CompatibilityCode.LEGACY_MODE_ALIAS,
-                f"Current mode {current.mode!r} was normalized to "
-                f"{current_mode.value!r}",
+                f"Current mode {current.mode!r} was normalized to {current_mode.value!r}",
             )
         )
 
@@ -340,16 +320,14 @@ def check_run_compatibility(
         issues.append(
             _warning(
                 CompatibilityCode.INFERRED_PROJECT_IDENTITY,
-                "Baseline project identity was inferred by a documented "
-                "migration rule",
+                "Baseline project identity was inferred by a documented migration rule",
             )
         )
     if current.project_identity_inferred:
         issues.append(
             _warning(
                 CompatibilityCode.INFERRED_PROJECT_IDENTITY,
-                "Current project identity was inferred by a documented "
-                "migration rule",
+                "Current project identity was inferred by a documented migration rule",
             )
         )
 
@@ -422,8 +400,7 @@ def _check_schema(
         issues.append(
             _warning(
                 CompatibilityCode.LEGACY_SCHEMA,
-                f"{label.capitalize()} uses a supported legacy summary "
-                "migrated in memory",
+                f"{label.capitalize()} uses a supported legacy summary migrated in memory",
             )
         )
         return
@@ -432,8 +409,7 @@ def _check_schema(
         issues.append(
             _error(
                 CompatibilityCode.UNSUPPORTED_SCHEMA,
-                f"{label.capitalize()} schema ID "
-                f"{descriptor.schema_id!r} is unsupported",
+                f"{label.capitalize()} schema ID {descriptor.schema_id!r} is unsupported",
             )
         )
         return
@@ -483,8 +459,7 @@ def _check_mode_scope(
             issues.append(
                 _error(
                     CompatibilityCode.QUICK_TARGET_MISSING,
-                    "Comparable quick runs require explicit stable target "
-                    "identities",
+                    "Comparable quick runs require explicit stable target identities",
                 )
             )
         elif previous.target_id != current.target_id:
@@ -501,9 +476,7 @@ def _check_mode_scope(
         current_scope = current.selected_subject_ids
         if not previous_scope or not current_scope:
             severity = (
-                CompatibilitySeverity.WARNING
-                if explicit_baseline
-                else CompatibilitySeverity.ERROR
+                CompatibilitySeverity.WARNING if explicit_baseline else CompatibilitySeverity.ERROR
             )
             issues.append(
                 CompatibilityIssue(
@@ -538,8 +511,7 @@ def _check_mode_scope(
             issues.append(
                 _warning(
                     CompatibilityCode.RELEASE_CONTRACT_CHANGED,
-                    "Project release requirements changed between baseline "
-                    "and current run",
+                    "Project release requirements changed between baseline and current run",
                 )
             )
 
@@ -554,16 +526,14 @@ def _check_status_vocabulary(
         issues.append(
             _error(
                 CompatibilityCode.STATUS_VOCABULARY_MISMATCH,
-                "Baseline status vocabulary is not the canonical validation "
-                "status set",
+                "Baseline status vocabulary is not the canonical validation status set",
             )
         )
     if current.status_values != _CANONICAL_STATUS_VALUES:
         issues.append(
             _error(
                 CompatibilityCode.STATUS_VOCABULARY_MISMATCH,
-                "Current status vocabulary is not the canonical validation "
-                "status set",
+                "Current status vocabulary is not the canonical validation status set",
             )
         )
 
@@ -605,8 +575,7 @@ def _check_subject_identity(
         issues.append(
             _error(
                 CompatibilityCode.SUBJECT_IDENTITY_MISMATCH,
-                "Baseline and current run do not use compatible subject "
-                "identity conventions",
+                "Baseline and current run do not use compatible subject identity conventions",
             )
         )
 
@@ -617,11 +586,7 @@ def _check_context_changes(
     *,
     issues: list[CompatibilityIssue],
 ) -> None:
-    if (
-        previous.gf_version
-        and current.gf_version
-        and previous.gf_version != current.gf_version
-    ):
+    if previous.gf_version and current.gf_version and previous.gf_version != current.gf_version:
         issues.append(
             _warning(
                 CompatibilityCode.GF_VERSION_CHANGED,
@@ -641,8 +606,7 @@ def _check_context_changes(
         issues.append(
             _warning(
                 CompatibilityCode.NORMALIZATION_VERSION_CHANGED,
-                "Normalization version changed for comparison scope: "
-                f"{scope}",
+                f"Normalization version changed for comparison scope: {scope}",
             )
         )
 
@@ -651,8 +615,7 @@ def _canonical_subject_set(values: Iterable[object]) -> tuple[str, ...]:
     if isinstance(values, (str, bytes)):
         raise TypeError("selected_subject_ids must be an iterable of strings")
     normalized = tuple(
-        _canonical_identity(value, field_name="selected_subject_ids")
-        for value in values
+        _canonical_identity(value, field_name="selected_subject_ids") for value in values
     )
     if len(normalized) != len(set(normalized)):
         raise ValueError("selected_subject_ids must not contain duplicates")
@@ -685,8 +648,7 @@ def _normalize_status_values(values: Iterable[object]) -> frozenset[str]:
     if isinstance(values, (str, bytes)):
         values = (values,)
     normalized = frozenset(
-        _require_text(value, field_name="status_values").upper()
-        for value in values
+        _require_text(value, field_name="status_values").upper() for value in values
     )
     if not normalized:
         raise ValueError("status_values must not be empty")
@@ -708,9 +670,7 @@ def _normalize_version_map(
             field_name=f"normalization_versions[{key!r}]",
         )
         if key in normalized:
-            raise ValueError(
-                f"duplicate normalization version scope {key!r}"
-            )
+            raise ValueError(f"duplicate normalization version scope {key!r}")
         normalized[key] = value
     return tuple(sorted(normalized.items()))
 
@@ -787,16 +747,16 @@ def _sort_issues(
 
 
 __all__ = (
+    "LEGACY_FILE_IDENTITY_V0",
+    "RUN_SUMMARY_SCHEMA_ID",
+    "SUBJECT_IDENTITY_V1",
+    "SUPPORTED_RUN_SUMMARY_SCHEMA_MAJOR",
     "CompatibilityCode",
     "CompatibilityIssue",
     "CompatibilityResult",
     "CompatibilitySeverity",
     "IncompatibleBaselineError",
-    "LEGACY_FILE_IDENTITY_V0",
-    "RUN_SUMMARY_SCHEMA_ID",
     "RunCompatibilityDescriptor",
-    "SUBJECT_IDENTITY_V1",
-    "SUPPORTED_RUN_SUMMARY_SCHEMA_MAJOR",
     "check_run_compatibility",
     "normalize_validation_mode",
     "require_explicit_baseline_compatibility",

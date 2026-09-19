@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import stat
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+import os
 from pathlib import Path
+import stat
 from typing import Final, Protocol, cast, runtime_checkable
 
 from gf_wordbench.infrastructure.json_io import JsonObject, read_json, write_json
@@ -17,8 +17,9 @@ from gf_wordbench.kernel.statuses import ValidationStatus
 from gf_wordbench.version import __version__
 
 from .declarations import ArtifactDeclaration
-from .hashing import FileHash, hash_file
+from .hashing import ArtifactChangedDuringHashError, FileHash, hash_file
 from .media_types import validate_role_media_type
+
 from .models import (
     ArtifactManifest,
     ArtifactManifestEntry,
@@ -64,14 +65,20 @@ class ArtifactMutationError(ManifestBuildError):
 
 @runtime_checkable
 class RunPathsLike(Protocol):
-    run_id: object
-    run_dir: Path
-    manifest_json: Path
+    @property
+    def run_id(self) -> object: ...
+
+    @property
+    def run_dir(self) -> Path: ...
+
+    @property
+    def manifest_json(self) -> Path: ...
 
 
 @runtime_checkable
 class RunResultLike(Protocol):
-    run_paths: RunPathsLike
+    @property
+    def run_paths(self) -> RunPathsLike: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,10 +99,7 @@ class ManifestBuildPolicy:
         ):
             if type(getattr(self, name)) is not bool:
                 raise TypeError(f"{name} must be a bool")
-        if (
-            self.case_sensitive_paths is not None
-            and type(self.case_sensitive_paths) is not bool
-        ):
+        if self.case_sensitive_paths is not None and type(self.case_sensitive_paths) is not bool:
             raise TypeError("case_sensitive_paths must be a bool or None")
         if type(self.hash_chunk_size) is not int or self.hash_chunk_size < 1:
             raise ValueError("hash_chunk_size must be a positive integer")
@@ -103,9 +107,7 @@ class ManifestBuildPolicy:
             raise ValueError("max_artifacts must be a positive integer")
         roles = frozenset(self.non_empty_required_roles)
         if any(not isinstance(role, str) or not role.strip() for role in roles):
-            raise ValueError(
-                "non_empty_required_roles must contain non-empty strings"
-            )
+            raise ValueError("non_empty_required_roles must contain non-empty strings")
         object.__setattr__(self, "non_empty_required_roles", roles)
 
 
@@ -139,9 +141,7 @@ class ManifestBuildResult:
             raise TypeError("manifest must be ArtifactManifest")
         warnings = tuple(self.warnings)
         if any(not isinstance(item, ManifestBuildWarning) for item in warnings):
-            raise TypeError(
-                "warnings must contain ManifestBuildWarning values"
-            )
+            raise TypeError("warnings must contain ManifestBuildWarning values")
         for name in (
             "entry_count",
             "required_entry_count",
@@ -151,13 +151,9 @@ class ManifestBuildResult:
             if type(value) is not int or value < 0:
                 raise ValueError(f"{name} must be a non-negative integer")
         if self.entry_count != len(self.manifest.artifacts):
-            raise ValueError(
-                "entry_count must equal the manifest artifact count"
-            )
+            raise ValueError("entry_count must equal the manifest artifact count")
         if self.required_entry_count > self.entry_count:
-            raise ValueError(
-                "required_entry_count must not exceed entry_count"
-            )
+            raise ValueError("required_entry_count must not exceed entry_count")
         object.__setattr__(self, "warnings", warnings)
 
 
@@ -240,8 +236,7 @@ def build_manifest_result(
         except FileNotFoundError:
             if declaration.required:
                 raise MissingRequiredArtifactError(
-                    "required artifact is missing: "
-                    f"{prepared.manifest_path}"
+                    f"required artifact is missing: {prepared.manifest_path}"
                 ) from None
             warnings.append(
                 ManifestBuildWarning(
@@ -254,16 +249,13 @@ def build_manifest_result(
         except PermissionError as exc:
             if declaration.required:
                 raise MissingRequiredArtifactError(
-                    "required artifact is unreadable: "
-                    f"{prepared.manifest_path}: {exc}"
+                    f"required artifact is unreadable: {prepared.manifest_path}: {exc}"
                 ) from exc
             warnings.append(
                 ManifestBuildWarning(
                     code="optional_artifact_unreadable",
                     path=prepared.manifest_path,
-                    message=(
-                        "Optional artifact could not be read and was omitted."
-                    ),
+                    message=("Optional artifact could not be read and was omitted."),
                 )
             )
             continue
@@ -348,9 +340,7 @@ def write_manifest(
                 "persisted manifest document differs from canonical serialization"
             )
         if persisted_manifest != manifest:
-            raise ManifestBuildError(
-                "persisted manifest model differs from the supplied manifest"
-            )
+            raise ManifestBuildError("persisted manifest model differs from the supplied manifest")
 
         return ManifestWriteResult(
             status=ValidationStatus.OK,
@@ -379,13 +369,16 @@ def _serialize_manifest_document(manifest: ArtifactManifest) -> JsonObject:
         serialize_artifact_manifest,
     )
 
-    return cast(JsonObject, serialize_artifact_manifest(manifest))
+    return cast("JsonObject", serialize_artifact_manifest(manifest))
 
 
 def _parse_manifest_document(document: JsonObject) -> ArtifactManifest:
     from gf_wordbench.reporting.schemas.manifest_v1 import parse_artifact_manifest
 
-    return parse_artifact_manifest(document, strict=True)
+    return cast(
+        "ArtifactManifest",
+        parse_artifact_manifest(document, strict=True),
+    )
 
 
 def _manifest_write_error_message(exc: Exception) -> str:
@@ -428,9 +421,7 @@ def _canonical_manifest_path_from_resolved(
     try:
         relative = artifact_path.relative_to(run_root)
     except ValueError as exc:
-        raise UnsafeManifestPathError(
-            f"artifact path escapes run root: {artifact_path}"
-        ) from exc
+        raise UnsafeManifestPathError(f"artifact path escapes run root: {artifact_path}") from exc
 
     normalized = relative.as_posix()
     _validate_manifest_relative_path(normalized)
@@ -447,32 +438,26 @@ def manifest_path_comparison_key(
     """Return the platform-policy comparison key for a manifest path."""
 
     _validate_manifest_relative_path(manifest_path)
-    sensitive = (
-        _platform_paths_are_case_sensitive()
-        if case_sensitive is None
-        else case_sensitive
-    )
+    sensitive = _platform_paths_are_case_sensitive() if case_sensitive is None else case_sensitive
     if type(sensitive) is not bool:
         raise TypeError("case_sensitive must be a bool or None")
     return manifest_path if sensitive else manifest_path.casefold()
 
 
 def _prepare_declaration_sequence(
-    declarations: Sequence[ArtifactDeclaration],
+    declarations: object,
     *,
     run_root: Path,
     manifest_target: Path,
     policy: ManifestBuildPolicy,
 ) -> tuple[_PreparedDeclaration, ...]:
-    if isinstance(declarations, (str, bytes)):
-        raise TypeError(
-            "artifact_declarations must be a sequence of ArtifactDeclaration"
-        )
+    if isinstance(declarations, (str, bytes)) or not isinstance(
+        declarations, Sequence
+    ):
+        raise TypeError("artifact_declarations must be a sequence of ArtifactDeclaration")
     prepared_input = tuple(declarations)
     if len(prepared_input) > policy.max_artifacts:
-        raise ManifestBuildError(
-            "artifact declaration count exceeds the configured maximum"
-        )
+        raise ManifestBuildError("artifact declaration count exceeds the configured maximum")
 
     prepared: list[_PreparedDeclaration] = []
     seen: dict[str, str] = {}
@@ -480,16 +465,13 @@ def _prepare_declaration_sequence(
 
     for declaration in prepared_input:
         if not isinstance(declaration, ArtifactDeclaration):
-            raise TypeError(
-                "artifact_declarations must contain ArtifactDeclaration values"
-            )
+            raise TypeError("artifact_declarations must contain ArtifactDeclaration values")
         if type(declaration.required) is not bool:
             raise TypeError("ArtifactDeclaration.required must be a bool")
 
         validate_role_media_type(
             declaration.role,
             declaration.media_type,
-            strict=True,
         )
 
         candidate = declaration.path
@@ -505,9 +487,7 @@ def _prepare_declaration_sequence(
             require_exists=False,
         )
         if absolute == manifest_target:
-            raise UnsafeManifestPathError(
-                "manifest.json must not include itself"
-            )
+            raise UnsafeManifestPathError("manifest.json must not include itself")
 
         manifest_path = _canonical_manifest_path_from_resolved(
             absolute,
@@ -521,8 +501,7 @@ def _prepare_declaration_sequence(
         previous = seen.get(key)
         if previous is not None:
             raise DuplicateManifestPathError(
-                "duplicate artifact path after normalization: "
-                f"{previous!r} and {manifest_path!r}"
+                f"duplicate artifact path after normalization: {previous!r} and {manifest_path!r}"
             )
         seen[key] = manifest_path
 
@@ -553,9 +532,7 @@ def _build_entry(
 
     is_symlink = stat.S_ISLNK(link_metadata.st_mode)
     if is_symlink and policy.reject_symlinks:
-        raise UnsafeManifestPathError(
-            f"symlink artifacts are prohibited: {manifest_path}"
-        )
+        raise UnsafeManifestPathError(f"symlink artifacts are prohibited: {manifest_path}")
 
     resolved = artifact_path.resolve(strict=True)
     try:
@@ -573,39 +550,33 @@ def _build_entry(
             )
         raise FileNotFoundError(manifest_path)
     if not stat.S_ISREG(metadata.st_mode):
-        raise UnsafeManifestPathError(
-            f"artifact is not a regular file: {manifest_path}"
-        )
+        raise UnsafeManifestPathError(f"artifact is not a regular file: {manifest_path}")
 
-    file_hash = hash_file(
-        resolved,
-        algorithm=MANIFEST_HASH_ALGORITHM,
-        chunk_size=policy.hash_chunk_size,
-        verify_stability=policy.verify_hash_stability,
-    )
+    try:
+        file_hash = hash_file(
+            resolved,
+            chunk_size_bytes=policy.hash_chunk_size,
+            reject_symlinks=True,
+            verify_reopen=policy.verify_hash_stability,
+        )
+    except ArtifactChangedDuringHashError as exc:
+        raise ArtifactMutationError(f"artifact changed while hashing: {manifest_path}") from exc
+
     if not isinstance(file_hash, FileHash):
         raise TypeError("hash_file must return FileHash")
     if file_hash.algorithm != MANIFEST_HASH_ALGORITHM:
-        raise ManifestBuildError(
-            f"unsupported hash algorithm returned for {manifest_path}"
-        )
-    if file_hash.changed_during_read:
-        raise ArtifactMutationError(
-            f"artifact changed while hashing: {manifest_path}"
-        )
+        raise ManifestBuildError(f"unsupported hash algorithm returned for {manifest_path}")
+    if bool(getattr(file_hash, "changed_during_read", False)):
+        raise ArtifactMutationError(f"artifact changed while hashing: {manifest_path}")
     if file_hash.size_bytes != metadata.st_size:
-        raise ArtifactMutationError(
-            f"artifact size changed while hashing: {manifest_path}"
-        )
+        raise ArtifactMutationError(f"artifact size changed while hashing: {manifest_path}")
 
     if (
         declaration.required
         and declaration.role in policy.non_empty_required_roles
         and file_hash.size_bytes == 0
     ):
-        raise MissingRequiredArtifactError(
-            f"required artifact must be non-empty: {manifest_path}"
-        )
+        raise MissingRequiredArtifactError(f"required artifact must be non-empty: {manifest_path}")
 
     return ArtifactManifestEntry(
         path=manifest_path,
@@ -648,13 +619,9 @@ def _manifest_location(run_paths: RunPathsLike) -> tuple[Path, Path]:
         field_name="run_paths.manifest_json",
     )
     if manifest_target.name != MANIFEST_FILENAME:
-        raise UnsafeManifestPathError(
-            f"manifest target must be named {MANIFEST_FILENAME!r}"
-        )
+        raise UnsafeManifestPathError(f"manifest target must be named {MANIFEST_FILENAME!r}")
     if manifest_target.parent != run_root:
-        raise UnsafeManifestPathError(
-            "manifest target must be a direct child of the run directory"
-        )
+        raise UnsafeManifestPathError("manifest target must be a direct child of the run directory")
     return run_root, manifest_target
 
 
@@ -664,9 +631,7 @@ def _validate_manifest_run_id(
 ) -> None:
     expected = _canonical_run_id(run_paths.run_id)
     if manifest.run_id != expected:
-        raise ManifestBuildError(
-            "manifest and run_paths use different run identifiers"
-        )
+        raise ManifestBuildError("manifest and run_paths use different run identifiers")
 
 
 def _validate_run_result_paths(
@@ -676,31 +641,19 @@ def _validate_run_result_paths(
     if not isinstance(run_result, RunResultLike):
         raise TypeError("run_result must expose a RunPaths-compatible run_paths")
     result_paths = _require_run_paths(run_result.run_paths)
-    if _canonical_run_id(result_paths.run_id) != _canonical_run_id(
-        run_paths.run_id
-    ):
-        raise ManifestBuildError(
-            "run_result and run_paths use different run identifiers"
-        )
-    if result_paths.run_dir.resolve(strict=False) != run_paths.run_dir.resolve(
+    if _canonical_run_id(result_paths.run_id) != _canonical_run_id(run_paths.run_id):
+        raise ManifestBuildError("run_result and run_paths use different run identifiers")
+    if result_paths.run_dir.resolve(strict=False) != run_paths.run_dir.resolve(strict=False):
+        raise ManifestBuildError("run_result and run_paths use different run directories")
+    if result_paths.manifest_json.resolve(strict=False) != run_paths.manifest_json.resolve(
         strict=False
     ):
-        raise ManifestBuildError(
-            "run_result and run_paths use different run directories"
-        )
-    if result_paths.manifest_json.resolve(
-        strict=False
-    ) != run_paths.manifest_json.resolve(strict=False):
-        raise ManifestBuildError(
-            "run_result and run_paths use different manifest targets"
-        )
+        raise ManifestBuildError("run_result and run_paths use different manifest targets")
 
 
 def _require_run_paths(value: object) -> RunPathsLike:
     if not isinstance(value, RunPathsLike):
-        raise TypeError(
-            "run_paths must expose run_id, run_dir, and manifest_json"
-        )
+        raise TypeError("run_paths must expose run_id, run_dir, and manifest_json")
     if not isinstance(value.run_dir, Path):
         raise TypeError("run_paths.run_dir must be pathlib.Path")
     if not isinstance(value.manifest_json, Path):
@@ -732,14 +685,14 @@ def _resolved_candidate(
         raise ValueError(f"{field_name} must not contain NUL")
 
     candidate = path if path.is_absolute() else run_root / path
-    resolved = candidate.resolve(strict=require_exists)
+    absolute = Path(os.path.abspath(candidate))
+    if require_exists and not absolute.exists():
+        raise FileNotFoundError(absolute)
     try:
-        resolved.relative_to(run_root)
+        absolute.relative_to(run_root)
     except ValueError as exc:
-        raise UnsafeManifestPathError(
-            f"{field_name} escapes the run root"
-        ) from exc
-    return resolved
+        raise UnsafeManifestPathError(f"{field_name} escapes the run root") from exc
+    return absolute
 
 
 def _validate_manifest_relative_path(value: str) -> None:
@@ -748,35 +701,23 @@ def _validate_manifest_relative_path(value: str) -> None:
     if not value or not value.strip():
         raise UnsafeManifestPathError("manifest path must not be empty")
     if "\x00" in value:
-        raise UnsafeManifestPathError(
-            "manifest path must not contain NUL"
-        )
+        raise UnsafeManifestPathError("manifest path must not contain NUL")
     if "\\" in value:
-        raise UnsafeManifestPathError(
-            "manifest path must use forward slashes"
-        )
+        raise UnsafeManifestPathError("manifest path must use forward slashes")
     if value.startswith(("/", "//")):
-        raise UnsafeManifestPathError(
-            "manifest path must be run-relative"
-        )
+        raise UnsafeManifestPathError("manifest path must be run-relative")
     if "://" in value:
-        raise UnsafeManifestPathError(
-            "manifest path must not contain a URI scheme"
-        )
+        raise UnsafeManifestPathError("manifest path must not contain a URI scheme")
     if len(value) >= 2 and value[1] == ":" and value[0].isalpha():
-        raise UnsafeManifestPathError(
-            "manifest path must not contain a drive prefix"
-        )
+        raise UnsafeManifestPathError("manifest path must not contain a drive prefix")
 
     parts = value.split("/")
     if any(part in ("", ".", "..") for part in parts):
-        raise UnsafeManifestPathError(
-            "manifest path contains an unsafe or unresolved segment"
-        )
+        raise UnsafeManifestPathError("manifest path contains an unsafe or unresolved segment")
 
 
 def _generation_timestamp(value: datetime | None) -> str:
-    timestamp = datetime.now(timezone.utc) if value is None else value
+    timestamp = datetime.now(UTC) if value is None else value
     if not isinstance(timestamp, datetime):
         raise TypeError("generated_at must be datetime or None")
     return format_rfc3339_utc(timestamp)
@@ -810,13 +751,13 @@ def _platform_paths_are_case_sensitive() -> bool:
 
 
 __all__ = (
-    "ArtifactMutationError",
-    "DuplicateManifestPathError",
     "MANIFEST_FILENAME",
     "MANIFEST_HASH_ALGORITHM",
     "MANIFEST_PRODUCER_NAME",
     "MANIFEST_SCHEMA_ID",
     "MANIFEST_SCHEMA_VERSION",
+    "ArtifactMutationError",
+    "DuplicateManifestPathError",
     "ManifestBuildError",
     "ManifestBuildPolicy",
     "ManifestBuildResult",

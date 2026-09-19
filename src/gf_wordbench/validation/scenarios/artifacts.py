@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
-import os
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import hashlib
+import os
 from pathlib import Path, PurePosixPath
-from typing import Final, TypeAlias, cast
+import re
+from typing import Final, Protocol, TypeAlias, runtime_checkable
 
 from gf_wordbench.infrastructure.atomic_io import (
     atomic_write_bytes,
@@ -31,6 +31,17 @@ from gf_wordbench.kernel.ids import ScenarioId, validate_scenario_id
 
 PathInput: TypeAlias = str | os.PathLike[str]
 
+
+@runtime_checkable
+class _ScenarioSpecLike(Protocol):
+    scenario_id: object
+
+
+@runtime_checkable
+class _RunPathsLike(Protocol):
+    run_dir: PathInput
+
+
 MAX_SAFE_KEY_LENGTH: Final[int] = 96
 MAX_GENERATED_BASENAME_LENGTH: Final[int] = 120
 HASH_SUFFIX_LENGTH: Final[int] = 8
@@ -43,9 +54,7 @@ GOLD_DIFF_SUFFIX: Final[str] = ".gold.diff"
 
 _SHA256_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
 _TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9_-]*$")
-_PORTABLE_SEGMENT_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Za-z0-9._-]+$"
-)
+_PORTABLE_SEGMENT_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9._-]+$")
 _WINDOWS_RESERVED_NAMES: Final[frozenset[str]] = frozenset(
     {
         "con",
@@ -99,37 +108,22 @@ class ScenarioArtifactPaths:
                 raise ValueError(f"{field_name} must be absolute")
 
         if self.raw_scenarios_directory == self.run_directory:
-            raise ValueError(
-                "raw_scenarios_directory must be below run_directory"
-            )
+            raise ValueError("raw_scenarios_directory must be below run_directory")
         if self.generated_output_directory == self.run_directory:
-            raise ValueError(
-                "generated_output_directory must be below run_directory"
-            )
+            raise ValueError("generated_output_directory must be below run_directory")
 
         expected = {
-            "stdout_path": (
-                self.raw_scenarios_directory
-                / f"{self.safe_key}{STDOUT_SUFFIX}"
-            ),
-            "stderr_path": (
-                self.raw_scenarios_directory
-                / f"{self.safe_key}{STDERR_SUFFIX}"
-            ),
+            "stdout_path": (self.raw_scenarios_directory / f"{self.safe_key}{STDOUT_SUFFIX}"),
+            "stderr_path": (self.raw_scenarios_directory / f"{self.safe_key}{STDERR_SUFFIX}"),
             "normalized_output_path": (
-                self.raw_scenarios_directory
-                / f"{self.safe_key}{NORMALIZED_OUTPUT_SUFFIX}"
+                self.raw_scenarios_directory / f"{self.safe_key}{NORMALIZED_OUTPUT_SUFFIX}"
             ),
-            "gold_diff_path": (
-                self.raw_scenarios_directory
-                / f"{self.safe_key}{GOLD_DIFF_SUFFIX}"
-            ),
+            "gold_diff_path": (self.raw_scenarios_directory / f"{self.safe_key}{GOLD_DIFF_SUFFIX}"),
         }
         for field_name, expected_path in expected.items():
             if getattr(self, field_name) != expected_path:
                 raise ValueError(
-                    f"{field_name} does not match the canonical scenario "
-                    "artifact name"
+                    f"{field_name} does not match the canonical scenario artifact name"
                 )
 
         for path in (
@@ -143,9 +137,7 @@ class ScenarioArtifactPaths:
             try:
                 path.relative_to(self.run_directory)
             except ValueError as exc:
-                raise ValueError(
-                    "scenario artifact paths must remain below run_directory"
-                ) from exc
+                raise ValueError("scenario artifact paths must remain below run_directory") from exc
 
     def path_for(self, kind: ScenarioArtifactKind) -> Path:
         if not isinstance(kind, ScenarioArtifactKind):
@@ -158,9 +150,7 @@ class ScenarioArtifactPaths:
             return self.normalized_output_path
         if kind is ScenarioArtifactKind.GOLD_DIFF:
             return self.gold_diff_path
-        raise ValueError(
-            "generated output artifacts require an explicit existing path"
-        )
+        raise ValueError("generated output artifacts require an explicit existing path")
 
     def run_relative(self, path: PathInput) -> str:
         return run_relative_artifact_path(
@@ -228,9 +218,7 @@ class ScenarioArtifactRecord:
             raise TypeError("size_bytes must be an integer")
         if self.size_bytes < 0:
             raise ValueError("size_bytes must be non-negative")
-        if not isinstance(self.sha256, str) or _SHA256_RE.fullmatch(
-            self.sha256
-        ) is None:
+        if not isinstance(self.sha256, str) or _SHA256_RE.fullmatch(self.sha256) is None:
             raise ValueError("sha256 must be a full lowercase SHA-256")
         _validate_metadata_text(self.media_type, field="media_type")
         if self.source_run_relative_path is not None:
@@ -256,9 +244,7 @@ def scenario_safe_key(scenario_id: object) -> str:
     ):
         return canonical
 
-    digest = hashlib.sha256(canonical.encode("ascii")).hexdigest()[
-        :HASH_SUFFIX_LENGTH
-    ]
+    digest = hashlib.sha256(canonical.encode("ascii")).hexdigest()[:HASH_SUFFIX_LENGTH]
     suffix = f"--{digest}"
     readable = canonical
 
@@ -369,17 +355,13 @@ def write_normalized_output(
         ScenarioArtifactKind.STDOUT,
         ScenarioArtifactKind.STDERR,
     }:
-        raise ValueError(
-            "source_kind must identify raw stdout or raw stderr"
-        )
+        raise ValueError("source_kind must identify raw stdout or raw stderr")
     if not isinstance(text, str):
         raise TypeError("text must be a string")
     if "\x00" in text:
         raise ValueError("normalized output must not contain NUL")
     if "\r" in text:
-        raise ValueError(
-            "normalized output must use canonical LF line endings"
-        )
+        raise ValueError("normalized output must use canonical LF line endings")
 
     destination = paths.normalized_output_path
     _require_new_artifact(destination, role="normalized scenario output")
@@ -402,17 +384,72 @@ def write_normalized_output(
         ) from exc
 
     source_path = paths.path_for(source_kind)
-    source_relative = (
-        paths.run_relative(source_path)
-        if source_path.exists()
-        else None
-    )
+    source_relative = paths.run_relative(source_path) if source_path.exists() else None
     return verify_scenario_artifact(
         paths,
         kind=ScenarioArtifactKind.NORMALIZED_OUTPUT,
         source_run_relative_path=source_relative,
         normalization_version=normalization_version,
     )
+
+
+def write_normalized_scenario_output(
+    spec: object,
+    normalized_sections: Iterable[object],
+    run_paths: object,
+) -> Path:
+    """Publish normalized scenario text through the canonical artifact owner.
+
+    This stage-level adapter keeps the service independent from the lower-level
+    ``ScenarioArtifactPaths`` value object while preserving the same run-owned
+    destination and LF-normalized UTF-8 output.
+    """
+
+    if not isinstance(spec, _ScenarioSpecLike):
+        raise TypeError("spec must expose scenario_id")
+    if not isinstance(run_paths, _RunPathsLike):
+        raise TypeError("run_paths must expose run_dir")
+    scenario_id = validate_scenario_id(spec.scenario_id)
+    run_directory = Path(run_paths.run_dir).resolve()
+    raw_directory = Path(
+        getattr(
+            run_paths,
+            "raw_scenarios_dir",
+            run_directory / "raw" / "scenarios",
+        )
+    ).resolve()
+    raw_directory.mkdir(parents=True, exist_ok=True)
+    destination = resolve_for_output(
+        raw_directory / f"{scenario_safe_key(scenario_id)}{NORMALIZED_OUTPUT_SUFFIX}"
+    )
+    require_within(destination, run_directory, role="normalized scenario output")
+
+    lines: list[str] = []
+    for index, section in enumerate(normalized_sections):
+        text = getattr(
+            section,
+            "normalized_text",
+            getattr(section, "text", None),
+        )
+        if not isinstance(text, str):
+            raise TypeError(f"normalized_sections[{index}] must expose normalized_text or text")
+        if "\x00" in text:
+            raise ValueError("normalized scenario output must not contain NUL")
+        lines.append(text.replace("\r\n", "\n").replace("\r", "\n"))
+
+    payload = "\n".join(lines)
+    if payload and not payload.endswith("\n"):
+        payload += "\n"
+    atomic_write_text(
+        destination,
+        payload,
+        encoding="utf-8",
+        newline="\n",
+        create_parents=False,
+        root=run_directory,
+        role="normalized scenario output",
+    )
+    return destination
 
 
 def write_gold_diff(
@@ -424,14 +461,10 @@ def write_gold_diff(
     if not isinstance(metadata, GoldDiffMetadata):
         raise TypeError("metadata must be GoldDiffMetadata")
     if metadata.scenario_id != paths.scenario_id:
-        raise ValueError(
-            "gold diff metadata scenario_id does not match artifact paths"
-        )
+        raise ValueError("gold diff metadata scenario_id does not match artifact paths")
     expected_actual = paths.run_relative(paths.normalized_output_path)
     if metadata.actual_normalized_output_path != expected_actual:
-        raise ValueError(
-            "gold diff metadata must reference the owned normalized output"
-        )
+        raise ValueError("gold diff metadata must reference the owned normalized output")
     if not isinstance(diff_text, str):
         raise TypeError("diff_text must be a string")
     if "\x00" in diff_text:
@@ -481,9 +514,7 @@ def verify_scenario_artifact(
     if not isinstance(kind, ScenarioArtifactKind):
         raise TypeError("kind must be a ScenarioArtifactKind")
     if kind is ScenarioArtifactKind.GENERATED_OUTPUT:
-        raise ValueError(
-            "use verify_generated_scenario_artifact for generated output"
-        )
+        raise ValueError("use verify_generated_scenario_artifact for generated output")
 
     path = paths.path_for(kind)
     non_empty = (
@@ -526,10 +557,7 @@ def verify_generated_scenario_artifact(
         raise ArtifactError(
             "Scenario-generated artifact basename is too long",
             code="GF-WB-SCENARIO-001",
-            detail=(
-                f"maximum={MAX_GENERATED_BASENAME_LENGTH}; "
-                f"actual={len(resolved.name)}"
-            ),
+            detail=(f"maximum={MAX_GENERATED_BASENAME_LENGTH}; actual={len(resolved.name)}"),
             stage="scenarios",
             operation="verify-artifact",
             subject=str(paths.scenario_id),
@@ -584,14 +612,12 @@ def collect_existing_scenario_artifacts(
                 evidence_paths=(paths.run_relative(path),),
             )
 
-    generated_paths = tuple(generated_artifacts)
-    for path in sorted(
+    generated_paths = tuple(Path(value) for value in generated_artifacts)
+    for generated_path in sorted(
         generated_paths,
         key=lambda value: os.fspath(value).casefold(),
     ):
-        records.append(
-            verify_generated_scenario_artifact(paths, path)
-        )
+        records.append(verify_generated_scenario_artifact(paths, generated_path))
 
     records.sort(
         key=lambda record: (
@@ -783,24 +809,16 @@ def _normalize_required_kinds(
     values: Iterable[ScenarioArtifactKind],
 ) -> frozenset[ScenarioArtifactKind]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "required_kinds must be an iterable of ScenarioArtifactKind"
-        )
+        raise TypeError("required_kinds must be an iterable of ScenarioArtifactKind")
     try:
         normalized = frozenset(values)
     except TypeError as exc:
-        raise TypeError(
-            "required_kinds must be an iterable of ScenarioArtifactKind"
-        ) from exc
+        raise TypeError("required_kinds must be an iterable of ScenarioArtifactKind") from exc
     for value in normalized:
         if not isinstance(value, ScenarioArtifactKind):
-            raise TypeError(
-                "required_kinds must contain ScenarioArtifactKind values"
-            )
+            raise TypeError("required_kinds must contain ScenarioArtifactKind values")
         if value is ScenarioArtifactKind.GENERATED_OUTPUT:
-            raise ValueError(
-                "generated outputs must be supplied explicitly"
-            )
+            raise ValueError("generated outputs must be supplied explicitly")
     return normalized
 
 
@@ -916,11 +934,7 @@ def _path_security_error(
         detail=f"candidate={candidate!s}; root={root!s}",
         stage="scenarios",
         operation="resolve-artifact-path",
-        subject=(
-            os.fspath(candidate)
-            if scenario_id is None
-            else str(scenario_id)
-        ),
+        subject=(os.fspath(candidate) if scenario_id is None else str(scenario_id)),
     )
 
 
@@ -994,9 +1008,7 @@ def _validate_safe_key(value: str) -> None:
     if not isinstance(value, str):
         raise TypeError("safe_key must be a string")
     if not value or len(value) > MAX_SAFE_KEY_LENGTH:
-        raise ValueError(
-            f"safe_key must contain 1 to {MAX_SAFE_KEY_LENGTH} characters"
-        )
+        raise ValueError(f"safe_key must contain 1 to {MAX_SAFE_KEY_LENGTH} characters")
     if _PORTABLE_SEGMENT_RE.fullmatch(value) is None:
         raise ValueError("safe_key contains non-portable characters")
     if value in {".", ".."}:
@@ -1012,6 +1024,94 @@ def _is_windows_reserved(value: str) -> bool:
     return stem in _WINDOWS_RESERVED_NAMES
 
 
+def verify_scenario_artifacts(
+    spec: object,
+    execution: object,
+    *,
+    run_paths: object,
+) -> object:
+    """Verify process-level artifacts declared by a scenario specification.
+
+    This compatibility stage intentionally returns a small structural result so
+    the scenario service does not depend on infrastructure result classes.
+    """
+    from types import SimpleNamespace
+
+    declared = tuple(
+        getattr(
+            spec,
+            "expected_artifacts",
+            getattr(spec, "artifacts", ()),
+        )
+        or ()
+    )
+    records: list[object] = []
+    missing: list[object] = []
+
+    owner = getattr(execution, "working_directory", None)
+    if not isinstance(owner, Path):
+        owner = getattr(run_paths, "run_dir", None)
+    if owner is not None and not isinstance(owner, Path):
+        return SimpleNamespace(
+            records=(),
+            missing_required=(),
+            message="Scenario artifact owner is not a path.",
+            error=True,
+        )
+
+    for declaration in declared:
+        raw_path = getattr(declaration, "path", declaration)
+        try:
+            path = raw_path if isinstance(raw_path, Path) else Path(raw_path)
+        except (TypeError, ValueError):
+            return SimpleNamespace(
+                records=tuple(records),
+                missing_required=tuple(missing),
+                message="Scenario artifact declaration contains an invalid path.",
+                error=True,
+            )
+
+        if not path.is_absolute():
+            if owner is None:
+                return SimpleNamespace(
+                    records=tuple(records),
+                    missing_required=tuple(missing),
+                    message=("Relative scenario artifact path has no approved owner."),
+                    error=True,
+                )
+            path = owner / path
+        path = path.resolve(strict=False)
+
+        required = bool(getattr(declaration, "required", True))
+        kind = getattr(declaration, "kind", None)
+        kind_value = str(getattr(kind, "value", kind or "file")).casefold()
+        exists = path.is_dir() if "directory" in kind_value else path.is_file()
+        minimum_size = getattr(declaration, "minimum_size_bytes", 0)
+        if exists and isinstance(minimum_size, int) and minimum_size > 0:
+            try:
+                exists = path.stat().st_size >= minimum_size
+            except OSError:
+                exists = False
+
+        record = SimpleNamespace(
+            path=path,
+            exists=exists,
+            required=required,
+            role=getattr(declaration, "role", "scenario-artifact"),
+            declaration=declaration,
+        )
+        records.append(record)
+        if required and not exists:
+            missing.append(record)
+
+    return SimpleNamespace(
+        records=tuple(records),
+        missing_required=tuple(missing),
+        message=("Required scenario artifacts are missing." if missing else ""),
+        error=False,
+    )
+
+
 def _validate_portable_relative_path(
     value: str,
     *,
@@ -1020,9 +1120,7 @@ def _validate_portable_relative_path(
     if not isinstance(value, str):
         raise TypeError(f"{field} must be a string")
     if not value or "\x00" in value or "\\" in value:
-        raise ValueError(
-            f"{field} must be a non-empty portable relative path"
-        )
+        raise ValueError(f"{field} must be a non-empty portable relative path")
     path = PurePosixPath(value)
     if path.is_absolute() or value != path.as_posix():
         raise ValueError(f"{field} must use canonical '/' separators")
@@ -1034,9 +1132,7 @@ def _validate_token(value: str, *, field: str) -> None:
     if not isinstance(value, str):
         raise TypeError(f"{field} must be a string")
     if _TOKEN_RE.fullmatch(value) is None:
-        raise ValueError(
-            f"{field} must be a lowercase machine token"
-        )
+        raise ValueError(f"{field} must be a lowercase machine token")
 
 
 def _validate_metadata_text(value: str, *, field: str) -> None:
@@ -1045,9 +1141,7 @@ def _validate_metadata_text(value: str, *, field: str) -> None:
     if not value.strip():
         raise ValueError(f"{field} must not be empty")
     if "\x00" in value or "\r" in value or "\n" in value:
-        raise ValueError(
-            f"{field} must be a single NUL-free line"
-        )
+        raise ValueError(f"{field} must be a single NUL-free line")
 
 
 def _require_paths(value: ScenarioArtifactPaths) -> None:
@@ -1058,7 +1152,7 @@ def _require_paths(value: ScenarioArtifactPaths) -> None:
 def _require_bool(value: object, *, field: str) -> bool:
     if type(value) is not bool:
         raise TypeError(f"{field} must be a bool")
-    return cast(bool, value)
+    return value
 
 
 def _bounded_exception(
@@ -1075,13 +1169,13 @@ def _bounded_exception(
 
 __all__ = (
     "GOLD_DIFF_SUFFIX",
-    "GoldDiffMetadata",
     "HASH_SUFFIX_LENGTH",
     "MAX_GENERATED_BASENAME_LENGTH",
     "MAX_SAFE_KEY_LENGTH",
     "NORMALIZED_OUTPUT_SUFFIX",
     "STDERR_SUFFIX",
     "STDOUT_SUFFIX",
+    "GoldDiffMetadata",
     "ScenarioArtifactKind",
     "ScenarioArtifactPaths",
     "ScenarioArtifactRecord",
@@ -1091,8 +1185,10 @@ __all__ = (
     "scenario_safe_key",
     "verify_generated_scenario_artifact",
     "verify_scenario_artifact",
+    "verify_scenario_artifacts",
     "write_gold_diff",
     "write_normalized_output",
+    "write_normalized_scenario_output",
     "write_scenario_stderr",
     "write_scenario_stdout",
 )

@@ -3,14 +3,18 @@
 This module owns state defaults, tolerant parsing, strict validation, and
 conversion between immutable state models and their canonical JSON document.
 Filesystem persistence remains owned by :mod:`gf_wordbench.state.repository`.
+
+The remembered language path is historical UI state only. It must never be
+treated as an implicit startup selection, an automatic reopen request, or a
+fallback language.
 """
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Final, Never, NotRequired, TypedDict, cast
 
 from gf_wordbench.kernel.errors import (
@@ -29,6 +33,7 @@ APP_STATE_FILENAME: Final = ".gf_wordbench_state.json"
 LEGACY_APP_STATE_FILENAME: Final = ".gf_audit_state.json"
 PRODUCER_NAME: Final = "gf-wordbench"
 
+DEFAULT_LAST_SELECTED_LANGUAGE_PATH: Final[None] = None
 DEFAULT_MODE: Final = ValidationMode.DIAGNOSTIC
 DEFAULT_TIMEOUT_SEC: Final = 60
 DEFAULT_MAX_FILES: Final = 0
@@ -41,9 +46,7 @@ DEFAULT_EMIT_CPU_STATS: Final = False
 MAX_STATE_WARNINGS: Final = 32
 CANONICAL_MODES: Final = frozenset(mode.value for mode in ValidationMode)
 
-_SCHEMA_VERSION_PATTERN: Final = re.compile(
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
-)
+_SCHEMA_VERSION_PATTERN: Final = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _CURRENT_SCHEMA_MAJOR: Final = 2
 _CURRENT_SCHEMA_MINOR: Final = 0
 _LEGACY_SCHEMA_MAJOR: Final = 1
@@ -122,6 +125,8 @@ class ProducerDocument(TypedDict):
 
 
 class EnvironmentDocument(TypedDict):
+    """Persisted environment history; no field selects a language implicitly."""
+
     last_selected_language_path: str | None
     last_selected_validation_profile: str | None
     last_rgl_root: str | None
@@ -184,7 +189,7 @@ def default_app_state() -> AppState:
         schema_version=APP_STATE_SCHEMA_VERSION,
         producer=None,
         environment=EnvironmentState(
-            last_selected_language_path=None,
+            last_selected_language_path=DEFAULT_LAST_SELECTED_LANGUAGE_PATH,
             last_selected_validation_profile=None,
             last_rgl_root=None,
             gf_executable=None,
@@ -227,7 +232,7 @@ def parse_app_state(
             _StrictContext(source).fail("$", "must be a JSON object")
 
         canonical = canonicalize_app_state_document(
-            cast(Mapping[str, object], document),
+            cast("Mapping[str, object]", document),
             source=source,
             require_producer=True,
         )
@@ -242,10 +247,7 @@ def parse_app_state(
     state = _document_to_state(result.document)
     validate_app_state(state)
 
-    warnings = tuple(
-        f"{warning.field}: {warning.message}"
-        for warning in result.warnings
-    )
+    warnings = tuple(f"{warning.field}: {warning.message}" for warning in result.warnings)
     return state, warnings
 
 
@@ -267,13 +269,9 @@ def serialize_app_state(
         )
     )
     if producer is None:
-        raise SchemaValidationError(
-            "producer_version is required when state.producer is absent"
-        )
+        raise SchemaValidationError("producer_version is required when state.producer is absent")
     if producer.name != PRODUCER_NAME:
-        raise SchemaValidationError(
-            f"producer name must be {PRODUCER_NAME!r}"
-        )
+        raise SchemaValidationError(f"producer name must be {PRODUCER_NAME!r}")
 
     return canonicalize_app_state_document(
         _state_to_document(state, producer=producer),
@@ -314,6 +312,8 @@ def recover_app_state_document(
     The former ``project_root`` value is deliberately discarded because it
     cannot safely establish a selected language path or validation profile.
     The former ``rgl_root`` value remains a non-authoritative remembered root.
+    Recovered language paths remain remembered history and never authorize an
+    automatic startup selection.
     """
 
     del source
@@ -364,11 +364,7 @@ def recover_app_state_document(
         return _failure(warnings, schema_version)
 
     legacy_document = major == _LEGACY_SCHEMA_MAJOR
-    supported_minor = (
-        _LEGACY_SCHEMA_MINOR
-        if legacy_document
-        else _CURRENT_SCHEMA_MINOR
-    )
+    supported_minor = _LEGACY_SCHEMA_MINOR if legacy_document else _CURRENT_SCHEMA_MINOR
     future_minor = minor > supported_minor
     if future_minor:
         _warn(
@@ -383,8 +379,7 @@ def recover_app_state_document(
             warnings,
             "schema_migrated",
             "$.schema_version",
-            f"state {schema_version} was migrated in memory to "
-            f"{APP_STATE_SCHEMA_VERSION}",
+            f"state {schema_version} was migrated in memory to {APP_STATE_SCHEMA_VERSION}",
         )
 
     state = default_app_state_document()
@@ -430,16 +425,11 @@ def canonicalize_app_state_document(
 
     schema_version = root.get("schema_version")
     if schema_version != APP_STATE_SCHEMA_VERSION:
-        parsed = (
-            _parse_version(schema_version)
-            if isinstance(schema_version, str)
-            else None
-        )
+        parsed = _parse_version(schema_version) if isinstance(schema_version, str) else None
         if parsed is not None and parsed[0] != _CURRENT_SCHEMA_MAJOR:
             context.unsupported(
                 "$.schema_version",
-                f"schema major {parsed[0]} is unsupported for strict "
-                "canonical output",
+                f"schema major {parsed[0]} is unsupported for strict canonical output",
             )
         context.fail(
             "$.schema_version",
@@ -447,9 +437,7 @@ def canonicalize_app_state_document(
         )
 
     required_root = _REQUIRED_ROOT_FIELDS | (
-        frozenset({"producer"})
-        if require_producer
-        else frozenset()
+        frozenset({"producer"}) if require_producer else frozenset()
     )
 
     _strict_shape(
@@ -505,6 +493,7 @@ def canonicalize_app_state_document(
 
     return result.document
 
+
 def producer_document(version: str) -> ProducerDocument:
     """Build producer metadata through the canonical owning model."""
 
@@ -523,11 +512,7 @@ def _state_to_document(
     *,
     producer: ProducerInfo | None = None,
 ) -> AppStateDocument:
-    selected_producer = (
-        state.producer
-        if producer is None
-        else producer
-    )
+    selected_producer = state.producer if producer is None else producer
 
     document = AppStateDocument(
         schema_id=state.schema_id,
@@ -539,21 +524,13 @@ def _state_to_document(
             last_selected_validation_profile=_portable_optional_path(
                 state.environment.last_selected_validation_profile
             ),
-            last_rgl_root=_portable_optional_path(
-                state.environment.last_rgl_root
-            ),
-            gf_executable=_portable_optional_path(
-                state.environment.gf_executable
-            ),
-            output_root=_portable_optional_path(
-                state.environment.output_root
-            ),
+            last_rgl_root=_portable_optional_path(state.environment.last_rgl_root),
+            gf_executable=_portable_optional_path(state.environment.gf_executable),
+            output_root=_portable_optional_path(state.environment.output_root),
         ),
         selection=SelectionDocument(
             mode=state.selection.mode.value,
-            target_file=_portable_path(
-                state.selection.target_file
-            ),
+            target_file=_portable_path(state.selection.target_file),
             timeout_sec=state.selection.timeout_sec,
             max_files=state.selection.max_files,
             keep_ok_details=state.selection.keep_ok_details,
@@ -563,12 +540,8 @@ def _state_to_document(
             emit_cpu_stats=state.selection.emit_cpu_stats,
         ),
         last_run=LastRunDocument(
-            run_dir=_portable_optional_path(
-                state.last_run.run_dir
-            ),
-            summary_path=_portable_optional_path(
-                state.last_run.summary_path
-            ),
+            run_dir=_portable_optional_path(state.last_run.run_dir),
+            summary_path=_portable_optional_path(state.last_run.summary_path),
             status_message=state.last_run.status_message,
         ),
     )
@@ -604,12 +577,8 @@ def _document_to_state(
         schema_version=document["schema_version"],
         producer=producer,
         environment=EnvironmentState(
-            last_selected_language_path=environment[
-                "last_selected_language_path"
-            ],
-            last_selected_validation_profile=environment[
-                "last_selected_validation_profile"
-            ],
+            last_selected_language_path=environment["last_selected_language_path"],
+            last_selected_validation_profile=environment["last_selected_validation_profile"],
             last_rgl_root=environment["last_rgl_root"],
             gf_executable=environment["gf_executable"],
             output_root=environment["output_root"],
@@ -662,12 +631,7 @@ def _recover_producer(
         warnings,
     )
 
-    if (
-        name != PRODUCER_NAME
-        or not isinstance(version, str)
-        or not version
-        or _NUL in version
-    ):
+    if name != PRODUCER_NAME or not isinstance(version, str) or not version or _NUL in version:
         _warn(
             warnings,
             "invalid_producer",
@@ -747,12 +711,11 @@ def _recover_legacy_environment(
             warnings,
             "discarded_project_root",
             "$.environment.project_root",
-            "legacy project_root was discarded; select a language path "
-            "explicitly",
+            "legacy project_root was discarded; select a language path explicitly",
         )
 
     return EnvironmentDocument(
-        last_selected_language_path=None,
+        last_selected_language_path=DEFAULT_LAST_SELECTED_LANGUAGE_PATH,
         last_selected_validation_profile=None,
         last_rgl_root=_optional_path(
             group,
@@ -802,7 +765,7 @@ def _recover_selection(
         mode = DEFAULT_MODE.value
 
     return SelectionDocument(
-        mode=cast(str, mode),
+        mode=mode,
         target_file=_target_path(
             group,
             "target_file",
@@ -1048,16 +1011,9 @@ def _integer(
         warnings,
     )
 
-    valid = (
-        type(value) is int
-        and (
-            value > 0
-            if positive
-            else value >= 0
-        )
-    )
+    valid = type(value) is int and (value > 0 if positive else value >= 0)
     if valid:
-        return cast(int, value)
+        return cast("int", value)
 
     if value is not _MISSING:
         _warn(
@@ -1086,7 +1042,7 @@ def _boolean(
     )
 
     if type(value) is bool:
-        return cast(bool, value)
+        return value
 
     if value is not _MISSING:
         _warn(
@@ -1106,11 +1062,8 @@ def _recover_mapping(
     *,
     warn: bool = True,
 ) -> Mapping[str, object] | None:
-    if (
-        isinstance(value, Mapping)
-        and all(isinstance(key, str) for key in value)
-    ):
-        return cast(Mapping[str, object], value)
+    if isinstance(value, Mapping) and all(isinstance(key, str) for key in value):
+        return cast("Mapping[str, object]", value)
 
     if warn:
         _warn(
@@ -1148,16 +1101,13 @@ def _strict_mapping(
     field: str,
     context: _StrictContext,
 ) -> Mapping[str, object]:
-    if (
-        not isinstance(value, Mapping)
-        or not all(isinstance(key, str) for key in value)
-    ):
+    if not isinstance(value, Mapping) or not all(isinstance(key, str) for key in value):
         context.fail(
             field,
             "must be an object with string keys",
         )
 
-    return cast(Mapping[str, object], value)
+    return cast("Mapping[str, object]", value)
 
 
 def _strict_shape(
@@ -1171,32 +1121,22 @@ def _strict_shape(
     if missing:
         context.fail(
             field,
-            "missing required fields: "
-            + ", ".join(sorted(missing)),
+            "missing required fields: " + ", ".join(sorted(missing)),
         )
 
     unknown = set(group).difference(allowed)
     if unknown:
         context.fail(
             field,
-            "unknown fields: "
-            + ", ".join(sorted(unknown)),
+            "unknown fields: " + ", ".join(sorted(unknown)),
         )
 
 
 def _valid_path_text(value: str) -> bool:
-    if (
-        not value
-        or _NUL in value
-        or value == "~"
-        or value.startswith(("~/", "~\\"))
-    ):
+    if not value or _NUL in value or value == "~" or value.startswith(("~/", "~\\")):
         return False
 
-    return not any(
-        pattern.search(value)
-        for pattern in _ENVIRONMENT_REFERENCE_PATTERNS
-    )
+    return not any(pattern.search(value) for pattern in _ENVIRONMENT_REFERENCE_PATTERNS)
 
 
 def _normalize_path(value: str) -> str:
@@ -1206,11 +1146,7 @@ def _normalize_path(value: str) -> str:
 def _portable_optional_path(
     value: str | None,
 ) -> str | None:
-    return (
-        None
-        if value is None
-        else _portable_path(value)
-    )
+    return None if value is None else _portable_path(value)
 
 
 def _portable_path(value: str) -> str:
@@ -1218,9 +1154,7 @@ def _portable_path(value: str) -> str:
         return ""
 
     if not _valid_path_text(value):
-        raise SchemaValidationError(
-            "state contains an unsafe path value"
-        )
+        raise SchemaValidationError("state contains an unsafe path value")
 
     return _normalize_path(value)
 
@@ -1230,26 +1164,15 @@ def _raise_incompatible(
     *,
     source: Path | None,
 ) -> Never:
-    warning = (
-        result.warnings[0]
-        if result.warnings
-        else None
-    )
+    warning = result.warnings[0] if result.warnings else None
     message = (
         "application state is incompatible"
         if warning is None
         else f"{warning.field}: {warning.message}"
     )
-    location = (
-        f"{source}: "
-        if source is not None
-        else ""
-    )
+    location = f"{source}: " if source is not None else ""
 
-    if (
-        warning is not None
-        and warning.code == "unsupported_schema_major"
-    ):
+    if warning is not None and warning.code == "unsupported_schema_major":
         raise UnsupportedVersionError(location + message)
 
     raise SchemaValidationError(location + message)
@@ -1312,41 +1235,30 @@ class _StrictContext:
         field: str,
         message: str,
     ) -> Never:
-        location = (
-            f"{self.source}: "
-            if self.source is not None
-            else ""
-        )
-        raise SchemaValidationError(
-            f"{location}{field}: {message}"
-        )
+        location = f"{self.source}: " if self.source is not None else ""
+        raise SchemaValidationError(f"{location}{field}: {message}")
 
     def unsupported(
         self,
         field: str,
         message: str,
     ) -> Never:
-        location = (
-            f"{self.source}: "
-            if self.source is not None
-            else ""
-        )
-        raise UnsupportedVersionError(
-            f"{location}{field}: {message}"
-        )
+        location = f"{self.source}: " if self.source is not None else ""
+        raise UnsupportedVersionError(f"{location}{field}: {message}")
 
 
 __all__ = (
     "APP_STATE_FILENAME",
     "APP_STATE_SCHEMA_ID",
     "APP_STATE_SCHEMA_VERSION",
-    "AppStateDocument",
     "CANONICAL_MODES",
-    "EnvironmentDocument",
+    "DEFAULT_LAST_SELECTED_LANGUAGE_PATH",
     "LEGACY_APP_STATE_FILENAME",
     "LEGACY_APP_STATE_SCHEMA_VERSION",
-    "LastRunDocument",
     "MAX_STATE_WARNINGS",
+    "AppStateDocument",
+    "EnvironmentDocument",
+    "LastRunDocument",
     "ProducerDocument",
     "SelectionDocument",
     "StateSchemaResult",

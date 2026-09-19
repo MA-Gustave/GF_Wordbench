@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 from types import MappingProxyType
@@ -12,6 +13,7 @@ from gf_wordbench.diagnostics.models import (
     DiagnosticEvidence,
     DiagnosticPattern,
     DiagnosticPatternRegistry,
+    MetadataValue,
     DiagnosticSeverity,
     PatternConfidence,
     PatternLifecycle,
@@ -35,9 +37,9 @@ def _evidence(
     tmp_path: Path,
     *,
     operation_kind: str = "run_scenario",
-    scenario_facts: dict[str, object] | None = None,
-    framework_facts: dict[str, object] | None = None,
-    contract_facts: dict[str, object] | None = None,
+    scenario_facts: Mapping[str, MetadataValue] | None = None,
+    framework_facts: Mapping[str, MetadataValue] | None = None,
+    contract_facts: Mapping[str, MetadataValue] | None = None,
 ) -> DiagnosticEvidence:
     return DiagnosticEvidence(
         operation_kind=operation_kind,
@@ -74,20 +76,19 @@ def test_scenario_catalog_is_stable_unique_and_ordered() -> None:
         20,
         21,
     )
-    assert len({
-        pattern.pattern_id
-        for pattern in SCENARIO_PATTERNS
-    }) == len(SCENARIO_PATTERNS)
+    assert len({pattern.pattern_id for pattern in SCENARIO_PATTERNS}) == len(SCENARIO_PATTERNS)
 
     for pattern in SCENARIO_PATTERNS:
         assert pattern.lifecycle_state is PatternLifecycle.ACTIVE
         assert pattern.confidence is PatternConfidence.AUTHORITATIVE
         assert pattern.severity is DiagnosticSeverity.ERROR
-        assert pattern.operations == frozenset({
-            "run_scenario",
-            "scenario_preflight",
-            "scenario_validation",
-        })
+        assert pattern.operations == frozenset(
+            {
+                "run_scenario",
+                "scenario_preflight",
+                "scenario_validation",
+            }
+        )
         assert pattern.streams == frozenset({"framework-state"})
 
 
@@ -141,21 +142,28 @@ def test_registry_rejects_noncanonical_priority_order() -> None:
 def test_registry_lookup_and_applicability_are_scope_aware() -> None:
     registry = _registry()
 
-    assert registry.get(REQUIRED_SCENARIO_MISSING_PATTERN_ID) is (
-        REQUIRED_SCENARIO_MISSING_PATTERN
+    assert registry.get(REQUIRED_SCENARIO_MISSING_PATTERN_ID) is (REQUIRED_SCENARIO_MISSING_PATTERN)
+    assert (
+        registry.applicable(
+            "run_scenario",
+            stream="framework-state",
+        )
+        == SCENARIO_PATTERNS
     )
-    assert registry.applicable(
-        "run_scenario",
-        stream="framework-state",
-    ) == SCENARIO_PATTERNS
-    assert registry.applicable(
-        "compile_module",
-        stream="framework-state",
-    ) == ()
-    assert registry.applicable(
-        "run_scenario",
-        stream="stderr",
-    ) == ()
+    assert (
+        registry.applicable(
+            "compile_module",
+            stream="framework-state",
+        )
+        == ()
+    )
+    assert (
+        registry.applicable(
+            "run_scenario",
+            stream="stderr",
+        )
+        == ()
+    )
 
     with pytest.raises(KeyError):
         registry.get("DP-SCEN-999")
@@ -213,9 +221,7 @@ def test_required_scenario_missing_is_authoritative_framework_evidence(
     assert match.severity is DiagnosticSeverity.ERROR
     assert match.confidence is PatternConfidence.AUTHORITATIVE
     assert match.message == "Required scenario is missing."
-    assert match.normalized_signature == (
-        "DP-SCEN-001|release-smoke"
-    )
+    assert match.normalized_signature == ("DP-SCEN-001|release-smoke")
     assert match.references == (
         "scenario:release-smoke",
         "validation/scenarios/release-smoke.gfs",
@@ -245,12 +251,15 @@ def test_required_scenario_pattern_has_relevant_negative_cases(
     tmp_path: Path,
     scenario_facts: dict[str, object],
 ) -> None:
-    assert match_required_scenario_missing(
-        _evidence(
-            tmp_path,
-            scenario_facts=scenario_facts,
+    assert (
+        match_required_scenario_missing(
+            _evidence(
+                tmp_path,
+                scenario_facts=scenario_facts,
+            )
         )
-    ) is None
+        is None
+    )
 
 
 def test_required_section_incomplete_preserves_section_identity(
@@ -285,12 +294,8 @@ def test_required_section_incomplete_preserves_section_identity(
     assert match.error_kind == "CONTRACT"
     assert match.severity is DiagnosticSeverity.ERROR
     assert match.confidence is PatternConfidence.AUTHORITATIVE
-    assert match.message == (
-        "Required scenario section did not complete."
-    )
-    assert match.normalized_signature == (
-        "DP-SCEN-002|syntax|linearize"
-    )
+    assert match.message == ("Required scenario section did not complete.")
+    assert match.normalized_signature == ("DP-SCEN-002|syntax|linearize")
     assert match.references == (
         "scenario:syntax",
         "section:linearize",
@@ -316,9 +321,7 @@ def test_explicit_incomplete_flag_uses_bounded_unknown_section(
 
     assert facts.incomplete_sections == ("unknown-section",)
     assert match is not None
-    assert match.normalized_signature == (
-        "DP-SCEN-002|unknown-scenario|unknown-section"
-    )
+    assert match.normalized_signature == ("DP-SCEN-002|unknown-scenario|unknown-section")
     assert match.references == ("section:unknown-section",)
 
 
@@ -346,9 +349,10 @@ def test_scenario_facts_can_be_supplied_by_nested_metadata(
 
 
 def test_pattern_lookup_requires_a_canonical_known_id() -> None:
-    assert get_scenario_pattern(
-        REQUIRED_SECTION_INCOMPLETE_PATTERN_ID
-    ) is REQUIRED_SECTION_INCOMPLETE_PATTERN
+    assert (
+        get_scenario_pattern(REQUIRED_SECTION_INCOMPLETE_PATTERN_ID)
+        is REQUIRED_SECTION_INCOMPLETE_PATTERN
+    )
 
     with pytest.raises(
         KeyError,

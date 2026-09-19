@@ -27,10 +27,10 @@ Both bootstrap factories must be import-side-effect free until called.
 from __future__ import annotations
 
 import argparse
-import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+import sys
 from typing import Final, Protocol, TextIO, runtime_checkable
 
 from gf_wordbench.kernel.errors import (
@@ -70,8 +70,7 @@ class ProjectCheckApplication(Protocol):
     def check_project(
         self,
         request: ProjectCheckRequest,
-    ) -> ProjectValidationResult:
-        ...
+    ) -> ProjectValidationResult: ...
 
 
 @runtime_checkable
@@ -81,8 +80,7 @@ class ScenarioCheckApplication(Protocol):
     def check_scenarios(
         self,
         request: ScenarioCheckRequest,
-    ) -> ScenarioCheckCommandResult | ProjectValidationResult:
-        ...
+    ) -> ScenarioCheckCommandResult | ProjectValidationResult: ...
 
 
 class SubparserCollection(Protocol):
@@ -92,8 +90,7 @@ class SubparserCollection(Protocol):
         self,
         name: str,
         **kwargs: object,
-    ) -> argparse.ArgumentParser:
-        ...
+    ) -> argparse.ArgumentParser: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,19 +135,12 @@ class ProjectCheckRequest:
             )
 
         if self.quiet and self.verbose:
-            raise ValueError(
-                "--quiet and --verbose cannot be used together"
-            )
+            raise ValueError("--quiet and --verbose cannot be used together")
 
         if self.legacy_project_root is not None:
             expected = _legacy_profile_path(self.legacy_project_root)
-            if (
-                _normalized_path(self.validation_profile)
-                != _normalized_path(expected)
-            ):
-                raise ValueError(
-                    "legacy project root conflicts with validation profile"
-                )
+            if _normalized_path(self.validation_profile) != _normalized_path(expected):
+                raise ValueError("legacy project root conflicts with validation profile")
 
     @property
     def selected_language_path(self) -> Path | None:
@@ -182,6 +172,7 @@ class ProjectCheckRequest:
         if self.legacy_project_root is not None:
             return self.legacy_project_root
         return _profile_workspace_root(self.validation_profile)
+
 
 @dataclass(frozen=True, slots=True)
 class ProjectCheckCommandResult:
@@ -219,9 +210,7 @@ class ProjectCheckCommandResult:
 
         expected = OverallStatus.FAIL if self.errors else OverallStatus.OK
         if self.overall_status is not expected:
-            raise ValueError(
-                "overall_status must agree with profile diagnostics"
-            )
+            raise ValueError("overall_status must agree with profile diagnostics")
 
     @classmethod
     def from_validation(
@@ -230,13 +219,11 @@ class ProjectCheckCommandResult:
         *,
         validation_profile: Path,
         language_path: Path | None,
-    ) -> "ProjectCheckCommandResult":
+    ) -> ProjectCheckCommandResult:
         """Project one application result into the canonical CLI result."""
 
         if not isinstance(validation, ProjectValidationResult):
-            raise TypeError(
-                "validation must be ProjectValidationResult"
-            )
+            raise TypeError("validation must be ProjectValidationResult")
 
         errors = len(validation.errors)
         warnings = len(validation.warnings)
@@ -244,14 +231,10 @@ class ProjectCheckCommandResult:
 
         if errors:
             message = (
-                "Validation profile contract is invalid: "
-                f"{errors} error(s), {warnings} warning(s)."
+                f"Validation profile contract is invalid: {errors} error(s), {warnings} warning(s)."
             )
         elif warnings:
-            message = (
-                "Validation profile contract is valid with "
-                f"{warnings} warning(s)."
-            )
+            message = f"Validation profile contract is valid with {warnings} warning(s)."
         else:
             message = "Validation profile contract is valid."
 
@@ -278,22 +261,19 @@ class ProjectCheckCommandResult:
     @property
     def errors(self) -> tuple[ProjectDiagnostic, ...]:
         return tuple(
-            item
-            for item in self.diagnostics
-            if item.severity is ProjectDiagnosticSeverity.ERROR
+            item for item in self.diagnostics if item.severity is ProjectDiagnosticSeverity.ERROR
         )
 
     @property
     def warnings(self) -> tuple[ProjectDiagnostic, ...]:
         return tuple(
-            item
-            for item in self.diagnostics
-            if item.severity is ProjectDiagnosticSeverity.WARNING
+            item for item in self.diagnostics if item.severity is ProjectDiagnosticSeverity.WARNING
         )
 
     @property
     def ok(self) -> bool:
         return self.overall_status is OverallStatus.OK
+
 
 @dataclass(frozen=True, slots=True)
 class ScenarioCheckRequest:
@@ -334,27 +314,16 @@ class ScenarioCheckRequest:
             )
 
         if self.language_path is None and not self.use_last_language:
-            raise ValueError(
-                "scenario check requires language_path or use_last_language"
-            )
+            raise ValueError("scenario check requires language_path or use_last_language")
         if self.language_path is not None and self.use_last_language:
-            raise ValueError(
-                "language_path and use_last_language are mutually exclusive"
-            )
+            raise ValueError("language_path and use_last_language are mutually exclusive")
         if self.quiet and self.verbose:
-            raise ValueError(
-                "--quiet and --verbose cannot be used together"
-            )
+            raise ValueError("--quiet and --verbose cannot be used together")
 
         if self.legacy_project_root is not None:
             expected = _legacy_profile_path(self.legacy_project_root)
-            if (
-                _normalized_path(self.validation_profile)
-                != _normalized_path(expected)
-            ):
-                raise ValueError(
-                    "legacy project root conflicts with validation profile"
-                )
+            if _normalized_path(self.validation_profile) != _normalized_path(expected):
+                raise ValueError("legacy project root conflicts with validation profile")
 
         identifiers = _normalize_scenario_ids(
             self.scenario_ids,
@@ -376,6 +345,7 @@ class ScenarioCheckRequest:
             return self.legacy_project_root
         return _profile_workspace_root(self.validation_profile)
 
+
 @dataclass(frozen=True, slots=True)
 class ScenarioCheckIssue:
     """One bounded issue discovered by the scenario-check application."""
@@ -389,9 +359,7 @@ class ScenarioCheckIssue:
 
     def __post_init__(self) -> None:
         if self.severity not in {"error", "warning"}:
-            raise ValueError(
-                "severity must be 'error' or 'warning'"
-            )
+            raise ValueError("severity must be 'error' or 'warning'")
 
         _require_message(self.code, field="code")
         _require_message(self.message, field="message")
@@ -406,13 +374,9 @@ class ScenarioCheckIssue:
 
         if self.line is not None:
             if type(self.line) is not int:
-                raise TypeError(
-                    "line must be an integer or None"
-                )
+                raise TypeError("line must be an integer or None")
             if self.line <= 0:
-                raise ValueError(
-                    "line must be positive when provided"
-                )
+                raise ValueError("line must be positive when provided")
 
 
 @dataclass(frozen=True, slots=True)
@@ -458,9 +422,7 @@ class ScenarioCheckCommandResult:
 
         expected = OverallStatus.FAIL if self.errors else OverallStatus.OK
         if self.overall_status is not expected:
-            raise ValueError(
-                "overall_status must agree with scenario issues"
-            )
+            raise ValueError("overall_status must agree with scenario issues")
 
     @classmethod
     def from_validation(
@@ -468,20 +430,16 @@ class ScenarioCheckCommandResult:
         validation: ProjectValidationResult,
         *,
         request: ScenarioCheckRequest,
-    ) -> "ScenarioCheckCommandResult":
+    ) -> ScenarioCheckCommandResult:
         """Adapt the bootstrap's transitional project-validation result."""
 
         if not isinstance(validation, ProjectValidationResult):
-            raise TypeError(
-                "validation must be ProjectValidationResult"
-            )
+            raise TypeError("validation must be ProjectValidationResult")
 
         issues = tuple(
             ScenarioCheckIssue(
                 severity=(
-                    "error"
-                    if diagnostic.severity is ProjectDiagnosticSeverity.ERROR
-                    else "warning"
+                    "error" if diagnostic.severity is ProjectDiagnosticSeverity.ERROR else "warning"
                 ),
                 code=diagnostic.code,
                 message=diagnostic.message,
@@ -497,22 +455,14 @@ class ScenarioCheckCommandResult:
         errors = sum(1 for issue in issues if issue.severity == "error")
         warnings = sum(1 for issue in issues if issue.severity == "warning")
         if errors:
-            message = (
-                "Scenario contracts are invalid: "
-                f"{errors} error(s), {warnings} warning(s)."
-            )
+            message = f"Scenario contracts are invalid: {errors} error(s), {warnings} warning(s)."
         elif warnings:
-            message = (
-                "Scenario contracts are valid with "
-                f"{warnings} warning(s)."
-            )
+            message = f"Scenario contracts are valid with {warnings} warning(s)."
         else:
             message = "Scenario contracts are valid."
 
         return cls(
-            overall_status=(
-                OverallStatus.FAIL if errors else OverallStatus.OK
-            ),
+            overall_status=(OverallStatus.FAIL if errors else OverallStatus.OK),
             validation_profile=request.validation_profile,
             language_path=request.language_path,
             checked_scenarios=request.scenario_ids,
@@ -528,19 +478,11 @@ class ScenarioCheckCommandResult:
 
     @property
     def errors(self) -> tuple[ScenarioCheckIssue, ...]:
-        return tuple(
-            item
-            for item in self.issues
-            if item.severity == "error"
-        )
+        return tuple(item for item in self.issues if item.severity == "error")
 
     @property
     def warnings(self) -> tuple[ScenarioCheckIssue, ...]:
-        return tuple(
-            item
-            for item in self.issues
-            if item.severity == "warning"
-        )
+        return tuple(item for item in self.issues if item.severity == "warning")
 
     @property
     def ok(self) -> bool:
@@ -603,10 +545,7 @@ def register_project_commands(
         dest="legacy_project_root",
         type=Path,
         metavar="PATH",
-        help=(
-            "Deprecated compatibility alias for "
-            "--profile <root>/project/project.toml."
-        ),
+        help=("Deprecated compatibility alias for --profile <root>/project/project.toml."),
     )
     check_parser.add_argument(
         "--gf-exe",
@@ -648,14 +587,10 @@ def project_check_request_from_namespace(
     if not isinstance(namespace, argparse.Namespace):
         raise TypeError("namespace must be argparse.Namespace")
 
-    canonical_command = _command_value(
-        getattr(namespace, "_command", None)
-    )
+    canonical_command = _command_value(getattr(namespace, "_command", None))
     if canonical_command is not None:
         if canonical_command != _PROJECT_CHECK_CANONICAL_COMMAND:
-            raise ValueError(
-                "namespace does not identify project check"
-            )
+            raise ValueError("namespace does not identify project check")
     else:
         command_group = getattr(
             namespace,
@@ -673,16 +608,12 @@ def project_check_request_from_namespace(
             None,
         )
         if command_group != _PROJECT_COMMAND:
-            raise ValueError(
-                "namespace does not identify a project command"
-            )
+            raise ValueError("namespace does not identify a project command")
         if (
             project_command != _PROJECT_CHECK_COMMAND
             and command_name != _PROJECT_CHECK_CANONICAL_COMMAND
         ):
-            raise ValueError(
-                "namespace does not identify project check"
-            )
+            raise ValueError("namespace does not identify project check")
 
     legacy_root = _optional_path(
         _namespace_first(
@@ -802,9 +733,7 @@ def scenario_check_request_from_cli_request(
     elif isinstance(raw_ids, list):
         scenario_ids = tuple(raw_ids)
     else:
-        raise CliUsageError(
-            "scenario_ids must be a sequence of scenario IDs"
-        )
+        raise CliUsageError("scenario_ids must be a sequence of scenario IDs")
 
     legacy_root = _optional_path(
         _request_first(
@@ -882,9 +811,7 @@ def run_project_check(
 
     validation = application.check_project(request)
     if not isinstance(validation, ProjectValidationResult):
-        raise TypeError(
-            "check_project() must return ProjectValidationResult"
-        )
+        raise TypeError("check_project() must return ProjectValidationResult")
 
     return ProjectCheckCommandResult.from_validation(
         validation,
@@ -976,9 +903,7 @@ def execute_project_check(
         _write_error(stderr, _safe_exception_message(exc))
         return EXIT_RUNTIME_ERROR
 
-    validation = ProjectValidationResult(
-        command_result.diagnostics
-    )
+    validation = ProjectValidationResult(command_result.diagnostics)
     present_project_check(
         validation,
         quiet=request.quiet,
@@ -986,11 +911,7 @@ def execute_project_check(
         stdout=stdout,
         stderr=stderr,
     )
-    return (
-        EXIT_OK
-        if command_result.ok
-        else EXIT_VALIDATION_FAILED
-    )
+    return EXIT_OK if command_result.ok else EXIT_VALIDATION_FAILED
 
 
 def present_project_check(
@@ -1008,15 +929,12 @@ def present_project_check(
     _require_bool(quiet, field="quiet")
     _require_bool(verbose, field="verbose")
     if quiet and verbose:
-        raise ValueError(
-            "quiet and verbose cannot both be enabled"
-        )
+        raise ValueError("quiet and verbose cannot both be enabled")
 
     error_count = len(result.errors)
     warning_count = len(result.warnings)
     info_count = sum(
-        diagnostic.severity is ProjectDiagnosticSeverity.INFO
-        for diagnostic in result.diagnostics
+        diagnostic.severity is ProjectDiagnosticSeverity.INFO for diagnostic in result.diagnostics
     )
     status = "OK" if result.ok else "INVALID"
 
@@ -1034,10 +952,7 @@ def present_project_check(
     _write_line(stdout, f"Validation profile check: {status}")
     _write_line(
         stdout,
-        (
-            f"Diagnostics: {error_count} errors, "
-            f"{warning_count} warnings, {info_count} info"
-        ),
+        (f"Diagnostics: {error_count} errors, {warning_count} warnings, {info_count} info"),
     )
 
     for diagnostic in result.diagnostics:
@@ -1057,9 +972,7 @@ def _present_diagnostic(
     stderr: TextIO,
 ) -> None:
     if not isinstance(diagnostic, ProjectDiagnostic):
-        raise TypeError(
-            "diagnostic must be ProjectDiagnostic"
-        )
+        raise TypeError("diagnostic must be ProjectDiagnostic")
 
     if diagnostic.severity is ProjectDiagnosticSeverity.ERROR:
         prefix = "ERROR"
@@ -1073,10 +986,7 @@ def _present_diagnostic(
 
     _write_line(
         stream,
-        (
-            f"{prefix}: [{diagnostic.code}] "
-            f"{diagnostic.field}: {diagnostic.message}"
-        ),
+        (f"{prefix}: [{diagnostic.code}] {diagnostic.field}: {diagnostic.message}"),
     )
 
     if diagnostic.suggestion:
@@ -1105,8 +1015,7 @@ def _build_project_check_application() -> ProjectCheckApplication:
     )
 
     application = build_project_check_application()
-    _require_project_application(application)
-    return application
+    return _require_project_application(application)
 
 
 def _build_scenario_check_application() -> ScenarioCheckApplication:
@@ -1117,17 +1026,14 @@ def _build_scenario_check_application() -> ScenarioCheckApplication:
     )
 
     application = build_scenario_check_application()
-    _require_scenario_application(application)
-    return application
+    return _require_scenario_application(application)
 
 
 def _require_project_application(
     application: object,
 ) -> ProjectCheckApplication:
     if not isinstance(application, ProjectCheckApplication):
-        raise TypeError(
-            "application must satisfy ProjectCheckApplication"
-        )
+        raise TypeError("application must satisfy ProjectCheckApplication")
     return application
 
 
@@ -1135,9 +1041,7 @@ def _require_scenario_application(
     application: object,
 ) -> ScenarioCheckApplication:
     if not isinstance(application, ScenarioCheckApplication):
-        raise TypeError(
-            "application must satisfy ScenarioCheckApplication"
-        )
+        raise TypeError("application must satisfy ScenarioCheckApplication")
     return application
 
 
@@ -1152,17 +1056,13 @@ def _resolve_validation_profile(
     )
     if profile is None:
         if legacy_project_root is None:
-            raise CliUsageError(
-                "an explicit --profile is required"
-            )
+            raise CliUsageError("an explicit --profile is required")
         return _legacy_profile_path(legacy_project_root)
 
     if legacy_project_root is not None:
         expected = _legacy_profile_path(legacy_project_root)
         if _normalized_path(profile) != _normalized_path(expected):
-            raise CliUsageError(
-                "--project-root conflicts with --profile"
-            )
+            raise CliUsageError("--project-root conflicts with --profile")
     return profile
 
 
@@ -1198,9 +1098,7 @@ def _require_cli_command(
     if not isinstance(expected, CliCommand):
         raise TypeError("expected must be CliCommand")
     if request.command is not expected:
-        raise CliUsageError(
-            f"CLI request must identify {expected.value}"
-        )
+        raise CliUsageError(f"CLI request must identify {expected.value}")
 
 
 def _normalize_scenario_ids(
@@ -1215,9 +1113,7 @@ def _normalize_scenario_ids(
     seen: set[str] = set()
     for index, value in enumerate(values):
         if not isinstance(value, str):
-            raise TypeError(
-                f"{field}[{index}] must be a string"
-            )
+            raise TypeError(f"{field}[{index}] must be a string")
         identifier = str(
             validate_scenario_id(
                 value,
@@ -1225,9 +1121,7 @@ def _normalize_scenario_ids(
             )
         )
         if identifier in seen:
-            raise ValueError(
-                f"duplicate scenario ID {identifier!r}"
-            )
+            raise ValueError(f"duplicate scenario ID {identifier!r}")
         seen.add(identifier)
         normalized.append(identifier)
     return tuple(normalized)
@@ -1271,9 +1165,7 @@ def _command_value(value: object) -> str | None:
     if isinstance(value, Enum):
         value = value.value
     if not isinstance(value, str):
-        raise TypeError(
-            "command identifier must be a string or enum"
-        )
+        raise TypeError("command identifier must be a string or enum")
 
     normalized = value.strip()
     if not normalized or "\x00" in normalized:
@@ -1302,14 +1194,10 @@ def _optional_path(
         path = value
     elif isinstance(value, str):
         if not value.strip():
-            raise ValueError(
-                f"{field} must not be empty"
-            )
+            raise ValueError(f"{field} must not be empty")
         path = Path(value)
     else:
-        raise TypeError(
-            f"{field} must be a path or None"
-        )
+        raise TypeError(f"{field} must be a path or None")
 
     _require_path(path, field=field)
     return path
@@ -1331,13 +1219,9 @@ def _require_path(
     field: str,
 ) -> Path:
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field} must be pathlib.Path"
-        )
+        raise TypeError(f"{field} must be pathlib.Path")
     if "\x00" in str(value):
-        raise ValueError(
-            f"{field} must not contain NUL"
-        )
+        raise ValueError(f"{field} must not contain NUL")
     return value
 
 
@@ -1359,22 +1243,13 @@ def _require_message(
     if not isinstance(value, str):
         raise TypeError(f"{field} must be a string")
     if not value:
-        raise ValueError(
-            f"{field} must be a non-empty string"
-        )
+        raise ValueError(f"{field} must be a non-empty string")
     if value != value.strip():
-        raise ValueError(
-            f"{field} must not have outer whitespace"
-        )
+        raise ValueError(f"{field} must not have outer whitespace")
     if "\x00" in value or "\r" in value or "\n" in value:
-        raise ValueError(
-            f"{field} must be a single-line string without NUL"
-        )
+        raise ValueError(f"{field} must be a single-line string without NUL")
     if len(value) > _MAX_ERROR_MESSAGE_LENGTH:
-        raise ValueError(
-            f"{field} exceeds "
-            f"{_MAX_ERROR_MESSAGE_LENGTH} characters"
-        )
+        raise ValueError(f"{field} exceeds {_MAX_ERROR_MESSAGE_LENGTH} characters")
     return value
 
 
@@ -1385,22 +1260,16 @@ def _write_error(stream: TextIO, message: str) -> None:
 def _write_line(stream: TextIO, text: str) -> None:
     writer = getattr(stream, "write", None)
     if not callable(writer):
-        raise TypeError(
-            "output stream must provide write()"
-        )
+        raise TypeError("output stream must provide write()")
     writer(f"{text}\n")
 
 
 def _safe_exception_message(exc: BaseException) -> str:
-    message = " ".join(
-        str(exc).replace("\x00", "\\x00").split()
-    )
+    message = " ".join(str(exc).replace("\x00", "\\x00").split())
     if not message:
         message = type(exc).__name__
     if len(message) > _MAX_ERROR_MESSAGE_LENGTH:
-        message = (
-            f"{message[: _MAX_ERROR_MESSAGE_LENGTH - 3]}..."
-        )
+        message = f"{message[: _MAX_ERROR_MESSAGE_LENGTH - 3]}..."
     return message
 
 

@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import re
+import os
 from pathlib import Path, PurePosixPath
+import re
 
 import pytest
 
 from gf_wordbench.kernel.errors import ConfigurationError
 from gf_wordbench.validation.selection import filters as filters_module
 from gf_wordbench.validation.selection.filters import (
-    CandidateFilterDecision,
-    CompiledSourceFilters,
     EXCLUDED_BY_LIMIT,
     EXCLUDED_BY_REGEX,
     MISSING_FILE,
@@ -21,6 +20,8 @@ from gf_wordbench.validation.selection.filters import (
     OUTSIDE_PROJECT_ROOT,
     OUTSIDE_SOURCE_ROOT,
     UNREADABLE_FILE,
+    CandidateFilterDecision,
+    CompiledSourceFilters,
     apply_diagnostic_limit,
     candidate_exclusion_reason,
     compile_optional_regex,
@@ -81,10 +82,13 @@ def test_compiled_filters_apply_exclude_before_include() -> None:
         exclude_regex=r"\.disabled\.gf$",
     )
 
-    assert filters.exclusion_reason(
-        file_name="Grammar.disabled.gf",
-        project_relative_path="lib/src/Grammar.disabled.gf",
-    ) == EXCLUDED_BY_REGEX
+    assert (
+        filters.exclusion_reason(
+            file_name="Grammar.disabled.gf",
+            project_relative_path="lib/src/Grammar.disabled.gf",
+        )
+        == EXCLUDED_BY_REGEX
+    )
 
 
 def test_compiled_filters_search_filename_and_project_relative_path() -> None:
@@ -92,23 +96,32 @@ def test_compiled_filters_search_filename_and_project_relative_path() -> None:
         include_regex=r"^Grammar[A-Z].*\.gf$",
         exclude_regex=None,
     )
-    assert filename_filter.exclusion_reason(
-        file_name="GrammarExample.gf",
-        project_relative_path="lib/src/example/GrammarExample.gf",
-    ) is None
+    assert (
+        filename_filter.exclusion_reason(
+            file_name="GrammarExample.gf",
+            project_relative_path="lib/src/example/GrammarExample.gf",
+        )
+        is None
+    )
 
     path_filter = compile_source_filters(
         include_regex=r"/syntax/",
         exclude_regex=None,
     )
-    assert path_filter.exclusion_reason(
-        file_name="SyntaxExample.gf",
-        project_relative_path="lib/src/example/syntax/SyntaxExample.gf",
-    ) is None
-    assert path_filter.exclusion_reason(
-        file_name="MorphoExample.gf",
-        project_relative_path="lib/src/example/MorphoExample.gf",
-    ) == NOT_MATCHED_BY_INCLUDE_REGEX
+    assert (
+        path_filter.exclusion_reason(
+            file_name="SyntaxExample.gf",
+            project_relative_path="lib/src/example/syntax/SyntaxExample.gf",
+        )
+        is None
+    )
+    assert (
+        path_filter.exclusion_reason(
+            file_name="MorphoExample.gf",
+            project_relative_path="lib/src/example/MorphoExample.gf",
+        )
+        == NOT_MATCHED_BY_INCLUDE_REGEX
+    )
 
 
 def test_regex_matching_is_case_sensitive_unless_pattern_requests_otherwise() -> None:
@@ -261,12 +274,15 @@ def test_candidate_regex_filtering_uses_resolved_project_relative_path(
         source_root=source_root,
         filters=filters,
     ).selected
-    assert candidate_exclusion_reason(
-        excluded,
-        project_root=project_root,
-        source_root=source_root,
-        filters=filters,
-    ).excluded_reason == EXCLUDED_BY_REGEX
+    assert (
+        candidate_exclusion_reason(
+            excluded,
+            project_root=project_root,
+            source_root=source_root,
+            filters=filters,
+        ).excluded_reason
+        == EXCLUDED_BY_REGEX
+    )
 
 
 def test_candidate_unreadable_file_is_recorded(
@@ -275,14 +291,14 @@ def test_candidate_unreadable_file_is_recorded(
 ) -> None:
     project_root, source_root = _project_tree(tmp_path)
     candidate = _write(source_root / "Main.gf")
-    real_access = filters_module.os.access
+    real_access = os.access
 
-    def fake_access(path: object, mode: int) -> bool:
+    def fake_access(path: str | os.PathLike[str], mode: int) -> bool:
         if Path(path) == candidate.resolve():
             return False
         return real_access(path, mode)
 
-    monkeypatch.setattr(filters_module.os, "access", fake_access)
+    monkeypatch.setattr(os, "access", fake_access)
 
     decision = candidate_exclusion_reason(
         candidate,
@@ -365,7 +381,7 @@ def test_filter_candidate_files_validates_collection_contract(tmp_path: Path) ->
 
     with pytest.raises(TypeError, match="iterable of paths"):
         filter_candidate_files(
-            source_root / "Main.gf",
+            source_root / "Main.gf",  # type: ignore[arg-type]
             project_root=project_root,
             source_root=source_root,
         )
@@ -383,28 +399,31 @@ def test_is_included_file_is_a_boolean_convenience_boundary(tmp_path: Path) -> N
     selected = _write(source_root / "Main.gf")
     excluded = _write(source_root / "Main.bak.gf")
 
-    assert is_included_file(
-        selected,
-        project_root=project_root,
-        source_root=source_root,
-        include_regex=r"^Main.*\.gf$",
-        exclude_regex=r"\.bak\.gf$",
-    ) is True
-    assert is_included_file(
-        excluded,
-        project_root=project_root,
-        source_root=source_root,
-        include_regex=r"^Main.*\.gf$",
-        exclude_regex=r"\.bak\.gf$",
-    ) is False
+    assert (
+        is_included_file(
+            selected,
+            project_root=project_root,
+            source_root=source_root,
+            include_regex=r"^Main.*\.gf$",
+            exclude_regex=r"\.bak\.gf$",
+        )
+        is True
+    )
+    assert (
+        is_included_file(
+            excluded,
+            project_root=project_root,
+            source_root=source_root,
+            include_regex=r"^Main.*\.gf$",
+            exclude_regex=r"\.bak\.gf$",
+        )
+        is False
+    )
 
 
 def test_diagnostic_limit_zero_and_large_values_are_unlimited(tmp_path: Path) -> None:
     project_root, source_root = _project_tree(tmp_path)
-    paths = tuple(
-        _write(source_root / name).resolve()
-        for name in ("A.gf", "B.gf", "C.gf")
-    )
+    paths = tuple(_write(source_root / name).resolve() for name in ("A.gf", "B.gf", "C.gf"))
 
     assert apply_diagnostic_limit(
         paths,
@@ -427,10 +446,7 @@ def test_diagnostic_limit_preserves_order_and_accounts_for_overflow(
     tmp_path: Path,
 ) -> None:
     project_root, source_root = _project_tree(tmp_path)
-    paths = tuple(
-        _write(source_root / name).resolve()
-        for name in ("A.gf", "B.gf", "C.gf")
-    )
+    paths = tuple(_write(source_root / name).resolve() for name in ("A.gf", "B.gf", "C.gf"))
 
     selected, overflow = apply_diagnostic_limit(
         paths,
@@ -457,7 +473,7 @@ def test_diagnostic_limit_rejects_invalid_limit_and_escaped_path(
     with pytest.raises(TypeError, match="must be an integer"):
         apply_diagnostic_limit(
             (inside,),
-            max_files=True,  # type: ignore[arg-type]
+            max_files=True,
             project_root=project_root,
         )
     with pytest.raises(ConfigurationError, match="must be non-negative") as negative:

@@ -8,8 +8,9 @@ comparison, diagnostics classification, or release policy.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 import importlib.util
 import json
 import os
@@ -20,7 +21,7 @@ import sys
 import threading
 import time
 import traceback
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any
 
 PASS = "PASS"
 WARN = "WARN"
@@ -48,8 +49,14 @@ LogFn = Callable[[str], None]
 CheckFn = Callable[["DiagConfig", "DiagReport", LogFn], None]
 
 
+def _utc_now() -> datetime:
+    """Return one timezone-aware UTC timestamp."""
+
+    return datetime.now(UTC)
+
+
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return _utc_now().isoformat(timespec="seconds")
 
 
 def _safe_slug(value: str) -> str:
@@ -242,9 +249,7 @@ def load_config() -> DiagConfig:
     output_value = os.environ.get(
         "WORDBENCH_DIAG_OUTPUT_ROOT", str(raw.get("output_root", ""))
     ).strip()
-    rgl_value = os.environ.get(
-        "WORDBENCH_DIAG_RGL_ROOT", str(raw.get("rgl_root", ""))
-    ).strip()
+    rgl_value = os.environ.get("WORDBENCH_DIAG_RGL_ROOT", str(raw.get("rgl_root", ""))).strip()
     gf_executable = os.environ.get(
         "WORDBENCH_DIAG_GF_EXECUTABLE", str(raw.get("gf_executable", "gf"))
     )
@@ -272,9 +277,7 @@ def build_env(config: DiagConfig) -> dict[str, str]:
     env = os.environ.copy()
     source_root = config.repo_root / "src"
     existing = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = str(source_root) + (
-        os.pathsep + existing if existing else ""
-    )
+    env["PYTHONPATH"] = str(source_root) + (os.pathsep + existing if existing else "")
     env["WORDBENCH_DIAG_REPO_ROOT"] = str(config.repo_root)
     env.pop("WORDBENCH_DIAG_PROJECT_ROOT", None)
     if config.language_path is not None:
@@ -282,9 +285,7 @@ def build_env(config: DiagConfig) -> dict[str, str]:
     else:
         env.pop("WORDBENCH_DIAG_LANGUAGE_PATH", None)
     if config.validation_profile is not None:
-        env["WORDBENCH_DIAG_VALIDATION_PROFILE"] = str(
-            config.validation_profile
-        )
+        env["WORDBENCH_DIAG_VALIDATION_PROFILE"] = str(config.validation_profile)
     else:
         env.pop("WORDBENCH_DIAG_VALIDATION_PROFILE", None)
 
@@ -418,7 +419,7 @@ def run_command(
     env: Mapping[str, str] | None = None,
     name: str = "command",
 ) -> StepResult:
-    started = datetime.now()
+    started = _utc_now()
     started_at = started.isoformat(timespec="seconds")
     try:
         completed = subprocess.run(
@@ -448,7 +449,7 @@ def run_command(
         exit_code = None
         output = f"{type(exc).__name__}: {exc}"
         exception = type(exc).__name__
-    ended = datetime.now()
+    ended = _utc_now()
     return StepResult(
         name=name,
         command=list(command),
@@ -508,13 +509,12 @@ class DiagReport:
         level: str,
         name: str,
         purpose: str,
-    ) -> "DiagReport":
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        artifact_dir = (
-            config.artifact_root / f"{level}-{_safe_slug(name)}" / stamp
-        )
+    ) -> DiagReport:
+        created_at = _utc_now()
+        stamp = created_at.strftime("%Y%m%d_%H%M%S_%f")
+        artifact_dir = config.artifact_root / f"{level}-{_safe_slug(name)}" / stamp
         artifact_dir.mkdir(parents=True, exist_ok=True)
-        now = _now()
+        now = created_at.isoformat(timespec="seconds")
         return cls(
             schema="wordbench.minidiag.report.v2",
             suite="GF Wordbench Mini Diagnostics",
@@ -524,13 +524,9 @@ class DiagReport:
             started_at=now,
             finished_at=now,
             repo_root=str(config.repo_root),
-            language_path=(
-                str(config.language_path) if config.language_path is not None else None
-            ),
+            language_path=(str(config.language_path) if config.language_path is not None else None),
             validation_profile=(
-                str(config.validation_profile)
-                if config.validation_profile is not None
-                else None
+                str(config.validation_profile) if config.validation_profile is not None else None
             ),
             verdict=PASS,
             artifact_dir=artifact_dir,
@@ -574,8 +570,19 @@ class DiagReport:
         if not self.findings:
             self.verdict = PASS
             return
+
+        statuses = [item.severity for item in self.findings]
+        substantive_statuses = [status for status in statuses if status != SKIP]
+
+        # Optional checks that were not requested must not downgrade an
+        # otherwise successful level. A level containing only SKIP findings
+        # remains SKIP; PASS + SKIP resolves to PASS.
+        if not substantive_statuses:
+            self.verdict = SKIP
+            return
+
         self.verdict = max(
-            (item.severity for item in self.findings),
+            substantive_statuses,
             key=lambda status: _STATUS_ORDER.get(status, _STATUS_ORDER[ERROR]),
         )
 
@@ -587,7 +594,7 @@ class DiagReport:
 
     def to_dict(self) -> dict[str, Any]:
         self.recompute()
-        return {
+        payload: dict[str, Any] = {
             "schema": self.schema,
             "suite": self.suite,
             "level": self.level,
@@ -605,6 +612,14 @@ class DiagReport:
             "steps": [item.to_dict() for item in self.steps],
             "metadata": self.metadata,
         }
+        for key in (
+            "configured_language_path",
+            "effective_language_path",
+            "language_source",
+        ):
+            if key in self.metadata:
+                payload[key] = self.metadata[key]
+        return payload
 
     def write(self) -> tuple[Path, Path]:
         json_path = self.artifact_dir / f"{self.level}-report.json"
@@ -966,13 +981,8 @@ class LevelWindow:
         self.root.minsize(780, 520)
         self._build()
         self.log(f"Repository: {self.config.repo_root}")
-        self.log(
-            f"Language path: {self.config.language_path or 'not configured'}"
-        )
-        self.log(
-            "Validation profile: "
-            f"{self.config.validation_profile or 'not configured'}"
-        )
+        self.log(f"Language path: {self.config.language_path or 'not configured'}")
+        self.log(f"Validation profile: {self.config.validation_profile or 'not configured'}")
         self.log(f"Configuration: {self.config.config_path or 'built-in defaults'}")
 
     def _build(self) -> None:
@@ -983,9 +993,7 @@ class LevelWindow:
             text=f"{self.level_id} — {self.level_name}",
             font=("Segoe UI", 16, "bold"),
         ).pack(anchor="w")
-        self.ttk.Label(outer, text=self.purpose, wraplength=920).pack(
-            anchor="w", pady=(2, 10)
-        )
+        self.ttk.Label(outer, text=self.purpose, wraplength=920).pack(anchor="w", pady=(2, 10))
         bar = self.ttk.Frame(outer)
         bar.pack(fill="x", pady=(0, 8))
         self.run_button = self.ttk.Button(bar, text="Run", command=self.run_async)
@@ -995,9 +1003,7 @@ class LevelWindow:
             text="Open artifacts",
             command=lambda: open_path(self.config.artifact_root),
         ).pack(side="left", padx=6)
-        self.ttk.Button(bar, text="Copy log", command=self.copy_log).pack(
-            side="left", padx=6
-        )
+        self.ttk.Button(bar, text="Copy log", command=self.copy_log).pack(side="left", padx=6)
         self.ttk.Label(bar, textvariable=self.status_var).pack(side="right")
         frame = self.ttk.LabelFrame(outer, text="Log")
         frame.pack(fill="both", expand=True)
@@ -1017,7 +1023,8 @@ class LevelWindow:
         try:
             self.root.after(0, append)
         except RuntimeError:
-            pass
+            # The Tk root may already be destroyed while a worker is finishing.
+            return
 
     def copy_log(self) -> None:
         self.root.clipboard_clear()

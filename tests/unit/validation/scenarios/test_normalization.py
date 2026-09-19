@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import FrozenInstanceError
-from typing import Final
+import hashlib
+from typing import Any, Final, cast
 
 import pytest
 
@@ -21,8 +21,8 @@ from gf_wordbench.validation.scenarios.normalization import (
     NormalizationProfile,
     NormalizationProfileRegistry,
     NormalizeDesignatedPathFields,
-    NormalizeLineEndings,
     NormalizedScenarioSection,
+    NormalizeLineEndings,
     PathTokenReplacement,
     RemoveApprovedAnsiSequences,
     RemoveApprovedExactLines,
@@ -124,10 +124,13 @@ def test_default_profile_identity_and_rule_are_stable() -> None:
         "1.0.0",
     )
     assert DEFAULT_NORMALIZATION_PROFILE.rules == (NormalizeLineEndings(),)
-    assert DEFAULT_NORMALIZATION_REGISTRY.require(
-        "scenario-default",
-        "1.0.0",
-    ) is DEFAULT_NORMALIZATION_PROFILE
+    assert (
+        DEFAULT_NORMALIZATION_REGISTRY.require(
+            "scenario-default",
+            "1.0.0",
+        )
+        is DEFAULT_NORMALIZATION_PROFILE
+    )
 
 
 @pytest.mark.parametrize(
@@ -179,11 +182,7 @@ def test_approved_path_replacement_is_literal_ordered_and_declared() -> None:
     )
     text = "run=C:\\runs\\42\\out\nproject=C:\\project\nother=C:\\temp\n"
 
-    assert rule.apply(text) == (
-        "run=<RUN_ROOT>\\out\n"
-        "project=<PROJECT_ROOT>\n"
-        "other=C:\\temp\n"
-    )
+    assert rule.apply(text) == ("run=<RUN_ROOT>\\out\nproject=<PROJECT_ROOT>\nother=C:\\temp\n")
 
 
 def test_path_token_replacement_rejects_unsafe_declarations() -> None:
@@ -353,9 +352,7 @@ def test_normalized_section_records_reproducible_evidence_and_utf8_sizes() -> No
     assert result.profile_id == "test-profile"
     assert result.profile_version == "1.2.3"
     assert result.source_sha256 == hashlib.sha256(source.encode("utf-8")).hexdigest()
-    assert result.normalized_sha256 == hashlib.sha256(
-        expected.encode("utf-8")
-    ).hexdigest()
+    assert result.normalized_sha256 == hashlib.sha256(expected.encode("utf-8")).hexdigest()
     assert result.source_size_bytes == len(source.encode("utf-8"))
     assert result.normalized_size_bytes == len(expected.encode("utf-8"))
     assert result.normalized_text == expected
@@ -508,6 +505,14 @@ def test_public_entry_points_reject_wrong_boundary_types() -> None:
         )
 
 
+
+def _construct_normalized_section(
+    values: dict[str, object],
+) -> NormalizedScenarioSection:
+    """Construct from deliberately dynamic test data at one narrow boundary."""
+    return cast(Any, NormalizedScenarioSection)(**values)
+
+
 def test_normalized_section_model_rejects_inconsistent_field_shapes() -> None:
     valid = {
         "section_id": SectionId("parse-output"),
@@ -523,25 +528,23 @@ def test_normalized_section_model_rejects_inconsistent_field_shapes() -> None:
         "changed": True,
     }
 
-    assert NormalizedScenarioSection(**valid).applied_rule_ids == (
-        "NORM-TEST-001",
-    )
+    assert _construct_normalized_section(valid).applied_rule_ids == ("NORM-TEST-001",)
 
     bad_digest = dict(valid, source_sha256="A" * 64)
     with pytest.raises(ValueError, match="lowercase SHA-256"):
-        NormalizedScenarioSection(**bad_digest)
+        _construct_normalized_section(bad_digest)
 
     duplicate_rules = dict(
         valid,
         applied_rule_ids=("NORM-TEST-001", "NORM-TEST-001"),
     )
     with pytest.raises(ValueError, match="duplicates"):
-        NormalizedScenarioSection(**duplicate_rules)
+        _construct_normalized_section(duplicate_rules)
 
     boolean_size = dict(valid, source_size_bytes=True)
     with pytest.raises(ValueError, match="non-negative integer"):
-        NormalizedScenarioSection(**boolean_size)
+        _construct_normalized_section(boolean_size)
 
     non_boolean_changed = dict(valid, changed=1)
     with pytest.raises(TypeError, match="changed must be a bool"):
-        NormalizedScenarioSection(**non_boolean_changed)
+        _construct_normalized_section(non_boolean_changed)

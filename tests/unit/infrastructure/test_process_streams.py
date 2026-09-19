@@ -77,8 +77,7 @@ def test_open_capture_session_creates_parent_directories_and_distinct_files(
         assert not capture.stdout.closed
         assert not capture.stderr.closed
 
-    assert capture.stdout.closed
-    assert capture.stderr.closed
+    assert all((capture.stdout.closed, capture.stderr.closed))
 
 
 def test_capture_preserves_stdout_and_stderr_as_separate_raw_bytes(
@@ -240,11 +239,10 @@ def test_context_manager_finalizes_partial_evidence_when_body_raises(
     manager, stdout_path, stderr_path = _open(tmp_path)
     capture: CaptureSession | None = None
 
-    with pytest.raises(RuntimeError, match="operation failed"):
-        with manager as capture:
-            capture.stdout.write(b"partial stdout")
-            capture.stderr.write(b"partial stderr")
-            raise RuntimeError("operation failed")
+    with pytest.raises(RuntimeError, match="operation failed"), manager as capture:
+        capture.stdout.write(b"partial stdout")
+        capture.stderr.write(b"partial stderr")
+        raise RuntimeError("operation failed")
 
     assert capture is not None
     result = capture.finalize()

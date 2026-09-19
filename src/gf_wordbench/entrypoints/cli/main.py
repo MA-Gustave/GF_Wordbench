@@ -16,9 +16,9 @@ structured result exposing ``overall_status``.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable, Sequence
 from enum import Enum
+import sys
 from typing import Final, Literal, TypeAlias
 
 from gf_wordbench.kernel.errors import (
@@ -53,9 +53,7 @@ ErrorCategory: TypeAlias = Literal[
     "runtime",
 ]
 
-_CANONICAL_COMMANDS: Final[tuple[str, ...]] = tuple(
-    command.value for command in CliCommand
-)
+_CANONICAL_COMMANDS: Final[tuple[str, ...]] = tuple(command.value for command in CliCommand)
 _MAX_FALLBACK_ERROR_LENGTH: Final[int] = 2_000
 
 
@@ -115,8 +113,7 @@ def _execute_request(request: CliRequest) -> int:
 
         if not isinstance(result, HasOverallStatus):
             raise TypeError(
-                "command handler must return a structured result "
-                "exposing overall_status"
+                "command handler must return a structured result exposing overall_status"
             )
 
         present_result(result, request=request)
@@ -190,41 +187,55 @@ def _command_handler(command: object) -> CommandHandler:
         case CliCommand.LANGUAGE_PROBE:
             from .language_commands import execute_language_probe_command
 
-            return execute_language_probe_command
+            return _validated_handler(execute_language_probe_command)
 
         case CliCommand.VALIDATE:
             from .audit_commands import execute_validate_cli_command
 
-            return execute_validate_cli_command
+            return _validated_handler(execute_validate_cli_command)
 
         case CliCommand.PROJECT_CHECK:
             from .project_commands import execute_project_check_command
 
-            return execute_project_check_command
+            return _validated_handler(execute_project_check_command)
 
         case CliCommand.SCENARIOS_CHECK:
             from .project_commands import execute_scenarios_check_command
 
-            return execute_scenarios_check_command
+            return _validated_handler(execute_scenarios_check_command)
 
         case CliCommand.GOLD_UPDATE:
             from .maintenance_commands import execute_gold_update_command
 
-            return execute_gold_update_command
+            return _validated_handler(execute_gold_update_command)
 
         case CliCommand.SCHEMAS_CHECK:
             from .maintenance_commands import execute_schemas_check_command
 
-            return execute_schemas_check_command
+            return _validated_handler(execute_schemas_check_command)
 
         case CliCommand.REPORTS_CHECK:
             from .maintenance_commands import execute_reports_check_command
 
-            return execute_reports_check_command
+            return _validated_handler(execute_reports_check_command)
 
-    raise AssertionError(
-        f"unhandled canonical command: {command_name.value}"
-    )
+    raise AssertionError(f"unhandled canonical command: {command_name.value}")
+
+
+def _validated_handler(
+    handler: Callable[[CliRequest], object],
+) -> CommandHandler:
+    """Adapt a command-specific callable to the canonical CLI result contract."""
+
+    def execute(request: CliRequest) -> CommandResult:
+        result = handler(request)
+        if not isinstance(result, HasOverallStatus):
+            raise TypeError(
+                "command handler must return a structured result exposing overall_status"
+            )
+        return result
+
+    return execute
 
 
 def _normalize_command(value: object) -> CliCommand:
@@ -237,23 +248,18 @@ def _normalize_command(value: object) -> CliCommand:
         value = value.value
 
     if not isinstance(value, str):
-        raise CliUsageError(
-            "parsed request does not define a command"
-        )
+        raise CliUsageError("parsed request does not define a command")
 
     candidate = value.strip().lower()
     if not candidate or "\x00" in candidate:
-        raise CliUsageError(
-            "parsed request contains an invalid command"
-        )
+        raise CliUsageError("parsed request contains an invalid command")
 
     try:
         return CliCommand(candidate)
     except ValueError as exc:
         supported = ", ".join(_CANONICAL_COMMANDS)
         raise CliUsageError(
-            f"unsupported command {candidate!r}; "
-            f"expected one of: {supported}"
+            f"unsupported command {candidate!r}; expected one of: {supported}"
         ) from exc
 
 
@@ -266,21 +272,15 @@ def _normalize_argv(
         return tuple(sys.argv[1:])
 
     if isinstance(argv, (str, bytes, bytearray)):
-        raise TypeError(
-            "argv must be a sequence of argument strings"
-        )
+        raise TypeError("argv must be a sequence of argument strings")
 
     arguments = tuple(argv)
 
     for index, argument in enumerate(arguments):
         if not isinstance(argument, str):
-            raise TypeError(
-                f"argv[{index}] must be a string"
-            )
+            raise TypeError(f"argv[{index}] must be a string")
         if "\x00" in argument:
-            raise ValueError(
-                f"argv[{index}] must not contain NUL"
-            )
+            raise ValueError(f"argv[{index}] must not contain NUL")
 
     return arguments
 
@@ -333,19 +333,13 @@ def _present_error_safely(
 def _write_fallback_error(error: BaseException) -> None:
     """Write a bounded fallback message when presentation itself fails."""
 
-    text = " ".join(
-        str(error)
-        .replace("\x00", "\\x00")
-        .split()
-    )
+    text = " ".join(str(error).replace("\x00", "\\x00").split())
 
     if not text:
         text = type(error).__name__
 
     if len(text) > _MAX_FALLBACK_ERROR_LENGTH:
-        text = (
-            f"{text[: _MAX_FALLBACK_ERROR_LENGTH - 3]}..."
-        )
+        text = f"{text[: _MAX_FALLBACK_ERROR_LENGTH - 3]}..."
 
     try:
         sys.stderr.write(f"ERROR: {text}\n")

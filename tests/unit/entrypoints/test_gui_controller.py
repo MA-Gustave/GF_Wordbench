@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import ast
-import dataclasses
-import inspect
-import threading
 from collections.abc import Callable
+import dataclasses
 from dataclasses import dataclass, fields
 from enum import Enum
+import inspect
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -26,7 +25,6 @@ from gf_wordbench.entrypoints.gui.controller import (
     WorkerHandle,
     default_controller_error,
 )
-
 
 _PROGRESS = object()
 _RESULT_A = object()
@@ -291,7 +289,7 @@ def test_controller_value_objects_are_frozen_slotted_dataclasses() -> None:
         GuiControllerServices,
     ):
         assert dataclasses.is_dataclass(cls)
-        assert cls.__dataclass_params__.frozen
+        assert getattr(cls, "__dataclass_params__").frozen
         assert hasattr(cls, "__slots__")
 
 
@@ -356,8 +354,7 @@ def test_runtime_protocols_describe_only_transport_and_presentation() -> None:
 
 def test_callback_and_service_bundles_reject_non_callable_dependencies() -> None:
     callback_values: dict[str, Callable[..., None]] = {
-        field.name: (lambda *args, **kwargs: None)
-        for field in fields(WorkerCallbacks)
+        field.name: (lambda *args, **kwargs: None) for field in fields(WorkerCallbacks)
     }
     WorkerCallbacks(**callback_values)
 
@@ -367,25 +364,50 @@ def test_callback_and_service_bundles_reject_non_callable_dependencies() -> None
         with pytest.raises(TypeError):
             WorkerCallbacks(**invalid)
 
-    required_services = {
-        "validate_request": lambda request: (),
-        "validation_has_errors": lambda validation: False,
-        "preview_run": lambda request: _RunPlan(request),
-        "run_config_from_plan": lambda plan: _RunConfig(
+    def validate_request(request: _ResolvedLanguageRunRequest) -> tuple[str, ...]:
+        del request
+        return ()
+
+    def validation_has_errors(validation: tuple[str, ...]) -> bool:
+        return bool(validation)
+
+    def preview_run(request: _ResolvedLanguageRunRequest) -> _RunPlan:
+        return _RunPlan(request)
+
+    def run_config_from_plan(plan: _RunPlan) -> _RunConfig:
+        return _RunConfig(
             language_key=plan.request.language_key,
             selected_language_path=plan.request.selected_language_path,
             validation_profile_path=plan.request.validation_profile_path,
             target_file=plan.request.target_file,
-        ),
-        "create_worker": lambda config, callbacks: _Worker(config, callbacks),
+        )
+
+    def create_worker(
+        config: _RunConfig,
+        callbacks: WorkerCallbacks[object, object],
+    ) -> _Worker:
+        return _Worker(config, callbacks)
+
+    required_services: dict[str, object] = {
+        "validate_request": validate_request,
+        "validation_has_errors": validation_has_errors,
+        "preview_run": preview_run,
+        "run_config_from_plan": run_config_from_plan,
+        "create_worker": create_worker,
     }
-    GuiControllerServices(**required_services)
+    GuiControllerServices(
+        validate_request=validate_request,
+        validation_has_errors=validation_has_errors,
+        preview_run=preview_run,
+        run_config_from_plan=run_config_from_plan,
+        create_worker=create_worker,
+    )
 
     for name in required_services:
         invalid = dict(required_services)
         invalid[name] = object()
         with pytest.raises(TypeError):
-            GuiControllerServices(**invalid)
+            cast(Any, GuiControllerServices)(**invalid)
 
 
 def test_invalid_request_does_not_create_or_start_worker() -> None:

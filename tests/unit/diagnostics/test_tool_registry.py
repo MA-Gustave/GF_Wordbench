@@ -189,17 +189,11 @@ def test_registry_filters_specs_and_builds_complete_snapshot() -> None:
         ai_assisted=True,
         platforms=(ToolPlatform.WINDOWS, ToolPlatform.LINUX),
     )
-    registry = DiagnosticToolRegistry(
-        (diagnostic_only, optional, required)
-    )
+    registry = DiagnosticToolRegistry((diagnostic_only, optional, required))
 
     assert registry.by_availability("required") == (required,)
-    assert registry.by_availability(
-        ToolAvailabilityPolicy.OPTIONAL
-    ) == (optional,)
-    assert registry.by_availability("diagnostic_only") == (
-        diagnostic_only,
-    )
+    assert registry.by_availability(ToolAvailabilityPolicy.OPTIONAL) == (optional,)
+    assert registry.by_availability("diagnostic_only") == (diagnostic_only,)
     assert registry.by_mutability(ToolMutability.READ_ONLY) == (
         diagnostic_only,
         optional,
@@ -279,7 +273,5 @@ def test_registry_preserves_reviewed_mutation_and_confirmation_policy() -> None:
     selected = registry.require("project-rewriter")
     assert selected.is_mutating
     assert not selected.is_executable_in_normal_validation
-    assert selected.confirmation_policy is (
-        ToolConfirmationPolicy.EXPLICIT_USER_CONFIRMATION
-    )
+    assert selected.confirmation_policy is (ToolConfirmationPolicy.EXPLICIT_USER_CONFIRMATION)
     assert registry.read_only() == ()

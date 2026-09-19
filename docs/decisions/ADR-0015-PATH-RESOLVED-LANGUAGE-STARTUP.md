@@ -1,19 +1,19 @@
 # ADR-0015 — Path-Resolved Single-Language Startup
 
-**ADR ID:** `ADR-0015`  
-**Title:** Path-Resolved Language Selection and Startup  
-**Status:** Accepted  
-**Decision date:** 2026-07-30  
-**Last reviewed:** 2026-07-30  
-**Decision owners:** GF Wordbench maintainers  
-**Implementation status:** Not implemented  
-**Verification status:** Pending implementation and automated evidence  
-**Applies to:** GUI and CLI startup, language selection, source-root resolution, GF path resolution, project configuration, application state, bootstrap, validation planning, run construction, reporting, migration and tests  
-**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
-**Related locks:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`  
-**Related decisions:** `ADR-0001-SINGLE-ACTIVE-LANGUAGE.md`, `ADR-0002-GF-AS-EXECUTION-ENGINE.md`, `ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md`, `ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md`, `ADR-0011-SEPARATE-PORTFOLIO.md`, `ADR-0012-INDEPENDENT-PRODUCTS.md`, `ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md`  
-**Supersedes:** `ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md` in full, and the remaining portions of `ADR-0001-SINGLE-ACTIVE-LANGUAGE.md` that make `project/project.toml` or one physical workspace the mandatory language-startup authority  
-**Preserves:** exactly one resolved language context per running Wordbench session, exactly one language identity per ordinary run, centralized GF path resolution, GF as semantic authority, deterministic validation and no cross-language evidence mixing  
+**ADR ID:** `ADR-0015`
+**Title:** Path-Resolved Language Selection and Startup
+**Status:** Accepted
+**Decision date:** 2026-07-30
+**Last reviewed:** 2026-07-30
+**Decision owners:** GF Wordbench maintainers
+**Implementation status:** Not implemented
+**Verification status:** Pending implementation and automated evidence
+**Applies to:** GUI and CLI startup, language selection, source-root resolution, GF path resolution, project configuration, application state, bootstrap, validation planning, run construction, reporting, migration and tests
+**Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`
+**Related locks:** `docs/INTERFILE_CONTRACT_LOCK.md`, `docs/PERSISTED_SCHEMA_LOCK.md`, `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md`
+**Related decisions:** `ADR-0001-SINGLE-ACTIVE-LANGUAGE.md`, `ADR-0002-GF-AS-EXECUTION-ENGINE.md`, `ADR-0008-HEXAGONAL-MODULAR-MONOLITH.md`, `ADR-0009-GF-ANTI-CORRUPTION-BOUNDARY.md`, `ADR-0011-SEPARATE-PORTFOLIO.md`, `ADR-0012-INDEPENDENT-PRODUCTS.md`, `ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md`
+**Supersedes:** `ADR-0014-CATALOG-DRIVEN-LANGUAGE-STARTUP.md` in full, and the remaining portions of `ADR-0001-SINGLE-ACTIVE-LANGUAGE.md` that make `project/project.toml` or one physical workspace the mandatory language-startup authority
+**Preserves:** exactly one resolved language context per running Wordbench session, exactly one language identity per ordinary run, centralized GF path resolution, GF as semantic authority, deterministic validation and no cross-language evidence mixing
 **Superseded by:** None
 
 ---

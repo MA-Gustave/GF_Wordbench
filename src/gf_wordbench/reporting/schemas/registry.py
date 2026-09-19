@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import PurePosixPath, PureWindowsPath
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -230,9 +230,7 @@ class SchemaResolution:
     def __post_init__(self) -> None:
         requested_id = normalize_schema_id(self.requested_id, require_wordbench_prefix=False)
         requested_version = (
-            None
-            if self.requested_version is None
-            else SchemaVersion.parse(self.requested_version)
+            None if self.requested_version is None else SchemaVersion.parse(self.requested_version)
         )
         if not isinstance(self.compatibility, SchemaCompatibility):
             raise TypeError("compatibility must be SchemaCompatibility")
@@ -264,12 +262,12 @@ class SchemaResolution:
 
 class SchemaRegistry:
     __slots__ = (
-        "_definitions",
-        "_legacy",
         "_by_key",
         "_current_by_id",
-        "_versions_by_id",
+        "_definitions",
+        "_legacy",
         "_legacy_by_id",
+        "_versions_by_id",
     )
 
     def __init__(
@@ -290,10 +288,7 @@ class SchemaRegistry:
             schema_id: tuple(sorted(items, key=lambda item: item.version))
             for schema_id, items in versions.items()
         }
-        current_by_id = {
-            schema_id: items[-1]
-            for schema_id, items in versions_by_id.items()
-        }
+        current_by_id = {schema_id: items[-1] for schema_id, items in versions_by_id.items()}
         legacy_by_id = {entry.legacy_id: entry for entry in legacy_tuple}
 
         self._definitions = tuple(
@@ -501,9 +496,7 @@ class SchemaRegistry:
     def find_by_path(self, path: str) -> tuple[SchemaDefinition, ...]:
         normalized = normalize_schema_path(path)
         return tuple(
-            definition
-            for definition in self._definitions
-            if definition.matches_path(normalized)
+            definition for definition in self._definitions if definition.matches_path(normalized)
         )
 
     def find_legacy_by_path(self, path: str) -> tuple[LegacySchemaDefinition, ...]:
@@ -514,7 +507,6 @@ class SchemaRegistry:
         return MappingProxyType(
             {definition.qualified_id: definition for definition in self._definitions}
         )
-
 
 
 def normalize_schema_id(value: str, *, require_wordbench_prefix: bool = True) -> str:
@@ -658,9 +650,7 @@ def validate_schema_identity(
     if expected_schema_id is not None:
         expected = normalize_schema_id(expected_schema_id)
         if key.schema_id != expected:
-            raise ValueError(
-                f"wrong schema_id: expected {expected!r}, received {key.schema_id!r}"
-            )
+            raise ValueError(f"wrong schema_id: expected {expected!r}, received {key.schema_id!r}")
     resolution = resolve_schema(key.schema_id, key.version, for_write=for_write)
     if for_write:
         if not resolution.writable:
@@ -700,9 +690,7 @@ def _validate_definitions(definitions: tuple[SchemaDefinition, ...]) -> None:
     for schema_id, versions in by_id.items():
         majors = {definition.version.major for definition in versions}
         if len(majors) > 1:
-            raise ValueError(
-                f"registry contains multiple active major versions for {schema_id!r}"
-            )
+            raise ValueError(f"registry contains multiple active major versions for {schema_id!r}")
 
 
 def _validate_legacy(
@@ -721,8 +709,7 @@ def _validate_legacy(
             raise ValueError("legacy schema ID must not collide with a canonical schema ID")
         if entry.replacement not in canonical_keys:
             raise ValueError(
-                f"legacy replacement is not present in the canonical registry: "
-                f"{entry.replacement}"
+                f"legacy replacement is not present in the canonical registry: {entry.replacement}"
             )
         seen.add(entry.legacy_id)
 
@@ -790,24 +777,33 @@ MANIFEST_SCHEMA_VERSION: Final[str] = ARTIFACT_MANIFEST_SCHEMA_VERSION
 SUMMARY_SCHEMA_ID: Final[str] = RUN_SUMMARY_SCHEMA_ID
 SUMMARY_SCHEMA_VERSION: Final[str] = RUN_SUMMARY_SCHEMA_VERSION
 
-PROJECT_SCHEMA_KEY: Final[SchemaKey] = SchemaKey(PROJECT_SCHEMA_ID, PROJECT_SCHEMA_VERSION)
-APP_STATE_SCHEMA_KEY: Final[SchemaKey] = SchemaKey(APP_STATE_SCHEMA_ID, APP_STATE_SCHEMA_VERSION)
-RUN_SUMMARY_SCHEMA_KEY: Final[SchemaKey] = SchemaKey(RUN_SUMMARY_SCHEMA_ID, RUN_SUMMARY_SCHEMA_VERSION)
+PROJECT_SCHEMA_KEY: Final[SchemaKey] = SchemaKey(
+    PROJECT_SCHEMA_ID,
+    SchemaVersion.parse(PROJECT_SCHEMA_VERSION),
+)
+APP_STATE_SCHEMA_KEY: Final[SchemaKey] = SchemaKey(
+    APP_STATE_SCHEMA_ID,
+    SchemaVersion.parse(APP_STATE_SCHEMA_VERSION),
+)
+RUN_SUMMARY_SCHEMA_KEY: Final[SchemaKey] = SchemaKey(
+    RUN_SUMMARY_SCHEMA_ID,
+    SchemaVersion.parse(RUN_SUMMARY_SCHEMA_VERSION),
+)
 ARTIFACT_MANIFEST_SCHEMA_KEY: Final[SchemaKey] = SchemaKey(
     ARTIFACT_MANIFEST_SCHEMA_ID,
-    ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    SchemaVersion.parse(ARTIFACT_MANIFEST_SCHEMA_VERSION),
 )
 SCENARIO_OUTPUT_SCHEMA_KEY: Final[SchemaKey] = SchemaKey(
     SCENARIO_OUTPUT_SCHEMA_ID,
-    SCENARIO_OUTPUT_SCHEMA_VERSION,
+    SchemaVersion.parse(SCENARIO_OUTPUT_SCHEMA_VERSION),
 )
 SCENARIO_GOLD_SCHEMA_KEY: Final[SchemaKey] = SchemaKey(
     SCENARIO_GOLD_SCHEMA_ID,
-    SCENARIO_GOLD_SCHEMA_VERSION,
+    SchemaVersion.parse(SCENARIO_GOLD_SCHEMA_VERSION),
 )
 
 
-CANONICAL_SCHEMA_DEFINITIONS: Final[tuple[SchemaDefinition, ...]] = (
+_DECLARED_CANONICAL_SCHEMA_DEFINITIONS: Final[tuple[SchemaDefinition, ...]] = (
     SchemaDefinition(
         schema_id=PROJECT_SCHEMA_ID,
         version=SchemaVersion.parse(PROJECT_SCHEMA_VERSION),
@@ -920,6 +916,13 @@ CANONICAL_SCHEMA_DEFINITIONS: Final[tuple[SchemaDefinition, ...]] = (
         migration_policy="explicit_review",
         newline="lf",
     ),
+)
+
+CANONICAL_SCHEMA_DEFINITIONS: Final[tuple[SchemaDefinition, ...]] = tuple(
+    sorted(
+        _DECLARED_CANONICAL_SCHEMA_DEFINITIONS,
+        key=lambda definition: (definition.schema_id, definition.version),
+    )
 )
 
 

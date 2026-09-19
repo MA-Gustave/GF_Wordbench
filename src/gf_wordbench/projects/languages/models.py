@@ -11,20 +11,20 @@ language-identity authorities.
 
 from __future__ import annotations
 
-import os
-import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
 from typing import Final
 
-
 _GF_SUFFIX: Final[str] = ".gf"
-_DIAGNOSTIC_CODE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^GF-WB-[A-Z][A-Z0-9]*-[0-9]{3}$"
-)
-_MODULE_SUFFIX_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Z][A-Za-z0-9_]*$"
+_DIAGNOSTIC_CODE_RE: Final[re.Pattern[str]] = re.compile(r"^GF-WB-[A-Z][A-Z0-9]*-[0-9]{3}$")
+_MODULE_SUFFIX_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
+_STANDARD_MODULE_FILE_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?:Lang|Grammar|All|Syntax|Lexicon|Paradigms|Morpho|Cat|Noun|Verb|Structural)"
+    r"(?P<suffix>[A-Z][A-Za-z0-9_]*)\.gf$"
 )
 _PROVENANCE_FIELD_RE: Final[re.Pattern[str]] = re.compile(
     r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$"
@@ -37,6 +37,11 @@ class SelectedPathKind(StrEnum):
 
     DIRECTORY = "directory"
     FILE = "file"
+
+
+# Compatibility alias for consumers written before the canonical rename.
+# It is intentionally absent from ``__all__``.
+LanguagePathKind = SelectedPathKind
 
 
 @unique
@@ -52,12 +57,16 @@ class LanguageProbeStatus(StrEnum):
 
 
 @unique
-class LanguageDiagnosticSeverity(StrEnum):
+class LanguageProbeSeverity(StrEnum):
     """Severity of one language-resolution diagnostic."""
 
     ERROR = "error"
     WARNING = "warning"
     INFO = "info"
+
+
+# The retired ``LanguageDiagnosticSeverity`` name is resolved lazily below so
+# it does not become a second public contract owner.
 
 
 @unique
@@ -119,10 +128,19 @@ class LanguageResolutionSource(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class LanguageProbeRequest:
-    """Explicit, non-executable input to path-resolved language startup."""
+    """Explicit, bounded input to the pre-runtime language loader.
+
+    The request describes one user-selected path.  It never selects a default
+    language, opens a validation profile, creates a run, or authorizes the main
+    Wordbench runtime.  Optional choices are responses to a previously reported
+    ambiguity and remain explicit user input.
+    """
 
     selected_path: Path
     explicit_rgl_root: Path | None = None
+    max_ancestor_depth: int = 12
+    max_source_files: int = 0
+    require_unambiguous_suffix: bool = False
     module_suffix_choice: str | None = None
     entrypoint_choice: Path | None = None
     verify_with_gf: bool = False
@@ -144,20 +162,30 @@ class LanguageProbeRequest:
             self.entrypoint_choice,
             field="entrypoint_choice",
         )
+
+        if type(self.max_ancestor_depth) is not int:
+            raise TypeError("max_ancestor_depth must be an integer")
+        if self.max_ancestor_depth < 1:
+            raise ValueError("max_ancestor_depth must be at least 1")
+        if type(self.max_source_files) is not int:
+            raise TypeError("max_source_files must be an integer")
+        if self.max_source_files < 0:
+            raise ValueError("max_source_files must not be negative")
+        if type(self.require_unambiguous_suffix) is not bool:
+            raise TypeError("require_unambiguous_suffix must be a bool")
         if type(self.verify_with_gf) is not bool:
             raise TypeError("verify_with_gf must be a bool")
 
+        # ``explicit_rgl_root`` is a dependency root, not necessarily the
+        # physical owner of the selected language sources.  ADR-0015 permits
+        # nonstandard/external GF source trees when their RGL dependency root
+        # is supplied explicitly, so the two paths may be disjoint.
         if (
-            explicit_rgl_root is not None
-            and not _contains_path(
-                explicit_rgl_root,
-                selected_path,
-                allow_equal=True,
-            )
+            entrypoint_choice is not None
+            and module_suffix_choice is not None
+            and not _path_stem(entrypoint_choice).endswith(module_suffix_choice)
         ):
-            raise ValueError(
-                "explicit_rgl_root must contain selected_path"
-            )
+            raise ValueError("entrypoint_choice must agree with module_suffix_choice")
 
         object.__setattr__(self, "selected_path", selected_path)
         object.__setattr__(self, "explicit_rgl_root", explicit_rgl_root)
@@ -206,6 +234,20 @@ class LanguageModuleCandidate:
         return _path_stem(self.file_path)
 
     @property
+    def name(self) -> str:
+        """Expose the underlying filename for path-compatible consumers."""
+
+        return self.file_path.name
+
+    def as_posix(self) -> str:
+        """Return the underlying candidate path in portable form."""
+
+        return self.file_path.as_posix()
+
+    def __fspath__(self) -> str:
+        return str(self.file_path)
+
+    @property
     def entrypoint_priority(self) -> int | None:
         """Return the standard presentation rank for entrypoint-like roles."""
 
@@ -218,25 +260,54 @@ class LanguageModuleCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class LanguageProbeChoice:
+    """One explicit choice offered by the loader to resolve ambiguity."""
+
+    value: str
+    label: str
+    entrypoints: tuple[Path, ...] = ()
+
+    def __post_init__(self) -> None:
+        value = _require_single_line_text(
+            self.value,
+            field="value",
+            allow_empty=False,
+            allow_unicode=False,
+        )
+        label = _require_single_line_text(
+            self.label,
+            field="label",
+            allow_empty=False,
+            allow_unicode=True,
+        )
+        entrypoints = _require_path_tuple(
+            self.entrypoints,
+            field="entrypoints",
+            require_gf_suffix=True,
+        )
+        object.__setattr__(self, "value", value)
+        object.__setattr__(self, "label", label)
+        object.__setattr__(self, "entrypoints", entrypoints)
+
+
+@dataclass(frozen=True, slots=True)
 class LanguageProbeDiagnostic:
     """One structured finding produced during language resolution."""
 
     code: str
-    severity: LanguageDiagnosticSeverity
+    severity: LanguageProbeSeverity
     stage: str
     subject: str
     message: str
-    technical_detail: str = ""
     remediation: str = ""
+    detail: str = ""
     relevant_path: Path | None = None
-    candidate_choices: tuple[str, ...] = ()
+    candidates: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         code = _require_diagnostic_code(self.code)
-        if not isinstance(self.severity, LanguageDiagnosticSeverity):
-            raise TypeError(
-                "severity must be a LanguageDiagnosticSeverity"
-            )
+        if not isinstance(self.severity, LanguageProbeSeverity):
+            raise TypeError("severity must be a LanguageProbeSeverity")
         stage = _require_single_line_text(
             self.stage,
             field="stage",
@@ -246,17 +317,12 @@ class LanguageProbeDiagnostic:
             self.subject,
             field="subject",
             allow_empty=False,
+            allow_unicode=True,
         )
         message = _require_single_line_text(
             self.message,
             field="message",
             allow_empty=False,
-            allow_unicode=True,
-        )
-        technical_detail = _require_text(
-            self.technical_detail,
-            field="technical_detail",
-            allow_empty=True,
             allow_unicode=True,
         )
         remediation = _require_text(
@@ -265,40 +331,45 @@ class LanguageProbeDiagnostic:
             allow_empty=True,
             allow_unicode=True,
         )
+        detail = _require_text(
+            self.detail,
+            field="detail",
+            allow_empty=True,
+            allow_unicode=True,
+        )
         relevant_path = _require_optional_absolute_path(
             self.relevant_path,
             field="relevant_path",
         )
-        candidate_choices = _require_unique_text_tuple(
-            self.candidate_choices,
-            field="candidate_choices",
+        candidates = _require_unique_text_tuple(
+            self.candidates,
+            field="candidates",
             allow_unicode=True,
         )
 
-        if (
-            self.severity is LanguageDiagnosticSeverity.ERROR
-            and not remediation
-        ):
-            raise ValueError(
-                "error diagnostics must provide remediation"
-            )
+        if self.severity is LanguageProbeSeverity.ERROR and not remediation:
+            raise ValueError("error diagnostics must provide remediation")
 
         object.__setattr__(self, "code", code)
         object.__setattr__(self, "stage", stage)
         object.__setattr__(self, "subject", subject)
         object.__setattr__(self, "message", message)
-        object.__setattr__(
-            self,
-            "technical_detail",
-            technical_detail,
-        )
         object.__setattr__(self, "remediation", remediation)
+        object.__setattr__(self, "detail", detail)
         object.__setattr__(self, "relevant_path", relevant_path)
-        object.__setattr__(
-            self,
-            "candidate_choices",
-            candidate_choices,
-        )
+        object.__setattr__(self, "candidates", candidates)
+
+    @property
+    def technical_detail(self) -> str:
+        """Compatibility projection for older diagnostic renderers."""
+
+        return self.detail
+
+    @property
+    def candidate_choices(self) -> tuple[str, ...]:
+        """Compatibility projection for older ambiguity renderers."""
+
+        return self.candidates
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,22 +384,15 @@ class LanguageCapabilityStatus:
         if not isinstance(self.capability, LanguageCapability):
             raise TypeError("capability must be a LanguageCapability")
         if not isinstance(self.availability, CapabilityAvailability):
-            raise TypeError(
-                "availability must be a CapabilityAvailability"
-            )
+            raise TypeError("availability must be a CapabilityAvailability")
         reason = _require_single_line_text(
             self.reason,
             field="reason",
             allow_empty=True,
             allow_unicode=True,
         )
-        if (
-            self.availability is not CapabilityAvailability.AVAILABLE
-            and not reason
-        ):
-            raise ValueError(
-                "unavailable or unknown capabilities must provide a reason"
-            )
+        if self.availability is not CapabilityAvailability.AVAILABLE and not reason:
+            raise ValueError("unavailable or unknown capabilities must provide a reason")
         object.__setattr__(self, "reason", reason)
 
     @property
@@ -351,9 +415,7 @@ class LanguageResolutionProvenance:
             allow_empty=False,
         )
         if _PROVENANCE_FIELD_RE.fullmatch(field) is None:
-            raise ValueError(
-                "field must use lowercase dotted identifier syntax"
-            )
+            raise ValueError("field must use lowercase dotted identifier syntax")
         value = _require_single_line_text(
             self.value,
             field="value",
@@ -361,9 +423,7 @@ class LanguageResolutionProvenance:
             allow_unicode=True,
         )
         if not isinstance(self.source, LanguageResolutionSource):
-            raise TypeError(
-                "source must be a LanguageResolutionSource"
-            )
+            raise TypeError("source must be a LanguageResolutionSource")
         object.__setattr__(self, "field", field)
         object.__setattr__(self, "value", value)
 
@@ -391,9 +451,7 @@ class LanguageCandidate:
             field="selected_path",
         )
         if not isinstance(self.selected_path_kind, SelectedPathKind):
-            raise TypeError(
-                "selected_path_kind must be a SelectedPathKind"
-            )
+            raise TypeError("selected_path_kind must be a SelectedPathKind")
         language_directory = _require_absolute_path(
             self.language_directory,
             field="language_directory",
@@ -492,8 +550,14 @@ class LanguageCandidate:
             if candidate.entrypoint_priority is not None
         )
 
+    @property
+    def display_name(self) -> str:
+        """Return a local presentation label, never a portable identity."""
 
-@dataclass(frozen=True, slots=True)
+        return _path_name(self.language_directory)
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class ResolvedLanguageContext:
     """Immutable language and source authority for one Wordbench runtime."""
 
@@ -512,6 +576,109 @@ class ResolvedLanguageContext:
     capability_statuses: tuple[LanguageCapabilityStatus, ...] = ()
     resolution_provenance: tuple[LanguageResolutionProvenance, ...] = ()
 
+    def __init__(
+        self,
+        language_key: str,
+        selected_path: Path,
+        selected_path_kind: SelectedPathKind,
+        language_directory: Path,
+        rgl_source_root: Path,
+        rgl_root: Path | None,
+        focused_target: Path | None,
+        module_suffix: str | None,
+        available_entrypoints: tuple[LanguageModuleCandidate | Path, ...],
+        source_inventory: tuple[Path, ...],
+        gf_path_requirements: tuple[Path, ...],
+        structural_diagnostics: tuple[LanguageProbeDiagnostic, ...] = (),
+        capability_statuses: (tuple[LanguageCapabilityStatus, ...] | Mapping[str, bool]) = (),
+        resolution_provenance: tuple[LanguageResolutionProvenance, ...] = (),
+        *,
+        selected_file: Path | None = None,
+    ) -> None:
+        if selected_file is not None and selected_file != selected_path:
+            raise ValueError("selected_file conflicts with selected_path")
+
+        normalized_target = focused_target
+        if normalized_target is not None and not _is_absolute_path(normalized_target):
+            normalized_target = language_directory / normalized_target
+
+        normalized_entrypoints: list[LanguageModuleCandidate] = []
+        for index, entrypoint in enumerate(available_entrypoints):
+            if isinstance(entrypoint, LanguageModuleCandidate):
+                normalized_entrypoints.append(entrypoint)
+                continue
+            if not isinstance(entrypoint, Path):
+                raise TypeError(
+                    f"available_entrypoints[{index}] must be a LanguageModuleCandidate or Path"
+                )
+            path = entrypoint if _is_absolute_path(entrypoint) else language_directory / entrypoint
+            match = _STANDARD_MODULE_FILE_RE.fullmatch(_path_name(path))
+            if match is None:
+                raise ValueError("available entrypoint paths must use a standard GF role")
+            prefix = _path_stem(path)[: -len(match.group("suffix"))]
+            role = next(
+                (
+                    candidate_role
+                    for candidate_role in LanguageModuleRole
+                    if _module_role_prefix(candidate_role) == prefix
+                ),
+                None,
+            )
+            if role is None:
+                raise ValueError("available entrypoint role is unsupported")
+            normalized_entrypoints.append(
+                LanguageModuleCandidate(
+                    file_path=path,
+                    role=role,
+                    module_suffix=match.group("suffix"),
+                )
+            )
+
+        normalized_capabilities: tuple[LanguageCapabilityStatus, ...]
+        if isinstance(capability_statuses, Mapping):
+            statuses: list[LanguageCapabilityStatus] = []
+            for raw_name, available in capability_statuses.items():
+                if not isinstance(raw_name, str) or type(available) is not bool:
+                    raise TypeError("capability_statuses mappings require string/bool items")
+                token = raw_name.replace("-", "_")
+                try:
+                    capability = LanguageCapability(token)
+                except ValueError as exc:
+                    raise ValueError(f"unsupported language capability {raw_name!r}") from exc
+                statuses.append(
+                    LanguageCapabilityStatus(
+                        capability=capability,
+                        availability=(
+                            CapabilityAvailability.AVAILABLE
+                            if available
+                            else CapabilityAvailability.UNAVAILABLE
+                        ),
+                        reason="" if available else "Unavailable.",
+                    )
+                )
+            normalized_capabilities = tuple(statuses)
+        else:
+            normalized_capabilities = tuple(capability_statuses)
+
+        for name, value in (
+            ("language_key", language_key),
+            ("selected_path", selected_path),
+            ("selected_path_kind", selected_path_kind),
+            ("language_directory", language_directory),
+            ("rgl_source_root", rgl_source_root),
+            ("rgl_root", rgl_root),
+            ("focused_target", normalized_target),
+            ("module_suffix", module_suffix),
+            ("available_entrypoints", tuple(normalized_entrypoints)),
+            ("source_inventory", tuple(source_inventory)),
+            ("gf_path_requirements", tuple(gf_path_requirements)),
+            ("structural_diagnostics", tuple(structural_diagnostics)),
+            ("capability_statuses", normalized_capabilities),
+            ("resolution_provenance", tuple(resolution_provenance)),
+        ):
+            object.__setattr__(self, name, value)
+        self.__post_init__()
+
     def __post_init__(self) -> None:
         language_key = _require_language_key(
             self.language_key,
@@ -522,9 +689,7 @@ class ResolvedLanguageContext:
             field="selected_path",
         )
         if not isinstance(self.selected_path_kind, SelectedPathKind):
-            raise TypeError(
-                "selected_path_kind must be a SelectedPathKind"
-            )
+            raise TypeError("selected_path_kind must be a SelectedPathKind")
         language_directory = _require_absolute_path(
             self.language_directory,
             field="language_directory",
@@ -594,39 +759,23 @@ class ResolvedLanguageContext:
             available_entrypoints,
             source_inventory=source_inventory,
         )
-        if any(
-            candidate.entrypoint_priority is None
-            for candidate in available_entrypoints
-        ):
-            raise ValueError(
-                "available_entrypoints may contain only Lang, Grammar, or All roles"
-            )
+        if any(candidate.entrypoint_priority is None for candidate in available_entrypoints):
+            raise ValueError("available_entrypoints may contain only Lang, Grammar, or All roles")
         if module_suffix is not None and any(
-            candidate.module_suffix != module_suffix
-            for candidate in available_entrypoints
+            candidate.module_suffix != module_suffix for candidate in available_entrypoints
         ):
-            raise ValueError(
-                "available_entrypoints must agree with module_suffix"
-            )
-        if (
-            focused_target is not None
-            and not _contains_path(
-                language_directory,
-                focused_target,
-                allow_equal=False,
-            )
+            raise ValueError("available_entrypoints must agree with module_suffix")
+        if focused_target is not None and not _contains_path(
+            language_directory,
+            focused_target,
+            allow_equal=False,
         ):
-            raise ValueError(
-                "focused_target must remain inside language_directory"
-            )
+            raise ValueError("focused_target must remain inside language_directory")
         if not any(
-            status.capability is LanguageCapability.SOURCE_READY
-            and status.available
+            status.capability is LanguageCapability.SOURCE_READY and status.available
             for status in capability_statuses
         ):
-            raise ValueError(
-                "a resolved language context must be source-ready"
-            )
+            raise ValueError("a resolved language context must be source-ready")
 
         object.__setattr__(self, "language_key", language_key)
         object.__setattr__(self, "selected_path", selected_path)
@@ -670,6 +819,32 @@ class ResolvedLanguageContext:
             return self.selected_path
         return None
 
+    @property
+    def display_name(self) -> str:
+        """Return a local presentation label distinct from language_key."""
+
+        return _path_name(self.language_directory)
+
+    @property
+    def module_suffix_candidates(self) -> tuple[str, ...]:
+        """Return every standard module suffix present in the source inventory."""
+
+        suffixes: list[str] = []
+        for path in self.source_inventory:
+            match = _STANDARD_MODULE_FILE_RE.fullmatch(_path_name(path))
+            if match is None:
+                continue
+            suffix = match.group("suffix")
+            if suffix not in suffixes:
+                suffixes.append(suffix)
+        return tuple(sorted(suffixes, key=lambda value: value.casefold()))
+
+    @property
+    def entrypoint_paths(self) -> tuple[Path, ...]:
+        """Return entrypoint paths for GUI and CLI presentation."""
+
+        return tuple(candidate.file_path for candidate in self.available_entrypoints)
+
     def capability(
         self,
         capability: LanguageCapability,
@@ -679,23 +854,20 @@ class ResolvedLanguageContext:
         if not isinstance(capability, LanguageCapability):
             raise TypeError("capability must be a LanguageCapability")
         return next(
-            (
-                status
-                for status in self.capability_statuses
-                if status.capability is capability
-            ),
+            (status for status in self.capability_statuses if status.capability is capability),
             None,
         )
 
 
 @dataclass(frozen=True, slots=True)
 class LanguageProbeResult:
-    """Typed terminal result of one language-probe request."""
+    """Typed terminal result of one pre-runtime language-probe request."""
 
     status: LanguageProbeStatus
     candidate: LanguageCandidate | None = None
     context: ResolvedLanguageContext | None = None
     diagnostics: tuple[LanguageProbeDiagnostic, ...] = ()
+    choices: tuple[LanguageProbeChoice, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, LanguageProbeStatus):
@@ -704,42 +876,42 @@ class LanguageProbeResult:
             self.candidate,
             LanguageCandidate,
         ):
-            raise TypeError(
-                "candidate must be a LanguageCandidate or None"
-            )
+            raise TypeError("candidate must be a LanguageCandidate or None")
         if self.context is not None and not isinstance(
             self.context,
             ResolvedLanguageContext,
         ):
-            raise TypeError(
-                "context must be a ResolvedLanguageContext or None"
-            )
+            raise TypeError("context must be a ResolvedLanguageContext or None")
         diagnostics = _require_diagnostic_tuple(
             self.diagnostics,
             field="diagnostics",
         )
+        choices = _require_choice_tuple(
+            self.choices,
+            field="choices",
+        )
 
         if self.status is LanguageProbeStatus.RESOLVED:
             if self.context is None:
-                raise ValueError(
-                    "resolved probe results require a context"
-                )
+                raise ValueError("resolved probe results require a context")
+            if choices:
+                raise ValueError("resolved probe results must not publish ambiguity choices")
             if any(
-                diagnostic.severity is LanguageDiagnosticSeverity.ERROR
-                for diagnostic in diagnostics
+                diagnostic.severity is LanguageProbeSeverity.ERROR for diagnostic in diagnostics
             ):
-                raise ValueError(
-                    "resolved probe results cannot contain error diagnostics"
-                )
+                raise ValueError("resolved probe results cannot contain error diagnostics")
         elif self.context is not None:
-            raise ValueError(
-                "non-resolved probe results must not publish a context"
-            )
+            raise ValueError("non-resolved probe results must not publish a context")
+
+        if self.status is LanguageProbeStatus.NEEDS_USER_INPUT:
+            if not choices:
+                raise ValueError("needs-user-input results require explicit choices")
+        elif choices:
+            raise ValueError("only needs-user-input results may publish choices")
 
         if (
             self.status
             in {
-                LanguageProbeStatus.NEEDS_USER_INPUT,
                 LanguageProbeStatus.INVALID_SELECTION,
                 LanguageProbeStatus.UNSUPPORTED_LAYOUT,
                 LanguageProbeStatus.CAPABILITY_UNAVAILABLE,
@@ -747,30 +919,38 @@ class LanguageProbeResult:
             }
             and not diagnostics
         ):
-            raise ValueError(
-                "non-resolved probe results require diagnostics"
-            )
-
-        if (
-            self.status is LanguageProbeStatus.NEEDS_USER_INPUT
-            and not any(
-                diagnostic.candidate_choices
-                for diagnostic in diagnostics
-            )
-        ):
-            raise ValueError(
-                "needs-user-input results require candidate choices"
-            )
+            raise ValueError("unsuccessful probe results require diagnostics")
 
         object.__setattr__(self, "diagnostics", diagnostics)
+        object.__setattr__(self, "choices", choices)
 
     @property
     def resolved(self) -> bool:
+        """Return whether one immutable monolingual runtime context exists."""
+
         return self.status is LanguageProbeStatus.RESOLVED
+
+    @property
+    def is_resolved(self) -> bool:
+        """Compatibility predicate used by startup and integration boundaries."""
+
+        return self.resolved and self.context is not None
+
+    @property
+    def disposition(self) -> LanguageProbeStatus:
+        """Compatibility presentation name for the canonical status."""
+
+        return self.status
 
     @property
     def needs_user_input(self) -> bool:
         return self.status is LanguageProbeStatus.NEEDS_USER_INPUT
+
+
+def __getattr__(name: str) -> object:
+    if name == "LanguageDiagnosticSeverity":
+        return LanguageProbeSeverity
+    raise AttributeError(name)
 
 
 # Validation helpers -------------------------------------------------------
@@ -783,9 +963,7 @@ def _require_diagnostic_code(value: object) -> str:
         allow_empty=False,
     )
     if _DIAGNOSTIC_CODE_RE.fullmatch(text) is None:
-        raise ValueError(
-            "code must match GF-WB-<DOMAIN>-<NNN>"
-        )
+        raise ValueError("code must match GF-WB-<DOMAIN>-<NNN>")
     return text
 
 
@@ -821,9 +999,7 @@ def _require_single_line_text(
         allow_unicode=allow_unicode,
     )
     if text != text.strip():
-        raise ValueError(
-            f"{field} must not contain surrounding whitespace"
-        )
+        raise ValueError(f"{field} must not contain surrounding whitespace")
     if "\r" in text or "\n" in text:
         raise ValueError(f"{field} must be a single-line string")
     return text
@@ -838,9 +1014,7 @@ def _require_absolute_path(value: object, *, field: str) -> Path:
     if not _is_absolute_path(value):
         raise ValueError(f"{field} must be absolute")
     if any(part == ".." for part in _path_parts(value)):
-        raise ValueError(
-            f"{field} must not contain unresolved parent traversal"
-        )
+        raise ValueError(f"{field} must not contain unresolved parent traversal")
     return value
 
 
@@ -880,9 +1054,7 @@ def _require_module_suffix(value: object, *, field: str) -> str:
         allow_empty=False,
     )
     if _MODULE_SUFFIX_RE.fullmatch(text) is None:
-        raise ValueError(
-            f"{field} must be an ASCII GF module suffix"
-        )
+        raise ValueError(f"{field} must be an ASCII GF module suffix")
     return text
 
 
@@ -911,9 +1083,7 @@ def _require_language_key(value: object, *, field: str) -> str:
     if text != posix.as_posix():
         raise ValueError(f"{field} must be canonically normalized")
     if any(part in {"", ".", ".."} for part in posix.parts):
-        raise ValueError(
-            f"{field} must not contain empty, current, or parent segments"
-        )
+        raise ValueError(f"{field} must not contain empty, current, or parent segments")
     return text
 
 
@@ -1010,9 +1180,7 @@ def _require_module_candidate_tuple(
     seen: set[str] = set()
     for index, item in enumerate(value):
         if not isinstance(item, LanguageModuleCandidate):
-            raise TypeError(
-                f"{field}[{index}] must be a LanguageModuleCandidate"
-            )
+            raise TypeError(f"{field}[{index}] must be a LanguageModuleCandidate")
         identity = _path_identity(item.file_path)
         if identity in seen:
             raise ValueError(f"{field} must not contain duplicate paths")
@@ -1030,10 +1198,27 @@ def _require_diagnostic_tuple(
         raise TypeError(f"{field} must be a tuple")
     for index, item in enumerate(value):
         if not isinstance(item, LanguageProbeDiagnostic):
-            raise TypeError(
-                f"{field}[{index}] must be a LanguageProbeDiagnostic"
-            )
+            raise TypeError(f"{field}[{index}] must be a LanguageProbeDiagnostic")
     return value
+
+
+def _require_choice_tuple(
+    value: object,
+    *,
+    field: str,
+) -> tuple[LanguageProbeChoice, ...]:
+    if not isinstance(value, tuple):
+        raise TypeError(f"{field} must be a tuple")
+    result: list[LanguageProbeChoice] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        if not isinstance(item, LanguageProbeChoice):
+            raise TypeError(f"{field}[{index}] must be a LanguageProbeChoice")
+        if item.value in seen:
+            raise ValueError(f"{field} must not contain duplicate values")
+        seen.add(item.value)
+        result.append(item)
+    return tuple(result)
 
 
 def _require_capability_status_tuple(
@@ -1046,13 +1231,9 @@ def _require_capability_status_tuple(
     seen: set[LanguageCapability] = set()
     for index, item in enumerate(value):
         if not isinstance(item, LanguageCapabilityStatus):
-            raise TypeError(
-                f"{field}[{index}] must be a LanguageCapabilityStatus"
-            )
+            raise TypeError(f"{field}[{index}] must be a LanguageCapabilityStatus")
         if item.capability in seen:
-            raise ValueError(
-                f"{field} must contain at most one status per capability"
-            )
+            raise ValueError(f"{field} must contain at most one status per capability")
         seen.add(item.capability)
     return value
 
@@ -1067,13 +1248,9 @@ def _require_provenance_tuple(
     seen: set[str] = set()
     for index, item in enumerate(value):
         if not isinstance(item, LanguageResolutionProvenance):
-            raise TypeError(
-                f"{field}[{index}] must be a LanguageResolutionProvenance"
-            )
+            raise TypeError(f"{field}[{index}] must be a LanguageResolutionProvenance")
         if item.field in seen:
-            raise ValueError(
-                f"{field} must contain at most one value per field"
-            )
+            raise ValueError(f"{field} must contain at most one value per field")
         seen.add(item.field)
     return value
 
@@ -1087,34 +1264,18 @@ def _validate_selected_path_relationship(
 ) -> None:
     if selected_path_kind is SelectedPathKind.FILE:
         if _path_suffix(selected_path).casefold() != _GF_SUFFIX:
-            raise ValueError(
-                "a file selected_path must end in '.gf'"
-            )
-        if _path_identity(_path_parent(selected_path)) != _path_identity(
-            language_directory
-        ):
-            raise ValueError(
-                "a selected file's parent must equal language_directory"
-            )
+            raise ValueError("a file selected_path must end in '.gf'")
+        if _path_identity(_path_parent(selected_path)) != _path_identity(language_directory):
+            raise ValueError("a selected file's parent must equal language_directory")
         if focused_target is None:
-            raise ValueError(
-                "a file selection requires focused_target"
-            )
+            raise ValueError("a file selection requires focused_target")
         if _path_identity(focused_target) != _path_identity(selected_path):
-            raise ValueError(
-                "focused_target must preserve the explicitly selected file"
-            )
+            raise ValueError("focused_target must preserve the explicitly selected file")
     else:
-        if _path_identity(selected_path) != _path_identity(
-            language_directory
-        ):
-            raise ValueError(
-                "a selected directory must equal language_directory"
-            )
+        if _path_identity(selected_path) != _path_identity(language_directory):
+            raise ValueError("a selected directory must equal language_directory")
         if focused_target is not None:
-            raise ValueError(
-                "a directory selection must not invent a focused target"
-            )
+            raise ValueError("a directory selection must not invent a focused target")
 
 
 def _validate_root_relationships(
@@ -1125,19 +1286,16 @@ def _validate_root_relationships(
 ) -> None:
     if rgl_source_root is None:
         if rgl_root is not None:
-            raise ValueError(
-                "rgl_root requires rgl_source_root"
-            )
+            raise ValueError("rgl_root requires rgl_source_root")
         return
 
-    if not _contains_path(
-        rgl_source_root,
-        language_directory,
-        allow_equal=False,
-    ):
-        raise ValueError(
-            "rgl_source_root must contain language_directory"
-        )
+    # A standard RGL language normally lives below ``rgl_source_root``.
+    # External GF projects are also valid when an explicit RGL dependency root
+    # is supplied; in that case ``language_directory`` is intentionally
+    # disjoint from ``rgl_source_root``.  Source containment is enforced
+    # independently by ``source_inventory`` below.
+    if _path_identity(rgl_source_root) == _path_identity(language_directory):
+        raise ValueError("rgl_source_root must not equal language_directory")
 
     if rgl_root is not None:
         if not _contains_path(
@@ -1148,8 +1306,7 @@ def _validate_root_relationships(
             raise ValueError("rgl_root must contain rgl_source_root")
         if _path_identity(_path_parent(rgl_source_root)) != _path_identity(rgl_root):
             raise ValueError(
-                "for the standard RGL layout, rgl_root must be the parent "
-                "of rgl_source_root"
+                "for the standard RGL layout, rgl_root must be the parent of rgl_source_root"
             )
 
 
@@ -1161,9 +1318,7 @@ def _require_paths_contained(
 ) -> None:
     for index, path in enumerate(paths):
         if not _contains_path(parent, path, allow_equal=False):
-            raise ValueError(
-                f"{field}[{index}] must remain inside language_directory"
-            )
+            raise ValueError(f"{field}[{index}] must remain inside language_directory")
 
 
 def _require_module_candidates_in_inventory(
@@ -1174,9 +1329,7 @@ def _require_module_candidates_in_inventory(
     inventory = {_path_identity(path) for path in source_inventory}
     for candidate in candidates:
         if _path_identity(candidate.file_path) not in inventory:
-            raise ValueError(
-                "module candidate paths must exist in source_inventory"
-            )
+            raise ValueError("module candidate paths must exist in source_inventory")
 
 
 def _require_suffixes_cover_candidates(
@@ -1187,10 +1340,7 @@ def _require_suffixes_cover_candidates(
     declared = set(suffixes)
     observed = {candidate.module_suffix for candidate in candidates}
     if observed != declared:
-        raise ValueError(
-            "module_suffixes must equal the suffixes observed in "
-            "module_candidates"
-        )
+        raise ValueError("module_suffixes must equal the suffixes observed in module_candidates")
 
 
 def _module_role_prefix(role: LanguageModuleRole) -> str:
@@ -1228,7 +1378,6 @@ def _path_parts(path: Path) -> tuple[str, ...]:
     return path.parts
 
 
-
 def _path_name(path: Path) -> str:
     rendered = os.fspath(path)
     if _is_windows_style(path):
@@ -1255,6 +1404,7 @@ def _path_parent(path: Path) -> Path:
     if _is_windows_style(path):
         return Path(str(PureWindowsPath(rendered).parent))
     return path.parent
+
 
 def _path_identity(path: Path) -> str:
     rendered = os.fspath(path)
@@ -1291,19 +1441,14 @@ def _comparison_parts(path: Path) -> tuple[str, ...]:
 
 
 __all__ = (
-    "CapabilityAvailability",
     "LanguageCandidate",
     "LanguageCapability",
-    "LanguageCapabilityStatus",
-    "LanguageDiagnosticSeverity",
     "LanguageModuleCandidate",
-    "LanguageModuleRole",
     "LanguageProbeDiagnostic",
     "LanguageProbeRequest",
     "LanguageProbeResult",
+    "LanguageProbeSeverity",
     "LanguageProbeStatus",
-    "LanguageResolutionProvenance",
-    "LanguageResolutionSource",
     "ResolvedLanguageContext",
     "SelectedPathKind",
 )

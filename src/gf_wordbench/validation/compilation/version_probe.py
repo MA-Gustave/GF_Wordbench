@@ -9,7 +9,7 @@ import math
 from pathlib import Path
 import re
 from types import MappingProxyType
-from typing import Final, Protocol, TypeAlias
+from typing import Final, Protocol, TypeAlias, cast
 
 from gf_wordbench.infrastructure.process import run_process
 from gf_wordbench.infrastructure.process.models import (
@@ -85,9 +85,7 @@ class GFVersion:
         normalized = ".".join(str(component) for component in components)
 
         if self.normalized and self.normalized != normalized:
-            raise ValueError(
-                "normalized must equal the canonical component rendering"
-            )
+            raise ValueError("normalized must equal the canonical component rendering")
 
         object.__setattr__(self, "components", components)
         object.__setattr__(self, "normalized", normalized)
@@ -98,21 +96,13 @@ class GFVersion:
         match = _EXACT_VERSION_RE.fullmatch(text)
 
         if match is None:
-            raise ValueError(
-                f"invalid GF version {text!r}; expected a dotted numeric version"
-            )
+            raise ValueError(f"invalid GF version {text!r}; expected a dotted numeric version")
 
-        components = tuple(
-            int(component)
-            for component in match.group("version").split(".")
-        )
+        components = tuple(int(component) for component in match.group("version").split("."))
         normalized_components = _normalize_components(components)
         return cls(
             components=normalized_components,
-            normalized=".".join(
-                str(component)
-                for component in normalized_components
-            ),
+            normalized=".".join(str(component) for component in normalized_components),
         )
 
     def comparison_key(self, width: int = 4) -> tuple[int, ...]:
@@ -183,21 +173,12 @@ class GFVersionPolicy:
         if not isinstance(self.strict_unknown, bool):
             raise TypeError("strict_unknown must be a bool")
 
-        overlap = set(tested_versions).intersection(
-            known_incompatible_versions
-        )
+        overlap = set(tested_versions).intersection(known_incompatible_versions)
         if overlap:
-            rendered = ", ".join(
-                sorted(version.normalized for version in overlap)
-            )
-            raise ValueError(
-                "tested_versions and known_incompatible_versions "
-                f"overlap: {rendered}"
-            )
+            rendered = ", ".join(sorted(version.normalized for version in overlap))
+            raise ValueError(f"tested_versions and known_incompatible_versions overlap: {rendered}")
 
-        capabilities = _normalize_capabilities(
-            self.capabilities_by_version
-        )
+        capabilities = _normalize_capabilities(self.capabilities_by_version)
 
         object.__setattr__(
             self,
@@ -227,12 +208,17 @@ class GFVersionPolicy:
 
     @property
     def effective_minimum_version(self) -> GFVersion | None:
+        minimum_supported = cast(
+            GFVersion | None,
+            self.minimum_supported_version,
+        )
+        project_minimum = cast(
+            GFVersion | None,
+            self.project_minimum_version,
+        )
         candidates = tuple(
             version
-            for version in (
-                self.minimum_supported_version,
-                self.project_minimum_version,
-            )
+            for version in (minimum_supported, project_minimum)
             if version is not None
         )
         if not candidates:
@@ -263,30 +249,19 @@ class GFVersionText:
             field_name="display_text",
         )
 
-        if (
-            self.parsed_version is not None
-            and not isinstance(self.parsed_version, GFVersion)
-        ):
-            raise TypeError(
-                "parsed_version must be a GFVersion or None"
-            )
+        if self.parsed_version is not None and not isinstance(self.parsed_version, GFVersion):
+            raise TypeError("parsed_version must be a GFVersion or None")
 
         source_stream = self.source_stream
         if source_stream not in {None, "stdout", "stderr"}:
-            raise ValueError(
-                "source_stream must be stdout, stderr, or None"
-            )
+            raise ValueError("source_stream must be stdout, stderr, or None")
 
         if not isinstance(self.recognized, bool):
             raise TypeError("recognized must be a bool")
         if self.recognized != (self.parsed_version is not None):
-            raise ValueError(
-                "recognized must agree with parsed_version"
-            )
+            raise ValueError("recognized must agree with parsed_version")
         if source_stream is None and display_text != UNKNOWN_VERSION_TEXT:
-            raise ValueError(
-                "missing source_stream requires UNKNOWN display text"
-            )
+            raise ValueError("missing source_stream requires UNKNOWN display text")
 
         object.__setattr__(self, "display_text", display_text)
 
@@ -305,18 +280,11 @@ class GFVersionCompatibilityResult:
             self.compatibility,
             GFVersionCompatibility,
         ):
-            raise TypeError(
-                "compatibility must be a GFVersionCompatibility"
-            )
+            raise TypeError("compatibility must be a GFVersionCompatibility")
         if not isinstance(self.accepted, bool):
             raise TypeError("accepted must be a bool")
-        if (
-            self.minimum_required is not None
-            and not isinstance(self.minimum_required, GFVersion)
-        ):
-            raise TypeError(
-                "minimum_required must be a GFVersion or None"
-            )
+        if self.minimum_required is not None and not isinstance(self.minimum_required, GFVersion):
+            raise TypeError("minimum_required must be a GFVersion or None")
 
         capabilities = _string_frozenset(
             self.capabilities,
@@ -340,9 +308,7 @@ class GFVersionCompatibilityResult:
             }
             and self.accepted
         ):
-            raise ValueError(
-                "unsupported or unknown compatibility cannot be accepted"
-            )
+            raise ValueError("unsupported or unknown compatibility cannot be accepted")
 
         object.__setattr__(self, "capabilities", capabilities)
         object.__setattr__(self, "warnings", warnings)
@@ -363,9 +329,7 @@ class GFVersionResult:
 
     def __post_init__(self) -> None:
         if not isinstance(self.outcome, GFVersionProbeOutcome):
-            raise TypeError(
-                "outcome must be a GFVersionProbeOutcome"
-            )
+            raise TypeError("outcome must be a GFVersionProbeOutcome")
 
         executable = _absolute_path(
             self.executable,
@@ -373,24 +337,14 @@ class GFVersionResult:
         )
 
         if not isinstance(self.version_text, GFVersionText):
-            raise TypeError(
-                "version_text must be a GFVersionText"
-            )
+            raise TypeError("version_text must be a GFVersionText")
         if not isinstance(
             self.compatibility,
             GFVersionCompatibilityResult,
         ):
-            raise TypeError(
-                "compatibility must be a "
-                "GFVersionCompatibilityResult"
-            )
-        if (
-            self.process_result is not None
-            and not isinstance(self.process_result, ProcessResult)
-        ):
-            raise TypeError(
-                "process_result must be a ProcessResult or None"
-            )
+            raise TypeError("compatibility must be a GFVersionCompatibilityResult")
+        if self.process_result is not None and not isinstance(self.process_result, ProcessResult):
+            raise TypeError("process_result must be a ProcessResult or None")
 
         stdout_path = _optional_absolute_path(
             self.stdout_path,
@@ -411,32 +365,16 @@ class GFVersionResult:
 
         if self.process_result is not None:
             if self.process_result.executable != executable:
-                raise ValueError(
-                    "process_result executable must match executable"
-                )
+                raise ValueError("process_result executable must match executable")
             if stdout_path != self.process_result.stdout_path:
-                raise ValueError(
-                    "stdout_path must match process_result"
-                )
+                raise ValueError("stdout_path must match process_result")
             if stderr_path != self.process_result.stderr_path:
-                raise ValueError(
-                    "stderr_path must match process_result"
-                )
+                raise ValueError("stderr_path must match process_result")
 
-        if (
-            self.outcome is GFVersionProbeOutcome.RECOGNIZED
-            and not self.version_text.recognized
-        ):
-            raise ValueError(
-                "recognized outcome requires a parsed version"
-            )
-        if (
-            self.outcome is GFVersionProbeOutcome.SKIPPED
-            and self.process_result is not None
-        ):
-            raise ValueError(
-                "skipped outcome cannot contain process_result"
-            )
+        if self.outcome is GFVersionProbeOutcome.RECOGNIZED and not self.version_text.recognized:
+            raise ValueError("recognized outcome requires a parsed version")
+        if self.outcome is GFVersionProbeOutcome.SKIPPED and self.process_result is not None:
+            raise ValueError("skipped outcome cannot contain process_result")
 
         object.__setattr__(self, "executable", executable)
         object.__setattr__(self, "stdout_path", stdout_path)
@@ -512,9 +450,7 @@ def build_gf_version_probe_request(
     )
 
     if stdout_path == stderr_path:
-        raise ValueError(
-            "stdout_path and stderr_path must be distinct"
-        )
+        raise ValueError("stdout_path and stderr_path must be distinct")
 
     arguments = _argument_tuple(version_arguments)
     request_id = _required_text(
@@ -677,15 +613,11 @@ def evaluate_gf_version_compatibility(
 
     if version in policy.known_incompatible_versions:
         return GFVersionCompatibilityResult(
-            compatibility=(
-                GFVersionCompatibility.KNOWN_INCOMPATIBLE
-            ),
+            compatibility=(GFVersionCompatibility.KNOWN_INCOMPATIBLE),
             accepted=False,
             minimum_required=minimum,
             capabilities=policy.capabilities_for(version),
-            message=(
-                f"GF {version} is explicitly known to be incompatible."
-            ),
+            message=(f"GF {version} is explicitly known to be incompatible."),
         )
 
     if minimum is not None and version < minimum:
@@ -694,9 +626,7 @@ def evaluate_gf_version_compatibility(
             accepted=False,
             minimum_required=minimum,
             capabilities=policy.capabilities_for(version),
-            message=(
-                f"GF {version} is below the required minimum {minimum}."
-            ),
+            message=(f"GF {version} is below the required minimum {minimum}."),
         )
 
     if version in policy.tested_versions:
@@ -705,20 +635,13 @@ def evaluate_gf_version_compatibility(
             accepted=True,
             minimum_required=minimum,
             capabilities=policy.capabilities_for(version),
-            message=(
-                f"GF {version} is a tested supported version."
-            ),
+            message=(f"GF {version} is a tested supported version."),
         )
 
     if policy.allow_untested_versions:
-        warning = (
-            f"GF {version} satisfies the minimum version policy "
-            "but is not listed as tested."
-        )
+        warning = f"GF {version} satisfies the minimum version policy but is not listed as tested."
         return GFVersionCompatibilityResult(
-            compatibility=(
-                GFVersionCompatibility.SUPPORTED_WITH_WARNING
-            ),
+            compatibility=(GFVersionCompatibility.SUPPORTED_WITH_WARNING),
             accepted=True,
             minimum_required=minimum,
             capabilities=policy.capabilities_for(version),
@@ -731,13 +654,8 @@ def evaluate_gf_version_compatibility(
         accepted=False,
         minimum_required=minimum,
         capabilities=policy.capabilities_for(version),
-        warnings=(
-            f"GF {version} is not listed in tested_versions.",
-        ),
-        message=(
-            f"GF {version} is recognized but its compatibility "
-            "has not been verified."
-        ),
+        warnings=(f"GF {version} is not listed in tested_versions.",),
+        message=(f"GF {version} is recognized but its compatibility has not been verified."),
     )
 
 
@@ -748,16 +666,9 @@ def interpret_gf_version_probe(
     evidence_reader: EvidenceReader = Path.read_bytes,
 ) -> GFVersionResult:
     if not isinstance(process_result, ProcessResult):
-        raise TypeError(
-            "process_result must be a ProcessResult"
-        )
-    if (
-        process_result.operation_kind
-        is not ProcessOperationKind.VERSION_PROBE
-    ):
-        raise ValueError(
-            "process_result must describe a version probe"
-        )
+        raise TypeError("process_result must be a ProcessResult")
+    if process_result.operation_kind is not ProcessOperationKind.VERSION_PROBE:
+        raise ValueError("process_result must describe a version probe")
     if not isinstance(policy, GFVersionPolicy):
         raise TypeError("policy must be a GFVersionPolicy")
     if not callable(evidence_reader):
@@ -788,10 +699,7 @@ def interpret_gf_version_probe(
         compatibility = _not_evaluated(
             "GF compatibility was not evaluated because the executable did not launch."
         )
-        message = (
-            process_result.launch_error_message
-            or "Failed to launch the GF executable."
-        )
+        message = process_result.launch_error_message or "Failed to launch the GF executable."
         return GFVersionResult(
             outcome=GFVersionProbeOutcome.LAUNCH_FAILED,
             executable=process_result.executable,
@@ -817,10 +725,7 @@ def interpret_gf_version_probe(
             stdout_path=process_result.stdout_path,
             stderr_path=process_result.stderr_path,
             warnings=tuple(warnings),
-            message=(
-                f"GF version probe timed out after "
-                f"{process_result.duration_ms} ms."
-            ),
+            message=(f"GF version probe timed out after {process_result.duration_ms} ms."),
         )
 
     if state is ExecutionState.CANCELLED:
@@ -841,14 +746,11 @@ def interpret_gf_version_probe(
         )
 
     if state is not ExecutionState.COMPLETED:
-        raise ValueError(
-            f"unsupported process execution state: {state!r}"
-        )
+        raise ValueError(f"unsupported process execution state: {state!r}")
 
     if process_result.exit_code != 0:
         warnings.append(
-            "GF version probe completed with non-zero exit code "
-            f"{process_result.exit_code}."
+            f"GF version probe completed with non-zero exit code {process_result.exit_code}."
         )
 
     compatibility = evaluate_gf_version_compatibility(
@@ -862,11 +764,8 @@ def interpret_gf_version_probe(
     elif compatibility.compatibility in {
         GFVersionCompatibility.UNSUPPORTED,
         GFVersionCompatibility.KNOWN_INCOMPATIBLE,
-    }:
-        outcome = GFVersionProbeOutcome.UNSUPPORTED
-    elif (
-        compatibility.compatibility
-        is GFVersionCompatibility.UNTESTED
+    } or (
+        compatibility.compatibility is GFVersionCompatibility.UNTESTED
         and not compatibility.accepted
     ):
         outcome = GFVersionProbeOutcome.UNSUPPORTED
@@ -880,14 +779,8 @@ def interpret_gf_version_probe(
             accepted=False,
             minimum_required=policy.effective_minimum_version,
             capabilities=frozenset(),
-            warnings=(
-                "A non-zero version-probe exit code prevents "
-                "compatibility acceptance.",
-            ),
-            message=(
-                "GF version probe did not satisfy the process "
-                "success contract."
-            ),
+            warnings=("A non-zero version-probe exit code prevents compatibility acceptance.",),
+            message=("GF version probe did not satisfy the process success contract."),
         )
         warnings.extend(compatibility.warnings)
 
@@ -929,17 +822,11 @@ def probe_gf_version(
     )
 
     if process_result.executable != request.executable:
-        raise ValueError(
-            "version probe used an executable different from the request"
-        )
+        raise ValueError("version probe used an executable different from the request")
     if process_result.args != request.args:
-        raise ValueError(
-            "version probe result arguments differ from the request"
-        )
+        raise ValueError("version probe result arguments differ from the request")
     if process_result.cwd != request.cwd:
-        raise ValueError(
-            "version probe result working directory differs from the request"
-        )
+        raise ValueError("version probe result working directory differs from the request")
 
     return interpret_gf_version_probe(
         process_result,
@@ -984,29 +871,18 @@ def _validate_probe_request(
 ) -> None:
     if not isinstance(request, ProcessRequest):
         raise TypeError("request must be a ProcessRequest")
-    if (
-        request.operation_kind
-        is not ProcessOperationKind.VERSION_PROBE
-    ):
-        raise ValueError(
-            "request.operation_kind must be VERSION_PROBE"
-        )
+    if request.operation_kind is not ProcessOperationKind.VERSION_PROBE:
+        raise ValueError("request.operation_kind must be VERSION_PROBE")
     if request.tool_id != "gf":
         raise ValueError("version probe tool_id must be 'gf'")
     if request.stdin != ProcessInput.none():
         raise ValueError("version probe stdin must be absent")
     if request.expected_artifacts:
-        raise ValueError(
-            "version probe must not declare file artifacts"
-        )
+        raise ValueError("version probe must not declare file artifacts")
     if request.mutability_class != "read_only":
-        raise ValueError(
-            "version probe mutability_class must be read_only"
-        )
+        raise ValueError("version probe mutability_class must be read_only")
     if not request.args:
-        raise ValueError(
-            "version probe must contain a version argument"
-        )
+        raise ValueError("version probe must contain a version argument")
 
 
 def _not_evaluated(
@@ -1031,23 +907,17 @@ def _read_evidence_text(
     try:
         payload = evidence_reader(path)
     except OSError as exc:
-        warnings.append(
-            f"Unable to read version-probe {stream_name}: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        warnings.append(f"Unable to read version-probe {stream_name}: {type(exc).__name__}: {exc}")
         return ""
 
     if not isinstance(payload, bytes):
-        raise TypeError(
-            "evidence_reader must return bytes"
-        )
+        raise TypeError("evidence_reader must return bytes")
 
     try:
         return payload.decode("utf-8")
     except UnicodeDecodeError:
         warnings.append(
-            f"Version-probe {stream_name} was not valid UTF-8; "
-            "replacement decoding was applied."
+            f"Version-probe {stream_name} was not valid UTF-8; replacement decoding was applied."
         )
         return payload.decode("utf-8", errors="replace")
 
@@ -1071,25 +941,17 @@ def _normalize_components(
     values: Iterable[int],
 ) -> tuple[int, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "version components must be an iterable of integers"
-        )
+        raise TypeError("version components must be an iterable of integers")
 
     components = tuple(values)
     if len(components) < 2 or len(components) > 4:
-        raise ValueError(
-            "GF versions must contain between two and four numeric components"
-        )
+        raise ValueError("GF versions must contain between two and four numeric components")
 
     for component in components:
         if isinstance(component, bool) or not isinstance(component, int):
-            raise TypeError(
-                "version components must be integers"
-            )
+            raise TypeError("version components must be integers")
         if component < 0:
-            raise ValueError(
-                "version components must be non-negative"
-            )
+            raise ValueError("version components must be non-negative")
 
     mutable = list(components)
     while len(mutable) > 2 and mutable[-1] == 0:
@@ -1108,12 +970,8 @@ def _coerce_version(
         try:
             return GFVersion.parse(value)
         except ValueError as exc:
-            raise ValueError(
-                f"invalid {field_name}: {value!r}"
-            ) from exc
-    raise TypeError(
-        f"{field_name} must be a GFVersion or string"
-    )
+            raise ValueError(f"invalid {field_name}: {value!r}") from exc
+    raise TypeError(f"{field_name} must be a GFVersion or string")
 
 
 def _optional_version(
@@ -1132,14 +990,9 @@ def _version_tuple(
     field_name: str,
 ) -> tuple[GFVersion, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            f"{field_name} must be an iterable of versions"
-        )
+        raise TypeError(f"{field_name} must be an iterable of versions")
 
-    parsed = tuple(
-        _coerce_version(value, field_name=field_name)
-        for value in values
-    )
+    parsed = tuple(_coerce_version(value, field_name=field_name) for value in values)
     return tuple(
         sorted(
             set(parsed),
@@ -1152,9 +1005,7 @@ def _normalize_capabilities(
     value: Mapping[str, Iterable[str]],
 ) -> Mapping[str, frozenset[str]]:
     if not isinstance(value, Mapping):
-        raise TypeError(
-            "capabilities_by_version must be a mapping"
-        )
+        raise TypeError("capabilities_by_version must be a mapping")
 
     normalized: dict[str, frozenset[str]] = {}
 
@@ -1165,45 +1016,32 @@ def _normalize_capabilities(
         )
         if version.normalized in normalized:
             raise ValueError(
-                "capabilities_by_version contains duplicate "
-                f"version {version.normalized}"
+                f"capabilities_by_version contains duplicate version {version.normalized}"
             )
 
         normalized[version.normalized] = _string_frozenset(
             raw_capabilities,
-            field_name=(
-                f"capabilities_by_version[{version.normalized!r}]"
-            ),
+            field_name=(f"capabilities_by_version[{version.normalized!r}]"),
         )
 
-    return MappingProxyType(
-        dict(sorted(normalized.items()))
-    )
+    return MappingProxyType(dict(sorted(normalized.items())))
 
 
 def _argument_tuple(
     values: Sequence[str],
 ) -> tuple[str, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "version_arguments must be a sequence of strings"
-        )
+        raise TypeError("version_arguments must be a sequence of strings")
 
     arguments = tuple(values)
     if not arguments:
-        raise ValueError(
-            "version_arguments must not be empty"
-        )
+        raise ValueError("version_arguments must not be empty")
 
     for index, argument in enumerate(arguments):
         if not isinstance(argument, str):
-            raise TypeError(
-                f"version_arguments[{index}] must be a string"
-            )
+            raise TypeError(f"version_arguments[{index}] must be a string")
         if not argument or "\x00" in argument:
-            raise ValueError(
-                f"version_arguments[{index}] must be non-empty and NUL-free"
-            )
+            raise ValueError(f"version_arguments[{index}] must be non-empty and NUL-free")
 
     return arguments
 
@@ -1255,9 +1093,7 @@ def _string_tuple(
     field_name: str,
 ) -> tuple[str, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            f"{field_name} must be an iterable of strings"
-        )
+        raise TypeError(f"{field_name} must be an iterable of strings")
 
     result = tuple(values)
     for value in result:
@@ -1270,9 +1106,7 @@ def _string_frozenset(
     *,
     field_name: str,
 ) -> frozenset[str]:
-    return frozenset(
-        _string_tuple(values, field_name=field_name)
-    )
+    return frozenset(_string_tuple(values, field_name=field_name))
 
 
 def _required_text(
@@ -1283,15 +1117,11 @@ def _required_text(
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a string")
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if not value.strip():
         raise ValueError(f"{field_name} must not be empty")
     if value != value.strip():
-        raise ValueError(
-            f"{field_name} must not have outer whitespace"
-        )
+        raise ValueError(f"{field_name} must not have outer whitespace")
     return value
 
 
@@ -1301,17 +1131,11 @@ def _absolute_path(
     field_name: str,
 ) -> Path:
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field_name} must be a pathlib.Path"
-        )
+        raise TypeError(f"{field_name} must be a pathlib.Path")
     if "\x00" in str(value):
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if not value.is_absolute():
-        raise ValueError(
-            f"{field_name} must be absolute"
-        )
+        raise ValueError(f"{field_name} must be absolute")
     return value
 
 
@@ -1331,15 +1155,11 @@ def _positive_finite_number(
     field_name: str,
 ) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(
-            f"{field_name} must be numeric"
-        )
+        raise TypeError(f"{field_name} must be numeric")
 
     normalized = float(value)
     if not math.isfinite(normalized) or normalized <= 0:
-        raise ValueError(
-            f"{field_name} must be finite and positive"
-        )
+        raise ValueError(f"{field_name} must be finite and positive")
     return normalized
 
 
@@ -1349,13 +1169,9 @@ def _positive_integer(
     field_name: str,
 ) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(
-            f"{field_name} must be an integer"
-        )
+        raise TypeError(f"{field_name} must be an integer")
     if value <= 0:
-        raise ValueError(
-            f"{field_name} must be positive"
-        )
+        raise ValueError(f"{field_name} must be positive")
     return value
 
 
@@ -1365,6 +1181,7 @@ __all__ = (
     "DEFAULT_VERSION_PROBE_OUTPUT_LIMIT_BYTES",
     "DEFAULT_VERSION_PROBE_TIMEOUT_SEC",
     "DEFAULT_VERSION_REQUEST_ID",
+    "UNKNOWN_VERSION_TEXT",
     "GFVersion",
     "GFVersionCompatibility",
     "GFVersionCompatibilityResult",
@@ -1372,7 +1189,6 @@ __all__ = (
     "GFVersionProbeOutcome",
     "GFVersionResult",
     "GFVersionText",
-    "UNKNOWN_VERSION_TEXT",
     "build_gf_version_probe_request",
     "evaluate_gf_version_compatibility",
     "interpret_gf_version_probe",

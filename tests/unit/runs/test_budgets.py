@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, replace
+import math
+from typing import cast
 
 import pytest
 
@@ -146,7 +147,7 @@ def test_clock_must_be_callable_and_return_a_finite_number() -> None:
         RunBudget(
             total_sec=10,
             finalization_reserve_sec=1,
-            clock=lambda: "now",  # type: ignore[return-value]
+            clock=cast("budgets.Clock", lambda: "now"),
         )
 
     with pytest.raises(ValueError, match="clock value must be finite"):
@@ -244,8 +245,8 @@ def test_allocation_rejects_invalid_names_and_durations() -> None:
             )
 
     with pytest.raises(TypeError, match="name must be a string"):
-        budget.try_allocate_stage(  # type: ignore[arg-type]
-            1,
+        budget.try_allocate_stage(
+            cast(str, 1),
             requested_sec=1,
             minimum_sec=1,
         )
@@ -327,13 +328,12 @@ def test_context_manager_releases_stage_after_success_and_failure() -> None:
 
     assert budget.active_allocations() == ()
 
-    with pytest.raises(RuntimeError, match="stage failed"):
-        with budget.stage(
-            "compile",
-            requested_sec=5,
-            minimum_sec=1,
-        ):
-            raise RuntimeError("stage failed")
+    with pytest.raises(RuntimeError, match="stage failed"), budget.stage(
+        "compile",
+        requested_sec=5,
+        minimum_sec=1,
+    ):
+        raise RuntimeError("stage failed")
 
     assert budget.active_allocations() == ()
 
@@ -390,11 +390,14 @@ def test_bounded_timeout_never_exceeds_active_allocation() -> None:
         requested_sec=30,
         minimum_sec=1,
     ) == pytest.approx(12.5)
-    assert budget.bounded_timeout(
-        allocation,
-        requested_sec=3,
-        minimum_sec=1,
-    ) == 3.0
+    assert (
+        budget.bounded_timeout(
+            allocation,
+            requested_sec=3,
+            minimum_sec=1,
+        )
+        == 3.0
+    )
 
     with pytest.raises(BudgetUnavailableError) as captured:
         budget.bounded_timeout(
@@ -481,14 +484,13 @@ def test_finalization_context_manager_releases_on_failure() -> None:
     budget = _budget(_Clock())
     budget.begin_finalization(reason="execution complete")
 
-    with pytest.raises(RuntimeError, match="publication failed"):
-        with budget.finalization_task(
-            "publisher",
-            requested_sec=5,
-            minimum_sec=1,
-        ) as allocation:
-            assert allocation.kind is BudgetKind.FINALIZATION
-            raise RuntimeError("publication failed")
+    with pytest.raises(RuntimeError, match="publication failed"), budget.finalization_task(
+        "publisher",
+        requested_sec=5,
+        minimum_sec=1,
+    ) as allocation:
+        assert allocation.kind is BudgetKind.FINALIZATION
+        raise RuntimeError("publication failed")
 
     assert budget.active_allocations() == ()
 

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
 from pathlib import Path, PurePosixPath
+import re
 from types import MappingProxyType
 from typing import Final
 
@@ -99,9 +99,7 @@ class CausalityFacts:
         if self.policy_skip and self.excluded_noise:
             raise ValueError("policy_skip and excluded_noise are mutually exclusive")
         if self.unresolved_cycle and confirmed:
-            raise ValueError(
-                "unresolved_cycle cannot be combined with confirmed root blockers"
-            )
+            raise ValueError("unresolved_cycle cannot be combined with confirmed root blockers")
 
         object.__setattr__(self, "confirmed_blockers", confirmed)
         object.__setattr__(self, "candidate_blockers", candidates)
@@ -146,19 +144,13 @@ class CausalityDecision:
         )
         evidence_paths = _freeze_paths(self.evidence_paths)
 
-        if self.is_direct is not (
-            self.diagnostic_class is DiagnosticClass.DIRECT
-        ):
-            raise ValueError(
-                "is_direct must equal diagnostic_class == DiagnosticClass.DIRECT"
-            )
+        if self.is_direct is not (self.diagnostic_class is DiagnosticClass.DIRECT):
+            raise ValueError("is_direct must equal diagnostic_class == DiagnosticClass.DIRECT")
         if self.diagnostic_class is DiagnosticClass.DOWNSTREAM:
             if not blocked_by:
                 raise ValueError("downstream decisions require blocked_by")
         elif blocked_by:
-            raise ValueError(
-                "blocked_by must be empty unless diagnostic_class is downstream"
-            )
+            raise ValueError("blocked_by must be empty unless diagnostic_class is downstream")
 
         object.__setattr__(self, "blocked_by", blocked_by)
         object.__setattr__(self, "explanation", explanation)
@@ -180,11 +172,7 @@ def classify_causality(
     if not isinstance(facts, CausalityFacts):
         raise TypeError("facts must be CausalityFacts")
 
-    blockers = tuple(
-        blocker
-        for blocker in facts.confirmed_blockers
-        if blocker != subject
-    )
+    blockers = tuple(blocker for blocker in facts.confirmed_blockers if blocker != subject)
 
     if status is ValidationStatus.OK:
         if error_kind is not ErrorKind.OK:
@@ -217,9 +205,7 @@ def classify_causality(
         return _decision(
             DiagnosticClass.SKIPPED,
             reason=CausalityReason.POLICY_SKIP,
-            explanation=(
-                "The operation was intentionally omitted by the resolved plan."
-            ),
+            explanation=("The operation was intentionally omitted by the resolved plan."),
             evidence_paths=facts.evidence_paths,
         )
 
@@ -228,18 +214,14 @@ def classify_causality(
     if error_kind is ErrorKind.OK:
         raise ValueError("FAIL or ERROR requires a non-OK error_kind")
     if facts.policy_skip or facts.excluded_noise:
-        raise ValueError(
-            "failing results cannot be classified as policy skips or noise"
-        )
+        raise ValueError("failing results cannot be classified as policy skips or noise")
 
     if blockers:
         return _decision(
             DiagnosticClass.DOWNSTREAM,
             blocked_by=blockers,
             reason=CausalityReason.CONFIRMED_BLOCKER,
-            explanation=(
-                "One or more confirmed failed subjects block the current subject."
-            ),
+            explanation=("One or more confirmed failed subjects block the current subject."),
             evidence_paths=facts.evidence_paths,
         )
 
@@ -248,8 +230,7 @@ def classify_causality(
             DiagnosticClass.AMBIGUOUS,
             reason=CausalityReason.UNRESOLVED_CYCLE,
             explanation=(
-                "A dependency cycle exists and no supported root blocker can be "
-                "resolved."
+                "A dependency cycle exists and no supported root blocker can be resolved."
             ),
             evidence_paths=facts.evidence_paths,
         )
@@ -258,10 +239,7 @@ def classify_causality(
         return _decision(
             DiagnosticClass.AMBIGUOUS,
             reason=CausalityReason.CONFLICTING_EVIDENCE,
-            explanation=(
-                "The available evidence supports multiple plausible causal "
-                "origins."
-            ),
+            explanation=("The available evidence supports multiple plausible causal origins."),
             evidence_paths=facts.evidence_paths,
         )
 
@@ -327,9 +305,7 @@ def validate_causality_decision(
             DiagnosticClass.SKIPPED,
             DiagnosticClass.NOISE,
         ):
-            raise ValueError(
-                "status SKIPPED requires diagnostic_class skipped or noise"
-            )
+            raise ValueError("status SKIPPED requires diagnostic_class skipped or noise")
         if error_kind is not ErrorKind.OK:
             raise ValueError("status SKIPPED requires error_kind OK")
         return
@@ -340,9 +316,7 @@ def validate_causality_decision(
             DiagnosticClass.DOWNSTREAM,
             DiagnosticClass.AMBIGUOUS,
         ):
-            raise ValueError(
-                "FAIL and ERROR require direct, downstream, or ambiguous causality"
-            )
+            raise ValueError("FAIL and ERROR require direct, downstream, or ambiguous causality")
         if error_kind is ErrorKind.OK:
             raise ValueError("FAIL and ERROR require a non-OK error_kind")
         return
@@ -433,14 +407,12 @@ def _ambiguous_reason(
     if facts.parser_failure:
         return (
             CausalityReason.PARSER_FAILURE,
-            "Diagnostic interpretation was not reliable enough to establish "
-            "causality.",
+            "Diagnostic interpretation was not reliable enough to establish causality.",
         )
     if facts.output_truncated:
         return (
             CausalityReason.OUTPUT_TRUNCATED,
-            "Captured evidence ended before a reliable causal conclusion could "
-            "be established.",
+            "Captured evidence ended before a reliable causal conclusion could be established.",
         )
     if facts.combined_inputs:
         return (
@@ -457,8 +429,7 @@ def _ambiguous_reason(
     if facts.successful_external_reference:
         return (
             CausalityReason.SUCCESSFUL_EXTERNAL_REFERENCE,
-            "The diagnostic references an external selected subject that did "
-            "not fail in this run.",
+            "The diagnostic references an external selected subject that did not fail in this run.",
         )
     return (
         CausalityReason.INSUFFICIENT_EVIDENCE,
@@ -525,19 +496,16 @@ _LOCAL_EXPLANATIONS: Final[Mapping[CausalityReason, str]] = MappingProxyType(
             "A structured diagnostic location identifies the current subject."
         ),
         CausalityReason.SELF_REFERENCE: (
-            "Structured diagnostic evidence explicitly references the current "
-            "subject."
+            "Structured diagnostic evidence explicitly references the current subject."
         ),
         CausalityReason.LOCAL_STAGE_FAILURE: (
-            "Stage-owned structured evidence identifies a failure local to the "
-            "current subject."
+            "Stage-owned structured evidence identifies a failure local to the current subject."
         ),
         CausalityReason.LOCAL_CONTRACT_FAILURE: (
             "The current subject violates a contract it directly owns."
         ),
         CausalityReason.LOCAL_ARTIFACT_FAILURE: (
-            "The current subject's producer operation violates its artifact "
-            "contract."
+            "The current subject's producer operation violates its artifact contract."
         ),
     }
 )

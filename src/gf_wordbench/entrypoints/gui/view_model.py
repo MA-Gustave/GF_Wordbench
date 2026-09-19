@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from enum import StrEnum, unique
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, TypeAlias
+from typing import Final, TypeAlias, TypedDict, Unpack
 
 from gf_wordbench.kernel.events import EventLevel, ProgressEvent
 from gf_wordbench.kernel.statuses import OverallStatus, ValidationMode
@@ -51,6 +51,27 @@ _MAX_ITEMS: Final[int] = 1_024
 OverrideScalar: TypeAlias = str | int | float | bool | None
 PathProbe: TypeAlias = Callable[[Path], bool]
 Clock: TypeAlias = Callable[[], datetime]
+
+
+class GuiRunRequestChanges(TypedDict, total=False):
+    selected_language_path: Path | None
+    validation_profile_path: Path | None
+    gf_executable: Path | None
+    rgl_root: Path | None
+    output_root: Path | None
+    mode: ValidationMode
+    target_file: str
+    checkpoint_id: str
+    scenario_filter: tuple[str, ...]
+    timeout_override: int | None
+    max_files: int
+    keep_ok_details: bool
+    diff_previous: bool
+    skip_version_probe: bool
+    no_compile: bool
+    emit_cpu_stats: bool
+    strict: bool
+    advanced_overrides: Mapping[str, OverrideScalar]
 
 
 @unique
@@ -153,12 +174,8 @@ class GuiRunRequest:
         environment = state.environment
         selection = state.selection
         return cls(
-            selected_language_path=_optional_path(
-                environment.last_selected_language_path
-            ),
-            validation_profile_path=_optional_path(
-                environment.last_selected_validation_profile
-            ),
+            selected_language_path=_optional_path(environment.last_selected_language_path),
+            validation_profile_path=_optional_path(environment.last_selected_validation_profile),
             gf_executable=_optional_path(environment.gf_executable),
             rgl_root=_optional_path(environment.last_rgl_root),
             output_root=_optional_path(environment.output_root),
@@ -175,12 +192,8 @@ class GuiRunRequest:
 
     def environment_state(self) -> EnvironmentState:
         return EnvironmentState(
-            last_selected_language_path=_path_text(
-                self.selected_language_path
-            ),
-            last_selected_validation_profile=_path_text(
-                self.validation_profile_path
-            ),
+            last_selected_language_path=_path_text(self.selected_language_path),
+            last_selected_validation_profile=_path_text(self.validation_profile_path),
             last_rgl_root=_path_text(self.rgl_root),
             gf_executable=_path_text(self.gf_executable),
             output_root=_path_text(self.output_root),
@@ -237,11 +250,7 @@ class ProgressView:
             _integer(self.completed, "completed", 0)
         if self.total is not None:
             _integer(self.total, "total", 0)
-        if (
-            self.completed is not None
-            and self.total is not None
-            and self.completed > self.total
-        ):
+        if self.completed is not None and self.total is not None and self.completed > self.total:
             raise ValueError("completed must not exceed total")
         _integer(self.warnings, "warnings", 0)
         _integer(self.failures, "failures", 0)
@@ -379,19 +388,19 @@ class GuiViewModel:
     """Mutable session state exposed through immutable snapshots."""
 
     __slots__ = (
-        "_base_state",
-        "_request",
-        "_language_context",
-        "_language",
-        "_run_state",
-        "_progress",
-        "_result",
-        "_artifact_actions",
         "_activity",
-        "_notices",
-        "_last_run",
-        "_clock",
         "_activity_limit",
+        "_artifact_actions",
+        "_base_state",
+        "_clock",
+        "_language",
+        "_language_context",
+        "_last_run",
+        "_notices",
+        "_progress",
+        "_request",
+        "_result",
+        "_run_state",
     )
 
     def __init__(
@@ -432,7 +441,7 @@ class GuiViewModel:
     def update_request(
         self,
         request: GuiRunRequest | None = None,
-        **changes: object,
+        **changes: Unpack[GuiRunRequestChanges],
     ) -> GuiRunRequest:
         self._require_idle("run request")
         if request is not None and changes:
@@ -502,10 +511,7 @@ class GuiViewModel:
         failures = _event_count(fields, "failure_count", current.failures)
         if event.severity is EventLevel.WARN and "warning_count" not in fields:
             warnings += 1
-        if (
-            event.severity in {EventLevel.ERROR, EventLevel.FATAL}
-            and "failure_count" not in fields
-        ):
+        if event.severity in {EventLevel.ERROR, EventLevel.FATAL} and "failure_count" not in fields:
             failures += 1
 
         self._progress = ProgressView(
@@ -564,33 +570,19 @@ class GuiViewModel:
         )
         self._run_state = RunPresentationState.COMPLETED
 
-        started_at = (
-            self._progress.started_at
-            if self._progress is not None
-            else result.started_at
-        )
+        started_at = self._progress.started_at if self._progress is not None else result.started_at
         warnings = self._progress.warnings if self._progress is not None else 0
         failures = self._progress.failures if self._progress is not None else 0
         self._progress = ProgressView(
             message=self._result.headline,
-            completed=(
-                self._progress.completed
-                if self._progress is not None
-                else None
-            ),
-            total=(
-                self._progress.total
-                if self._progress is not None
-                else None
-            ),
+            completed=(self._progress.completed if self._progress is not None else None),
+            total=(self._progress.total if self._progress is not None else None),
             warnings=warnings,
             failures=failures,
             started_at=started_at,
             updated_at=result.finished_at,
             stage=self._progress.stage if self._progress is not None else None,
-            subject=(
-                self._progress.subject if self._progress is not None else None
-            ),
+            subject=(self._progress.subject if self._progress is not None else None),
         )
         self._last_run = LastRunState(
             run_dir=str(result.run_paths.run_dir),
@@ -598,11 +590,7 @@ class GuiViewModel:
             status_message=self._result.headline,
         )
 
-        level = (
-            EventLevel.INFO
-            if result.overall_status is OverallStatus.OK
-            else EventLevel.WARN
-        )
+        level = EventLevel.INFO if result.overall_status is OverallStatus.OK else EventLevel.WARN
         if result.overall_status is OverallStatus.ERROR:
             level = EventLevel.ERROR
         self._append_activity(
@@ -679,9 +667,7 @@ class GuiViewModel:
             can_switch_language=not active,
             can_edit_environment=not active,
             can_edit_request=not active,
-            can_open_last_run=bool(
-                self._last_run.run_dir or self._last_run.summary_path
-            ),
+            can_open_last_run=bool(self._last_run.run_dir or self._last_run.summary_path),
         )
 
     def _require_idle(self, subject: str) -> None:
@@ -689,9 +675,7 @@ class GuiViewModel:
             RunPresentationState.RUNNING,
             RunPresentationState.CANCELLING,
         }:
-            raise RuntimeError(
-                f"{subject} cannot change while a run is active"
-            )
+            raise RuntimeError(f"{subject} cannot change while a run is active")
 
     def _now(self, value: datetime | None = None) -> datetime:
         return _utc(self._clock() if value is None else value)
@@ -713,7 +697,7 @@ class GuiViewModel:
                 subject,
             )
         )
-        del self._activity[:-self._activity_limit]
+        del self._activity[: -self._activity_limit]
 
 
 def language_view_from_context(
@@ -724,18 +708,9 @@ def language_view_from_context(
     if not isinstance(context, ResolvedLanguageContext):
         raise TypeError("context must be ResolvedLanguageContext")
 
-    entrypoints = tuple(
-        _entrypoint_path(item)
-        for item in context.available_entrypoints
-    )
-    capabilities = tuple(
-        _capability_text(item)
-        for item in context.capability_statuses
-    )
-    issues = tuple(
-        _diagnostic_text(item)
-        for item in context.structural_diagnostics
-    )
+    entrypoints = tuple(_entrypoint_path(item) for item in context.available_entrypoints)
+    capabilities = tuple(_capability_text(item) for item in context.capability_statuses)
+    issues = tuple(_diagnostic_text(item) for item in context.structural_diagnostics)
 
     return LanguageView(
         language_key=context.language_key,
@@ -893,10 +868,7 @@ def artifact_actions_from_result(
             reason = "" if enabled else "Artifact is not available"
         except OSError as exc:
             enabled = False
-            reason = (
-                "Artifact could not be inspected: "
-                f"{type(exc).__name__}"
-            )
+            reason = f"Artifact could not be inspected: {type(exc).__name__}"
         actions.append(
             ArtifactAction(
                 action_id,
@@ -913,11 +885,17 @@ def artifact_actions_from_result(
 def _run_language_name(result: RunResult) -> str:
     context = result.run_config.language_context
     if context is not None:
-        return context.language_key
+        language_key = context.language_key
+        if not isinstance(language_key, str):
+            raise TypeError("language_context.language_key must be a string")
+        return language_key
 
     project = result.run_config.project
     if project is not None:
-        return project.identity.name
+        project_name = project.identity.name
+        if not isinstance(project_name, str):
+            raise TypeError("project.identity.name must be a string")
+        return project_name
 
     return "Resolved language"
 
@@ -928,9 +906,7 @@ def _entrypoint_path(value: object) -> Path:
     candidate_path = getattr(value, "file_path", None)
     if isinstance(candidate_path, Path):
         return candidate_path
-    raise TypeError(
-        "available_entrypoints must contain Paths or module candidates"
-    )
+    raise TypeError("available_entrypoints must contain Paths or module candidates")
 
 
 def _capability_text(value: object) -> str:
@@ -973,9 +949,7 @@ def _overrides(
     for key, value in values.items():
         key = _text(key, "advanced override key")
         if not isinstance(value, (str, int, float, bool, type(None))):
-            raise TypeError(
-                f"advanced override {key!r} must be scalar"
-            )
+            raise TypeError(f"advanced override {key!r} must be scalar")
         result[key] = value
     return MappingProxyType(dict(sorted(result.items())))
 
@@ -1023,32 +997,22 @@ def _path(value: object, field_name: str) -> Path:
 
 
 def _utc(value: datetime) -> datetime:
-    if (
-        not isinstance(value, datetime)
-        or value.tzinfo is None
-        or value.utcoffset() is None
-    ):
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("timestamp must be a timezone-aware datetime")
     return value.astimezone(UTC)
 
 
 def _integer(value: object, field_name: str, minimum: int) -> int:
     if type(value) is not int or value < minimum:
-        raise ValueError(
-            f"{field_name} must be an integer >= {minimum}"
-        )
+        raise ValueError(f"{field_name} must be an integer >= {minimum}")
     return value
 
 
 def _text(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip() or "\x00" in value:
-        raise ValueError(
-            f"{field_name} must be a non-empty string without NUL"
-        )
+        raise ValueError(f"{field_name} must be a non-empty string without NUL")
     if len(value) > _MAX_TEXT:
-        raise ValueError(
-            f"{field_name} exceeds {_MAX_TEXT} characters"
-        )
+        raise ValueError(f"{field_name} exceeds {_MAX_TEXT} characters")
     return value
 
 
@@ -1056,7 +1020,5 @@ def _entry(value: object, field_name: str) -> str:
     if not isinstance(value, str) or "\x00" in value:
         raise ValueError(f"{field_name} must be a string without NUL")
     if value and value != value.strip():
-        raise ValueError(
-            f"{field_name} must not contain surrounding whitespace"
-        )
+        raise ValueError(f"{field_name} must not contain surrounding whitespace")
     return value

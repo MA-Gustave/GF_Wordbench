@@ -9,10 +9,25 @@
 **Registry source:** `docs/PERSISTED_SCHEMA_LOCK.md`  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Product-boundary authority:** ADR-0001, ADR-0011 and ADR-0012  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document is the central index of every persisted GF Wordbench format.
@@ -63,7 +78,7 @@ registry entry
 
 No new unversioned machine-readable schema is permitted.
 
-GF Wordbench schemas describe exactly one active project and one run at a time. They must not contain a Portfolio workspace registry, cross-workspace aggregation state, portfolio readiness, or `gf-portfolio` private configuration.
+GF Wordbench schemas describe exactly one selected language context and one run at a time. They must not contain a Portfolio workspace registry, cross-workspace aggregation state, portfolio readiness, or `gf-portfolio` private configuration.
 
 `gf-portfolio` may consume finalized public Wordbench artifacts through versioned read-only contracts. Wordbench does not require Portfolio storage, runtime, services, schemas, or availability.
 
@@ -128,12 +143,12 @@ Canonical writers must never emit them.
 
 | Schema ID | Version | Format | Canonical path or pattern | Contract class |
 |---|---:|---|---|---|
-| `gf-wordbench.project` | `1.0` | TOML | `project/project.toml` | Canonical root schema |
+| `gf-wordbench.project` | `1.0` | TOML | `<validation-profile-root>/project.toml` | Canonical root schema |
 | `gf-wordbench.app-state` | `1.0` | JSON | `.gf_wordbench_state.json` | Canonical root schema |
 | `gf-wordbench.run-summary` | `1.0` | JSON | `run_<run-id>/summary.json` | Canonical root schema |
 | `gf-wordbench.artifact-manifest` | `1.0` | JSON | `run_<run-id>/manifest.json` | Canonical root schema |
 | `gf-wordbench.scenario-output` | `1.0` | canonical text | `run_<run-id>/raw/scenarios/<scenario-id>.out` | Canonical text schema |
-| `gf-wordbench.scenario-gold` | `1.0` | canonical text | `project/validation/gold/<scenario-id>.gold` | Canonical text schema |
+| `gf-wordbench.scenario-gold` | `1.0` | canonical text | `<validation-profile-root>/validation/gold/<scenario-id>.gold` | Canonical text schema |
 
 Every canonical schema requires:
 
@@ -165,7 +180,7 @@ Every canonical schema requires:
 | total `ok` | historical summary | `files_ok` | Rename during migration | Emit `files_ok` |
 | total `fail` | historical summary | `files_fail` | Rename during migration | Emit canonical totals |
 | top-error mapping | historical summary | ordered top-error array | Normalize during migration | Emit array |
-| language fields in GUI state | legacy state | `project/project.toml` | Discard after project config is authoritative | Never write to state |
+| language fields in GUI state | legacy state | `<validation-profile-root>/project.toml` | Discard after project config is authoritative | Never write to state |
 
 Legacy aliases must not become canonical again.
 
@@ -433,7 +448,7 @@ schema_version: 1.0
 ## 7.2 Canonical path
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 ## 7.3 Format
@@ -581,7 +596,7 @@ schema_version: 1.0
 
 Stores disposable local application preferences.
 
-Deleting it must not damage the active project.
+Deleting it must not damage the selected language context.
 
 It is not the project definition.
 
@@ -687,7 +702,7 @@ selected_* run preferences → selection
 last_* pointers → last_run
 mode=file → quick
 mode=all → diagnostic
-project-owned source fields → discarded
+profile-owned source fields → discarded
 is_running → discarded
 ```
 
@@ -1404,7 +1419,7 @@ This identity is represented by the stable text header.
 ## 17.2 Canonical path
 
 ```text
-project/validation/gold/<scenario-id>.gold
+<validation-profile-root>/validation/gold/<scenario-id>.gold
 ```
 
 ## 17.3 Format
@@ -1461,7 +1476,7 @@ project review tooling
 
 `docs/usage/CLI_REFERENCE.md` owns the exact command surface for gold updates.
 
-The operation requires a scenario ID, shows or stores the diff, writes atomically and records the project-owned decision evidence.
+The operation requires a scenario ID, shows or stores the diff, writes atomically and records the profile-owned decision evidence.
 
 A standard validation command must not update gold.
 
@@ -1729,7 +1744,7 @@ Any component that parses one of these as a stable machine format must first def
 
 | Persisted asset | Writer | Readers |
 |---|---|---|
-| `project/project.toml` | initializer, migrator, project maintainer | project loader, bootstrap |
+| `<validation-profile-root>/project.toml` | initializer, migrator, project maintainer | project loader, bootstrap |
 | `.gf_wordbench_state.json` | state manager | GUI, bootstrap |
 | `summary.json` | JSON report writer | diff, GUI, automation, migration |
 | `manifest.json` | manifest writer | verifier, cleanup, export |
@@ -1971,7 +1986,7 @@ validate scenario output headers
 validate gold headers
 detect unsupported versions
 detect non-canonical separators
-detect absolute project-owned paths
+detect absolute profile-owned paths
 verify deterministic arrays
 verify required files
 detect legacy aliases in canonical output
@@ -2036,7 +2051,7 @@ legacy unversioned state
 is_running resets
 invalid timeout fallback
 runtime objects not persisted
-project-owned fields discarded
+profile-owned fields discarded
 ```
 
 ## 31.4 Summary tests
@@ -2089,7 +2104,7 @@ Persisted-schema drift exists when:
 - a writer emits a field its reader does not recognize;
 - a reader requires an undocumented field;
 - a root shape changes without a version change;
-- application state contains project-owned language configuration;
+- application state contains profile-owned language configuration;
 - two files use different names for one status;
 - `top_errors` changes between mapping and array in canonical output;
 - one writer uses absolute paths while another uses relative paths for the same role;
@@ -2174,13 +2189,13 @@ No persisted-schema change may be applied in one writer only.
 
 | File or pattern | Schema/contract |
 |---|---|
-| `project/project.toml` | `gf-wordbench.project/1.0` |
+| `<validation-profile-root>/project.toml` | `gf-wordbench.project/1.0` |
 | `.gf_wordbench_state.json` | `gf-wordbench.app-state/1.0` |
 | `.gf_audit_state.json` | legacy state |
 | `run_<id>/summary.json` | `gf-wordbench.run-summary/1.0` or legacy summary |
 | `run_<id>/manifest.json` | `gf-wordbench.artifact-manifest/1.0` |
 | `run_<id>/raw/scenarios/*.out` | `gf-wordbench.scenario-output/1.0` |
-| `project/validation/gold/*.gold` | `gf-wordbench.scenario-gold/1.0` |
+| `<validation-profile-root>/validation/gold/*.gold` | `gf-wordbench.scenario-gold/1.0` |
 | `run_<id>/summary.md` | summary soft schema |
 | `run_<id>/AI_READY.md` | AI-ready soft schema |
 | `run_<id>/top_errors.txt` | top-errors soft schema |
@@ -2241,7 +2256,7 @@ No persisted-schema change may be applied in one writer only.
 
 | Question | Source |
 |---|---|
-| What project is active? | `project/project.toml` |
+| What project is active? | `<validation-profile-root>/project.toml` |
 | What local GUI/environment preferences exist? | `.gf_wordbench_state.json` |
 | What happened in a run? | `summary.json` |
 | Which files belong to the run? | `manifest.json` |

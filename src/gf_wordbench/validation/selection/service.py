@@ -8,14 +8,15 @@ ordering behavior to path-resolved language startup without requiring a fake
 
 from __future__ import annotations
 
-import os
-import re
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
+import os
+from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
 from typing import Final, Protocol, runtime_checkable
 
 from gf_wordbench.config.models import RunConfig
+from gf_wordbench.projects.models import ProjectConfig
 from gf_wordbench.kernel.errors import (
     ConfigurationError,
     EvidenceIOError,
@@ -41,9 +42,7 @@ _OUTSIDE_PROJECT_ROOT: Final[str] = "outside_project_root"
 _OUTSIDE_SOURCE_ROOT: Final[str] = "outside_source_root"
 _UNREADABLE_FILE: Final[str] = "unreadable_file"
 _EXCLUDED_BY_REGEX: Final[str] = "excluded_by_regex"
-_NOT_MATCHED_BY_INCLUDE_REGEX: Final[str] = (
-    "not_matched_by_include_regex"
-)
+_NOT_MATCHED_BY_INCLUDE_REGEX: Final[str] = "not_matched_by_include_regex"
 _EXCLUDED_BY_LIMIT: Final[str] = "excluded_by_limit"
 _DUPLICATE_CANDIDATE: Final[str] = "duplicate_candidate"
 
@@ -64,27 +63,21 @@ class SelectionFilesystem(Protocol):
         path: Path,
         *,
         strict: bool,
-    ) -> Path:
-        ...
+    ) -> Path: ...
 
-    def exists(self, path: Path) -> bool:
-        ...
+    def exists(self, path: Path) -> bool: ...
 
-    def is_file(self, path: Path) -> bool:
-        ...
+    def is_file(self, path: Path) -> bool: ...
 
-    def is_directory(self, path: Path) -> bool:
-        ...
+    def is_directory(self, path: Path) -> bool: ...
 
-    def is_readable(self, path: Path) -> bool:
-        ...
+    def is_readable(self, path: Path) -> bool: ...
 
     def rglob(
         self,
         root: Path,
         pattern: str,
-    ) -> Iterable[Path]:
-        ...
+    ) -> Iterable[Path]: ...
 
 
 class _LocalSelectionFilesystem:
@@ -118,9 +111,7 @@ class _LocalSelectionFilesystem:
         return root.rglob(pattern)
 
 
-_LOCAL_FILESYSTEM: Final[SelectionFilesystem] = (
-    _LocalSelectionFilesystem()
-)
+_LOCAL_FILESYSTEM: Final[SelectionFilesystem] = _LocalSelectionFilesystem()
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,9 +145,7 @@ class SelectionService:
             self.filesystem,
             SelectionFilesystem,
         ):
-            raise TypeError(
-                "filesystem must satisfy SelectionFilesystem"
-            )
+            raise TypeError("filesystem must satisfy SelectionFilesystem")
 
     def select(
         self,
@@ -286,27 +275,19 @@ class SelectionService:
         self,
         run_config: RunConfig,
     ) -> _SelectionRoots:
-        project = run_config.project
+        project = _required_project(run_config)
 
         project_root = self._resolve_required_directory(
             project.project_root,
             subject="project.project_root",
-            missing_message=(
-                "The active project root does not exist."
-            ),
+            missing_message=("The active project root does not exist."),
         )
 
-        expected_source_root = (
-            project_root.joinpath(
-                *project.sources.directory.parts
-            )
-        )
+        expected_source_root = project_root.joinpath(*project.sources.directory.parts)
         source_root = self._resolve_required_directory(
             expected_source_root,
             subject="project.source_root",
-            missing_message=(
-                "The configured project source root does not exist."
-            ),
+            missing_message=("The configured project source root does not exist."),
         )
 
         if not _contains(
@@ -317,10 +298,7 @@ class SelectionService:
             raise PathSecurityError(
                 "The configured source root escapes the active project.",
                 code="GF-WB-PATH-220",
-                detail=(
-                    f"project_root={project_root!s}\n"
-                    f"source_root={source_root!s}"
-                ),
+                detail=(f"project_root={project_root!s}\nsource_root={source_root!s}"),
                 stage="selection",
                 operation="resolve_source_root",
                 subject=str(source_root),
@@ -331,35 +309,30 @@ class SelectionService:
             strict=False,
             operation="resolve_declared_source_root",
         )
-        if _identity_key(
-            declared_source_root
-        ) != _identity_key(source_root):
+        if _identity_key(declared_source_root) != _identity_key(source_root):
             raise _configuration_error(
-                "The resolved source root does not match the "
-                "loaded project configuration.",
-                detail=(
-                    f"declared={declared_source_root!s}\n"
-                    f"expected={source_root!s}"
-                ),
+                "The resolved source root does not match the loaded project configuration.",
+                detail=(f"declared={declared_source_root!s}\nexpected={source_root!s}"),
                 subject="project.source_root",
                 code="GF-WB-CONFIG-221",
             )
 
+        environment_project_root_value = run_config.environment.project_root
+        if environment_project_root_value is None:
+            raise _configuration_error(
+                "The environment project root is required for profile-based selection.",
+                subject="environment.project_root",
+                code="GF-WB-CONFIG-222",
+            )
         environment_project_root = self._resolve_path(
-            run_config.environment.project_root,
+            environment_project_root_value,
             strict=False,
             operation="resolve_environment_project_root",
         )
-        if _identity_key(
-            environment_project_root
-        ) != _identity_key(project_root):
+        if _identity_key(environment_project_root) != _identity_key(project_root):
             raise _configuration_error(
-                "The environment project root does not match the "
-                "active project root.",
-                detail=(
-                    f"environment={environment_project_root!s}\n"
-                    f"project={project_root!s}"
-                ),
+                "The environment project root does not match the active project root.",
+                detail=(f"environment={environment_project_root!s}\nproject={project_root!s}"),
                 subject="environment.project_root",
                 code="GF-WB-CONFIG-222",
             )
@@ -492,7 +465,7 @@ class SelectionService:
             roots=roots,
             filters=filters,
             glob_pattern=_validate_glob(
-                run_config.project.sources.glob,
+                _required_project(run_config).sources.glob,
                 field="sources.glob",
             ),
             max_files=run_config.max_files,
@@ -546,10 +519,7 @@ class SelectionService:
                 excluded.append(
                     ExcludedFileEntry(
                         file_path=evaluation.path,
-                        excluded_reason=(
-                            evaluation.exclusion_reason
-                            or _NOT_A_FILE
-                        ),
+                        excluded_reason=(evaluation.exclusion_reason or _NOT_A_FILE),
                     )
                 )
 
@@ -649,12 +619,8 @@ class SelectionService:
 
         direct_candidates = _ordered_unique_lexical_paths(
             (
-                roots.project_root.joinpath(
-                    *target_path.parts
-                ),
-                roots.source_root.joinpath(
-                    *target_path.parts
-                ),
+                roots.project_root.joinpath(*target_path.parts),
+                roots.source_root.joinpath(*target_path.parts),
             )
         )
 
@@ -736,16 +702,12 @@ class SelectionService:
         role: str,
     ) -> Path:
         if not isinstance(target, Path):
-            raise TypeError(
-                f"{role} must be a pathlib.Path"
-            )
+            raise TypeError(f"{role} must be a pathlib.Path")
 
         if _is_absolute_text(str(target)):
             candidate = target
         else:
-            candidate = roots.source_root.joinpath(
-                *target.parts
-            )
+            candidate = roots.source_root.joinpath(*target.parts)
 
         return self._resolve_path(
             candidate,
@@ -813,9 +775,7 @@ class SelectionService:
             )
 
         file_name = resolved.name
-        relative_path = resolved.relative_to(
-            roots.project_root
-        ).as_posix()
+        relative_path = resolved.relative_to(roots.project_root).as_posix()
 
         if _regex_matches(
             filters.exclude,
@@ -827,19 +787,14 @@ class SelectionService:
                 exclusion_reason=_EXCLUDED_BY_REGEX,
             )
 
-        if (
-            filters.include is not None
-            and not _regex_matches(
-                filters.include,
-                file_name=file_name,
-                relative_path=relative_path,
-            )
+        if filters.include is not None and not _regex_matches(
+            filters.include,
+            file_name=file_name,
+            relative_path=relative_path,
         ):
             return _CandidateEvaluation(
                 path=resolved,
-                exclusion_reason=(
-                    _NOT_MATCHED_BY_INCLUDE_REGEX
-                ),
+                exclusion_reason=(_NOT_MATCHED_BY_INCLUDE_REGEX),
             )
 
         return _CandidateEvaluation(
@@ -856,10 +811,7 @@ class SelectionService:
         if evaluation.selected:
             return
 
-        reason = (
-            evaluation.exclusion_reason
-            or _NOT_A_FILE
-        )
+        reason = evaluation.exclusion_reason or _NOT_A_FILE
         if reason in {
             _OUTSIDE_PROJECT_ROOT,
             _OUTSIDE_SOURCE_ROOT,
@@ -867,10 +819,7 @@ class SelectionService:
             raise PathSecurityError(
                 f"The required {role} is outside its allowed root.",
                 code="GF-WB-PATH-221",
-                detail=(
-                    f"path={evaluation.path!s}\n"
-                    f"reason={reason}"
-                ),
+                detail=(f"path={evaluation.path!s}\nreason={reason}"),
                 stage="selection",
                 operation="select_required_target",
                 subject=str(evaluation.path),
@@ -878,10 +827,7 @@ class SelectionService:
 
         raise _configuration_error(
             f"The required {role} cannot be selected.",
-            detail=(
-                f"path={evaluation.path!s}\n"
-                f"reason={reason}"
-            ),
+            detail=(f"path={evaluation.path!s}\nreason={reason}"),
             subject=str(evaluation.path),
             code="GF-WB-CONFIG-233",
         )
@@ -942,11 +888,7 @@ class SelectionService:
             raise EvidenceIOError(
                 "Source candidate enumeration failed.",
                 code="GF-WB-IO-222",
-                detail=(
-                    f"source_root={source_root!s}\n"
-                    f"glob={glob_pattern!r}\n"
-                    f"error={exc}"
-                ),
+                detail=(f"source_root={source_root!s}\nglob={glob_pattern!r}\nerror={exc}"),
                 stage="selection",
                 operation="enumerate_candidate_files",
                 subject=str(source_root),
@@ -963,9 +905,7 @@ class SelectionService:
         if not isinstance(path, Path):
             raise TypeError("selection paths must be pathlib.Path values")
         if "\x00" in str(path):
-            raise ValueError(
-                "selection paths must not contain NUL"
-            )
+            raise ValueError("selection paths must not contain NUL")
 
         try:
             return self.filesystem.resolve(
@@ -980,10 +920,7 @@ class SelectionService:
             raise EvidenceIOError(
                 "A selection path could not be resolved.",
                 code="GF-WB-IO-223",
-                detail=(
-                    f"path={path!s}\n"
-                    f"error={exc}"
-                ),
+                detail=(f"path={path!s}\nerror={exc}"),
                 stage="selection",
                 operation=operation,
                 subject=str(path),
@@ -1054,9 +991,7 @@ def select_files(
 ) -> tuple[list[Path], list[ExcludedFileEntry]]:
     """Select files for one fully resolved validation run."""
 
-    service = SelectionService(
-        filesystem=filesystem or _LOCAL_FILESYSTEM
-    )
+    service = SelectionService(filesystem=filesystem or _LOCAL_FILESYSTEM)
     return service.select(run_config)
 
 
@@ -1072,9 +1007,7 @@ def select_source_tree(
 ) -> tuple[list[Path], list[ExcludedFileEntry]]:
     """Select one source inventory for path-resolved language probing."""
 
-    service = SelectionService(
-        filesystem=filesystem or _LOCAL_FILESYSTEM
-    )
+    service = SelectionService(filesystem=filesystem or _LOCAL_FILESYSTEM)
     return service.select_source_tree(
         source_root,
         containment_root=containment_root,
@@ -1097,10 +1030,21 @@ def extract_module_name(
     return _extract_module_name(file_path)
 
 
+def _required_project(run_config: RunConfig) -> ProjectConfig:
+    project = run_config.project
+    if project is None:
+        raise _configuration_error(
+            "Source selection requires an explicit validation profile.",
+            subject="validation_profile",
+            code="GF-WB-CONFIG-219",
+        )
+    return project
+
+
 def _compile_filters(
     run_config: RunConfig,
 ) -> _CompiledFilters:
-    sources = run_config.project.sources
+    sources = _required_project(run_config).sources
     return _compile_filter_values(
         include_regex=sources.include_regex,
         exclude_regex=sources.exclude_regex,
@@ -1149,11 +1093,7 @@ def _compile_optional_regex(
     except re.error as exc:
         raise _configuration_error(
             "A source-selection regex is invalid.",
-            detail=(
-                f"field={field}\n"
-                f"pattern={value!r}\n"
-                f"error={exc}"
-            ),
+            detail=(f"field={field}\npattern={value!r}\nerror={exc}"),
             subject=field,
             code="GF-WB-CONFIG-237",
         ) from exc
@@ -1167,10 +1107,7 @@ def _regex_matches(
 ) -> bool:
     if pattern is None:
         return False
-    return (
-        pattern.search(file_name) is not None
-        or pattern.search(relative_path) is not None
-    )
+    return pattern.search(file_name) is not None or pattern.search(relative_path) is not None
 
 
 def _validate_glob(
@@ -1243,10 +1180,7 @@ def _portable_relative_path(
         raise PathSecurityError(
             "A selected path is outside the active project root.",
             code="GF-WB-PATH-222",
-            detail=(
-                f"path={path!s}\n"
-                f"project_root={project_root!s}"
-            ),
+            detail=(f"path={path!s}\nproject_root={project_root!s}"),
             stage="selection",
             operation="build_relative_identity",
             subject=str(path),
@@ -1271,20 +1205,13 @@ def _contains(
     allow_equal: bool,
 ) -> bool:
     try:
-        common = Path(
-            os.path.commonpath(
-                (str(root), str(candidate))
-            )
-        )
+        common = Path(os.path.commonpath((str(root), str(candidate))))
     except ValueError:
         return False
 
     if _identity_key(common) != _identity_key(root):
         return False
-    if not allow_equal and (
-        _identity_key(candidate)
-        == _identity_key(root)
-    ):
+    if not allow_equal and (_identity_key(candidate) == _identity_key(root)):
         return False
     return True
 
@@ -1296,11 +1223,7 @@ def _ordered_unique_lexical_paths(
     result: list[Path] = []
 
     for value in values:
-        key = os.path.normcase(
-            os.path.normpath(
-                os.path.abspath(str(value))
-            )
-        )
+        key = os.path.normcase(os.path.normpath(os.path.abspath(str(value))))
         if key in seen:
             continue
         seen.add(key)
@@ -1312,18 +1235,14 @@ def _ordered_unique_lexical_paths(
 def _identity_key(
     path: Path,
 ) -> str:
-    return os.path.normcase(
-        os.path.normpath(str(path))
-    )
+    return os.path.normcase(os.path.normpath(str(path)))
 
 
 def _normalize_target_text(
     value: object,
 ) -> str:
     if not isinstance(value, str):
-        raise TypeError(
-            "target.value must be a string"
-        )
+        raise TypeError("target.value must be a string")
     if "\x00" in value:
         raise _configuration_error(
             "The target path contains NUL.",
@@ -1356,11 +1275,7 @@ def _is_basename_only(
 ) -> bool:
     posix = PurePosixPath(value)
     windows = PureWindowsPath(value)
-    return (
-        posix.name == value
-        and windows.name == value
-        and value not in {".", ".."}
-    )
+    return posix.name == value and windows.name == value and value not in {".", ".."}
 
 
 def _portable_name(
@@ -1394,15 +1309,9 @@ def _require_run_config(
     value: object,
 ) -> RunConfig:
     if not isinstance(value, RunConfig):
-        raise TypeError(
-            "run_config must be a RunConfig"
-        )
+        raise TypeError("run_config must be a RunConfig")
     if not isinstance(value.mode, ValidationMode):
-        raise TypeError(
-            "run_config.mode must be a ValidationMode"
-        )
+        raise TypeError("run_config.mode must be a ValidationMode")
     if type(value.max_files) is not int:
-        raise TypeError(
-            "run_config.max_files must be an integer"
-        )
+        raise TypeError("run_config.max_files must be an integer")
     return value

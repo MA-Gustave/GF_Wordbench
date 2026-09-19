@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import os
-import re
-import stat
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum, unique
+import os
 from pathlib import Path, PurePosixPath
+import re
+import stat
 from typing import Final, TypeAlias
 
 from gf_wordbench.kernel.ids import (
@@ -19,12 +19,13 @@ from gf_wordbench.kernel.ids import (
     validate_run_id,
 )
 from gf_wordbench.kernel.statuses import OverallStatus, ValidationMode
+
 SUMMARY_FILENAME: Final = "summary.json"
 MANIFEST_FILENAME: Final = "manifest.json"
-_RUN_DIR_RE: Final = re.compile(
-    r"^run_(?P<id>[0-9]{8}_[0-9]{6}(?:_(?:0[2-9]|[1-9][0-9]+))?)$"
-)
+_RUN_DIR_RE: Final = re.compile(r"^run_(?P<id>[0-9]{8}_[0-9]{6}(?:_(?:0[2-9]|[1-9][0-9]+))?)$")
 _RUN_LIKE_RE: Final = re.compile(r"^run_.+$", re.IGNORECASE)
+
+
 @unique
 class RunHistoryState(StrEnum):
     FINALIZED = "finalized"
@@ -32,6 +33,8 @@ class RunHistoryState(StrEnum):
     CORRUPT = "corrupt"
     LEGACY = "legacy"
     UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True, slots=True)
 class RunHistoryRecord:
     run_id: RunId
@@ -46,17 +49,16 @@ class RunHistoryRecord:
     manifest_relative_path: PurePosixPath | str | None = MANIFEST_FILENAME
     complete: bool = True
     legacy: bool = False
+
     def __post_init__(self) -> None:
         object.__setattr__(self, "run_id", validate_run_id(self.run_id))
         object.__setattr__(self, "project_id", validate_project_id(self.project_id))
-        if not isinstance(self.mode, ValidationMode):
-            object.__setattr__(self, "mode", ValidationMode(self.mode))
-        if not isinstance(self.overall_status, OverallStatus):
-            object.__setattr__(
-                self,
-                "overall_status",
-                OverallStatus(self.overall_status),
-            )
+        object.__setattr__(self, "mode", _validation_mode(self.mode))
+        object.__setattr__(
+            self,
+            "overall_status",
+            _overall_status(self.overall_status),
+        )
         started = _utc(self.started_at, "started_at")
         finished = _utc(self.finished_at, "finished_at")
         if finished < started:
@@ -78,8 +80,10 @@ class RunHistoryRecord:
         if type(self.complete) is not bool or type(self.legacy) is not bool:
             raise TypeError("complete and legacy must be bools")
 
+
 SummaryReader: TypeAlias = Callable[[Path], RunHistoryRecord]
 ManifestVerifier: TypeAlias = Callable[[Path, Path, RunId], bool]
+
 
 @dataclass(frozen=True, slots=True)
 class RunHistoryEntry:
@@ -116,6 +120,7 @@ class RunHistoryEntry:
     @property
     def is_finalized(self) -> bool:
         return self.state is RunHistoryState.FINALIZED
+
 
 @dataclass(frozen=True, slots=True)
 class RunHistoryQuery:
@@ -185,6 +190,7 @@ class RunHistoryQuery:
         ):
             raise ValueError("max_entries must be a positive integer or None")
 
+
 @dataclass(frozen=True, slots=True)
 class RunHistoryResult:
     entries: tuple[RunHistoryEntry, ...]
@@ -198,6 +204,7 @@ class RunHistoryResult:
     def previous_run(self) -> RunHistoryEntry | None:
         eligible = self.eligible_entries
         return eligible[0] if eligible else None
+
 
 def discover_run_history(
     query: RunHistoryQuery,
@@ -242,6 +249,7 @@ def discover_run_history(
         entries = entries[: query.max_entries]
     return RunHistoryResult(tuple(entries), tuple(ignored))
 
+
 def select_previous_run(
     query: RunHistoryQuery,
     *,
@@ -253,6 +261,7 @@ def select_previous_run(
         summary_reader=summary_reader,
         manifest_verifier=manifest_verifier,
     ).previous_run
+
 
 def inspect_run_directory(
     run_dir: Path,
@@ -269,11 +278,7 @@ def inspect_run_directory(
 
     directory_id = _directory_run_id(path)
     legacy_name = directory_id is None
-    issues = (
-        (f"{path}: non-canonical run directory name",)
-        if legacy_name
-        else ()
-    )
+    issues = (f"{path}: non-canonical run directory name",) if legacy_name else ()
     summary_path = path / SUMMARY_FILENAME
     if _link(summary_path) or not summary_path.is_file():
         return RunHistoryEntry(
@@ -290,11 +295,7 @@ def inspect_run_directory(
             raise TypeError("summary_reader returned an invalid record")
     except (OSError, UnicodeError, TypeError, ValueError) as exc:
         manifest = path / MANIFEST_FILENAME
-        state = (
-            RunHistoryState.CORRUPT
-            if manifest.exists()
-            else RunHistoryState.INCOMPLETE
-        )
+        state = RunHistoryState.CORRUPT if manifest.exists() else RunHistoryState.INCOMPLETE
         return RunHistoryEntry(
             run_dir=path,
             state=state,
@@ -379,6 +380,7 @@ def inspect_run_directory(
         manifest_verified=True,
     )
 
+
 def is_previous_run_eligible(
     entry: RunHistoryEntry,
     query: RunHistoryQuery,
@@ -388,6 +390,7 @@ def is_previous_run_eligible(
     if not isinstance(query, RunHistoryQuery):
         raise TypeError("query must be a RunHistoryQuery")
     return _with_eligibility(entry, query).previous_run_eligible
+
 
 def _with_eligibility(
     entry: RunHistoryEntry,
@@ -432,6 +435,7 @@ def _with_eligibility(
         issues=tuple(dict.fromkeys(issues)),
     )
 
+
 def _manifest_path(
     run_dir: Path,
     record: RunHistoryRecord,
@@ -439,8 +443,26 @@ def _manifest_path(
     relative = record.manifest_relative_path
     if relative is None:
         return None
-    candidate = run_dir.joinpath(*relative.parts)
+    normalized = _run_relative_path(relative)
+    candidate = run_dir.joinpath(*normalized.parts)
     return candidate if _within(candidate, run_dir) else None
+
+
+def _validation_mode(value: object) -> ValidationMode:
+    if isinstance(value, ValidationMode):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("mode must be ValidationMode or str")
+    return ValidationMode(value)
+
+
+def _overall_status(value: object) -> OverallStatus:
+    if isinstance(value, OverallStatus):
+        return value
+    if not isinstance(value, str):
+        raise TypeError("overall_status must be OverallStatus or str")
+    return OverallStatus(value)
+
 
 def _directory_run_id(path: Path) -> RunId | None:
     match = _RUN_DIR_RE.fullmatch(path.name)
@@ -451,6 +473,7 @@ def _directory_run_id(path: Path) -> RunId | None:
     except (TypeError, ValueError):
         return None
 
+
 def _sort_key(entry: RunHistoryEntry) -> tuple[datetime, datetime, int, str]:
     minimum = datetime.min.replace(tzinfo=UTC)
     run_time, collision = _run_order(entry.run_id)
@@ -460,6 +483,7 @@ def _sort_key(entry: RunHistoryEntry) -> tuple[datetime, datetime, int, str]:
         collision,
         entry.run_dir.name.casefold(),
     )
+
 
 def _run_order(run_id: RunId | None) -> tuple[datetime, int]:
     minimum = datetime.min.replace(tzinfo=UTC)
@@ -475,6 +499,7 @@ def _run_order(run_id: RunId | None) -> tuple[datetime, int]:
     except (ValueError, IndexError):
         return minimum, 0
 
+
 def _include(entry: RunHistoryEntry, query: RunHistoryQuery) -> bool:
     if entry.state in {RunHistoryState.FINALIZED, RunHistoryState.LEGACY}:
         return True
@@ -484,13 +509,12 @@ def _include(entry: RunHistoryEntry, query: RunHistoryQuery) -> bool:
         return query.include_corrupt
     return query.include_unknown
 
+
 def _is_current(entry: RunHistoryEntry, query: RunHistoryQuery) -> bool:
     if query.current_run_id is not None and entry.run_id == query.current_run_id:
         return True
-    return (
-        query.current_run_dir is not None
-        and _same(entry.run_dir, query.current_run_dir)
-    )
+    return query.current_run_dir is not None and _same(entry.run_dir, query.current_run_dir)
+
 
 def _entry(
     run_dir: Path,
@@ -503,6 +527,7 @@ def _entry(
         run_id=_directory_run_id(run_dir),
         issues=(f"{run_dir}: {issue}",),
     )
+
 
 def _project_relative_path(value: str) -> str:
     if not isinstance(value, str) or not value or "\x00" in value:
@@ -517,6 +542,7 @@ def _project_relative_path(value: str) -> str:
         raise ValueError("path must be project-relative")
     return path.as_posix()
 
+
 def _run_relative_path(value: PurePosixPath | str) -> PurePosixPath:
     text = value.as_posix() if isinstance(value, PurePosixPath) else value
     if not isinstance(text, str) or not text or "\x00" in text or "\\" in text:
@@ -530,6 +556,7 @@ def _run_relative_path(value: PurePosixPath | str) -> PurePosixPath:
         raise ValueError("manifest path must be run-relative")
     return path
 
+
 def _absolute_path(path: Path, field: str) -> Path:
     if not isinstance(path, Path):
         raise TypeError(f"{field} must be pathlib.Path")
@@ -537,11 +564,13 @@ def _absolute_path(path: Path, field: str) -> Path:
         raise ValueError(f"{field} must be absolute")
     return path
 
+
 def _absolute_directory(path: Path, field: str) -> Path:
     checked = _absolute_path(path, field)
     if _link(checked) or not checked.is_dir():
         raise NotADirectoryError(f"{field} is not a safe directory")
     return checked.resolve(strict=True)
+
 
 def _utc(value: datetime, field: str) -> datetime:
     if not isinstance(value, datetime):
@@ -550,11 +579,13 @@ def _utc(value: datetime, field: str) -> datetime:
         raise ValueError(f"{field} must be timezone-aware")
     return value.astimezone(UTC)
 
+
 def _immediate_child(path: Path, root: Path) -> bool:
     try:
         return path.resolve(strict=True).parent == root.resolve(strict=True)
     except OSError:
         return False
+
 
 def _within(path: Path, root: Path) -> bool:
     try:
@@ -563,10 +594,12 @@ def _within(path: Path, root: Path) -> bool:
     except (OSError, ValueError):
         return False
 
+
 def _same(left: Path, right: Path) -> bool:
     return os.path.normcase(str(left.resolve(strict=False))) == os.path.normcase(
         str(right.resolve(strict=False))
     )
+
 
 def _link(path: Path) -> bool:
     try:
@@ -578,15 +611,16 @@ def _link(path: Path) -> bool:
     flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     return bool(flag and getattr(metadata, "st_file_attributes", 0) & flag)
 
+
 __all__ = (
     "MANIFEST_FILENAME",
+    "SUMMARY_FILENAME",
     "ManifestVerifier",
     "RunHistoryEntry",
     "RunHistoryQuery",
     "RunHistoryRecord",
     "RunHistoryResult",
     "RunHistoryState",
-    "SUMMARY_FILENAME",
     "SummaryReader",
     "discover_run_history",
     "inspect_run_directory",

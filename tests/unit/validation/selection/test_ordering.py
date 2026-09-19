@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import cast
 
 import pytest
 
@@ -185,10 +187,7 @@ def test_deduplicate_preserving_order_keeps_first_resolved_identity(
 def test_deduplicate_preserving_order_accepts_one_shot_iterables(
     tmp_path: Path,
 ) -> None:
-    candidates = (
-        _candidate(str(index), tmp_path / f"{index}.gf")
-        for index in range(3)
-    )
+    candidates = (_candidate(str(index), tmp_path / f"{index}.gf") for index in range(3))
 
     result = deduplicate_preserving_order(candidates, path_getter=_path)
 
@@ -223,7 +222,7 @@ def test_deduplicate_preserving_order_requires_path_results(
     ):
         deduplicate_preserving_order(
             (candidate,),
-            path_getter=lambda item: str(item.path),  # type: ignore[return-value]
+            path_getter=cast("Callable[[_Candidate], Path]", lambda item: str(item.path)),
         )
 
 
@@ -354,7 +353,7 @@ def test_diagnostic_limit_result_normalizes_sequences_to_tuples(
     selected = _candidate("selected", tmp_path / "Selected.gf")
     overflow = _candidate("overflow", tmp_path / "Overflow.gf")
 
-    result = DiagnosticLimitResult(
+    result: DiagnosticLimitResult[_Candidate] = DiagnosticLimitResult(
         selected=[selected],  # type: ignore[arg-type]
         overflow=[overflow],  # type: ignore[arg-type]
     )
@@ -379,10 +378,7 @@ def test_diagnostic_limit_result_rejects_same_object_in_both_groups(
 
 
 def test_apply_diagnostic_limit_zero_means_unlimited(tmp_path: Path) -> None:
-    candidates = tuple(
-        _candidate(str(index), tmp_path / f"{index}.gf")
-        for index in range(3)
-    )
+    candidates = tuple(_candidate(str(index), tmp_path / f"{index}.gf") for index in range(3))
 
     result = apply_diagnostic_limit(candidates, max_files=0)
 
@@ -393,10 +389,7 @@ def test_apply_diagnostic_limit_zero_means_unlimited(tmp_path: Path) -> None:
 def test_apply_diagnostic_limit_splits_after_the_selected_prefix(
     tmp_path: Path,
 ) -> None:
-    candidates = tuple(
-        _candidate(str(index), tmp_path / f"{index}.gf")
-        for index in range(4)
-    )
+    candidates = tuple(_candidate(str(index), tmp_path / f"{index}.gf") for index in range(4))
 
     result = apply_diagnostic_limit(candidates, max_files=2)
 

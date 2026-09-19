@@ -1,0 +1,2171 @@
+.FF.F.......F...FFFFF................................................... [  4%]
+........................................................................ [  8%]
+........................................................................ [ 12%]
+........................................................................ [ 16%]
+........................................................................ [ 20%]
+........................................................................ [ 24%]
+.FFF..F.....F.....................................F................F.... [ 28%]
+........................................................................ [ 32%]
+........................................................................ [ 36%]
+........................................................................ [ 40%]
+......................................F.....FF.......................... [ 44%]
+........................F..................................F............ [ 48%]
+..F.............F..................F.................................... [ 52%]
+........................................................................ [ 56%]
+........................................................................ [ 60%]
+........................................................................ [ 64%]
+........................................................................ [ 68%]
+........................................................................ [ 72%]
+...FF.......F........................................................... [ 76%]
+........................................................................ [ 80%]
+........................................................................ [ 84%]
+........................................................................ [ 88%]
+.............................F.......F..FFF............................. [ 92%]
+........................................................................ [ 96%]
+..............................................................           [100%]
+=================================== FAILURES ===================================
+____________________ test_canonical_policy_tiers_are_exact _____________________
+
+    def test_canonical_policy_tiers_are_exact() -> None:
+        explicit = (
+            ConfigurationSource.CLI,
+            ConfigurationSource.GUI,
+            ConfigurationSource.AUTOMATION,
+        )
+        startup = (
+            ConfigurationSource.STARTUP_OPTION,
+            *explicit,
+        )
+    
+        expected = {
+            ConfigurationDomain.PROJECT_ROOT: (
+                startup,
+                (ConfigurationSource.ENVIRONMENT_VARIABLE,),
+                (ConfigurationSource.APPLICATION_STATE,),
+                (ConfigurationSource.FRAMEWORK_DEFAULT,),
+            ),
+            ConfigurationDomain.GF_EXECUTABLE: (
+                explicit,
+                (ConfigurationSource.ENVIRONMENT_VARIABLE,),
+                (ConfigurationSource.APPLICATION_STATE,),
+                (ConfigurationSource.PATH_DISCOVERY,),
+            ),
+            ConfigurationDomain.RGL_ROOT: (
+                explicit,
+                (ConfigurationSource.ENVIRONMENT_VARIABLE,),
+                (ConfigurationSource.APPLICATION_STATE,),
+                (ConfigurationSource.PATH_DISCOVERY,),
+            ),
+            ConfigurationDomain.OUTPUT_ROOT: (
+                explicit,
+                (ConfigurationSource.ENVIRONMENT_VARIABLE,),
+                (ConfigurationSource.APPLICATION_STATE,),
+                (ConfigurationSource.FRAMEWORK_DEFAULT,),
+            ),
+            ConfigurationDomain.STATE_PATH: (
+                startup,
+                (ConfigurationSource.ENVIRONMENT_VARIABLE,),
+                (ConfigurationSource.FRAMEWORK_DEFAULT,),
+            ),
+            ConfigurationDomain.PROJECT_FIELD: (
+                (ConfigurationSource.PROJECT_TOML,),
+                (ConfigurationSource.FRAMEWORK_DEFAULT,),
+            ),
+            ConfigurationDomain.MODE: (
+                explicit,
+                (ConfigurationSource.PROJECT_TOML,),
+                (ConfigurationSource.FRAMEWORK_DEFAULT,),
+            ),
+            ConfigurationDomain.TARGET: (
+                explicit,
+                (ConfigurationSource.PROJECT_TOML,),
+                (ConfigurationSource.RUNTIME_DERIVED,),
+            ),
+            ConfigurationDomain.TIMEOUT: (
+                explicit,
+                (ConfigurationSource.PROJECT_TOML,),
+                (ConfigurationSource.FRAMEWORK_DEFAULT,),
+            ),
+            ConfigurationDomain.RUN_OPTION: (
+                explicit,
+                (ConfigurationSource.APPLICATION_STATE,),
+                (ConfigurationSource.FRAMEWORK_DEFAULT,),
+            ),
+        }
+    
+        for domain, tiers in expected.items():
+            policy = policy_for(domain)
+            assert policy.domain is domain
+>           assert policy.tiers == tiers
+E           AssertionError: assert ((<Configurat...igration'>,),) == ((<Configurat...k_default'>,))
+E             
+E             At index 0 diff: (<ConfigurationSource.LEGACY_MIGRATION: 'legacy_migration'>,) != (<ConfigurationSource.STARTUP_OPTION: 'startup_option'>, <ConfigurationSource.CLI: 'cli'>, <ConfigurationSource.GUI: 'gui'>, <ConfigurationSource.AUTOMATION: 'automation'>)
+E             Right contains 3 more items, first extra item: (<ConfigurationSource.ENVIRONMENT_VARIABLE: 'environment_variable'>,)
+E             
+E             Full diff:
+E               (
+E                   (
+E             -         <ConfigurationSource.STARTUP_OPTION: 'startup_option'>,
+E             -         <ConfigurationSource.CLI: 'cli'>,
+E             -         <ConfigurationSource.GUI: 'gui'>,
+E             -         <ConfigurationSource.AUTOMATION: 'automation'>,
+E             ?                               ^^^          ^^^
+E             +         <ConfigurationSource.LEGACY_MIGRATION: 'legacy_migration'>,
+E             ?                              +++ ^^^ +++        +++ ^^^ +++
+E             -     ),
+E             -     (
+E             -         <ConfigurationSource.ENVIRONMENT_VARIABLE: 'environment_variable'>,
+E             -     ),
+E             -     (
+E             -         <ConfigurationSource.APPLICATION_STATE: 'application_state'>,
+E             -     ),
+E             -     (
+E             -         <ConfigurationSource.FRAMEWORK_DEFAULT: 'framework_default'>,
+E                   ),
+E               )
+
+tests/unit/config/test_precedence.py:221: AssertionError
+________________ test_policy_rank_equivalence_and_authorization ________________
+
+    def test_policy_rank_equivalence_and_authorization() -> None:
+        policy = policy_for(ConfigurationDomain.MODE)
+    
+        assert policy.rank(ConfigurationSource.CLI) == 0
+>       assert policy.rank(ConfigurationSource.PROJECT_TOML) == 1
+E       AssertionError: assert 2 == 1
+E        +  where 2 = rank(<ConfigurationSource.PROJECT_TOML: 'project_toml'>)
+E        +    where rank = PrecedencePolicy(domain=<ConfigurationDomain.MODE: 'mode'>, tiers=((<ConfigurationSource.CLI: 'cli'>, <ConfigurationSo...<ConfigurationSource.PROJECT_TOML: 'project_toml'>,), (<ConfigurationSource.FRAMEWORK_DEFAULT: 'framework_default'>,))).rank
+E        +    and   <ConfigurationSource.PROJECT_TOML: 'project_toml'> = ConfigurationSource.PROJECT_TOML
+
+tests/unit/config/test_precedence.py:228: AssertionError
+_____ test_explicit_values_outrank_project_environment_state_and_defaults ______
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_explicit_values_outrank_p0')
+
+    def test_explicit_values_outrank_project_environment_state_and_defaults(
+        tmp_path: Path,
+    ) -> None:
+        cli_target = ValidationTarget(
+            kind=TargetKind.ENTRYPOINT,
+            value="GrammarEx.gf",
+        )
+        result = resolve_precedence(
+            _request(
+                tmp_path,
+                environment=EnvironmentOverrides(
+                    project_root="environment-project",
+                    output_root="environment-output",
+                ),
+                candidates={
+                    ConfigurationSource.APPLICATION_STATE: {
+                        "project_root": "state-project",
+                        "output_root": "state-output",
+                        "max_files": 5,
+                    },
+                    ConfigurationSource.PROJECT_TOML: {
+                        "mode": ValidationMode.RELEASE,
+                        "timeout_sec": 90,
+                        "target": ValidationTarget(
+                            kind=TargetKind.PROJECT,
+                            value=None,
+                        ),
+                    },
+                    ConfigurationSource.CLI: {
+                        "project_root": "cli-project",
+                        "output_root": "cli-output",
+                        "mode": ValidationMode.DIAGNOSTIC,
+                        "timeout_sec": 15,
+                        "target": cli_target,
+                        "max_files": 12,
+                    },
+                },
+            )
+        )
+    
+>       assert result.issues == ()
+E       assert (Configuratio...e_choices=())) == ()
+E         
+E         Left contains 2 more items, first extra item: ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source=<ConfigurationSource.APPLICATION_STATE: 'applicatio...cy.", stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=())
+E         
+E         Full diff:
+E         - ()
+E         + (
+E         +     ConfigurationIssue(
+E         +         severity=<IssueSeverity.ERROR: 'error'>,
+E         +         source=<ConfigurationSource.APPLICATION_STATE: 'application_state'>,
+E         +         field_path='project_root',
+E         +         provided_value='state-project',
+E         +         message="'application_state' is not authorized to set 'project_root'.",
+E         +         remediation="Use a source authorized by the 'project_root' policy.",
+E         +         stage='configuration',
+E         +         error_kind='configuration',
+E         +         technical_detail='',
+E         +         relevant_path=None,
+E         +         candidate_choices=(),
+E         +     ),
+E         +     ConfigurationIssue(
+E         +         severity=<IssueSeverity.ERROR: 'error'>,
+E         +         source=<ConfigurationSource.CLI: 'cli'>,
+E         +         field_path='project_root',
+E         +         provided_value='cli-project',
+E         +         message="'cli' is not authorized to set 'project_root'.",
+E         +         remediation="Use a source authorized by the 'project_root' policy.",
+E         +         stage='configuration',
+E         +         error_kind='configuration',
+E         +         technical_detail='',
+E         +         relevant_path=None,
+E         +         candidate_choices=(),
+E         +     ),
+E         + )
+
+tests/unit/config/test_precedence.py:300: AssertionError
+_______ test_project_owned_selection_is_copied_without_surface_override ________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_project_owned_selection_i0')
+
+    def test_project_owned_selection_is_copied_without_surface_override(
+        tmp_path: Path,
+    ) -> None:
+        project = _project(tmp_path)
+        result = resolve_precedence(
+            ConfigurationResolutionRequest(
+                defaults=_defaults(),
+                project=project,
+            )
+        )
+    
+        assert result.issues == ()
+        assert result.values is not None
+        assert result.values.selected_entrypoints == project.modules.entrypoints
+        assert result.values.selected_checkpoints == project.modules.checkpoints
+        assert result.values.selected_scenarios == project.validation.all_scenarios
+        assert (
+            result.values.release_requires_pgf
+            is project.validation.release_requires_pgf
+        )
+    
+        provenance = _provenance(result)
+        for field_path in (
+            "selected_entrypoints",
+            "selected_checkpoints",
+            "selected_scenarios",
+            "release_requires_pgf",
+        ):
+>           assert (
+                provenance[field_path]
+                is ConfigurationSource.PROJECT_TOML
+            )
+E           AssertionError: assert <ConfigurationSource.VALIDATION_PROFILE: 'validation_profile'> is <ConfigurationSource.PROJECT_TOML: 'project_toml'>
+E            +  where <ConfigurationSource.PROJECT_TOML: 'project_toml'> = ConfigurationSource.PROJECT_TOML
+
+tests/unit/config/test_precedence.py:549: AssertionError
+_______ test_resolver_composes_precedence_environment_and_project_owners _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697c950c30>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_resolver_composes_precede0')
+
+    def test_resolver_composes_precedence_environment_and_project_owners(
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        project = _project(tmp_path)
+        request = ConfigurationResolutionRequest(
+            defaults=_defaults(),
+            project=project,
+        )
+        warning = _issue(
+            severity=IssueSeverity.WARNING,
+            field_path="compatibility.legacy_mode",
+            source=ConfigurationSource.LEGACY_MIGRATION,
+            message="Legacy mode alias was migrated.",
+        )
+    
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_precedence",
+            lambda supplied: PrecedenceResolution(
+                values=_precedence_values(tmp_path),
+                issues=(warning,),
+                provenance=(
+                    _provenance(
+                        "mode",
+                        ConfigurationSource.CLI,
+                        ValidationMode.DIAGNOSTIC,
+                    ),
+                ),
+            ),
+        )
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_environment",
+            lambda supplied: EnvironmentResolution(
+                value=_environment(tmp_path),
+                provenance=(
+                    _provenance(
+                        "environment.gf_executable",
+                        ConfigurationSource.PATH_DISCOVERY,
+                        (tmp_path / "bin" / "gf").resolve(),
+                    ),
+                ),
+            ),
+        )
+    
+        resolution = resolver_module.resolve_configuration(request)
+    
+>       assert resolution.succeeded is True
+E       AssertionError: assert False is True
+E        +  where False = ConfigurationResolution(configuration=None, issues=(ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source...guration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=()),), provenance=()).succeeded
+
+tests/unit/config/test_resolver.py:252: AssertionError
+___ test_resolver_does_not_construct_run_config_when_an_owner_reports_error ____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697c950d70>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_resolver_does_not_constru0')
+
+    def test_resolver_does_not_construct_run_config_when_an_owner_reports_error(
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        request = ConfigurationResolutionRequest(
+            defaults=_defaults(),
+            project=_project(tmp_path),
+        )
+        error = _issue(
+            severity=IssueSeverity.ERROR,
+            field_path="environment.gf_executable",
+            source=ConfigurationSource.PATH_DISCOVERY,
+            message="GF executable was not found.",
+        )
+        warning = _issue(
+            severity=IssueSeverity.WARNING,
+            field_path="mode",
+            source=ConfigurationSource.LEGACY_MIGRATION,
+            message="Legacy mode alias was migrated.",
+        )
+    
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_precedence",
+            lambda supplied: PrecedenceResolution(
+                values=_precedence_values(tmp_path),
+                issues=(warning,),
+                provenance=(
+                    _provenance(
+                        "mode",
+                        ConfigurationSource.CLI,
+                        ValidationMode.DIAGNOSTIC,
+                    ),
+                ),
+            ),
+        )
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_environment",
+            lambda supplied: EnvironmentResolution(
+                value=None,
+                issues=(error,),
+                provenance=(
+                    _provenance(
+                        "environment.gf_executable",
+                        ConfigurationSource.PATH_DISCOVERY,
+                        None,
+                    ),
+                ),
+            ),
+        )
+    
+        resolution = resolver_module.resolve_configuration(request)
+    
+        assert resolution.succeeded is False
+        assert resolution.configuration is None
+>       assert resolution.issues == (error, warning)
+E       AssertionError: assert (Configuratio..._choices=()),) == (Configuratio...e_choices=()))
+E         
+E         At index 0 diff: ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source=<ConfigurationSource.STARTUP_OPTION: 'startup_option'>, field_path='language_context', provided_value=None, message='A resolved language context is required before run configuration can be composed.', remediation='Select a GF language directory or .gf file and complete path-resolved language startup first.', stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=()) != ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source=<ConfigurationSource.PATH_DISCOVERY: 'path_discovery'>, field_path='environment.gf_executable', provided_value=None, message='GF executable was not found.', remediation='Correct the source value.', stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=())
+E         Right contains one more item: ConfigurationIssue(severity=<IssueSeverity.WARNING: 'warning'>, source=<ConfigurationSource.LEGACY_MIGRATION: 'legacy_...ue.', stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=())
+E         
+E         Full diff:
+E           (
+E               ConfigurationIssue(
+E                   severity=<IssueSeverity.ERROR: 'error'>,
+E         -         source=<ConfigurationSource.PATH_DISCOVERY: 'path_discovery'>,
+E         -         field_path='environment.gf_executable',
+E         +         source=<ConfigurationSource.STARTUP_OPTION: 'startup_option'>,
+E         +         field_path='language_context',
+E                   provided_value=None,
+E         +         message='A resolved language context is required before run '
+E         +                 'configuration can be composed.',
+E         +         remediation='Select a GF language directory or .gf file and complete '
+E         +                     'path-resolved language startup first.',
+E         -         message='GF executable was not found.',
+E         -         remediation='Correct the source value.',
+E         -         stage='configuration',
+E         -         error_kind='configuration',
+E         -         technical_detail='',
+E         -         relevant_path=None,
+E         -         candidate_choices=(),
+E         -     ),
+E         -     ConfigurationIssue(
+E         -         severity=<IssueSeverity.WARNING: 'warning'>,
+E         -         source=<ConfigurationSource.LEGACY_MIGRATION: 'legacy_migration'>,
+E         -         field_path='mode',
+E         -         provided_value=None,
+E         -         message='Legacy mode alias was migrated.',
+E         -         remediation='Correct the source value.',
+E                   stage='configuration',
+E                   error_kind='configuration',
+E                   technical_detail='',
+E                   relevant_path=None,
+E                   candidate_choices=(),
+E               ),
+E           )
+
+tests/unit/config/test_resolver.py:355: AssertionError
+______ test_resolver_reports_conflicting_provenance_as_composition_error _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697c9717f0>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_resolver_reports_conflict0')
+
+    def test_resolver_reports_conflicting_provenance_as_composition_error(
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        request = ConfigurationResolutionRequest(
+            defaults=_defaults(),
+            project=_project(tmp_path),
+        )
+    
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_precedence",
+            lambda supplied: PrecedenceResolution(
+                values=_precedence_values(tmp_path),
+                provenance=(
+                    _provenance(
+                        "output_root",
+                        ConfigurationSource.CLI,
+                        (tmp_path / "runs").resolve(),
+                    ),
+                ),
+            ),
+        )
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_environment",
+            lambda supplied: EnvironmentResolution(
+                value=_environment(tmp_path),
+                provenance=(
+                    _provenance(
+                        "output_root",
+                        ConfigurationSource.ENVIRONMENT_VARIABLE,
+                        (tmp_path / "other-runs").resolve(),
+                    ),
+                ),
+            ),
+        )
+    
+        resolution = resolver_module.resolve_configuration(request)
+    
+        assert resolution.configuration is None
+        assert resolution.provenance == ()
+        assert len(resolution.issues) == 1
+        issue = resolution.issues[0]
+        assert issue.severity is IssueSeverity.ERROR
+>       assert issue.source is ConfigurationSource.RUNTIME_DERIVED
+E       AssertionError: assert <ConfigurationSource.STARTUP_OPTION: 'startup_option'> is <ConfigurationSource.RUNTIME_DERIVED: 'runtime_derived'>
+E        +  where <ConfigurationSource.STARTUP_OPTION: 'startup_option'> = ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source=<ConfigurationSource.STARTUP_OPTION: 'startup_optio...st.', stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=()).source
+E        +  and   <ConfigurationSource.RUNTIME_DERIVED: 'runtime_derived'> = ConfigurationSource.RUNTIME_DERIVED
+
+tests/unit/config/test_resolver.py:409: AssertionError
+_______ test_resolver_converts_invalid_run_config_into_structured_issue ________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697c932050>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_resolver_converts_invalid0')
+
+    def test_resolver_converts_invalid_run_config_into_structured_issue(
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        request = ConfigurationResolutionRequest(
+            defaults=_defaults(),
+            project=_project(tmp_path),
+        )
+>       values = _precedence_values(
+            tmp_path,
+            mode=ValidationMode.QUICK,
+        )
+
+tests/unit/config/test_resolver.py:422: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_resolver_converts_invalid0')
+
+    def _precedence_values(
+        tmp_path: Path,
+        *,
+        mode: ValidationMode = ValidationMode.DIAGNOSTIC,
+    ) -> PrecedenceValues:
+>       return PrecedenceValues(
+            project_root=(tmp_path / "project").resolve(),
+            gf_executable=(tmp_path / "bin" / "gf").resolve(),
+            rgl_root=(tmp_path / "rgl").resolve(),
+            output_root=(tmp_path / "runs").resolve(),
+            state_path=(tmp_path / ".gf_wordbench_state.json").resolve(),
+            mode=mode,
+            target=ValidationTarget(
+                kind=TargetKind.PROJECT,
+                value=None,
+            ),
+            timeout_sec=45,
+            max_files=25,
+            keep_ok_details=True,
+            diff_previous=False,
+            skip_version_probe=True,
+            no_compile=False,
+            emit_cpu_stats=True,
+            evidence_level="expanded",
+            selected_checkpoints=(),
+            selected_entrypoints=(),
+            selected_scenarios=(),
+            release_requires_pgf=False,
+        )
+E       TypeError: PrecedenceValues.__init__() missing 2 required positional arguments: 'selected_language_path' and 'validation_profile'
+
+tests/unit/config/test_resolver.py:140: TypeError
+_______ test_require_configuration_raises_canonical_configuration_error ________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697c933250>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_require_configuration_rai0')
+
+    def test_require_configuration_raises_canonical_configuration_error(
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        request = ConfigurationResolutionRequest(
+            defaults=_defaults(),
+            project=_project(tmp_path),
+        )
+        issue = _issue(
+            severity=IssueSeverity.ERROR,
+            field_path="mode",
+            source=ConfigurationSource.CLI,
+            message="Mode is invalid.",
+        )
+    
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_precedence",
+            lambda supplied: PrecedenceResolution(
+                values=None,
+                issues=(issue,),
+            ),
+        )
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_environment",
+            lambda supplied: EnvironmentResolution(
+                value=_environment(tmp_path),
+            ),
+        )
+    
+        with pytest.raises(
+            ConfigurationError,
+            match="mode.*Mode is invalid",
+        ):
+>           resolver_module.require_configuration(request)
+
+tests/unit/config/test_resolver.py:493: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/gf_wordbench/config/resolver.py:152: in require_configuration
+    return resolve_configuration(request).require()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ConfigurationResolution(configuration=None, issues=(ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source...guration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=()),), provenance=())
+
+    def require(self) -> RunConfig:
+        """Return the configuration or raise ConfigurationError."""
+    
+        if self.succeeded:
+            assert self.configuration is not None
+            return self.configuration
+    
+        errors = tuple(
+            issue
+            for issue in self.issues
+            if issue.severity is IssueSeverity.ERROR
+        )
+        relevant = errors or self.issues
+    
+        detail = "\n".join(
+            (
+                f"{issue.field_path}: {issue.message} "
+                f"Remediation: {issue.remediation}"
+            )
+            for issue in relevant
+        )
+        subject = (
+            relevant[0].field_path
+            if relevant
+            else None
+        )
+    
+        message = "Configuration resolution failed."
+        if detail:
+            message = f"{message}\n{detail}"
+    
+>       raise ConfigurationError(
+            message,
+            code="GF-WB-CONFIG-001",
+            detail=detail,
+            stage="configuration",
+            operation="resolve",
+            subject=subject,
+        )
+E       gf_wordbench.kernel.errors.ConfigurationError: Configuration resolution failed.
+E       language_context: A resolved language context is required before run configuration can be composed. Remediation: Select a GF language directory or .gf file and complete path-resolved language startup first.
+
+src/gf_wordbench/config/models.py:1522: ConfigurationError
+
+During handling of the above exception, another exception occurred:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697c933250>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_require_configuration_rai0')
+
+    def test_require_configuration_raises_canonical_configuration_error(
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        request = ConfigurationResolutionRequest(
+            defaults=_defaults(),
+            project=_project(tmp_path),
+        )
+        issue = _issue(
+            severity=IssueSeverity.ERROR,
+            field_path="mode",
+            source=ConfigurationSource.CLI,
+            message="Mode is invalid.",
+        )
+    
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_precedence",
+            lambda supplied: PrecedenceResolution(
+                values=None,
+                issues=(issue,),
+            ),
+        )
+        monkeypatch.setattr(
+            resolver_module,
+            "resolve_environment",
+            lambda supplied: EnvironmentResolution(
+                value=_environment(tmp_path),
+            ),
+        )
+    
+>       with pytest.raises(
+            ConfigurationError,
+            match="mode.*Mode is invalid",
+        ):
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'mode.*Mode is invalid'
+E         Actual message: 'Configuration resolution failed.\nlanguage_context: A resolved language context is required before run configuration can be composed. Remediation: Select a GF language directory or .gf file and complete path-resolved language startup first.'
+
+tests/unit/config/test_resolver.py:489: AssertionError
+___________ test_build_manifest_uses_final_bytes_and_canonical_order ___________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_build_manifest_uses_final0')
+
+    def test_build_manifest_uses_final_bytes_and_canonical_order(tmp_path: Path) -> None:
+        run_result, run_paths = _run_context(tmp_path)
+        summary = _write(run_paths.run_dir / "summary.json", b'{"status":"OK"}\n')
+        human = _write(run_paths.run_dir / "summary.md", "# Résumé\n".encode())
+        master_log = _write(run_paths.run_dir / "raw" / "master.log", b"compile ok\n")
+    
+        declarations = (
+            artifact_declaration(
+                Path("raw/master.log"),
+                ArtifactRole.MASTER_LOG,
+                required=True,
+                created_by=ArtifactProducer.REPORTING_LOGS,
+            ),
+            artifact_declaration(
+                Path("summary.md"),
+                ArtifactRole.HUMAN_SUMMARY,
+                required=True,
+                created_by=ArtifactProducer.REPORTING_MARKDOWN,
+            ),
+            artifact_declaration(
+                Path("summary.json"),
+                ArtifactRole.MACHINE_SUMMARY,
+                required=True,
+                created_by=ArtifactProducer.REPORTING_JSON,
+            ),
+        )
+    
+>       result = build_manifest_result(
+            run_result,
+            run_paths,
+            declarations,
+            generated_at=datetime(
+                2026,
+                7,
+                25,
+                15,
+                4,
+                23,
+                tzinfo=timezone(timedelta(hours=-4)),
+            ),
+            producer_version="1.2.3",
+        )
+
+tests/unit/reporting/test_manifest_builder.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/gf_wordbench/reporting/manifest/builder.py:279: in build_manifest_result
+    manifest = ArtifactManifest(
+<string>:11: in __init__
+    ???
+src/gf_wordbench/reporting/manifest/models.py:221: in __post_init__
+    run_id = validate_run_id(self.run_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/gf_wordbench/kernel/ids.py:324: in validate_run_id
+    candidate = _validate_pattern(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '20260725_190423_demo'
+
+    def _validate_pattern(
+        value: object,
+        *,
+        field: str,
+        pattern: re.Pattern[str],
+        expected: str,
+        example: str,
+    ) -> str:
+        candidate = _require_string(value, field=field)
+    
+        if pattern.fullmatch(candidate) is None:
+>           raise ValueError(
+                f"Invalid {field} {candidate!r}. "
+                f"Expected {expected}; for example {example!r}"
+            )
+E           ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+
+src/gf_wordbench/kernel/ids.py:109: ValueError
+_____________ test_build_manifest_facades_return_the_same_manifest _____________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_build_manifest_facades_re0')
+
+    def test_build_manifest_facades_return_the_same_manifest(tmp_path: Path) -> None:
+        run_result, run_paths = _run_context(tmp_path)
+        _write(run_paths.run_dir / "summary.json", b"{}\n")
+        declarations = (
+            artifact_declaration(
+                Path("summary.json"),
+                ArtifactRole.MACHINE_SUMMARY,
+                required=True,
+                created_by=ArtifactProducer.REPORTING_JSON,
+            ),
+        )
+        generated_at = datetime(2026, 7, 25, 19, 4, 23, tzinfo=timezone.utc)
+    
+>       explicit = build_manifest(
+            run_result,
+            run_paths,
+            declarations,
+            generated_at=generated_at,
+            producer_version="1.0.0",
+        )
+
+tests/unit/reporting/test_manifest_builder.py:209: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/gf_wordbench/reporting/manifest/builder.py:182: in build_manifest
+    return build_manifest_result(
+src/gf_wordbench/reporting/manifest/builder.py:279: in build_manifest_result
+    manifest = ArtifactManifest(
+<string>:11: in __init__
+    ???
+src/gf_wordbench/reporting/manifest/models.py:221: in __post_init__
+    run_id = validate_run_id(self.run_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/gf_wordbench/kernel/ids.py:324: in validate_run_id
+    candidate = _validate_pattern(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '20260725_190423_demo'
+
+    def _validate_pattern(
+        value: object,
+        *,
+        field: str,
+        pattern: re.Pattern[str],
+        expected: str,
+        example: str,
+    ) -> str:
+        candidate = _require_string(value, field=field)
+    
+        if pattern.fullmatch(candidate) is None:
+>           raise ValueError(
+                f"Invalid {field} {candidate!r}. "
+                f"Expected {expected}; for example {example!r}"
+            )
+E           ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+
+src/gf_wordbench/kernel/ids.py:109: ValueError
+________ test_optional_missing_artifact_is_omitted_with_bounded_warning ________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_optional_missing_artifact0')
+
+    def test_optional_missing_artifact_is_omitted_with_bounded_warning(tmp_path: Path) -> None:
+        run_result, run_paths = _run_context(tmp_path)
+    
+>       result = build_manifest_result(
+            run_result,
+            run_paths,
+            (_text_declaration(Path("details/optional.txt")),),
+            generated_at=datetime(2026, 7, 25, 19, 4, 23, tzinfo=timezone.utc),
+        )
+
+tests/unit/reporting/test_manifest_builder.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/gf_wordbench/reporting/manifest/builder.py:279: in build_manifest_result
+    manifest = ArtifactManifest(
+<string>:11: in __init__
+    ???
+src/gf_wordbench/reporting/manifest/models.py:221: in __post_init__
+    run_id = validate_run_id(self.run_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/gf_wordbench/kernel/ids.py:324: in validate_run_id
+    candidate = _validate_pattern(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '20260725_190423_demo'
+
+    def _validate_pattern(
+        value: object,
+        *,
+        field: str,
+        pattern: re.Pattern[str],
+        expected: str,
+        example: str,
+    ) -> str:
+        candidate = _require_string(value, field=field)
+    
+        if pattern.fullmatch(candidate) is None:
+>           raise ValueError(
+                f"Invalid {field} {candidate!r}. "
+                f"Expected {expected}; for example {example!r}"
+            )
+E           ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+
+src/gf_wordbench/kernel/ids.py:109: ValueError
+_______ test_empty_text_artifact_is_allowed_when_role_contract_allows_it _______
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_empty_text_artifact_is_al0')
+
+    def test_empty_text_artifact_is_allowed_when_role_contract_allows_it(tmp_path: Path) -> None:
+        run_result, run_paths = _run_context(tmp_path)
+        _write(run_paths.run_dir / "top_errors.txt", b"")
+    
+        declaration = artifact_declaration(
+            Path("top_errors.txt"),
+            ArtifactRole.TOP_ERRORS,
+            required=True,
+            created_by=ArtifactProducer.REPORTING_LOGS,
+        )
+    
+>       manifest = build_manifest(run_result, run_paths, (declaration,))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/reporting/test_manifest_builder.py:282: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/gf_wordbench/reporting/manifest/builder.py:182: in build_manifest
+    return build_manifest_result(
+src/gf_wordbench/reporting/manifest/builder.py:279: in build_manifest_result
+    manifest = ArtifactManifest(
+<string>:11: in __init__
+    ???
+src/gf_wordbench/reporting/manifest/models.py:221: in __post_init__
+    run_id = validate_run_id(self.run_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/gf_wordbench/kernel/ids.py:324: in validate_run_id
+    candidate = _validate_pattern(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '20260725_190423_demo'
+
+    def _validate_pattern(
+        value: object,
+        *,
+        field: str,
+        pattern: re.Pattern[str],
+        expected: str,
+        example: str,
+    ) -> str:
+        candidate = _require_string(value, field=field)
+    
+        if pattern.fullmatch(candidate) is None:
+>           raise ValueError(
+                f"Invalid {field} {candidate!r}. "
+                f"Expected {expected}; for example {example!r}"
+            )
+E           ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+
+src/gf_wordbench/kernel/ids.py:109: ValueError
+_________ test_case_sensitive_policy_preserves_distinct_display_paths __________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_case_sensitive_policy_pre0')
+
+    def test_case_sensitive_policy_preserves_distinct_display_paths(tmp_path: Path) -> None:
+        run_result, run_paths = _run_context(tmp_path)
+        upper = _write(run_paths.run_dir / "Detail.txt", b"upper")
+        lower = _write(run_paths.run_dir / "detail.txt", b"lower")
+    
+>       manifest = build_manifest(
+            run_result,
+            run_paths,
+            (
+                _text_declaration(upper),
+                _text_declaration(lower),
+            ),
+            policy=ManifestBuildPolicy(case_sensitive_paths=True),
+        )
+
+tests/unit/reporting/test_manifest_builder.py:360: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/gf_wordbench/reporting/manifest/builder.py:182: in build_manifest
+    return build_manifest_result(
+src/gf_wordbench/reporting/manifest/builder.py:279: in build_manifest_result
+    manifest = ArtifactManifest(
+<string>:11: in __init__
+    ???
+src/gf_wordbench/reporting/manifest/models.py:221: in __post_init__
+    run_id = validate_run_id(self.run_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/gf_wordbench/kernel/ids.py:324: in validate_run_id
+    candidate = _validate_pattern(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = '20260725_190423_demo'
+
+    def _validate_pattern(
+        value: object,
+        *,
+        field: str,
+        pattern: re.Pattern[str],
+        expected: str,
+        example: str,
+    ) -> str:
+        candidate = _require_string(value, field=field)
+    
+        if pattern.fullmatch(candidate) is None:
+>           raise ValueError(
+                f"Invalid {field} {candidate!r}. "
+                f"Expected {expected}; for example {example!r}"
+            )
+E           ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+
+src/gf_wordbench/kernel/ids.py:109: ValueError
+_____ test_unsafe_artifact_paths_are_errors[-MANIFEST_ARTIFACT_PATH_EMPTY] _____
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_unsafe_artifact_paths_are0')
+path = '', code = 'MANIFEST_ARTIFACT_PATH_EMPTY'
+
+    @pytest.mark.parametrize(
+        ("path", "code"),
+        [
+            ("", "MANIFEST_ARTIFACT_PATH_EMPTY"),
+            ("/absolute.txt", "MANIFEST_ARTIFACT_PATH_ABSOLUTE"),
+            (r"C:\absolute.txt", "MANIFEST_ARTIFACT_PATH_ABSOLUTE"),
+            ("../escape.txt", "MANIFEST_ARTIFACT_PATH_TRAVERSAL"),
+            ("manifest.json", "MANIFEST_ARTIFACT_PATH_SELF"),
+        ],
+    )
+    def test_unsafe_artifact_paths_are_errors(
+        tmp_path: Path,
+        path: str,
+        code: str,
+    ) -> None:
+        run_root = tmp_path / "run_run-001"
+        run_root.mkdir()
+        document = _document(artifacts=[_entry(path, b"")])
+    
+>       result = _verify_document(run_root, document)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/reporting/test_manifest_verifier.py:365: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/reporting/test_manifest_verifier.py:136: in _verify_document
+    return verify_manifest(
+src/gf_wordbench/reporting/manifest/verifier.py:159: in verify_manifest
+    return _build_result(state)
+           ^^^^^^^^^^^^^^^^^^^^
+src/gf_wordbench/reporting/manifest/verifier.py:603: in _build_result
+    return ManifestVerificationResult(
+<string>:13: in __init__
+    ???
+src/gf_wordbench/reporting/manifest/models.py:372: in __post_init__
+    unsafe_paths = _validate_path_messages(
+src/gf_wordbench/reporting/manifest/models.py:618: in _validate_path_messages
+    result.append(_require_text(value, field=f"{field} item"))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = ''
+
+    def _require_text(value: object, *, field: str) -> str:
+        if not isinstance(value, str):
+            raise TypeError(f"{field} must be a string")
+        if not value.strip():
+>           raise ValueError(f"{field} must not be empty")
+E           ValueError: unsafe_paths item must not be empty
+
+src/gf_wordbench/reporting/manifest/models.py:644: ValueError
+____________ test_missing_optional_artifact_is_warning_not_failure _____________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_missing_optional_artifact0')
+
+    def test_missing_optional_artifact_is_warning_not_failure(tmp_path: Path) -> None:
+        run_root = tmp_path / "run_run-001"
+        run_root.mkdir()
+    
+>       result = _verify_document(
+            run_root,
+            _document(
+                artifacts=[
+                    _entry("optional.bin", b"expected", required=False),
+                ]
+            ),
+        )
+
+tests/unit/reporting/test_manifest_verifier.py:497: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/reporting/test_manifest_verifier.py:136: in _verify_document
+    return verify_manifest(
+src/gf_wordbench/reporting/manifest/verifier.py:159: in verify_manifest
+    return _build_result(state)
+           ^^^^^^^^^^^^^^^^^^^^
+src/gf_wordbench/reporting/manifest/verifier.py:603: in _build_result
+    return ManifestVerificationResult(
+<string>:13: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ManifestVerificationResult(status=<ValidationStatus.OK: 'OK'>, manifest_path=PosixPath('/tmp/pytest-of-root/pytest-3/t... warnings=('MANIFEST_ARTIFACT_MISSING: optional artifact is missing: optional.bin',), message='verified 0 artifact(s)')
+
+    def __post_init__(self) -> None:
+        status = _coerce_validation_status(self.status)
+        manifest_path = _validate_path(
+            self.manifest_path,
+            field="manifest_path",
+        )
+        schema_version = self.schema_version
+        if schema_version is not None:
+            schema_version = _validate_schema_version(schema_version)
+        artifacts_checked = _validate_non_negative_int(
+            self.artifacts_checked,
+            field="artifacts_checked",
+        )
+        required_artifacts_checked = _validate_non_negative_int(
+            self.required_artifacts_checked,
+            field="required_artifacts_checked",
+        )
+        if required_artifacts_checked > artifacts_checked:
+            raise ValueError(
+                "required_artifacts_checked must not exceed artifacts_checked"
+            )
+        missing_paths = _validate_path_messages(
+            self.missing_paths,
+            field="missing_paths",
+            require_safe=True,
+        )
+        mismatched_paths = _validate_path_messages(
+            self.mismatched_paths,
+            field="mismatched_paths",
+            require_safe=True,
+        )
+        unsafe_paths = _validate_path_messages(
+            self.unsafe_paths,
+            field="unsafe_paths",
+            require_safe=False,
+        )
+        warnings = _validate_messages(self.warnings, field="warnings")
+        message = _require_text(self.message, field="message")
+        if status is ValidationStatus.OK and (
+            missing_paths or mismatched_paths or unsafe_paths
+        ):
+>           raise ValueError(
+                "an OK verification result cannot contain integrity failures"
+            )
+E           ValueError: an OK verification result cannot contain integrity failures
+
+src/gf_wordbench/reporting/manifest/models.py:382: ValueError
+_______________ test_file_projection_normalizes_paths_and_digest _______________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_file_projection_normalize0')
+
+    def test_file_projection_normalizes_paths_and_digest(tmp_path: Path) -> None:
+        run_paths = _run_paths(tmp_path)
+        run_config = _run_config(tmp_path)
+        result = _file_result(
+            run_config,
+            run_paths,
+            relative_path="src/Zeta.gf",
+            ok=False,
+            blocked_by=(r"src\beta.gf", "src/Alpha.gf", "src/Alpha.gf"),
+            digest=_SHA_B.upper(),
+        )
+    
+        projected = project_file_result(
+            result,
+            run_config=run_config,
+            run_paths=run_paths,
+        )
+    
+        assert projected["file_path"] == "src/Zeta.gf"
+>       assert projected["blocked_by"] == ["src/Alpha.gf", "src/beta.gf"]
+E       AssertionError: assert ['src/Alpha.g...src\\beta.gf'] == ['src/Alpha.g...'src/beta.gf']
+E         
+E         At index 1 diff: 'src\\beta.gf' != 'src/beta.gf'
+E         
+E         Full diff:
+E           [
+E               'src/Alpha.gf',
+E         -     'src/beta.gf',
+E         ?         ^
+E         +     'src\\beta.gf',
+E         ?         ^^
+E           ]
+
+tests/unit/reporting/test_summary_projection.py:500: AssertionError
+______ test_diff_projection_supports_nullable_statuses_required_by_schema ______
+
+    def test_diff_projection_supports_nullable_statuses_required_by_schema() -> None:
+        new_entry = _namespace(
+            subject_kind="file",
+            subject_id=r"src\New.gf",
+            previous_status=None,
+            current_status="OK",
+            change_kind="new",
+            message="New file",
+        )
+        removed_entry = _namespace(
+            subject_kind="scenario",
+            subject_id="legacy-scenario",
+            previous_status="FAIL",
+            current_status=None,
+            change_kind="removed",
+            message="Scenario removed",
+        )
+    
+>       assert project_diff_entry(new_entry) == {
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "subject_kind": "file",
+            "subject_id": "src/New.gf",
+            "previous_status": None,
+            "current_status": "OK",
+            "change_kind": "new",
+            "message": "New file",
+        }
+
+tests/unit/reporting/test_summary_projection.py:608: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/gf_wordbench/reporting/summary/projection.py:659: in project_diff_entry
+    "previous_status": _enum_text(
+src/gf_wordbench/reporting/summary/projection.py:891: in _enum_text
+    return _non_empty_text(value, field_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/gf_wordbench/reporting/summary/projection.py:1134: in _non_empty_text
+    return _text(value, field_name, allow_empty=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = None, field_name = 'diff_entry.previous_status'
+
+    def _text(
+        value: object,
+        field_name: str,
+        *,
+        allow_empty: bool = False,
+    ) -> str:
+        if not isinstance(value, str):
+>           raise TypeError(f"{field_name} must be str")
+E           TypeError: diff_entry.previous_status must be str
+
+src/gf_wordbench/reporting/summary/projection.py:1144: TypeError
+________ test_top_errors_use_count_then_case_insensitive_message_order _________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_top_errors_use_count_then0')
+
+    def test_top_errors_use_count_then_case_insensitive_message_order(
+        tmp_path: Path,
+    ) -> None:
+        run_result = _completed_run_result(tmp_path)
+        run_result.top_errors = (
+            _namespace(error_kind="TYPE", message="Alpha", count=2),
+            _namespace(error_kind="OTHER", message="zeta", count=2),
+            _namespace(error_kind="SYNTAX", message="beta", count=3),
+        )
+    
+        document = build_summary_document(run_result, producer_version="1.0.0")
+    
+>       assert [item["message"] for item in document["top_errors"]] == [
+            "beta",
+            "Alpha",
+            "zeta",
+        ]
+E       AssertionError: assert ['beta', 'zeta', 'Alpha'] == ['beta', 'Alpha', 'zeta']
+E         
+E         At index 1 diff: 'zeta' != 'Alpha'
+E         
+E         Full diff:
+E           [
+E               'beta',
+E         +     'zeta',
+E               'Alpha',
+E         -     'zeta',
+E           ]
+
+tests/unit/reporting/test_summary_projection.py:631: AssertionError
+_______________ test_symlink_artifact_is_rejected_when_supported _______________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_symlink_artifact_is_rejec0')
+
+    def test_symlink_artifact_is_rejected_when_supported(tmp_path: Path) -> None:
+        run_root = tmp_path.resolve()
+        target = _write(run_root / "target.txt", b"target")
+        link = run_root / "link.txt"
+        try:
+            link.symlink_to(target)
+        except (NotImplementedError, OSError):
+            pytest.skip("Symlink creation is unavailable in this environment.")
+    
+        migration = migrate_manifest_document(
+            None,
+            run_root=run_root,
+            run_id=_RUN_ID,
+            artifact_paths=("link.txt",),
+            generated_at=_TIMESTAMP,
+        )
+    
+>       assert migration.result.status is MigrationStatus.BLOCKED
+E       AssertionError: assert <MigrationStatus.MIGRATED: 'migrated'> is <MigrationStatus.BLOCKED: 'blocked'>
+E        +  where <MigrationStatus.MIGRATED: 'migrated'> = MigrationResult(migration_id='legacy-run-to-gf-wordbench-artifact-manifest-v1', source_schema='absent_or_legacy_manife..., status=<MigrationStatus.MIGRATED: 'migrated'>, warnings=(), losses=(), changed=True, written=False, backup_path=None).status
+E        +    where MigrationResult(migration_id='legacy-run-to-gf-wordbench-artifact-manifest-v1', source_schema='absent_or_legacy_manife..., status=<MigrationStatus.MIGRATED: 'migrated'>, warnings=(), losses=(), changed=True, written=False, backup_path=None) = DocumentMigration(result=MigrationResult(migration_id='legacy-run-to-gf-wordbench-artifact-manifest-v1', source_schema...bytes': 6, 'sha256': '34a04005bcaf206eec990bd9637d9fdb6725e0a0c0d4aebf003f17f4c956eb5c', 'created_by': 'migration'}]})).result
+E        +  and   <MigrationStatus.BLOCKED: 'blocked'> = MigrationStatus.BLOCKED
+
+tests/migrations/test_manifest_migrations.py:529: AssertionError
+_______ test_complete_supported_legacy_state_maps_to_path_resolved_shape _______
+
+    def test_complete_supported_legacy_state_maps_to_path_resolved_shape() -> None:
+        defaults = _defaults()
+        legacy = {
+            # A former project root cannot be converted safely into a selected
+            # language path without loading project configuration and inspecting the
+            # filesystem. Pure state migration therefore discards it.
+            "selected_project_root": r"C:\work\GF Wordbench",
+            "selected_rgl_root": r"C:\gf\rgl",
+            "selected_gf_exe": r"C:\gf\bin\gf.exe",
+            "selected_out_root": r"C:\work\runs",
+            "selected_target_file": r"grammar\Main.gf",
+            "last_run_dir": r"C:\work\runs\run_001",
+            "last_summary_path": r"C:\work\runs\run_001\summary.json",
+            "selected_mode": "release",
+            "selected_timeout_sec": 180,
+            "selected_max_files": 25,
+            "selected_keep_ok_details": True,
+            "selected_diff_previous": False,
+            "selected_skip_version_probe": True,
+            "selected_no_compile": False,
+            "selected_emit_cpu_stats": True,
+            "status_message": "  release   validation\ncompleted  ",
+        }
+    
+        migration = migrate_legacy_state(
+            legacy,
+            canonical_defaults=defaults,
+        )
+    
+        assert migration.payload["schema_id"] == APP_STATE_SCHEMA_ID
+        assert migration.payload["schema_version"] == APP_STATE_SCHEMA_VERSION
+>       assert migration.payload["environment"] == {
+            "last_selected_language_path": None,
+            "last_selected_validation_profile": None,
+            "last_rgl_root": "C:/gf/rgl",
+            "gf_executable": "C:/gf/bin/gf.exe",
+            "output_root": "C:/work/runs",
+        }
+E       AssertionError: assert {'gf_executab...ct.toml', ...} == {'gf_executab...e': None, ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'last_selected_validation_profile': 'C:/work/GF Wordbench/project/project.toml'} != {'last_selected_validation_profile': None}
+E         
+E         Full diff:
+E           {
+E               'gf_executable': 'C:/gf/bin/gf.exe',
+E               'last_rgl_root': 'C:/gf/rgl',
+E               'last_selected_language_path': None,
+E         -     'last_selected_validation_profile': None,
+E         +     'last_selected_validation_profile': 'C:/work/GF Wordbench/project/project.toml',
+E               'output_root': 'C:/work/runs',
+E           }
+
+tests/migrations/test_state_migrations.py:92: AssertionError
+____ test_path_migration_preserves_local_paths_without_resolving_filesystem ____
+
+    def test_path_migration_preserves_local_paths_without_resolving_filesystem() -> None:
+        defaults = _defaults()
+        migration = migrate_legacy_state(
+            {
+                "selected_project_root": "",
+                "selected_rgl_root": None,
+                "selected_gf_exe": "relative\\gf.exe",
+                "selected_out_root": "out\\runs",
+                "selected_target_file": None,
+                "last_run_dir": "run_001",
+                "last_summary_path": "run_001\\summary.json",
+            },
+            canonical_defaults=defaults,
+        )
+    
+        environment = migration.payload["environment"]
+        selection = migration.payload["selection"]
+        last_run = migration.payload["last_run"]
+        assert isinstance(environment, dict)
+        assert isinstance(selection, dict)
+        assert isinstance(last_run, dict)
+        assert environment == {
+            "last_selected_language_path": None,
+            "last_selected_validation_profile": None,
+            "last_rgl_root": None,
+            "gf_executable": "relative/gf.exe",
+            "output_root": "out/runs",
+        }
+        assert selection["target_file"] == ""
+        assert last_run["run_dir"] == "run_001"
+        assert last_run["summary_path"] == "run_001/summary.json"
+>       assert _warning_pairs(migration) == {
+            ("discarded_legacy_field", "selected_project_root")
+        }
+E       AssertionError: assert set() == {('discarded_...roject_root')}
+E         
+E         Extra items in the right set:
+E         ('discarded_legacy_field', 'selected_project_root')
+E         
+E         Full diff:
+E         + set()
+E         - {
+E         -     (
+E         -         'discarded_legacy_field',
+E         -         'selected_project_root',
+E         -     ),
+E         - }
+
+tests/migrations/test_state_migrations.py:323: AssertionError
+_______ test_language_identity_runtime_and_evidence_fields_are_discarded _______
+
+    def test_language_identity_runtime_and_evidence_fields_are_discarded() -> None:
+        discarded = {
+            "selected_project_root": r"C:\workspace\project",
+            "last_language_id": "Eng",
+            "catalog_path": r"C:\workspace\rgl-language-catalog.json",
+            "last_catalog_entry": "Eng",
+            "selected_scan_dir": "src",
+            "selected_scan_glob": "*.gf",
+            "selected_gf_path": ["src"],
+            "selected_include_regex": ".*",
+            "selected_exclude_regex": "generated",
+            "is_running": True,
+            "current_run_config": {"mode": "release"},
+            "current_run_result": {"status": "OK"},
+            "language": "Example",
+            "language_name": "Example Language",
+            "language_code": "ex",
+            "project_id": "example",
+            "project_name": "Example",
+            "project_registry": ["one", "two"],
+            "audit_results": [1],
+            "file_results": [2],
+            "scenario_results": [3],
+        }
+        legacy = {
+            **discarded,
+            "future_extension": {"enabled": True},
+            "selected_mode": "quick",
+        }
+    
+        migration = migrate_legacy_state(
+            legacy,
+            canonical_defaults=_defaults(),
+        )
+    
+>       assert migration.discarded_fields == tuple(sorted(discarded))
+E       AssertionError: assert ('audit_resul...running', ...) == ('audit_resul...running', ...)
+E         
+E         At index 18 diff: 'selected_scan_glob' != 'selected_project_root'
+E         Right contains 2 more items, first extra item: 'selected_scan_dir'
+E         
+E         Full diff:
+E           (
+E               'audit_results',
+E               'catalog_path',
+E               'current_run_config',
+E               'current_run_result',
+E               'file_results',
+E               'is_running',
+E               'language',
+E               'language_code',
+E               'language_name',
+E               'last_catalog_entry',
+E               'last_language_id',
+E               'project_id',
+E               'project_name',
+E               'project_registry',
+E               'scenario_results',
+E               'selected_exclude_regex',
+E               'selected_gf_path',
+E               'selected_include_regex',
+E         -     'selected_project_root',
+E         -     'selected_scan_dir',
+E               'selected_scan_glob',
+E           )
+
+tests/migrations/test_state_migrations.py:439: AssertionError
+____ test_repository_migrates_once_publishes_canonical_and_preserves_source ____
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_repository_migrates_once_0')
+
+    def test_repository_migrates_once_publishes_canonical_and_preserves_source(
+        tmp_path: Path,
+    ) -> None:
+        repository = StateRepository(workspace_root=tmp_path.resolve())
+        legacy_path = tmp_path / LEGACY_APP_STATE_FILENAME
+        canonical_path = tmp_path / APP_STATE_FILENAME
+        legacy_document = {
+            "selected_project_root": r"C:\workspace\project",
+            "selected_rgl_root": r"C:\gf\rgl",
+            "selected_mode": "file",
+            "selected_timeout_sec": "75",
+            "selected_no_compile": "yes",
+            "language_name": "must not become application state",
+            "unknown_future_field": 7,
+            "status_message": " migrated from legacy ",
+        }
+        _write_json(legacy_path, legacy_document)
+        original_legacy_bytes = legacy_path.read_bytes()
+    
+        result = repository.load_with_diagnostics()
+    
+        assert result.migrated is True
+        assert result.source_path == canonical_path.resolve()
+        assert result.state.selection.mode is ValidationMode.QUICK
+        assert result.state.selection.timeout_sec == 75
+        assert result.state.selection.no_compile is True
+        assert result.state.environment.last_selected_language_path is None
+>       assert result.state.environment.last_selected_validation_profile is None
+E       AssertionError: assert 'C:/workspace/project/project/project.toml' is None
+E        +  where 'C:/workspace/project/project/project.toml' = EnvironmentState(last_selected_language_path=None, last_selected_validation_profile='C:/workspace/project/project/project.toml', last_rgl_root='C:/gf/rgl', gf_executable=None, output_root=None).last_selected_validation_profile
+E        +    where EnvironmentState(last_selected_language_path=None, last_selected_validation_profile='C:/workspace/project/project/project.toml', last_rgl_root='C:/gf/rgl', gf_executable=None, output_root=None) = AppState(schema_id='gf-wordbench.app-state', schema_version='2.0', producer=ProducerInfo(name='gf-wordbench', version=..., emit_cpu_stats=False), last_run=LastRunState(run_dir=None, summary_path=None, status_message='migrated from legacy')).environment
+E        +      where AppState(schema_id='gf-wordbench.app-state', schema_version='2.0', producer=ProducerInfo(name='gf-wordbench', version=..., emit_cpu_stats=False), last_run=LastRunState(run_dir=None, summary_path=None, status_message='migrated from legacy')) = StateLoadResult(state=AppState(schema_id='gf-wordbench.app-state', schema_version='2.0', producer=ProducerInfo(name='g..., path=PosixPath('/tmp/pytest-of-root/pytest-3/test_repository_migrates_once_0/.gf_audit_state.json'))), migrated=True).state
+
+tests/migrations/test_state_migrations.py:620: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  gf_wordbench.state.repository:repository.py:770 selected_rgl_root: Legacy RGL root was retained as a path-resolution hint and must be revalidated against the selected language path.
+WARNING  gf_wordbench.state.repository:repository.py:770 selected_project_root: Legacy project root was converted to a validation-profile candidate and must be resolved explicitly and checked against the selected language.
+WARNING  gf_wordbench.state.repository:repository.py:770 selected_timeout_sec: Legacy integer text was converted to a canonical integer.
+WARNING  gf_wordbench.state.repository:repository.py:770 selected_no_compile: Legacy boolean alias was converted to a canonical boolean.
+WARNING  gf_wordbench.state.repository:repository.py:770 language_name: Legacy field is runtime-only or owned by the resolved language context, validation-profile policy, or run evidence.
+WARNING  gf_wordbench.state.repository:repository.py:770 $.environment.last_rgl_root: path separators were normalized
+_______________ test_protocol_fakes_satisfy_public_service_ports _______________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_protocol_fakes_satisfy_pu0')
+
+    def test_protocol_fakes_satisfy_public_service_ports(tmp_path: Path) -> None:
+        validator = _PreflightValidator()
+        builder = _RequestBuilder(tmp_path)
+        executor = _Executor(_process_result(tmp_path))
+        factory = _SummaryFactory()
+        observer = _Observer()
+    
+        assert isinstance(validator, CompilationPreflightValidator)
+        assert isinstance(builder, CompilationRequestBuilder)
+        assert isinstance(executor, CompilationExecutor)
+        assert isinstance(factory, CompilationSummaryFactory)
+>       assert isinstance(observer, CompilationObserver)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/validation/compilation/test_service.py:396: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'gf_wordbench.validation.compilation.service.CompilationObserver'>
+instance = _Observer(events=[])
+
+    def __instancecheck__(cls, instance):
+        # We need this method for situations where attributes are
+        # assigned in __init__.
+        if cls is Protocol:
+            return type.__instancecheck__(cls, instance)
+        if not getattr(cls, "_is_protocol", False):
+            # i.e., it's a concrete subclass of a protocol
+            return _abc_instancecheck(cls, instance)
+    
+        if (
+            not getattr(cls, '_is_runtime_protocol', False) and
+            not _allow_reckless_class_checks()
+        ):
+>           raise TypeError("Instance and class checks can only be used with"
+                            " @runtime_checkable protocols")
+E           TypeError: Instance and class checks can only be used with @runtime_checkable protocols
+
+/usr/lib/python3.13/typing.py:2117: TypeError
+______ test_preflight_value_object_enforces_success_and_failure_coherence ______
+
+    def test_preflight_value_object_enforces_success_and_failure_coherence() -> None:
+        assert CompilationPreflight.ok().succeeded is True
+        failed = CompilationPreflight.failed(
+            error_kind=ErrorKind.CONFIG,
+            message=" invalid project ",
+            detail=" missing source root ",
+            warnings=("warning",),
+        )
+        assert failed.succeeded is False
+        assert failed.message == "invalid project"
+        assert failed.detail == "missing source root"
+        assert failed.warnings == ("warning",)
+    
+        with pytest.raises(ValueError, match="successful preflight"):
+            CompilationPreflight(succeeded=True, error_kind=ErrorKind.CONFIG)
+        with pytest.raises(ValueError, match="failed preflight"):
+            CompilationPreflight(succeeded=False, error_kind=ErrorKind.OK, message="bad")
+        with pytest.raises(ValueError, match="requires a message"):
+>           CompilationPreflight(succeeded=False, error_kind=ErrorKind.CONFIG)
+
+tests/unit/validation/compilation/test_service.py:417: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+src/gf_wordbench/validation/compilation/service.py:62: in __post_init__
+    message = _bounded_text(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = ''
+
+    def _bounded_text(
+        value: object,
+        *,
+        field: str,
+        allow_empty: bool,
+    ) -> str:
+        if not isinstance(value, str):
+            raise TypeError(f"{field} must be a string")
+        if "\x00" in value:
+            raise ValueError(
+                f"{field} must not contain NUL"
+            )
+    
+        normalized = value.strip()
+        if not allow_empty and not normalized:
+>           raise ValueError(
+                f"{field} must not be empty"
+            )
+E           ValueError: message must not be empty
+
+src/gf_wordbench/validation/compilation/service.py:907: ValueError
+
+During handling of the above exception, another exception occurred:
+
+    def test_preflight_value_object_enforces_success_and_failure_coherence() -> None:
+        assert CompilationPreflight.ok().succeeded is True
+        failed = CompilationPreflight.failed(
+            error_kind=ErrorKind.CONFIG,
+            message=" invalid project ",
+            detail=" missing source root ",
+            warnings=("warning",),
+        )
+        assert failed.succeeded is False
+        assert failed.message == "invalid project"
+        assert failed.detail == "missing source root"
+        assert failed.warnings == ("warning",)
+    
+        with pytest.raises(ValueError, match="successful preflight"):
+            CompilationPreflight(succeeded=True, error_kind=ErrorKind.CONFIG)
+        with pytest.raises(ValueError, match="failed preflight"):
+            CompilationPreflight(succeeded=False, error_kind=ErrorKind.OK, message="bad")
+>       with pytest.raises(ValueError, match="requires a message"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'requires a message'
+E         Actual message: 'message must not be empty'
+
+tests/unit/validation/compilation/test_service.py:416: AssertionError
+________ test_cancellation_after_request_build_prevents_process_launch _________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_cancellation_after_reques0')
+
+    def test_cancellation_after_request_build_prevents_process_launch(tmp_path: Path) -> None:
+        target = _target("source")
+        token = _CancellationToken()
+        validator = _PreflightValidator()
+        builder = _CancelAfterBuildBuilder(tmp_path, token=token)
+        executor = _Executor(_process_result(tmp_path))
+        factory = _SummaryFactory()
+        service = CompilationService(validator, builder, executor, factory)
+    
+        summary = service.compile_target(target, cancellation_token=token)
+    
+>       assert summary.status is ValidationStatus.SKIPPED
+E       AssertionError: assert <ValidationStatus.ERROR: 'ERROR'> is <ValidationStatus.SKIPPED: 'SKIPPED'>
+E        +  where <ValidationStatus.ERROR: 'ERROR'> = CompileSummary(target_id='source', target_kind=<CompileTargetKind.SOURCE: 'source'>, status=<ValidationStatus.ERROR: '...artifacts=(PosixPath('artifacts/Source.gfo'),), produced_artifacts=(), artifact_checks_passed=False, skipped_reason='').status
+E        +  and   <ValidationStatus.SKIPPED: 'SKIPPED'> = ValidationStatus.SKIPPED
+
+tests/unit/validation/compilation/test_service.py:603: AssertionError
+__________ test_default_stage_loader_binds_the_canonical_stage_owners __________
+
+    def test_default_stage_loader_binds_the_canonical_stage_owners() -> None:
+>       stages = service._load_stage_functions()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/validation/scenarios/test_service.py:486: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _load_stage_functions() -> ScenarioStageFunctions:
+        from .artifacts import (
+            verify_scenario_artifacts,
+            write_normalized_scenario_output,
+        )
+>       from .assertions import evaluate_scenario_assertions
+E       ImportError: cannot import name 'evaluate_scenario_assertions' from 'gf_wordbench.validation.scenarios.assertions' (/mnt/data/batch03_original_repo/src/gf_wordbench/validation/scenarios/assertions.py)
+
+src/gf_wordbench/validation/scenarios/service.py:654: ImportError
+_________ test_successful_scenario_runs_each_owner_in_canonical_order __________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_successful_scenario_runs_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697ca35da0>
+
+    def test_successful_scenario_runs_each_owner_in_canonical_order(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        (
+            spec,
+            run_config,
+            run_paths,
+            harness,
+            registry,
+            normalization,
+        ) = _ready_harness(tmp_path, monkeypatch)
+        token = _CancellationToken()
+    
+        result = service.run_scenario(
+            spec,
+            run_config,
+            run_paths,
+            cancellation_token=token,
+        )
+    
+        assert harness.calls == [
+            "execute",
+            "markers",
+            "write_normalized",
+            "assertions",
+            "gold",
+            "artifacts",
+        ]
+        assert harness.cancellation_tokens == [token]
+        assert registry.calls == [("scenario-default", "1.0.0")]
+        assert len(normalization.calls) == 1
+        extracted, profile = normalization.calls[0]
+        assert profile is registry.profile
+        assert extracted == (
+            _ExtractedSection(
+                section_id="parse-basic",
+                text="  parse   result  ",
+                source_evidence="stdout:1-3",
+            ),
+        )
+    
+        assert result.scenario_id == "scenario-basic"
+        assert result.status is ValidationStatus.OK
+        assert result.diagnostic_class is DiagnosticClass.OK
+        assert result.error_kind is ErrorKind.OK
+        assert result.primary_message == "Scenario completed successfully."
+        assert result.command == harness.execution.command
+>       assert result.stdout_path == harness.execution.stdout_path
+E       AssertionError: assert PosixPath('raw/scenarios/basic.stdout.txt') == PosixPath('/tmp/pytest-of-root/pytest-3/test_successful_scenario_runs_0/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt')
+E        +  where PosixPath('raw/scenarios/basic.stdout.txt') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._ScenarioResultRecord object at 0x7f697c9970e0>.stdout_path
+E        +  and   PosixPath('/tmp/pytest-of-root/pytest-3/test_successful_scenario_runs_0/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt') = _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='').stdout_path
+E        +    where _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._StageHarness object at 0x7f697c997770>.execution
+
+tests/unit/validation/scenarios/test_service.py:690: AssertionError
+_ test_process_failures_become_structured_error_results[timed_out-True-False-TIMEOUT-Process timed out.] _
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697ca68750>
+state = <ExecutionState.TIMED_OUT: 'timed_out'>, timed_out = True
+cancelled = False, error_kind = <ErrorKind.TIMEOUT: 'TIMEOUT'>
+message = 'Process timed out.'
+
+    @pytest.mark.parametrize(
+        ("state", "timed_out", "cancelled", "error_kind", "message"),
+        [
+            (
+                ExecutionState.TIMED_OUT,
+                True,
+                False,
+                ErrorKind.TIMEOUT,
+                "Process timed out.",
+            ),
+            (
+                ExecutionState.CANCELLED,
+                False,
+                True,
+                ErrorKind.OTHER,
+                "Execution was cancelled.",
+            ),
+            (
+                ExecutionState.LAUNCH_FAILED,
+                False,
+                False,
+                ErrorKind.TOOL,
+                "Failed to launch GF executable.",
+            ),
+        ],
+    )
+    def test_process_failures_become_structured_error_results(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        state: ExecutionState,
+        timed_out: bool,
+        cancelled: bool,
+        error_kind: ErrorKind,
+        message: str,
+    ) -> None:
+        spec, run_config, run_paths, harness, _, normalization = _ready_harness(
+            tmp_path,
+            monkeypatch,
+        )
+        harness.execution = replace(
+            harness.execution,
+            exit_code=None,
+            execution_state=state,
+            timed_out=timed_out,
+            cancelled=cancelled,
+        )
+    
+        result = service.run_scenario(spec, run_config, run_paths)
+    
+        assert result.status is ValidationStatus.ERROR
+        assert result.diagnostic_class is DiagnosticClass.AMBIGUOUS
+        assert result.error_kind is error_kind
+        assert result.primary_message == message
+>       assert result.stdout_path == harness.execution.stdout_path
+E       AssertionError: assert PosixPath('raw/scenarios/basic.stdout.txt') == PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s0/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt')
+E        +  where PosixPath('raw/scenarios/basic.stdout.txt') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._ScenarioResultRecord object at 0x7f697ce9f750>.stdout_path
+E        +  and   PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s0/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt') = _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='').stdout_path
+E        +    where _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._StageHarness object at 0x7f697c599a70>.execution
+
+tests/unit/validation/scenarios/test_service.py:806: AssertionError
+_ test_process_failures_become_structured_error_results[cancelled-False-True-OTHER-Execution was cancelled.] _
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697c2b0830>
+state = <ExecutionState.CANCELLED: 'cancelled'>, timed_out = False
+cancelled = True, error_kind = <ErrorKind.OTHER: 'OTHER'>
+message = 'Execution was cancelled.'
+
+    @pytest.mark.parametrize(
+        ("state", "timed_out", "cancelled", "error_kind", "message"),
+        [
+            (
+                ExecutionState.TIMED_OUT,
+                True,
+                False,
+                ErrorKind.TIMEOUT,
+                "Process timed out.",
+            ),
+            (
+                ExecutionState.CANCELLED,
+                False,
+                True,
+                ErrorKind.OTHER,
+                "Execution was cancelled.",
+            ),
+            (
+                ExecutionState.LAUNCH_FAILED,
+                False,
+                False,
+                ErrorKind.TOOL,
+                "Failed to launch GF executable.",
+            ),
+        ],
+    )
+    def test_process_failures_become_structured_error_results(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        state: ExecutionState,
+        timed_out: bool,
+        cancelled: bool,
+        error_kind: ErrorKind,
+        message: str,
+    ) -> None:
+        spec, run_config, run_paths, harness, _, normalization = _ready_harness(
+            tmp_path,
+            monkeypatch,
+        )
+        harness.execution = replace(
+            harness.execution,
+            exit_code=None,
+            execution_state=state,
+            timed_out=timed_out,
+            cancelled=cancelled,
+        )
+    
+        result = service.run_scenario(spec, run_config, run_paths)
+    
+        assert result.status is ValidationStatus.ERROR
+        assert result.diagnostic_class is DiagnosticClass.AMBIGUOUS
+        assert result.error_kind is error_kind
+        assert result.primary_message == message
+>       assert result.stdout_path == harness.execution.stdout_path
+E       AssertionError: assert PosixPath('raw/scenarios/basic.stdout.txt') == PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s1/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt')
+E        +  where PosixPath('raw/scenarios/basic.stdout.txt') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._ScenarioResultRecord object at 0x7f697ce9fc50>.stdout_path
+E        +  and   PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s1/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt') = _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='').stdout_path
+E        +    where _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._StageHarness object at 0x7f697c599e00>.execution
+
+tests/unit/validation/scenarios/test_service.py:806: AssertionError
+_ test_process_failures_become_structured_error_results[launch_failed-False-False-TOOL-Failed to launch GF executable.] _
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f697c2b0c20>
+state = <ExecutionState.LAUNCH_FAILED: 'launch_failed'>, timed_out = False
+cancelled = False, error_kind = <ErrorKind.TOOL: 'TOOL'>
+message = 'Failed to launch GF executable.'
+
+    @pytest.mark.parametrize(
+        ("state", "timed_out", "cancelled", "error_kind", "message"),
+        [
+            (
+                ExecutionState.TIMED_OUT,
+                True,
+                False,
+                ErrorKind.TIMEOUT,
+                "Process timed out.",
+            ),
+            (
+                ExecutionState.CANCELLED,
+                False,
+                True,
+                ErrorKind.OTHER,
+                "Execution was cancelled.",
+            ),
+            (
+                ExecutionState.LAUNCH_FAILED,
+                False,
+                False,
+                ErrorKind.TOOL,
+                "Failed to launch GF executable.",
+            ),
+        ],
+    )
+    def test_process_failures_become_structured_error_results(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        state: ExecutionState,
+        timed_out: bool,
+        cancelled: bool,
+        error_kind: ErrorKind,
+        message: str,
+    ) -> None:
+        spec, run_config, run_paths, harness, _, normalization = _ready_harness(
+            tmp_path,
+            monkeypatch,
+        )
+        harness.execution = replace(
+            harness.execution,
+            exit_code=None,
+            execution_state=state,
+            timed_out=timed_out,
+            cancelled=cancelled,
+        )
+    
+        result = service.run_scenario(spec, run_config, run_paths)
+    
+        assert result.status is ValidationStatus.ERROR
+        assert result.diagnostic_class is DiagnosticClass.AMBIGUOUS
+        assert result.error_kind is error_kind
+        assert result.primary_message == message
+>       assert result.stdout_path == harness.execution.stdout_path
+E       AssertionError: assert PosixPath('raw/scenarios/basic.stdout.txt') == PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s2/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt')
+E        +  where PosixPath('raw/scenarios/basic.stdout.txt') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._ScenarioResultRecord object at 0x7f697ce9fd90>.stdout_path
+E        +  and   PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s2/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt') = _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='').stdout_path
+E        +    where _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._StageHarness object at 0x7f69962e95b0>.execution
+
+tests/unit/validation/scenarios/test_service.py:806: AssertionError
+=============================== warnings summary ===============================
+tests/unit/config/test_precedence.py:39
+  /mnt/data/batch03_original_repo/tests/unit/config/test_precedence.py:39: PytestUnknownMarkWarning: Unknown pytest.mark.unit - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    pytestmark = pytest.mark.unit
+
+tests/unit/diagnostics/test_streams_and_locations.py:31
+  /mnt/data/batch03_original_repo/tests/unit/diagnostics/test_streams_and_locations.py:31: PytestUnknownMarkWarning: Unknown pytest.mark.unit - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    pytestmark = pytest.mark.unit
+
+tests/unit/reporting/test_schema_registry.py:69
+  /mnt/data/batch03_original_repo/tests/unit/reporting/test_schema_registry.py:69: PytestUnknownMarkWarning: Unknown pytest.mark.schema - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    pytestmark = pytest.mark.schema
+
+tests/migrations/test_project_migrations.py:30
+  /mnt/data/batch03_original_repo/tests/migrations/test_project_migrations.py:30: PytestUnknownMarkWarning: Unknown pytest.mark.migration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    pytestmark = pytest.mark.migration
+
+tests/schemas/test_gold_schema.py:29
+  /mnt/data/batch03_original_repo/tests/schemas/test_gold_schema.py:29: PytestUnknownMarkWarning: Unknown pytest.mark.schema - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    pytestmark = pytest.mark.schema
+
+tests/schemas/test_summary_schema.py:37
+  /mnt/data/batch03_original_repo/tests/schemas/test_summary_schema.py:37: PytestUnknownMarkWarning: Unknown pytest.mark.schema - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    pytestmark = pytest.mark.schema
+
+tests/unit/validation/test_regression.py:57
+  /mnt/data/batch03_original_repo/tests/unit/validation/test_regression.py:57: PytestUnknownMarkWarning: Unknown pytest.mark.unit - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    pytestmark = pytest.mark.unit
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../../dev::test_canonical_policy_tiers_are_exact - AssertionError: assert ((<Configurat...igration'>,),) == ((<Configurat...k_default'>,))
+  
+  At index 0 diff: (<ConfigurationSource.LEGACY_MIGRATION: 'legacy_migration'>,) != (<ConfigurationSource.STARTUP_OPTION: 'startup_option'>, <ConfigurationSource.CLI: 'cli'>, <ConfigurationSource.GUI: 'gui'>, <ConfigurationSource.AUTOMATION: 'automation'>)
+  Right contains 3 more items, first extra item: (<ConfigurationSource.ENVIRONMENT_VARIABLE: 'environment_variable'>,)
+  
+  Full diff:
+    (
+        (
+  -         <ConfigurationSource.STARTUP_OPTION: 'startup_option'>,
+  -         <ConfigurationSource.CLI: 'cli'>,
+  -         <ConfigurationSource.GUI: 'gui'>,
+  -         <ConfigurationSource.AUTOMATION: 'automation'>,
+  ?                               ^^^          ^^^
+  +         <ConfigurationSource.LEGACY_MIGRATION: 'legacy_migration'>,
+  ?                              +++ ^^^ +++        +++ ^^^ +++
+  -     ),
+  -     (
+  -         <ConfigurationSource.ENVIRONMENT_VARIABLE: 'environment_variable'>,
+  -     ),
+  -     (
+  -         <ConfigurationSource.APPLICATION_STATE: 'application_state'>,
+  -     ),
+  -     (
+  -         <ConfigurationSource.FRAMEWORK_DEFAULT: 'framework_default'>,
+        ),
+    )
+FAILED ../../../dev::test_policy_rank_equivalence_and_authorization - AssertionError: assert 2 == 1
+ +  where 2 = rank(<ConfigurationSource.PROJECT_TOML: 'project_toml'>)
+ +    where rank = PrecedencePolicy(domain=<ConfigurationDomain.MODE: 'mode'>, tiers=((<ConfigurationSource.CLI: 'cli'>, <ConfigurationSo...<ConfigurationSource.PROJECT_TOML: 'project_toml'>,), (<ConfigurationSource.FRAMEWORK_DEFAULT: 'framework_default'>,))).rank
+ +    and   <ConfigurationSource.PROJECT_TOML: 'project_toml'> = ConfigurationSource.PROJECT_TOML
+FAILED ../../../dev::test_explicit_values_outrank_project_environment_state_and_defaults - assert (Configuratio...e_choices=())) == ()
+  
+  Left contains 2 more items, first extra item: ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source=<ConfigurationSource.APPLICATION_STATE: 'applicatio...cy.", stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=())
+  
+  Full diff:
+  - ()
+  + (
+  +     ConfigurationIssue(
+  +         severity=<IssueSeverity.ERROR: 'error'>,
+  +         source=<ConfigurationSource.APPLICATION_STATE: 'application_state'>,
+  +         field_path='project_root',
+  +         provided_value='state-project',
+  +         message="'application_state' is not authorized to set 'project_root'.",
+  +         remediation="Use a source authorized by the 'project_root' policy.",
+  +         stage='configuration',
+  +         error_kind='configuration',
+  +         technical_detail='',
+  +         relevant_path=None,
+  +         candidate_choices=(),
+  +     ),
+  +     ConfigurationIssue(
+  +         severity=<IssueSeverity.ERROR: 'error'>,
+  +         source=<ConfigurationSource.CLI: 'cli'>,
+  +         field_path='project_root',
+  +         provided_value='cli-project',
+  +         message="'cli' is not authorized to set 'project_root'.",
+  +         remediation="Use a source authorized by the 'project_root' policy.",
+  +         stage='configuration',
+  +         error_kind='configuration',
+  +         technical_detail='',
+  +         relevant_path=None,
+  +         candidate_choices=(),
+  +     ),
+  + )
+FAILED ../../../dev::test_project_owned_selection_is_copied_without_surface_override - AssertionError: assert <ConfigurationSource.VALIDATION_PROFILE: 'validation_profile'> is <ConfigurationSource.PROJECT_TOML: 'project_toml'>
+ +  where <ConfigurationSource.PROJECT_TOML: 'project_toml'> = ConfigurationSource.PROJECT_TOML
+FAILED ../../../dev::test_resolver_composes_precedence_environment_and_project_owners - AssertionError: assert False is True
+ +  where False = ConfigurationResolution(configuration=None, issues=(ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source...guration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=()),), provenance=()).succeeded
+FAILED ../../../dev::test_resolver_does_not_construct_run_config_when_an_owner_reports_error - AssertionError: assert (Configuratio..._choices=()),) == (Configuratio...e_choices=()))
+  
+  At index 0 diff: ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source=<ConfigurationSource.STARTUP_OPTION: 'startup_option'>, field_path='language_context', provided_value=None, message='A resolved language context is required before run configuration can be composed.', remediation='Select a GF language directory or .gf file and complete path-resolved language startup first.', stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=()) != ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source=<ConfigurationSource.PATH_DISCOVERY: 'path_discovery'>, field_path='environment.gf_executable', provided_value=None, message='GF executable was not found.', remediation='Correct the source value.', stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=())
+  Right contains one more item: ConfigurationIssue(severity=<IssueSeverity.WARNING: 'warning'>, source=<ConfigurationSource.LEGACY_MIGRATION: 'legacy_...ue.', stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=())
+  
+  Full diff:
+    (
+        ConfigurationIssue(
+            severity=<IssueSeverity.ERROR: 'error'>,
+  -         source=<ConfigurationSource.PATH_DISCOVERY: 'path_discovery'>,
+  -         field_path='environment.gf_executable',
+  +         source=<ConfigurationSource.STARTUP_OPTION: 'startup_option'>,
+  +         field_path='language_context',
+            provided_value=None,
+  +         message='A resolved language context is required before run '
+  +                 'configuration can be composed.',
+  +         remediation='Select a GF language directory or .gf file and complete '
+  +                     'path-resolved language startup first.',
+  -         message='GF executable was not found.',
+  -         remediation='Correct the source value.',
+  -         stage='configuration',
+  -         error_kind='configuration',
+  -         technical_detail='',
+  -         relevant_path=None,
+  -         candidate_choices=(),
+  -     ),
+  -     ConfigurationIssue(
+  -         severity=<IssueSeverity.WARNING: 'warning'>,
+  -         source=<ConfigurationSource.LEGACY_MIGRATION: 'legacy_migration'>,
+  -         field_path='mode',
+  -         provided_value=None,
+  -         message='Legacy mode alias was migrated.',
+  -         remediation='Correct the source value.',
+            stage='configuration',
+            error_kind='configuration',
+            technical_detail='',
+            relevant_path=None,
+            candidate_choices=(),
+        ),
+    )
+FAILED ../../../dev::test_resolver_reports_conflicting_provenance_as_composition_error - AssertionError: assert <ConfigurationSource.STARTUP_OPTION: 'startup_option'> is <ConfigurationSource.RUNTIME_DERIVED: 'runtime_derived'>
+ +  where <ConfigurationSource.STARTUP_OPTION: 'startup_option'> = ConfigurationIssue(severity=<IssueSeverity.ERROR: 'error'>, source=<ConfigurationSource.STARTUP_OPTION: 'startup_optio...st.', stage='configuration', error_kind='configuration', technical_detail='', relevant_path=None, candidate_choices=()).source
+ +  and   <ConfigurationSource.RUNTIME_DERIVED: 'runtime_derived'> = ConfigurationSource.RUNTIME_DERIVED
+FAILED ../../../dev::test_resolver_converts_invalid_run_config_into_structured_issue - TypeError: PrecedenceValues.__init__() missing 2 required positional arguments: 'selected_language_path' and 'validation_profile'
+FAILED ../../../dev::test_require_configuration_raises_canonical_configuration_error - AssertionError: Regex pattern did not match.
+  Expected regex: 'mode.*Mode is invalid'
+  Actual message: 'Configuration resolution failed.\nlanguage_context: A resolved language context is required before run configuration can be composed. Remediation: Select a GF language directory or .gf file and complete path-resolved language startup first.'
+FAILED ../../../dev/test_manifest_builder.py::test_build_manifest_uses_final_bytes_and_canonical_order - ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+FAILED ../../../dev/test_manifest_builder.py::test_build_manifest_facades_return_the_same_manifest - ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+FAILED ../../../dev/test_manifest_builder.py::test_optional_missing_artifact_is_omitted_with_bounded_warning - ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+FAILED ../../../dev/test_manifest_builder.py::test_empty_text_artifact_is_allowed_when_role_contract_allows_it - ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+FAILED ../../../dev/test_manifest_builder.py::test_case_sensitive_policy_preserves_distinct_display_paths - ValueError: Invalid run ID '20260725_190423_demo'. Expected YYYYMMDD_HHMMSS with an optional collision suffix beginning at _02; for example '20260724_145945_02'
+FAILED ../../../dev/test_manifest_verifier.py::test_unsafe_artifact_paths_are_errors[-MANIFEST_ARTIFACT_PATH_EMPTY] - ValueError: unsafe_paths item must not be empty
+FAILED ../../../dev/test_manifest_verifier.py::test_missing_optional_artifact_is_warning_not_failure - ValueError: an OK verification result cannot contain integrity failures
+FAILED ../../../dev/test_summary_projection.py::test_file_projection_normalizes_paths_and_digest - AssertionError: assert ['src/Alpha.g...src\\beta.gf'] == ['src/Alpha.g...'src/beta.gf']
+  
+  At index 1 diff: 'src\\beta.gf' != 'src/beta.gf'
+  
+  Full diff:
+    [
+        'src/Alpha.gf',
+  -     'src/beta.gf',
+  ?         ^
+  +     'src\\beta.gf',
+  ?         ^^
+    ]
+FAILED ../../../dev/test_summary_projection.py::test_diff_projection_supports_nullable_statuses_required_by_schema - TypeError: diff_entry.previous_status must be str
+FAILED ../../../dev/test_summary_projection.py::test_top_errors_use_count_then_case_insensitive_message_order - AssertionError: assert ['beta', 'zeta', 'Alpha'] == ['beta', 'Alpha', 'zeta']
+  
+  At index 1 diff: 'zeta' != 'Alpha'
+  
+  Full diff:
+    [
+        'beta',
+  +     'zeta',
+        'Alpha',
+  -     'zeta',
+    ]
+FAILED ../../../dev/test_manifest_migrations.py::test_symlink_artifact_is_rejected_when_supported - AssertionError: assert <MigrationStatus.MIGRATED: 'migrated'> is <MigrationStatus.BLOCKED: 'blocked'>
+ +  where <MigrationStatus.MIGRATED: 'migrated'> = MigrationResult(migration_id='legacy-run-to-gf-wordbench-artifact-manifest-v1', source_schema='absent_or_legacy_manife..., status=<MigrationStatus.MIGRATED: 'migrated'>, warnings=(), losses=(), changed=True, written=False, backup_path=None).status
+ +    where MigrationResult(migration_id='legacy-run-to-gf-wordbench-artifact-manifest-v1', source_schema='absent_or_legacy_manife..., status=<MigrationStatus.MIGRATED: 'migrated'>, warnings=(), losses=(), changed=True, written=False, backup_path=None) = DocumentMigration(result=MigrationResult(migration_id='legacy-run-to-gf-wordbench-artifact-manifest-v1', source_schema...bytes': 6, 'sha256': '34a04005bcaf206eec990bd9637d9fdb6725e0a0c0d4aebf003f17f4c956eb5c', 'created_by': 'migration'}]})).result
+ +  and   <MigrationStatus.BLOCKED: 'blocked'> = MigrationStatus.BLOCKED
+FAILED ../../../dev/test_state_migrations.py::test_complete_supported_legacy_state_maps_to_path_resolved_shape - AssertionError: assert {'gf_executab...ct.toml', ...} == {'gf_executab...e': None, ...}
+  
+  Omitting 4 identical items, use -vv to show
+  Differing items:
+  {'last_selected_validation_profile': 'C:/work/GF Wordbench/project/project.toml'} != {'last_selected_validation_profile': None}
+  
+  Full diff:
+    {
+        'gf_executable': 'C:/gf/bin/gf.exe',
+        'last_rgl_root': 'C:/gf/rgl',
+        'last_selected_language_path': None,
+  -     'last_selected_validation_profile': None,
+  +     'last_selected_validation_profile': 'C:/work/GF Wordbench/project/project.toml',
+        'output_root': 'C:/work/runs',
+    }
+FAILED ../../../dev/test_state_migrations.py::test_path_migration_preserves_local_paths_without_resolving_filesystem - AssertionError: assert set() == {('discarded_...roject_root')}
+  
+  Extra items in the right set:
+  ('discarded_legacy_field', 'selected_project_root')
+  
+  Full diff:
+  + set()
+  - {
+  -     (
+  -         'discarded_legacy_field',
+  -         'selected_project_root',
+  -     ),
+  - }
+FAILED ../../../dev/test_state_migrations.py::test_language_identity_runtime_and_evidence_fields_are_discarded - AssertionError: assert ('audit_resul...running', ...) == ('audit_resul...running', ...)
+  
+  At index 18 diff: 'selected_scan_glob' != 'selected_project_root'
+  Right contains 2 more items, first extra item: 'selected_scan_dir'
+  
+  Full diff:
+    (
+        'audit_results',
+        'catalog_path',
+        'current_run_config',
+        'current_run_result',
+        'file_results',
+        'is_running',
+        'language',
+        'language_code',
+        'language_name',
+        'last_catalog_entry',
+        'last_language_id',
+        'project_id',
+        'project_name',
+        'project_registry',
+        'scenario_results',
+        'selected_exclude_regex',
+        'selected_gf_path',
+        'selected_include_regex',
+  -     'selected_project_root',
+  -     'selected_scan_dir',
+        'selected_scan_glob',
+    )
+FAILED ../../../dev/test_state_migrations.py::test_repository_migrates_once_publishes_canonical_and_preserves_source - AssertionError: assert 'C:/workspace/project/project/project.toml' is None
+ +  where 'C:/workspace/project/project/project.toml' = EnvironmentState(last_selected_language_path=None, last_selected_validation_profile='C:/workspace/project/project/project.toml', last_rgl_root='C:/gf/rgl', gf_executable=None, output_root=None).last_selected_validation_profile
+ +    where EnvironmentState(last_selected_language_path=None, last_selected_validation_profile='C:/workspace/project/project/project.toml', last_rgl_root='C:/gf/rgl', gf_executable=None, output_root=None) = AppState(schema_id='gf-wordbench.app-state', schema_version='2.0', producer=ProducerInfo(name='gf-wordbench', version=..., emit_cpu_stats=False), last_run=LastRunState(run_dir=None, summary_path=None, status_message='migrated from legacy')).environment
+ +      where AppState(schema_id='gf-wordbench.app-state', schema_version='2.0', producer=ProducerInfo(name='gf-wordbench', version=..., emit_cpu_stats=False), last_run=LastRunState(run_dir=None, summary_path=None, status_message='migrated from legacy')) = StateLoadResult(state=AppState(schema_id='gf-wordbench.app-state', schema_version='2.0', producer=ProducerInfo(name='g..., path=PosixPath('/tmp/pytest-of-root/pytest-3/test_repository_migrates_once_0/.gf_audit_state.json'))), migrated=True).state
+FAILED ../../../dev/test_service.py::test_protocol_fakes_satisfy_public_service_ports - TypeError: Instance and class checks can only be used with @runtime_checkable protocols
+FAILED ../../../dev/test_service.py::test_preflight_value_object_enforces_success_and_failure_coherence - AssertionError: Regex pattern did not match.
+  Expected regex: 'requires a message'
+  Actual message: 'message must not be empty'
+FAILED ../../../dev/test_service.py::test_cancellation_after_request_build_prevents_process_launch - AssertionError: assert <ValidationStatus.ERROR: 'ERROR'> is <ValidationStatus.SKIPPED: 'SKIPPED'>
+ +  where <ValidationStatus.ERROR: 'ERROR'> = CompileSummary(target_id='source', target_kind=<CompileTargetKind.SOURCE: 'source'>, status=<ValidationStatus.ERROR: '...artifacts=(PosixPath('artifacts/Source.gfo'),), produced_artifacts=(), artifact_checks_passed=False, skipped_reason='').status
+ +  and   <ValidationStatus.SKIPPED: 'SKIPPED'> = ValidationStatus.SKIPPED
+FAILED ../../../dev/test_service.py::test_default_stage_loader_binds_the_canonical_stage_owners - ImportError: cannot import name 'evaluate_scenario_assertions' from 'gf_wordbench.validation.scenarios.assertions' (/mnt/data/batch03_original_repo/src/gf_wordbench/validation/scenarios/assertions.py)
+FAILED ../../../dev/test_service.py::test_successful_scenario_runs_each_owner_in_canonical_order - AssertionError: assert PosixPath('raw/scenarios/basic.stdout.txt') == PosixPath('/tmp/pytest-of-root/pytest-3/test_successful_scenario_runs_0/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt')
+ +  where PosixPath('raw/scenarios/basic.stdout.txt') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._ScenarioResultRecord object at 0x7f697c9970e0>.stdout_path
+ +  and   PosixPath('/tmp/pytest-of-root/pytest-3/test_successful_scenario_runs_0/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt') = _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='').stdout_path
+ +    where _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._StageHarness object at 0x7f697c997770>.execution
+FAILED ../../../dev/test_service.py::test_process_failures_become_structured_error_results[timed_out-True-False-TIMEOUT-Process timed out.] - AssertionError: assert PosixPath('raw/scenarios/basic.stdout.txt') == PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s0/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt')
+ +  where PosixPath('raw/scenarios/basic.stdout.txt') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._ScenarioResultRecord object at 0x7f697ce9f750>.stdout_path
+ +  and   PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s0/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt') = _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='').stdout_path
+ +    where _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._StageHarness object at 0x7f697c599a70>.execution
+FAILED ../../../dev/test_service.py::test_process_failures_become_structured_error_results[cancelled-False-True-OTHER-Execution was cancelled.] - AssertionError: assert PosixPath('raw/scenarios/basic.stdout.txt') == PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s1/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt')
+ +  where PosixPath('raw/scenarios/basic.stdout.txt') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._ScenarioResultRecord object at 0x7f697ce9fc50>.stdout_path
+ +  and   PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s1/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt') = _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='').stdout_path
+ +    where _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._StageHarness object at 0x7f697c599e00>.execution
+FAILED ../../../dev/test_service.py::test_process_failures_become_structured_error_results[launch_failed-False-False-TOOL-Failed to launch GF executable.] - AssertionError: assert PosixPath('raw/scenarios/basic.stdout.txt') == PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s2/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt')
+ +  where PosixPath('raw/scenarios/basic.stdout.txt') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._ScenarioResultRecord object at 0x7f697ce9fd90>.stdout_path
+ +  and   PosixPath('/tmp/pytest-of-root/pytest-3/test_process_failures_become_s2/run_20260725T190423Z_test/raw/scenarios/basic.stdout.txt') = _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='').stdout_path
+ +    where _Execution(command=('gf', '--run', 'scenarios/basic.gfs'), working_directory=PosixPath('/tmp/pytest-of-root/pytest-3/t...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', error_kind=<ErrorKind.OK: 'OK'>, primary_message='') = <mnt.data.batch03_original_repo.tests.unit.validation.scenarios.test_service._StageHarness object at 0x7f69962e95b0>.execution
+32 failed, 1758 passed, 7 warnings in 4.82s

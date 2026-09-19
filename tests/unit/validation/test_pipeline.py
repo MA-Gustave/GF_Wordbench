@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 import pytest
 
@@ -33,23 +33,21 @@ from gf_wordbench.validation.pipeline import (
 
 _NOW: Final[datetime] = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
 
-_STAGE_CLASSES: Final[Mapping[ValidationStageId, ValidationStageClass]] = (
-    MappingProxyType(
-        {
-            ValidationStageId.SELECT: ValidationStageClass.INVENTORY,
-            ValidationStageId.INVENTORY: ValidationStageClass.INVENTORY,
-            ValidationStageId.STATIC_SCAN: ValidationStageClass.ANALYSIS,
-            ValidationStageId.COMPILE: ValidationStageClass.ANALYSIS,
-            ValidationStageId.NORMALIZE_DIAGNOSTICS: ValidationStageClass.ANALYSIS,
-            ValidationStageId.CLASSIFY_FAILURES: ValidationStageClass.ANALYSIS,
-            ValidationStageId.EXECUTE_SCENARIOS: ValidationStageClass.SCENARIO,
-            ValidationStageId.NORMALIZE_SCENARIOS: ValidationStageClass.SCENARIO,
-            ValidationStageId.COMPARE_GOLD: ValidationStageClass.SCENARIO,
-            ValidationStageId.BUILD_RELEASE_ARTIFACTS: ValidationStageClass.RELEASE,
-            ValidationStageId.EVALUATE_RELEASE: ValidationStageClass.RELEASE,
-            ValidationStageId.COMPARE_PREVIOUS: ValidationStageClass.FINALIZATION,
-        }
-    )
+_STAGE_CLASSES: Final[Mapping[ValidationStageId, ValidationStageClass]] = MappingProxyType(
+    {
+        ValidationStageId.SELECT: ValidationStageClass.INVENTORY,
+        ValidationStageId.INVENTORY: ValidationStageClass.INVENTORY,
+        ValidationStageId.STATIC_SCAN: ValidationStageClass.ANALYSIS,
+        ValidationStageId.COMPILE: ValidationStageClass.ANALYSIS,
+        ValidationStageId.NORMALIZE_DIAGNOSTICS: ValidationStageClass.ANALYSIS,
+        ValidationStageId.CLASSIFY_FAILURES: ValidationStageClass.ANALYSIS,
+        ValidationStageId.EXECUTE_SCENARIOS: ValidationStageClass.SCENARIO,
+        ValidationStageId.NORMALIZE_SCENARIOS: ValidationStageClass.SCENARIO,
+        ValidationStageId.COMPARE_GOLD: ValidationStageClass.SCENARIO,
+        ValidationStageId.BUILD_RELEASE_ARTIFACTS: ValidationStageClass.RELEASE,
+        ValidationStageId.EVALUATE_RELEASE: ValidationStageClass.RELEASE,
+        ValidationStageId.COMPARE_PREVIOUS: ValidationStageClass.FINALIZATION,
+    }
 )
 
 _MODE_PARTICIPATION: Final[
@@ -183,7 +181,7 @@ def _all_executors() -> Mapping[
     ValidationStageId,
     Callable[[PipelineStageContext], PipelineStageResult],
 ]:
-    return {stage_id: _executor for stage_id in CANONICAL_STAGE_ORDER}
+    return dict.fromkeys(CANONICAL_STAGE_ORDER, _executor)
 
 
 def _focused_plan(
@@ -193,9 +191,7 @@ def _focused_plan(
     participation: StageParticipation = StageParticipation.REQUIRED,
     metadata: Mapping[str, str] | None = None,
 ) -> ValidationPipelinePlan:
-    overrides = {
-        item: StageParticipation.SKIPPED for item in CANONICAL_STAGE_ORDER
-    }
+    overrides = dict.fromkeys(CANONICAL_STAGE_ORDER, StageParticipation.SKIPPED)
     overrides[stage_id] = participation
     return ValidationPipelinePlan(
         mode=ValidationMode.QUICK,
@@ -286,16 +282,7 @@ def test_required_override_requires_an_executor() -> None:
         ValidationPipelinePlan(
             mode=ValidationMode.QUICK,
             request=object(),
-            executors={
-                stage_id: _executor
-                for stage_id in (
-                    ValidationStageId.SELECT,
-                    ValidationStageId.INVENTORY,
-                    ValidationStageId.STATIC_SCAN,
-                    ValidationStageId.COMPILE,
-                    ValidationStageId.NORMALIZE_DIAGNOSTICS,
-                )
-            },
+            executors=dict.fromkeys((ValidationStageId.SELECT, ValidationStageId.INVENTORY, ValidationStageId.STATIC_SCAN, ValidationStageId.COMPILE, ValidationStageId.NORMALIZE_DIAGNOSTICS), _executor),
             participation_overrides={
                 ValidationStageId.COMPARE_PREVIOUS: StageParticipation.REQUIRED
             },
@@ -510,9 +497,7 @@ def test_stage_result_enforces_status_dimension_consistency(
 
 
 def test_stage_context_copies_previous_results_and_metadata() -> None:
-    previous = {
-        ValidationStageId.SELECT: _stage_result(ValidationStageId.SELECT, required=True)
-    }
+    previous = {ValidationStageId.SELECT: _stage_result(ValidationStageId.SELECT, required=True)}
     metadata = {"zeta": "2", "alpha": "1"}
     context = PipelineStageContext(
         mode=ValidationMode.QUICK,
@@ -544,9 +529,7 @@ def test_stage_context_rejects_mismatched_previous_result_key() -> None:
             stage_id=ValidationStageId.INVENTORY,
             participation=StageParticipation.REQUIRED,
             request=object(),
-            previous_results={
-                ValidationStageId.SELECT: _stage_result(ValidationStageId.INVENTORY)
-            },
+            previous_results={ValidationStageId.SELECT: _stage_result(ValidationStageId.INVENTORY)},
             metadata={},
         )
 
@@ -620,9 +603,7 @@ def test_execute_pipeline_passes_request_metadata_and_prior_results() -> None:
         )
         return _stage_result(context.stage_id, required=True)
 
-    overrides = {
-        stage_id: StageParticipation.SKIPPED for stage_id in CANONICAL_STAGE_ORDER
-    }
+    overrides = dict.fromkeys(CANONICAL_STAGE_ORDER, StageParticipation.SKIPPED)
     overrides[ValidationStageId.SELECT] = StageParticipation.REQUIRED
     overrides[ValidationStageId.INVENTORY] = StageParticipation.REQUIRED
     plan = ValidationPipelinePlan(
@@ -762,9 +743,7 @@ def test_optional_error_does_not_block_required_dependent_but_is_overall_error()
         calls.append(context.stage_id)
         return _stage_result(context.stage_id, required=True)
 
-    overrides = {
-        stage_id: StageParticipation.SKIPPED for stage_id in CANONICAL_STAGE_ORDER
-    }
+    overrides = dict.fromkeys(CANONICAL_STAGE_ORDER, StageParticipation.SKIPPED)
     overrides[ValidationStageId.INVENTORY] = StageParticipation.OPTIONAL
     overrides[ValidationStageId.COMPILE] = StageParticipation.REQUIRED
     plan = ValidationPipelinePlan(
@@ -833,7 +812,12 @@ def test_aggregate_pipeline_status_contract(
 
 def test_aggregate_pipeline_status_rejects_non_results() -> None:
     with pytest.raises(TypeError, match="must contain PipelineStageResult"):
-        aggregate_pipeline_status((_stage_result(ValidationStageId.SELECT), object()))
+        aggregate_pipeline_status(
+            cast(
+                "Sequence[PipelineStageResult]",
+                (_stage_result(ValidationStageId.SELECT), object()),
+            )
+        )
 
 
 def test_execute_pipeline_rejects_invalid_public_arguments() -> None:

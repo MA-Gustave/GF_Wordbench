@@ -8,11 +8,11 @@ responsibility of the project schema, validator, and loader modules.
 
 from __future__ import annotations
 
-import math
-import tomllib
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, time
+import math
 from pathlib import Path
+import tomllib
 from typing import Final, TypeAlias
 
 from gf_wordbench.infrastructure.atomic_io import atomic_write_text
@@ -110,9 +110,7 @@ def read_project_toml(project_file: Path) -> TomlDocument:
     try:
         text = payload.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
-        raise ProjectTomlDecodeError(
-            f"Project TOML is not valid UTF-8: {path}"
-        ) from exc
+        raise ProjectTomlDecodeError(f"Project TOML is not valid UTF-8: {path}") from exc
 
     return parse_project_toml(text, source=path)
 
@@ -133,9 +131,7 @@ def parse_project_toml(
         parsed = tomllib.loads(normalized_text)
     except tomllib.TOMLDecodeError as exc:
         location = f" in {source}" if source is not None else ""
-        raise ProjectTomlDecodeError(
-            f"Invalid project TOML{location}: {exc}"
-        ) from exc
+        raise ProjectTomlDecodeError(f"Invalid project TOML{location}: {exc}") from exc
 
     return _normalize_document(parsed)
 
@@ -175,9 +171,7 @@ def write_project_toml(
         actual = read_project_toml(temporary)
 
         if actual != expected:
-            raise ProjectTomlEncodeError(
-                "Written project TOML failed semantic validation"
-            )
+            raise ProjectTomlEncodeError("Written project TOML failed semantic validation")
 
     return atomic_write_text(
         path,
@@ -213,14 +207,10 @@ def _render_normalized_document(document: TomlDocument) -> str:
     try:
         reparsed = tomllib.loads(rendered)
     except tomllib.TOMLDecodeError as exc:
-        raise ProjectTomlEncodeError(
-            f"Canonical project TOML rendering is invalid: {exc}"
-        ) from exc
+        raise ProjectTomlEncodeError(f"Canonical project TOML rendering is invalid: {exc}") from exc
 
     if _normalize_document(reparsed) != document:
-        raise ProjectTomlEncodeError(
-            "Canonical project TOML failed semantic round-trip validation"
-        )
+        raise ProjectTomlEncodeError("Canonical project TOML failed semantic round-trip validation")
 
     return rendered
 
@@ -229,17 +219,13 @@ def _normalize_document(document: Mapping[str, object]) -> TomlDocument:
     """Normalize and validate the root TOML document."""
 
     if not isinstance(document, Mapping):
-        raise ProjectTomlEncodeError(
-            "Project TOML document must be a mapping"
-        )
+        raise ProjectTomlEncodeError("Project TOML document must be a mapping")
 
     normalized: TomlDocument = {}
 
     for key, value in document.items():
         if not isinstance(key, str) or not key:
-            raise ProjectTomlEncodeError(
-                "Project TOML keys must be non-empty strings"
-            )
+            raise ProjectTomlEncodeError("Project TOML keys must be non-empty strings")
 
         normalized[key] = _normalize_value(
             value,
@@ -262,8 +248,7 @@ def _normalize_value(
         for key, child in value.items():
             if not isinstance(key, str) or not key:
                 raise ProjectTomlEncodeError(
-                    f"TOML key at {_display_path(path)} "
-                    "must be a non-empty string"
+                    f"TOML key at {_display_path(path)} must be a non-empty string"
                 )
 
             table[key] = _normalize_value(
@@ -297,8 +282,7 @@ def _normalize_value(
         return value
 
     raise ProjectTomlEncodeError(
-        f"Unsupported TOML value at {_display_path(path)}: "
-        f"{type(value).__name__}"
+        f"Unsupported TOML value at {_display_path(path)}: {type(value).__name__}"
     )
 
 
@@ -321,8 +305,7 @@ def _partition_table(
     for key, value in scalars.items():
         if _contains_mapping(value):
             raise ProjectTomlEncodeError(
-                "Arrays of tables are not supported at "
-                f"{_display_path((*path, key))}"
+                f"Arrays of tables are not supported at {_display_path((*path, key))}"
             )
 
     return scalars, child_tables
@@ -372,30 +355,21 @@ def _render_assignment(
 
         return [
             f"{formatted_key} = [",
-            *(
-                f"  {_format_scalar(item)},"
-                for item in value
-            ),
+            *(f"  {_format_scalar(item)}," for item in value),
             "]",
         ]
 
-    return [
-        f"{formatted_key} = {_format_scalar(value)}"
-    ]
+    return [f"{formatted_key} = {_format_scalar(value)}"]
 
 
 def _format_scalar(value: TomlValue) -> str:
     """Render one TOML scalar value."""
 
     if isinstance(value, dict):
-        raise ProjectTomlEncodeError(
-            "Inline tables are not emitted"
-        )
+        raise ProjectTomlEncodeError("Inline tables are not emitted")
 
     if isinstance(value, list):
-        raise ProjectTomlEncodeError(
-            "Nested arrays are not emitted"
-        )
+        raise ProjectTomlEncodeError("Nested arrays are not emitted")
 
     if isinstance(value, str):
         return _quote_basic_string(value)
@@ -418,18 +392,13 @@ def _format_scalar(value: TomlValue) -> str:
     if isinstance(value, time):
         return value.isoformat()
 
-    raise ProjectTomlEncodeError(
-        f"Unsupported TOML scalar: {type(value).__name__}"
-    )
+    raise ProjectTomlEncodeError(f"Unsupported TOML scalar: {type(value).__name__}")
 
 
 def _format_key(key: str) -> str:
     """Render a TOML bare or quoted key."""
 
-    if key and all(
-        character in _BARE_KEY_CHARS
-        for character in key
-    ):
+    if key and all(character in _BARE_KEY_CHARS for character in key):
         return key
 
     return _quote_basic_string(key)
@@ -475,14 +444,8 @@ def _ordered_keys(
 
     preferred_set = set(preferred)
 
-    return [
-        key
-        for key in preferred
-        if key in mapping
-    ] + sorted(
-        key
-        for key in mapping
-        if key not in preferred_set
+    return [key for key in preferred if key in mapping] + sorted(
+        key for key in mapping if key not in preferred_set
     )
 
 
@@ -493,10 +456,7 @@ def _contains_mapping(value: TomlValue) -> bool:
         return True
 
     if isinstance(value, list):
-        return any(
-            _contains_mapping(item)
-            for item in value
-        )
+        return any(_contains_mapping(item) for item in value)
 
     return False
 

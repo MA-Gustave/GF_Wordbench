@@ -20,9 +20,7 @@ from gf_wordbench.kernel.statuses import (
     ValidationStatus,
 )
 
-_STATUS_CONTRACTS: Final[
-    tuple[type[StrEnum], tuple[tuple[str, str], ...]], ...
-] = (
+_STATUS_CONTRACTS: Final[tuple[tuple[type[StrEnum], tuple[tuple[str, str], ...]], ...]] = (
     (
         ValidationStatus,
         (
@@ -196,10 +194,10 @@ def test_equal_text_does_not_merge_distinct_contract_dimensions() -> None:
         OverallStatus,
         ErrorKind,
     }
-    assert ValidationStatus.OK is not OverallStatus.OK
-    assert ValidationStatus.OK is not ErrorKind.OK
-    assert OverallStatus.OK is not ErrorKind.OK
-    assert ValidationStatus.SKIPPED is not DiagnosticClass.SKIPPED
+    assert id(ValidationStatus.OK) != id(OverallStatus.OK)
+    assert id(ValidationStatus.OK) != id(ErrorKind.OK)
+    assert id(OverallStatus.OK) != id(ErrorKind.OK)
+    assert id(ValidationStatus.SKIPPED) != id(DiagnosticClass.SKIPPED)
 
 
 def test_validation_and_overall_status_have_different_terminal_domains() -> None:
@@ -224,6 +222,6 @@ def test_execution_state_does_not_encode_not_started() -> None:
 
 def test_mode_and_target_dimensions_remain_independent() -> None:
     assert ValidationMode.CHECKPOINT.value == TargetKind.CHECKPOINT.value
-    assert ValidationMode.CHECKPOINT is not TargetKind.CHECKPOINT
+    assert id(ValidationMode.CHECKPOINT) != id(TargetKind.CHECKPOINT)
     assert type(ValidationMode.CHECKPOINT) is ValidationMode
     assert type(TargetKind.CHECKPOINT) is TargetKind

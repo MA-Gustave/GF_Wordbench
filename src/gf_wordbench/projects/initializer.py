@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import os
-import re
-from contextlib import nullcontext
-from datetime import UTC, datetime
-from uuid import uuid4
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
+import os
 from pathlib import Path, PurePosixPath
+import re
 from types import MappingProxyType
 from typing import Final
+from uuid import uuid4
 
 from gf_wordbench.kernel.errors import (
     ContractViolationError,
@@ -42,19 +41,13 @@ __all__ = (
 )
 
 _PROJECT_FILENAME: Final[str] = "project.toml"
-_TEMPLATE_DIRECTORY: Final[PurePosixPath] = PurePosixPath(
-    "templates/validation-profile"
-)
+_TEMPLATE_DIRECTORY: Final[PurePosixPath] = PurePosixPath("templates/validation-profile")
 _STAGE_SUFFIX: Final[str] = ".gf-wordbench-profile-init-stage"
 _ROLLBACK_SUFFIX: Final[str] = ".gf-wordbench-profile-init-rollback"
 _OPERATION_TYPE: Final[str] = "initialize-validation-profile"
 
-_PLACEHOLDER_TOKEN: Final[re.Pattern[str]] = re.compile(
-    r"^<[A-Z][A-Z0-9_-]*>$"
-)
-_PLACEHOLDER_REFERENCE: Final[re.Pattern[str]] = re.compile(
-    r"<[A-Z][A-Z0-9_-]*>"
-)
+_PLACEHOLDER_TOKEN: Final[re.Pattern[str]] = re.compile(r"^<[A-Z][A-Z0-9_-]*>$")
+_PLACEHOLDER_REFERENCE: Final[re.Pattern[str]] = re.compile(r"<[A-Z][A-Z0-9_-]*>")
 
 _TEXT_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
@@ -108,9 +101,7 @@ class ProjectInitializationRequest:
         object.__setattr__(
             self,
             "template_values",
-            MappingProxyType(
-                _normalized_template_values(self.template_values)
-            ),
+            MappingProxyType(_normalized_template_values(self.template_values)),
         )
 
     @property
@@ -176,11 +167,7 @@ class ProjectInitializer:
         self._filesystem = filesystem
         self._config_writer = config_writer
         self._lifecycle_lock = lifecycle_lock
-        self._validator = (
-            validator
-            if validator is not None
-            else ProjectValidator(filesystem)
-        )
+        self._validator = validator if validator is not None else ProjectValidator(filesystem)
 
     def initialize(
         self,
@@ -189,9 +176,7 @@ class ProjectInitializer:
         """Materialize and atomically publish one external validation profile."""
 
         if not isinstance(request, ProjectInitializationRequest):
-            raise TypeError(
-                "request must be a ProjectInitializationRequest"
-            )
+            raise TypeError("request must be a ProjectInitializationRequest")
 
         workspace_root = self._filesystem.resolve(request.workspace_root)
         project_root = self._filesystem.resolve(request.project_root)
@@ -202,9 +187,7 @@ class ProjectInitializer:
             workspace_root=workspace_root,
         )
 
-        template_root = self._filesystem.resolve(
-            self._template_source.root
-        )
+        template_root = self._filesystem.resolve(self._template_source.root)
         self._require_template_root(
             template_root,
             workspace_root=workspace_root,
@@ -223,19 +206,25 @@ class ProjectInitializer:
             suffix=_ROLLBACK_SUFFIX,
         )
 
-        lock_context = nullcontext()
-        if self._lifecycle_lock is not None:
-            lock_context = self._lifecycle_lock.acquire(
-                LifecycleLockRequest(
-                    operation_id=uuid4().hex,
-                    operation_type=_OPERATION_TYPE,
-                    process_id=os.getpid(),
-                    started_at=datetime.now(UTC),
-                    workspace_root=project_root.parent,
-                )
+        if self._lifecycle_lock is None:
+            return self._initialize_locked(
+                request,
+                workspace_root=workspace_root,
+                project_root=project_root,
+                template_root=template_root,
+                stage_root=stage_root,
+                rollback_root=rollback_root,
             )
 
-        with lock_context:
+        with self._lifecycle_lock.acquire(
+            LifecycleLockRequest(
+                operation_id=uuid4().hex,
+                operation_type=_OPERATION_TYPE,
+                process_id=os.getpid(),
+                started_at=datetime.now(UTC),
+                workspace_root=project_root.parent,
+            )
+        ):
             return self._initialize_locked(
                 request,
                 workspace_root=workspace_root,
@@ -386,9 +375,8 @@ class ProjectInitializer:
         )
 
     def _require_workspace(self, workspace_root: Path) -> None:
-        if (
-            not self._filesystem.exists(workspace_root)
-            or not self._filesystem.is_directory(workspace_root)
+        if not self._filesystem.exists(workspace_root) or not self._filesystem.is_directory(
+            workspace_root
         ):
             raise ProjectConfigurationError(
                 "Profile initialization requires an existing Wordbench workspace",
@@ -408,20 +396,14 @@ class ProjectInitializer:
             raise ProjectConfigurationError(
                 "Validation-profile destination must be external to the Wordbench repository",
                 code="GF-WB-PROJECT-INIT-002",
-                detail=(
-                    f"Repository: {workspace_root!s}; "
-                    f"destination: {project_root!s}."
-                ),
+                detail=(f"Repository: {workspace_root!s}; destination: {project_root!s}."),
                 stage="projects",
                 operation=_OPERATION_TYPE,
                 subject=str(project_root),
             )
 
         parent = project_root.parent
-        if (
-            not self._filesystem.exists(parent)
-            or not self._filesystem.is_directory(parent)
-        ):
+        if not self._filesystem.exists(parent) or not self._filesystem.is_directory(parent):
             raise ProjectConfigurationError(
                 "Validation-profile destination parent is unavailable",
                 code="GF-WB-PROJECT-INIT-003",
@@ -436,9 +418,7 @@ class ProjectInitializer:
         *,
         workspace_root: Path,
     ) -> None:
-        expected = self._filesystem.resolve(
-            workspace_root.joinpath(*_TEMPLATE_DIRECTORY.parts)
-        )
+        expected = self._filesystem.resolve(workspace_root.joinpath(*_TEMPLATE_DIRECTORY.parts))
         if template_root != expected:
             raise ContractViolationError(
                 "The template source is not templates/validation-profile",
@@ -449,9 +429,8 @@ class ProjectInitializer:
                 subject=str(template_root),
             )
 
-        if (
-            not self._filesystem.exists(template_root)
-            or not self._filesystem.is_directory(template_root)
+        if not self._filesystem.exists(template_root) or not self._filesystem.is_directory(
+            template_root
         ):
             raise ProjectConfigurationError(
                 "The canonical validation-profile template is unavailable",
@@ -536,10 +515,7 @@ class ProjectInitializer:
             raise ContractViolationError(
                 "Profile initialization failed and automatic rollback also failed",
                 code="GF-WB-PROJECT-INIT-010",
-                detail=(
-                    f"Original failure: {type(original_error).__name__}: "
-                    f"{original_error}"
-                ),
+                detail=(f"Original failure: {type(original_error).__name__}: {original_error}"),
                 stage="projects",
                 operation=_OPERATION_TYPE,
                 subject=str(project_root),
@@ -566,6 +542,7 @@ def initialize_project(
         validator=validator,
     ).initialize(request)
 
+
 def _staged_configuration(
     config: ProjectConfig,
     *,
@@ -589,17 +566,11 @@ def _require_matching_configuration(
 
     mismatches: list[str] = []
     if config.project_root != project_root:
-        mismatches.append(
-            f"project_root={config.project_root!s}"
-        )
+        mismatches.append(f"project_root={config.project_root!s}")
     if config.project_file != expected_project_file:
-        mismatches.append(
-            f"project_file={config.project_file!s}"
-        )
+        mismatches.append(f"project_file={config.project_file!s}")
     if config.source_root != expected_source_root:
-        mismatches.append(
-            f"source_root={config.source_root!s}"
-        )
+        mismatches.append(f"source_root={config.source_root!s}")
 
     if mismatches:
         raise ProjectConfigurationError(
@@ -610,7 +581,6 @@ def _require_matching_configuration(
             operation="initialize-project",
             subject=str(expected_project_file),
         )
-
 
 
 def _lifecycle_sibling(
@@ -647,9 +617,7 @@ def _inventory_layout(
 
     for entry in inventory:
         if not isinstance(entry, TreeEntry):
-            raise ContractViolationError(
-                f"{owner} returned a non-TreeEntry inventory value"
-            )
+            raise ContractViolationError(f"{owner} returned a non-TreeEntry inventory value")
 
         relative_path = _validated_relative_path(entry.relative_path)
         if entry.kind not in {
@@ -711,12 +679,8 @@ def _require_matching_layout(
     expected_paths = set(expected)
     observed_paths = set(observed)
 
-    missing = sorted(
-        (path.as_posix() for path in expected_paths - observed_paths)
-    )
-    unexpected = sorted(
-        (path.as_posix() for path in observed_paths - expected_paths)
-    )
+    missing = sorted(path.as_posix() for path in expected_paths - observed_paths)
+    unexpected = sorted(path.as_posix() for path in observed_paths - expected_paths)
     changed = sorted(
         path.as_posix()
         for path in expected_paths & observed_paths
@@ -744,11 +708,7 @@ def _require_matching_layout(
 def _created_files(
     layout: Mapping[PurePosixPath, TreeEntryKind],
 ) -> tuple[PurePosixPath, ...]:
-    return tuple(
-        path
-        for path, kind in layout.items()
-        if kind is TreeEntryKind.FILE
-    )
+    return tuple(path for path, kind in layout.items() if kind is TreeEntryKind.FILE)
 
 
 def _assert_stage(stage: _ProjectTemplateStage) -> None:
@@ -804,15 +764,11 @@ def _raise_for_validation(
 
     errors = validation.errors
     detail = "; ".join(
-        f"{item.code} {item.field}: {item.message}"
-        for item in errors[:_MAX_VALIDATION_ERRORS]
+        f"{item.code} {item.field}: {item.message}" for item in errors[:_MAX_VALIDATION_ERRORS]
     )
 
     if len(errors) > _MAX_VALIDATION_ERRORS:
-        detail += (
-            f"; and {len(errors) - _MAX_VALIDATION_ERRORS} "
-            "additional error(s)"
-        )
+        detail += f"; and {len(errors) - _MAX_VALIDATION_ERRORS} additional error(s)"
 
     raise ProjectConfigurationError(
         "Validation-profile initialization validation failed",
@@ -884,26 +840,14 @@ def _normalized_template_values(
     normalized: dict[str, str] = {}
 
     for token, replacement in values.items():
-        if (
-            not isinstance(token, str)
-            or _PLACEHOLDER_TOKEN.fullmatch(token) is None
-        ):
-            raise ValueError(
-                "template replacement keys must use "
-                "the form <UPPER_SNAKE_CASE>"
-            )
+        if not isinstance(token, str) or _PLACEHOLDER_TOKEN.fullmatch(token) is None:
+            raise ValueError("template replacement keys must use the form <UPPER_SNAKE_CASE>")
         if not isinstance(replacement, str):
-            raise TypeError(
-                f"replacement for {token} must be a string"
-            )
+            raise TypeError(f"replacement for {token} must be a string")
         if not replacement.strip():
-            raise ValueError(
-                f"replacement for {token} cannot be empty"
-            )
+            raise ValueError(f"replacement for {token} cannot be empty")
         if "\x00" in replacement:
-            raise ValueError(
-                f"replacement for {token} cannot contain NUL characters"
-            )
+            raise ValueError(f"replacement for {token} cannot contain NUL characters")
 
         normalized[token] = replacement
 
@@ -912,9 +856,7 @@ def _normalized_template_values(
 
 def _validated_relative_path(value: Path) -> PurePosixPath:
     if not isinstance(value, Path):
-        raise TypeError(
-            "profile inventory paths must be pathlib.Path values"
-        )
+        raise TypeError("profile inventory paths must be pathlib.Path values")
 
     rendered = value.as_posix()
     relative_path = PurePosixPath(rendered)

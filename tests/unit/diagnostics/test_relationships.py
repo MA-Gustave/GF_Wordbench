@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import pytest
 
 from gf_wordbench.diagnostics.classification import relationships
 from gf_wordbench.diagnostics.classification.relationships import (
-    BlockerGraph,
     blocker_identity_key,
     build_blocker_graph,
     collapse_blocker_graph,
@@ -77,10 +74,13 @@ def test_identity_collections_exclude_self_deduplicate_and_sort() -> None:
 
 
 def test_case_insensitive_identity_keys_preserve_canonical_spelling() -> None:
-    assert blocker_identity_key(
-        "LIB\\Grammar.gf",
-        case_sensitive=False,
-    ) == "lib/grammar.gf"
+    assert (
+        blocker_identity_key(
+            "LIB\\Grammar.gf",
+            case_sensitive=False,
+        )
+        == "lib/grammar.gf"
+    )
     assert normalize_blocker_identities(
         ("lib/grammar.gf", "LIB/Grammar.gf"),
         case_sensitive=False,
@@ -144,11 +144,14 @@ def test_downstream_relationship_fields_require_canonical_blockers() -> None:
 
 
 def test_persisted_is_direct_must_match_diagnostic_class() -> None:
-    assert validate_relationship_fields(
-        DiagnosticClass.DIRECT,
-        is_direct=True,
-        blocked_by=(),
-    ) == ()
+    assert (
+        validate_relationship_fields(
+            DiagnosticClass.DIRECT,
+            is_direct=True,
+            blocked_by=(),
+        )
+        == ()
+    )
     assert validate_relationship_fields(
         DiagnosticClass.DOWNSTREAM,
         is_direct=False,
@@ -272,7 +275,7 @@ def test_blocker_path_queries_follow_transitive_edges() -> None:
 
 
 def test_root_resolution_convenience_api_matches_graph_resolution() -> None:
-    immediate = {
+    immediate: relationships.BlockerMap = {
         "A": (),
         "B": ("A",),
         "C": ("B",),
@@ -311,7 +314,8 @@ def test_public_surface_is_explicit_and_owned_by_relationships_module() -> None:
     assert all(
         callable(getattr(relationships, name))
         for name in expected
-        if name not in {
+        if name
+        not in {
             "BlockerIdentity",
             "BlockerMap",
             "BlockerSequence",

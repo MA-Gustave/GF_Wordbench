@@ -485,8 +485,7 @@ A helper remains internal when it has one owner.
 Recommended pattern:
 
 ```python
-def _normalize_target_key(path: Path) -> str:
-    ...
+def _normalize_target_key(path: Path) -> str: ...
 ```
 
 Rules:
@@ -595,8 +594,8 @@ Recommended stage interface:
 
 ```python
 @dataclass(frozen=True, slots=True)
-class StageRequest:
-    ...
+class StageRequest: ...
+
 
 @dataclass(frozen=True, slots=True)
 class StageResult:
@@ -610,8 +609,7 @@ class StageResult:
 Recommended stage service:
 
 ```python
-def run_stage(request: StageRequest) -> StageResult:
-    ...
+def run_stage(request: StageRequest) -> StageResult: ...
 ```
 
 Exact models should be domain-specific and locked before public use.

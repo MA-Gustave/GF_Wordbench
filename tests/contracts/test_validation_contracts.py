@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 import ast
-import os
-import subprocess
-import sys
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
+import os
 from pathlib import Path
+import subprocess
+import sys
 from typing import Final
 
 import pytest
 
-import gf_wordbench.validation as validation_package
 from gf_wordbench.kernel.statuses import (
     ErrorKind,
     OverallStatus,
     ValidationMode,
     ValidationStatus,
 )
+import gf_wordbench.validation as validation_package
 from gf_wordbench.validation.pipeline import (
     PipelineStageResult,
     ValidationPipelinePlan,
@@ -100,8 +100,7 @@ def _assigned_value(tree: ast.Module, name: str) -> ast.expr:
         ):
             return node.value
         if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == name
-            for target in node.targets
+            isinstance(target, ast.Name) and target.id == name for target in node.targets
         ):
             return node.value
     raise AssertionError(f"missing assignment {name}")
@@ -224,9 +223,10 @@ def test_validation_mode_vocabulary_is_exact_and_canonical() -> None:
         _assigned_value(tree, "CANONICAL_VALIDATION_MODES"),
         "ValidationMode",
     ) == ("QUICK", "CHECKPOINT", "RELEASE", "DIAGNOSTIC")
-    assert _string_tuple(
-        _assigned_value(tree, "CANONICAL_VALIDATION_STAGES")
-    ) == _CANONICAL_STAGE_NAMES
+    assert (
+        _string_tuple(_assigned_value(tree, "CANONICAL_VALIDATION_STAGES"))
+        == _CANONICAL_STAGE_NAMES
+    )
 
 
 def test_legacy_mode_aliases_are_migration_only() -> None:
@@ -314,7 +314,7 @@ def test_quick_scenario_policy_activates_scenario_evidence_chain() -> None:
 
 def test_semantic_stage_vocabulary_has_one_canonical_order() -> None:
     assert tuple(stage.value for stage in StageId) == _CANONICAL_STAGE_NAMES
-    assert CANONICAL_STAGE_IDS == tuple(StageId)
+    assert tuple(StageId) == CANONICAL_STAGE_IDS
     assert canonical_stage_ids() == tuple(StageId)
 
 
@@ -324,8 +324,7 @@ def test_stage_registry_is_complete_unique_and_contiguous() -> None:
     assert tuple(contract.order for contract in STAGE_CONTRACTS) == tuple(range(20))
     assert tuple(contract.stage_id for contract in STAGE_CONTRACTS) == tuple(StageId)
     assert all(
-        set(contract.mode_requirements) == set(ValidationMode)
-        for contract in STAGE_CONTRACTS
+        set(contract.mode_requirements) == set(ValidationMode) for contract in STAGE_CONTRACTS
     )
 
 
@@ -338,26 +337,16 @@ def test_stage_dependencies_always_point_backward() -> None:
             *contract.ordered_after,
         )
         assert all(positions[predecessor] < contract.order for predecessor in predecessors)
-        assert set(contract.blocking_predecessors).issubset(
-            contract.required_predecessors
-        )
+        assert set(contract.blocking_predecessors).issubset(contract.required_predecessors)
 
 
 def test_validation_stages_never_write_project_assets() -> None:
     assert all(not contract.may_write_project_assets() for contract in STAGE_CONTRACTS)
-    assert not {
-        effect
-        for effect in StageEffect
-        if effect.value.startswith("write_project")
-    }
+    assert not {effect for effect in StageEffect if effect.value.startswith("write_project")}
 
 
 def test_process_backed_stages_preserve_raw_evidence() -> None:
-    process_backed = {
-        contract.stage_id
-        for contract in STAGE_CONTRACTS
-        if contract.process_backed
-    }
+    process_backed = {contract.stage_id for contract in STAGE_CONTRACTS if contract.process_backed}
     assert process_backed == _PROCESS_BACKED_STAGES
     for stage_id in process_backed:
         contract = get_stage_contract(stage_id)
@@ -456,23 +445,28 @@ def test_validation_and_overall_statuses_remain_distinct_dimensions() -> None:
         "FAIL",
         "ERROR",
     )
-    assert ValidationStatus.OK is not OverallStatus.OK
+    assert ValidationStatus.OK.__class__ is ValidationStatus
+    assert OverallStatus.OK.__class__ is OverallStatus
     assert not hasattr(OverallStatus, "SKIPPED")
 
 
 def test_pipeline_status_aggregation_uses_required_results() -> None:
-    assert aggregate_pipeline_status(
-        (_pipeline_result(ValidationStatus.OK, required=True),)
-    ) is OverallStatus.OK
-    assert aggregate_pipeline_status(
-        (_pipeline_result(ValidationStatus.FAIL, required=True),)
-    ) is OverallStatus.FAIL
-    assert aggregate_pipeline_status(
-        (_pipeline_result(ValidationStatus.ERROR, required=True),)
-    ) is OverallStatus.ERROR
-    assert aggregate_pipeline_status(
-        (_pipeline_result(ValidationStatus.FAIL, required=False),)
-    ) is OverallStatus.OK
+    assert (
+        aggregate_pipeline_status((_pipeline_result(ValidationStatus.OK, required=True),))
+        is OverallStatus.OK
+    )
+    assert (
+        aggregate_pipeline_status((_pipeline_result(ValidationStatus.FAIL, required=True),))
+        is OverallStatus.FAIL
+    )
+    assert (
+        aggregate_pipeline_status((_pipeline_result(ValidationStatus.ERROR, required=True),))
+        is OverallStatus.ERROR
+    )
+    assert (
+        aggregate_pipeline_status((_pipeline_result(ValidationStatus.FAIL, required=False),))
+        is OverallStatus.OK
+    )
 
 
 def test_pipeline_results_enforce_status_error_kind_consistency() -> None:

@@ -1,16 +1,11 @@
-"""Explicit validation-target resolution for path-resolved language selection.
-
-This module resolves source-backed validation targets inside one validated
-language directory. It does not discover the active language, construct the GF
-search path, parse GF imports, or load validation profiles.
-"""
+"""Canonical validation-target resolution."""
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
-from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
-from typing import Final
+import os
+from pathlib import Path, PurePosixPath
+import re
 
 from gf_wordbench.config.models import ValidationTarget
 from gf_wordbench.kernel.errors import (
@@ -21,37 +16,27 @@ from gf_wordbench.kernel.errors import (
 )
 from gf_wordbench.kernel.statuses import TargetKind
 
-_GF_SUFFIX: Final[str] = ".gf"
-_SOURCE_TARGET_KINDS: Final[frozenset[TargetKind]] = frozenset(
-    {
-        TargetKind.FILE,
-        TargetKind.MODULE,
-        TargetKind.CHECKPOINT,
-        TargetKind.ENTRYPOINT,
-    }
+_GF_SUFFIX = ".gf"
+_WINDOWS_ABSOLUTE_RE = re.compile(r"^[A-Za-z]:[/\\]")
+_SOURCE_TARGET_KINDS = frozenset(
+    {TargetKind.FILE, TargetKind.MODULE, TargetKind.CHECKPOINT, TargetKind.ENTRYPOINT}
 )
 
 
 def extract_module_name(file_path: Path) -> str:
-    """Return the expected GF module name derived from a source filename."""
-
-    path = _require_path_value(file_path, field="file_path")
-    if path.name in {"", ".", ".."}:
-        raise ValueError("file_path must name a source file")
-    if path.suffix.casefold() != _GF_SUFFIX:
-        raise ValueError("file_path must end in '.gf'")
-
-    module_name = path.stem
-    if not module_name:
-        raise ValueError("file_path must have a non-empty module name")
-    if "\x00" in module_name:
-        raise ValueError("module name must not contain a NUL character")
-    return module_name
+    if not isinstance(file_path, Path):
+        raise TypeError("file_path must be a Path")
+    rendered = str(file_path)
+    if "\x00" in rendered:
+        raise ValueError("file_path must not contain NUL")
+    if file_path.name in {"", ".", ".."} or file_path.suffix.casefold() != _GF_SUFFIX:
+        raise ValueError("file_path must name a .gf source file")
+    if not file_path.stem:
+        raise ValueError("file_path must have a module name")
+    return file_path.stem
 
 
 def is_source_target_kind(kind: TargetKind) -> bool:
-    """Return whether a target kind resolves to a GF source file."""
-
     if not isinstance(kind, TargetKind):
         raise TypeError("kind must be a TargetKind")
     return kind in _SOURCE_TARGET_KINDS
@@ -60,189 +45,157 @@ def is_source_target_kind(kind: TargetKind) -> bool:
 def format_target_identity(
     target: ValidationTarget,
     *,
-    language_key: str | None = None,
+    project_id: str | None = None,
 ) -> str:
-    """Render the canonical explicit identity of a validation target.
-
-    ``TargetKind.PROJECT`` remains a compatibility enum value until the target
-    model is migrated. When its value is absent, ``language_key`` supplies the
-    resolved portable language identity. The serialized target-kind token stays
-    unchanged here so persisted-schema migration remains owned elsewhere.
-    """
-
     if not isinstance(target, ValidationTarget):
         raise TypeError("target must be a ValidationTarget")
-
     value = target.value
     if target.kind is TargetKind.PROJECT and value is None:
-        value = _require_text(language_key, field="language_key")
+        if not isinstance(project_id, str):
+            raise TypeError("project_id must be a string")
+        if not project_id.strip():
+            raise ValueError("project_id must not be empty")
+        value = project_id
     elif value is None:
-        raise ContractViolationError(
-            f"{target.kind.value} target requires an explicit value"
-        )
+        raise ContractViolationError(f"{target.kind.value} target requires an explicit value")
+    if not isinstance(value, str):
+        raise TypeError("target value must be a string")
+    if "\x00" in value:
+        raise ValueError("target value must not contain NUL")
+    if target.kind in {
+        TargetKind.FILE,
+        TargetKind.CHECKPOINT,
+        TargetKind.ENTRYPOINT,
+    }:
+        value = value.replace("\\", "/")
+    return f"{target.kind.value}:{value}"
 
-    canonical_value = _canonical_identity_value(target.kind, value)
-    return f"{target.kind.value}:{canonical_value}"
 
-
-def canonical_language_relative_target(
+def canonical_project_relative_target(
     file_path: Path,
     *,
-    language_directory: Path,
+    project_root: Path,
 ) -> PurePosixPath:
-    """Return a canonical language-directory-relative target path."""
-
-    language = _resolve_language_directory(language_directory)
-    resolved = _resolve_existing_path(file_path, field="file_path")
-    _require_contained(
-        resolved,
-        root=language,
-        field="file_path",
-        allow_root=False,
-    )
-    return PurePosixPath(resolved.relative_to(language).as_posix())
+    return _canonical_relative(file_path, root=project_root, role="project_root")
 
 
-# Temporary compatibility aliases.
-#
-# Both names intentionally refer to the same function object. They do not retain
-# the obsolete project-root or source-root contracts; callers must provide the
-# canonical ``language_directory`` keyword argument.
-canonical_project_relative_target = canonical_language_relative_target
-canonical_source_relative_target = canonical_language_relative_target
+def canonical_source_relative_target(
+    file_path: Path,
+    *,
+    source_root: Path,
+) -> PurePosixPath:
+    return _canonical_relative(file_path, root=source_root, role="source_root")
 
 
 def resolve_quick_target(
     target: ValidationTarget | str | Path,
     *,
-    language_directory: Path,
+    project_root: Path,
+    source_root: Path,
 ) -> Path:
-    """Resolve one quick-mode file or module inside the active language."""
+    project, source = _validated_roots(project_root, source_root)
+    kind, raw = _coerce_quick_target(target)
+    candidate_text = raw
+    if kind is TargetKind.MODULE and Path(candidate_text).suffix == "":
+        candidate_text += _GF_SUFFIX
+    candidate = Path(candidate_text)
 
-    language = _resolve_language_directory(language_directory)
-    target_kind, raw_value = _coerce_quick_target(target)
-    target_path = _target_path_value(target_kind, raw_value)
+    direct_candidates: tuple[Path, ...]
+    if candidate.is_absolute() or _WINDOWS_ABSOLUTE_RE.match(candidate_text):
+        direct_candidates = (candidate,)
+    else:
+        direct_candidates = (project / candidate, source / candidate)
 
-    for candidate in _quick_direct_candidates(
-        target_path,
-        language_directory=language,
-    ):
-        if _path_exists(candidate, field="quick target"):
-            return _require_source_file(
-                candidate,
-                language_directory=language,
-                field="quick target",
-            )
+    seen: set[str] = set()
+    for direct in direct_candidates:
+        key = os.path.normcase(os.path.normpath(os.fspath(direct)))
+        if key in seen:
+            continue
+        seen.add(key)
+        if _safe_exists(direct):
+            return _require_source_file(direct, source_root=source, field="quick target")
 
-    if _is_basename_only(target_path):
-        return _resolve_unique_basename(
-            target_path.name,
-            language_directory=language,
-        )
+    if len(candidate.parts) == 1:
+        return _resolve_unique_basename(candidate.name, source_root=source)
 
     raise ProjectConfigurationError(
-        f"Quick target was not found: {raw_value!r}",
+        f"Quick target {raw!r} was not found",
         stage="selection",
         operation="resolve_quick_target",
-        subject=raw_value,
+        subject=raw,
     )
 
 
 def resolve_configured_target(
     target_path: str | Path,
     *,
-    language_directory: Path,
-    field: str = "configured target",
+    project_root: Path,
+    source_root: Path,
 ) -> Path:
-    """Resolve one profile target as an exact language-relative path."""
-
-    language = _resolve_language_directory(language_directory)
-    raw = _require_path_text(target_path, field=field)
-    portable = _require_portable_relative_path(raw, field=field)
-    candidate = language.joinpath(*portable.parts)
+    _project, source = _validated_roots(project_root, source_root)
+    raw = _path_text(target_path, field="configured target")
+    portable = _portable_source_relative(raw, field="configured target")
     return _require_source_file(
-        candidate,
-        language_directory=language,
-        field=field,
+        source.joinpath(*portable.parts),
+        source_root=source,
+        field="configured target",
     )
 
 
 def resolve_configured_targets(
-    target_paths: Iterable[str | Path],
+    targets: Iterable[str | Path],
     *,
-    language_directory: Path,
-    field: str = "configured targets",
+    project_root: Path,
+    source_root: Path,
 ) -> tuple[Path, ...]:
-    """Resolve an ordered target list and deduplicate filesystem identity."""
-
-    if isinstance(target_paths, (str, bytes, Path)):
-        raise TypeError(f"{field} must be an iterable of paths")
-
-    language = _resolve_language_directory(language_directory)
-
-    resolved: list[Path] = []
-    identities: set[str] = set()
-    try:
-        iterator = iter(target_paths)
-    except TypeError as exc:
-        raise TypeError(f"{field} must be an iterable of paths") from exc
-
-    for index, target_path in enumerate(iterator):
-        item_field = f"{field}[{index}]"
-        candidate = resolve_configured_target(
-            target_path,
-            language_directory=language,
-            field=item_field,
+    if isinstance(targets, (str, bytes, Path)):
+        raise TypeError("targets must be an iterable of paths")
+    result: list[Path] = []
+    seen: set[str] = set()
+    for target in targets:
+        resolved = resolve_configured_target(
+            target,
+            project_root=project_root,
+            source_root=source_root,
         )
-        identity = _filesystem_identity(candidate)
-        if identity in identities:
-            continue
-        identities.add(identity)
-        resolved.append(candidate)
-
-    return tuple(resolved)
+        identity = os.path.normcase(os.path.normpath(os.fspath(resolved)))
+        if identity not in seen:
+            seen.add(identity)
+            result.append(resolved)
+    return tuple(result)
 
 
 def resolve_release_targets(
     checkpoints: Iterable[str | Path],
     entrypoints: Iterable[str | Path],
     *,
-    language_directory: Path,
+    project_root: Path,
+    source_root: Path,
 ) -> tuple[Path, ...]:
-    """Resolve the release ordered union: checkpoints, then new entrypoints."""
-
-    checkpoint_targets = resolve_configured_targets(
-        checkpoints,
-        language_directory=language_directory,
-        field="checkpoints",
-    )
-    entrypoint_targets = resolve_configured_targets(
-        entrypoints,
-        language_directory=language_directory,
-        field="entrypoints",
-    )
-
-    combined: list[Path] = list(checkpoint_targets)
-    identities = {_filesystem_identity(path) for path in checkpoint_targets}
-    for path in entrypoint_targets:
-        identity = _filesystem_identity(path)
-        if identity in identities:
-            continue
-        identities.add(identity)
-        combined.append(path)
+    combined: list[Path] = []
+    seen: set[str] = set()
+    for group in (checkpoints, entrypoints):
+        for path in resolve_configured_targets(
+            group,
+            project_root=project_root,
+            source_root=source_root,
+        ):
+            identity = os.path.normcase(os.path.normpath(os.fspath(path)))
+            if identity not in seen:
+                seen.add(identity)
+                combined.append(path)
     return tuple(combined)
 
 
 def resolve_source_target(
     target: ValidationTarget,
     *,
-    language_directory: Path,
+    project_root: Path,
+    source_root: Path,
 ) -> Path:
-    """Resolve one source-backed typed target without mode inference."""
-
     if not isinstance(target, ValidationTarget):
         raise TypeError("target must be a ValidationTarget")
-    if target.kind not in _SOURCE_TARGET_KINDS:
+    if not is_source_target_kind(target.kind):
         raise ContractViolationError(
             f"Target kind {target.kind.value!r} does not resolve to a source file"
         )
@@ -250,169 +203,137 @@ def resolve_source_target(
         raise ContractViolationError(
             f"Target kind {target.kind.value!r} requires an explicit value"
         )
-
     if target.kind in {TargetKind.FILE, TargetKind.MODULE}:
         return resolve_quick_target(
             target,
-            language_directory=language_directory,
+            project_root=project_root,
+            source_root=source_root,
         )
-
     return resolve_configured_target(
-        _target_path_value(target.kind, target.value),
-        language_directory=language_directory,
-        field=f"{target.kind.value} target",
+        target.value,
+        project_root=project_root,
+        source_root=source_root,
     )
 
 
-def _coerce_quick_target(
-    target: ValidationTarget | str | Path,
-) -> tuple[TargetKind, str]:
+def _validated_roots(project_root: Path, source_root: Path) -> tuple[Path, Path]:
+    project = _absolute_directory(project_root, field="project_root")
+    source = _absolute_directory(source_root, field="source_root")
+    _contained(source, root=project, field="source_root", allow_root=False)
+    return project, source
+
+
+def _absolute_directory(value: Path, *, field: str) -> Path:
+    if not isinstance(value, Path):
+        raise TypeError(f"{field} must be a Path")
+    if "\x00" in str(value):
+        raise ValueError(f"{field} must not contain NUL")
+    if not value.is_absolute():
+        raise PathSecurityError(f"{field} must be absolute")
+    try:
+        resolved = value.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise ProjectConfigurationError(f"{field} does not exist: {value}") from exc
+    except OSError as exc:
+        raise EvidenceIOError(f"Unable to resolve {field}: {value}") from exc
+    if not resolved.is_dir():
+        raise ProjectConfigurationError(f"{field} is not a directory: {resolved}")
+    return resolved
+
+
+def _canonical_relative(file_path: Path, *, root: Path, role: str) -> PurePosixPath:
+    if not isinstance(file_path, Path):
+        raise TypeError("file_path must be a Path")
+    approved = _absolute_directory(root, field=role)
+    if not file_path.is_absolute():
+        raise PathSecurityError("file_path must be absolute")
+    try:
+        resolved = file_path.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise ProjectConfigurationError(f"file_path does not exist: {file_path}") from exc
+    except OSError as exc:
+        raise EvidenceIOError(f"Unable to resolve file_path: {file_path}") from exc
+    _contained(resolved, root=approved, field="file_path", allow_root=False)
+    return PurePosixPath(resolved.relative_to(approved).as_posix())
+
+
+def _contained(path: Path, *, root: Path, field: str, allow_root: bool) -> None:
+    try:
+        relative = path.relative_to(root)
+    except ValueError as exc:
+        raise PathSecurityError(f"{field} escapes the approved root: {path}") from exc
+    if not allow_root and not relative.parts:
+        raise PathSecurityError(f"{field} must be inside, not equal to, the approved root")
+
+
+def _coerce_quick_target(target: ValidationTarget | str | Path) -> tuple[TargetKind, str]:
     if isinstance(target, ValidationTarget):
         if target.kind not in {TargetKind.FILE, TargetKind.MODULE}:
-            raise ContractViolationError(
-                "quick target must use target kind 'file' or 'module'"
-            )
+            raise ContractViolationError("quick target must use file or module kind")
         if target.value is None:
             raise ContractViolationError("quick target requires an explicit value")
-        return target.kind, _require_text(target.value, field="quick target")
+        return target.kind, _path_text(target.value, field="quick target")
+    return TargetKind.FILE, _path_text(target, field="quick target")
 
-    return TargetKind.FILE, _require_path_text(target, field="quick target")
+
+def _path_text(value: str | Path, *, field: str) -> str:
+    if isinstance(value, Path):
+        text = str(value)
+    elif isinstance(value, str):
+        text = value
+    else:
+        raise TypeError(f"{field} must be path-like text")
+    if not text or "\x00" in text:
+        raise ProjectConfigurationError(f"{field} must be a non-empty NUL-free path")
+    return text
 
 
-def _target_path_value(kind: TargetKind, value: str) -> Path:
-    text = _require_text(value, field=f"{kind.value} target")
-    path = Path(text)
-    if kind is TargetKind.MODULE and path.suffix == "":
-        path = path.with_suffix(_GF_SUFFIX)
+def _portable_source_relative(value: str, *, field: str) -> PurePosixPath:
+    if "\\" in value or _WINDOWS_ABSOLUTE_RE.match(value):
+        raise ProjectConfigurationError(f"{field} must use a portable relative path")
+    path = PurePosixPath(value)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        raise ProjectConfigurationError(f"{field} must be a contained relative path")
+    if path.suffix.casefold() != _GF_SUFFIX:
+        raise ProjectConfigurationError(f"{field} must end in '.gf'")
     return path
 
 
-def _quick_direct_candidates(
-    target_path: Path,
-    *,
-    language_directory: Path,
-) -> tuple[Path, ...]:
-    if target_path.is_absolute():
-        return (target_path,)
-    return (language_directory / target_path,)
-
-
-def _resolve_unique_basename(
-    filename: str,
-    *,
-    language_directory: Path,
-) -> Path:
-    if Path(filename).suffix.casefold() != _GF_SUFFIX:
+def _require_source_file(candidate: Path, *, source_root: Path, field: str) -> Path:
+    if candidate.suffix.casefold() != _GF_SUFFIX:
         raise ProjectConfigurationError(
-            f"Quick target must name a '.gf' source file: {filename!r}",
-            stage="selection",
-            operation="resolve_quick_target",
-            subject=filename,
-        )
-
-    try:
-        discovered = tuple(language_directory.rglob(filename))
-    except OSError as exc:
-        raise EvidenceIOError(
-            f"Unable to search the language directory for quick target {filename!r}",
-            stage="selection",
-            operation="resolve_quick_target",
-            subject=filename,
-        ) from exc
-
-    valid: list[Path] = []
-    identities: set[str] = set()
-    for candidate in discovered:
-        try:
-            resolved = _require_source_file(
-                candidate,
-                language_directory=language_directory,
-                field="quick basename match",
-            )
-        except (ProjectConfigurationError, PathSecurityError, EvidenceIOError):
-            continue
-        identity = _filesystem_identity(resolved)
-        if identity in identities:
-            continue
-        identities.add(identity)
-        valid.append(resolved)
-
-    valid.sort(
-        key=lambda path: _portable_sort_key(
-            path,
-            root=language_directory,
-        )
-    )
-    if not valid:
-        raise ProjectConfigurationError(
-            f"Quick target was not found: {filename!r}",
-            stage="selection",
-            operation="resolve_quick_target",
-            subject=filename,
-        )
-    if len(valid) > 1:
-        matches = ", ".join(
-            path.relative_to(language_directory).as_posix() for path in valid
-        )
-        raise ProjectConfigurationError(
-            f"Quick target {filename!r} is ambiguous; matches: {matches}",
-            stage="selection",
-            operation="resolve_quick_target",
-            subject=filename,
-        )
-    return valid[0]
-
-
-def _require_source_file(
-    candidate: Path,
-    *,
-    language_directory: Path,
-    field: str,
-) -> Path:
-    path = _require_path_value(candidate, field=field)
-
-    if not _path_exists(path, field=field):
-        raise ProjectConfigurationError(
-            f"{field} does not exist: {path!s}",
+            f"{field} must end in '.gf': {candidate}",
             stage="selection",
             operation="resolve_target",
-            subject=str(path),
+            subject=str(candidate),
         )
     try:
-        is_file = path.is_file()
+        resolved = candidate.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise ProjectConfigurationError(
+            f"{field} does not exist: {candidate}",
+            stage="selection",
+            operation="resolve_target",
+            subject=str(candidate),
+        ) from exc
     except OSError as exc:
         raise EvidenceIOError(
-            f"Unable to inspect {field}: {path!s}",
+            f"Unable to inspect {field}: {candidate}",
             stage="selection",
             operation="resolve_target",
-            subject=str(path),
+            subject=str(candidate),
         ) from exc
-    if not is_file:
+    _contained(resolved, root=source_root, field=field, allow_root=False)
+    if not resolved.is_file():
         raise ProjectConfigurationError(
-            f"{field} is not a regular file: {path!s}",
+            f"{field} is not a regular file: {resolved}",
             stage="selection",
             operation="resolve_target",
-            subject=str(path),
+            subject=str(resolved),
         )
-    if path.suffix.casefold() != _GF_SUFFIX:
-        raise ProjectConfigurationError(
-            f"{field} must end in '.gf': {path!s}",
-            stage="selection",
-            operation="resolve_target",
-            subject=str(path),
-        )
-
-    resolved = _resolve_existing_path(path, field=field)
-    _require_contained(
-        resolved,
-        root=language_directory,
-        field=field,
-        allow_root=False,
-    )
-
     if not os.access(resolved, os.R_OK):
         raise EvidenceIOError(
-            f"{field} is not readable: {resolved!s}",
+            f"{field} is not readable: {resolved}",
             stage="selection",
             operation="resolve_target",
             subject=str(resolved),
@@ -420,157 +341,55 @@ def _require_source_file(
     return resolved
 
 
-def _resolve_language_directory(value: Path) -> Path:
-    return _resolve_directory(value, field="language_directory")
-
-
-def _resolve_directory(value: Path, *, field: str) -> Path:
-    path = _require_path_value(value, field=field)
-    if not path.is_absolute():
-        raise ContractViolationError(f"{field} must be absolute")
-    if not _path_exists(path, field=field):
-        raise ProjectConfigurationError(f"{field} does not exist: {path!s}")
+def _resolve_unique_basename(filename: str, *, source_root: Path) -> Path:
+    if Path(filename).suffix.casefold() != _GF_SUFFIX:
+        raise ProjectConfigurationError(
+            f"Quick target must end in '.gf': {filename!r}",
+            stage="selection",
+            operation="resolve_quick_target",
+            subject=filename,
+        )
     try:
-        if not path.is_dir():
-            raise ProjectConfigurationError(f"{field} is not a directory: {path!s}")
+        candidates = sorted(
+            (path.resolve() for path in source_root.rglob(filename) if path.is_file()),
+            key=lambda path: (
+                path.relative_to(source_root).as_posix().casefold(),
+                path.relative_to(source_root).as_posix(),
+            ),
+        )
     except OSError as exc:
-        raise EvidenceIOError(f"Unable to inspect {field}: {path!s}") from exc
-    return _resolve_existing_path(path, field=field)
-
-
-def _resolve_existing_path(value: Path, *, field: str) -> Path:
-    path = _require_path_value(value, field=field)
-    try:
-        return path.resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise ProjectConfigurationError(f"{field} does not exist: {path!s}") from exc
-    except (OSError, RuntimeError) as exc:
-        raise EvidenceIOError(f"Unable to resolve {field}: {path!s}") from exc
-
-
-def _require_contained(
-    candidate: Path,
-    *,
-    root: Path,
-    field: str,
-    allow_root: bool,
-) -> None:
-    try:
-        relative = candidate.relative_to(root)
-    except ValueError as exc:
-        raise PathSecurityError(
-            f"{field} escapes the approved language directory {root!s}: "
-            f"{candidate!s}",
+        raise EvidenceIOError(
+            f"Unable to search source_root for {filename!r}",
             stage="selection",
-            operation="resolve_target",
-            subject=str(candidate),
+            operation="resolve_quick_target",
+            subject=filename,
         ) from exc
-    if not allow_root and not relative.parts:
-        raise PathSecurityError(
-            f"{field} must be inside, not equal to, the approved language "
-            f"directory {root!s}",
+    if not candidates:
+        raise ProjectConfigurationError(
+            f"Quick target {filename!r} was not found",
             stage="selection",
-            operation="resolve_target",
-            subject=str(candidate),
+            operation="resolve_quick_target",
+            subject=filename,
         )
-
-
-def _require_portable_relative_path(value: str, *, field: str) -> PurePosixPath:
-    text = _require_text(value, field=field)
-    if "\\" in text:
+    if len(candidates) > 1:
+        matches = ", ".join(path.relative_to(source_root).as_posix() for path in candidates)
         raise ProjectConfigurationError(
-            f"{field} must use '/' as the portable path separator"
+            f"Quick target {filename!r} is ambiguous; matches: {matches}",
+            stage="selection",
+            operation="resolve_quick_target",
+            subject=filename,
         )
-    windows = PureWindowsPath(text)
-    portable = PurePosixPath(text)
-    if windows.is_absolute() or windows.drive or portable.is_absolute():
-        raise ProjectConfigurationError(
-            f"{field} must be language-directory-relative"
-        )
-    if portable in {PurePosixPath("."), PurePosixPath("..")}:
-        raise ProjectConfigurationError(f"{field} must name a source file")
-    if any(part in {"", ".", ".."} for part in portable.parts):
-        raise ProjectConfigurationError(
-            f"{field} contains an invalid path segment: {text!r}"
-        )
-    if portable.suffix.casefold() != _GF_SUFFIX:
-        raise ProjectConfigurationError(f"{field} must end in '.gf': {text!r}")
-    return portable
+    return _require_source_file(candidates[0], source_root=source_root, field="quick target")
 
 
-def _canonical_identity_value(kind: TargetKind, value: str) -> str:
-    text = _require_text(value, field=f"{kind.value} target value")
-    if kind in {
-        TargetKind.FILE,
-        TargetKind.MODULE,
-        TargetKind.CHECKPOINT,
-        TargetKind.ENTRYPOINT,
-    }:
-        path = PurePath(text)
-        if isinstance(path, PureWindowsPath):
-            return path.as_posix()
-        return text.replace("\\", "/")
-    return text
-
-
-def _require_path_text(value: str | Path, *, field: str) -> str:
-    if isinstance(value, Path):
-        text = os.fspath(value)
-    elif isinstance(value, str):
-        text = value
-    else:
-        raise TypeError(f"{field} must be a string or Path")
-    return _require_text(text, field=field)
-
-
-def _require_path_value(value: Path, *, field: str) -> Path:
-    if not isinstance(value, Path):
-        raise TypeError(f"{field} must be a Path")
-    if "\x00" in os.fspath(value):
-        raise ValueError(f"{field} must not contain a NUL character")
-    return value
-
-
-def _require_text(value: str | None, *, field: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError(f"{field} must be a string")
-    if not value:
-        raise ValueError(f"{field} must not be empty")
-    if value != value.strip():
-        raise ValueError(f"{field} must not contain surrounding whitespace")
-    if "\x00" in value:
-        raise ValueError(f"{field} must not contain a NUL character")
-    if "\r" in value or "\n" in value:
-        raise ValueError(f"{field} must be a single-line value")
-    return value
-
-
-def _path_exists(path: Path, *, field: str) -> bool:
+def _safe_exists(path: Path) -> bool:
     try:
         return path.exists()
     except OSError as exc:
-        raise EvidenceIOError(f"Unable to inspect {field}: {path!s}") from exc
-
-
-def _is_basename_only(path: Path) -> bool:
-    return (
-        not path.is_absolute()
-        and path.parent == Path(".")
-        and path.name not in {"", ".", ".."}
-    )
-
-
-def _filesystem_identity(path: Path) -> str:
-    return os.path.normcase(os.path.normpath(os.fspath(path)))
-
-
-def _portable_sort_key(path: Path, *, root: Path) -> tuple[str, str]:
-    relative = path.relative_to(root).as_posix()
-    return relative.casefold(), relative
+        raise EvidenceIOError(f"Unable to inspect target path: {path}") from exc
 
 
 __all__ = (
-    "canonical_language_relative_target",
     "canonical_project_relative_target",
     "canonical_source_relative_target",
     "extract_module_name",

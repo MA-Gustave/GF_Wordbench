@@ -6,9 +6,9 @@ This module configures application diagnostics only. Stage-owned raw evidence an
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 import json
 import logging
@@ -17,8 +17,7 @@ from pathlib import Path
 import re
 import sys
 from threading import RLock
-from types import TracebackType
-from typing import Final, TextIO
+from typing import Any, Final, TextIO
 
 LOGGER_NAMESPACE: Final = "gf_wordbench"
 DEFAULT_LOG_LEVEL: Final = logging.INFO
@@ -81,9 +80,7 @@ class RedactionPolicy:
     """Deterministic redaction rules applied to rendered runtime log text."""
 
     protected_values: tuple[str, ...] = ()
-    protected_keys: frozenset[str] = field(
-        default_factory=lambda: _DEFAULT_PROTECTED_KEYS
-    )
+    protected_keys: frozenset[str] = field(default_factory=lambda: _DEFAULT_PROTECTED_KEYS)
     marker: str = REDACTION_MARKER
 
     def __post_init__(self) -> None:
@@ -164,7 +161,9 @@ class RuntimeLoggingConfig:
 class RuntimeLogFormatter(logging.Formatter):
     """UTC formatter with deterministic structured fields and redaction."""
 
-    converter = staticmethod(lambda timestamp: datetime.fromtimestamp(timestamp, timezone.utc).timetuple())
+    converter = staticmethod(
+        lambda timestamp: datetime.fromtimestamp(timestamp, UTC).timetuple()
+    )
 
     def __init__(
         self,
@@ -186,8 +185,7 @@ class RuntimeLogFormatter(logging.Formatter):
             context = _record_context(record)
             if context:
                 fields = " ".join(
-                    f"{key}={_render_field_value(value)}"
-                    for key, value in sorted(context.items())
+                    f"{key}={_render_field_value(value)}" for key, value in sorted(context.items())
                 )
                 rendered = f"{rendered} [{fields}]"
 
@@ -212,9 +210,9 @@ class ContextLoggerAdapter(logging.LoggerAdapter[logging.Logger]):
     def process(
         self,
         msg: object,
-        kwargs: dict[str, object],
-    ) -> tuple[object, dict[str, object]]:
-        extra = dict(self.extra)
+        kwargs: MutableMapping[str, Any],
+    ) -> tuple[object, MutableMapping[str, Any]]:
+        extra = dict(self.extra or {})
         supplied = kwargs.get("extra")
         if supplied is not None:
             if not isinstance(supplied, Mapping):
@@ -283,6 +281,12 @@ def configure_runtime_logging(
     """
 
     effective = config or RuntimeLoggingConfig()
+    effective_level = normalize_log_level(effective.level)
+    effective_file_level = (
+        None
+        if effective.file_level is None
+        else normalize_log_level(effective.file_level)
+    )
     logger = logging.getLogger(LOGGER_NAMESPACE)
     formatter = RuntimeLogFormatter(
         redaction=effective.redaction,
@@ -294,7 +298,7 @@ def configure_runtime_logging(
 
         stream_handler = _OwnedStreamHandler(effective.stream or sys.stderr)
         stream_handler.set_name(f"{LOGGER_NAMESPACE}.runtime.console")
-        stream_handler.setLevel(effective.level)
+        stream_handler.setLevel(effective_level)
         stream_handler.setFormatter(formatter)
         logger.addHandler(stream_handler)
 
@@ -303,14 +307,12 @@ def configure_runtime_logging(
             file_handler = _OwnedFileHandler(effective.file_path)
             file_handler.set_name(f"{LOGGER_NAMESPACE}.runtime.file")
             file_handler.setLevel(
-                effective.file_level
-                if effective.file_level is not None
-                else effective.level
+                effective_file_level if effective_file_level is not None else effective_level
             )
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
 
-        logger.setLevel(_minimum_handler_level(logger.handlers, effective.level))
+        logger.setLevel(_minimum_handler_level(logger.handlers, effective_level))
         logger.propagate = effective.propagate
         logger.disabled = False
 
@@ -438,7 +440,7 @@ def _render_field_value(value: object) -> str:
 
 
 def _format_utc_timestamp(created: float) -> str:
-    value = datetime.fromtimestamp(created, timezone.utc)
+    value = datetime.fromtimestamp(created, UTC)
     milliseconds = value.microsecond // 1_000
     return value.strftime("%Y-%m-%dT%H:%M:%S") + f".{milliseconds:03d}Z"
 
@@ -453,11 +455,11 @@ def _redact_keyed_value(text: str, *, key: str, marker: str) -> str:
 
 
 __all__ = [
-    "ContextLoggerAdapter",
     "DEFAULT_LOG_LEVEL",
     "LOGGER_NAMESPACE",
-    "LoggingConfigurationError",
     "REDACTION_MARKER",
+    "ContextLoggerAdapter",
+    "LoggingConfigurationError",
     "RedactionPolicy",
     "RuntimeLogFormatter",
     "RuntimeLoggingConfig",

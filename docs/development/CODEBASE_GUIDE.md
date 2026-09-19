@@ -3,13 +3,28 @@
 **Document ID:** `GF-WB-DEVELOPMENT-CODEBASE-GUIDE`  
 **Status:** Normative developer guide  
 **Document version:** `2.0.0`  
-**Applies to:** GF Wordbench source, tests, active-project boundary, reusable project template, generated artifacts, public exports, and coordinated code changes  
+**Applies to:** GF Wordbench source, tests, active-project boundary, reusable validation-profile template, generated artifacts, public exports, and coordinated code changes  
 **Owner:** GF Wordbench maintainers  
-**Last reviewed:** `2026-07-24`  
+**Last reviewed:** 2026-08-05  
 **Target path:** `docs/development/CODEBASE_GUIDE.md`
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document explains how the GF Wordbench codebase is organized, where responsibilities belong, and how components cooperate.
@@ -51,28 +66,28 @@ The central rule is:
 
 ## 2. Product model
 
-GF Wordbench is a local development, validation, diagnostic, and release-readiness workbench for one active GF language project.
+GF Wordbench is a local development, validation, diagnostic, and release-readiness workbench for one resolved GF language context per run.
 
 One workspace contains:
 
 ```text
 one GF Wordbench framework
-one active GF language project
-one reusable generic project template
+one resolved GF language context per run
+one reusable generic validation-profile template
 zero or more generated runs
 local non-authoritative application state
 ```
 
-The active project is represented by:
+The selected language context is represented by:
 
 ```text
 project/
 ```
 
-The reusable project template is represented by:
+The reusable validation-profile template is represented by:
 
 ```text
-templates/project/
+templates/validation-profile/
 ```
 
 Generated evidence is represented by:
@@ -81,7 +96,7 @@ Generated evidence is represented by:
 run_<run-id>/
 ```
 
-GF Wordbench does not manage several unrelated active projects inside one workspace.
+GF Wordbench does not manage several unrelated selected language contexts inside one workspace.
 
 Multi-workspace inventory, aggregation, comparison, and portfolio views belong to the independent `gf-portfolio` product.
 
@@ -165,7 +180,7 @@ reporting
 
 | Module | Primary responsibility |
 |---|---|
-| `projects` | Active-project identity, configuration, loading, paths, lifecycle, and template operations |
+| `projects` | Active-resolved language identity, configuration, loading, paths, lifecycle, and template operations |
 | `runs` | Run identity, orchestration, budgets, continuation, cancellation, completion, and history |
 | `validation` | Selection, scanning, compilation, PGF construction, scenarios, gold comparison, regression comparison, and release gates |
 | `diagnostics` | Diagnostic normalization, findings, causal classification, pattern interpretation, and approved diagnostic tools |
@@ -353,7 +368,7 @@ Prohibited reverse control includes:
 ```text
 reporting → validation execution
 diagnostics → GF compilation execution
-projects → run results as project identity
+projects → run results as resolved language identity
 domain → adapters
 adapters → entrypoints
 project files → private Python modules
@@ -375,7 +390,7 @@ The `projects` module owns the active-project boundary.
 ### 8.1 Responsibilities
 
 ```text
-project identity
+resolved language identity
 project.toml loading and validation
 project-relative path resolution
 source-root relationship
@@ -412,7 +427,7 @@ Domain objects remain free of TOML, filesystem, GUI, and process details.
 Application use cases include:
 
 ```text
-load active project
+load selected language context
 show project
 check project
 initialize project
@@ -450,8 +465,8 @@ Git metadata reader
 
 The `projects` module must not:
 
-- infer project identity from application state;
-- infer project identity from previous runs;
+- infer resolved language identity from application state;
+- infer resolved language identity from previous runs;
 - read Portfolio registries;
 - own validation results;
 - write reports;
@@ -506,7 +521,7 @@ ContinuationDecision
 Application use cases include:
 
 ```text
-validate active project
+validate selected language context
 validate one target
 validate checkpoints
 run diagnostic validation
@@ -650,7 +665,7 @@ Validation components must not:
 - render user reports;
 - import GUI or CLI code;
 - update golds during normal validation;
-- define project identity;
+- define resolved language identity;
 - invoke Portfolio;
 - infer release readiness from one compile result;
 - treat static findings as GF compiler verdicts;
@@ -829,9 +844,9 @@ A successful scenario requires every configured completion and assertion criteri
 Normal validation is read-only with respect to:
 
 ```text
-project/validation/scenarios/
-project/validation/inputs/
-project/validation/gold/
+<validation-profile-root>/validation/scenarios/
+<validation-profile-root>/validation/inputs/
+<validation-profile-root>/validation/gold/
 ```
 
 Gold updates occur only through an explicit reviewed workflow.
@@ -855,7 +870,7 @@ removed
 Comparison requires compatible:
 
 ```text
-project identity
+resolved language identity
 schema
 subject identity
 rule semantics
@@ -1152,7 +1167,7 @@ Every artifact has one writer and zero or more observers.
 
 | Artifact | Owner |
 |---|---|
-| `project/project.toml` | `projects` |
+| `<validation-profile-root>/project.toml` | `projects` |
 | application state | local state adapter |
 | raw process evidence | process or tool adapter for the operation |
 | static-scan evidence | `validation` |
@@ -1259,20 +1274,20 @@ Importing bootstrap produces no filesystem, process, or UI side effects.
 
 ## 26. Project boundary
 
-The active project contains language-specific facts and assets.
+The selected language context contains language-specific facts and assets.
 
 ```text
-project/project.toml
-project/docs/
-project/validation/scenarios/
-project/validation/gold/
-project/validation/inputs/
+<validation-profile-root>/project.toml
+<validation-profile-root>/docs/
+<validation-profile-root>/validation/scenarios/
+<validation-profile-root>/validation/gold/
+<validation-profile-root>/validation/inputs/
 configured GF source tree
 ```
 
-The active project owns:
+The selected language context owns:
 
-- project identity;
+- resolved language identity;
 - language identity;
 - source roots;
 - module conventions;
@@ -1318,7 +1333,7 @@ Project documents describe the project directly. They do not maintain a separate
 
 ## 28. Template boundary
 
-`templates/project/` is generic and identity-free.
+`templates/validation-profile/` is generic and identity-free.
 
 It contains:
 
@@ -1334,14 +1349,14 @@ It must not contain:
 - old source paths;
 - local machine paths;
 - run history;
-- active project decisions;
+- selected language context decisions;
 - populated release evidence;
 - copied golds presented as current;
 - Portfolio identifiers.
 
 Initialization copies or renders the template into `project/`.
 
-Template updates do not overwrite an active project silently.
+Template updates do not overwrite an selected language context silently.
 
 ---
 
@@ -1423,7 +1438,7 @@ local executable selection
 It must not contain:
 
 ```text
-active project identity
+selected language context identity
 required entrypoints
 required scenarios
 release policy
@@ -2204,13 +2219,13 @@ local state port and adapter
 ### Active language identity
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 ### GF module contracts
 
 ```text
-project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 ---
@@ -2417,13 +2432,13 @@ docs/
 Active-project behavior is documented under:
 
 ```text
-project/docs/
+<validation-profile-root>/docs/
 ```
 
 Template guidance is documented under:
 
 ```text
-templates/project/docs/
+templates/validation-profile/docs/
 ```
 
 Rules:
@@ -2479,7 +2494,7 @@ The codebase architecture is healthy when:
 [ ] hexagonal dependency direction is enforced
 [ ] one owner exists for every major contract and artifact
 [ ] CLI, GUI, and automation call shared application use cases
-[ ] one active project is loaded from project/project.toml
+[ ] one selected language context is loaded from <validation-profile-root>/project.toml
 [ ] RunPaths owns generated locations
 [ ] runs coordinates without absorbing validation algorithms
 [ ] validation operations return typed evidence
@@ -2530,7 +2545,7 @@ The codebase architecture is healthy when:
 | Error classification | `docs/diagnostics/ERROR_CLASSIFICATION.md` |
 | Diagnostic tools | `docs/diagnostics/TOOL_CATALOG.md` |
 | Project schema | `docs/configuration/PROJECT_TOML_REFERENCE.md` |
-| Active-project contracts | `project/docs/INTERFILE_CONTRACT_LOCK.md` |
+| Active-project contracts | `<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md` |
 
 ---
 

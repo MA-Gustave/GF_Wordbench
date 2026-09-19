@@ -7,16 +7,17 @@ Normal project loading and validation must never invoke this service implicitly.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
 from enum import StrEnum, unique
 from pathlib import Path, PureWindowsPath
-from typing import Final, Literal, TypeAlias
+from typing import TYPE_CHECKING, Final, Literal, TypeAlias, cast
 
+from gf_wordbench.kernel.ids import ProjectId, ScenarioId
 from gf_wordbench.kernel.paths import ContainmentMode, relative_portable_path
 
 from .models import (
+    PROJECT_SCHEMA_ID,
+    PROJECT_SCHEMA_VERSION,
     GFProjectConfig,
     ModuleTargets,
     ProjectConfig,
@@ -25,6 +26,7 @@ from .models import (
     ValidationPolicy,
 )
 from .paths import ProjectPaths, resolve_source_root
+from .ports import ProjectMigrationWorkspacePort
 from .policies import (
     deduplicate_declared_path_parts,
     validate_language_code,
@@ -38,8 +40,12 @@ from .policies import (
     validate_scenario_policy,
     validate_source_glob,
 )
-from .ports import ClockPort, ProjectMigrationWorkspacePort
-from .schema import PROJECT_SCHEMA_ID, PROJECT_SCHEMA_VERSION
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+    from datetime import datetime
+
+    from .ports import ClockPort
 
 _SOURCE_SCHEMA: Final[str] = "gf-language-tree"
 _SOURCE_VERSION: Final[str] = "unversioned"
@@ -111,9 +117,7 @@ class ProjectMigrationIssue:
 
     def __post_init__(self) -> None:
         if self.severity not in {"blocker", "warning", "loss"}:
-            raise ValueError(
-                f"unsupported migration severity: {self.severity!r}"
-            )
+            raise ValueError(f"unsupported migration severity: {self.severity!r}")
 
         object.__setattr__(
             self,
@@ -371,35 +375,20 @@ class ProjectMigrationPlan:
     already_applied: bool = False
 
     def __post_init__(self) -> None:
-        if (
-            self.created_at.tzinfo is None
-            or self.created_at.utcoffset() is None
-        ):
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
             raise ValueError("created_at must be timezone-aware")
 
     @property
     def blocker_messages(self) -> tuple[str, ...]:
-        return tuple(
-            issue.message
-            for issue in self.issues
-            if issue.severity == "blocker"
-        )
+        return tuple(issue.message for issue in self.issues if issue.severity == "blocker")
 
     @property
     def warning_messages(self) -> tuple[str, ...]:
-        return tuple(
-            issue.message
-            for issue in self.issues
-            if issue.severity == "warning"
-        )
+        return tuple(issue.message for issue in self.issues if issue.severity == "warning")
 
     @property
     def loss_messages(self) -> tuple[str, ...]:
-        return tuple(
-            issue.message
-            for issue in self.issues
-            if issue.severity == "loss"
-        )
+        return tuple(issue.message for issue in self.issues if issue.severity == "loss")
 
 
 @dataclass(frozen=True, slots=True)
@@ -447,25 +436,27 @@ class ProjectMigrator:
         """Return a complete migration plan without writing canonical assets."""
 
         normalized = _normalize_request(request)
-        project_paths = ProjectPaths.from_root(
-            normalized.project_root
-        )
+        project_paths = ProjectPaths.from_root(normalized.project_root)
         target_source_root = resolve_source_root(
             project_paths.root,
             normalized.source_directory,
         )
 
-        source = self._workspace.inspect_source(
-            normalized.source_root
+        source = cast(
+            "ProjectMigrationSourceInspection",
+            self._workspace.inspect_source(normalized.source_root),
         )
-        destination = self._workspace.inspect_destination(
-            project_root=project_paths.root,
-            migration_id=normalized.migration_id,
-            project_id=normalized.project_id,
-            language_code=normalized.language_code,
-            source_directory=normalized.source_directory,
-            source_root=normalized.source_root,
-            strategy=normalized.strategy,
+        destination = cast(
+            "ProjectMigrationDestinationInspection",
+            self._workspace.inspect_destination(
+                project_root=project_paths.root,
+                migration_id=normalized.migration_id,
+                project_id=ProjectId(normalized.project_id),
+                language_code=normalized.language_code,
+                source_directory=normalized.source_directory,
+                source_root=normalized.source_root,
+                strategy=normalized.strategy,
+            ),
         )
 
         issues = [
@@ -507,9 +498,7 @@ class ProjectMigrator:
         )
 
         if not already_applied:
-            manual_actions.extend(
-                _required_manual_actions(normalized.strategy)
-            )
+            manual_actions.extend(_required_manual_actions(normalized.strategy))
 
         return ProjectMigrationPlan(
             migration_id=normalized.migration_id,
@@ -523,9 +512,7 @@ class ProjectMigrator:
             config=config,
             actions=actions,
             issues=tuple(_deduplicate_issues(issues)),
-            manual_actions=tuple(
-                _deduplicate_text(manual_actions)
-            ),
+            manual_actions=tuple(_deduplicate_text(manual_actions)),
             rollback=(
                 "The source remains untouched. Staged output is discarded "
                 "before publication on failure; after publication, restore "
@@ -562,9 +549,7 @@ class ProjectMigrator:
             )
 
         if plan.request.dry_run:
-            warnings.append(
-                "Dry run completed; no canonical project files were written."
-            )
+            warnings.append("Dry run completed; no canonical project files were written.")
             return _result(
                 plan,
                 ProjectMigrationStatus.NOT_NEEDED,
@@ -581,7 +566,7 @@ class ProjectMigrator:
             )
 
         try:
-            receipt = self._workspace.apply(plan)
+            receipt = cast("ProjectMigrationWriteReceipt", self._workspace.apply(plan))
         except Exception as exc:
             warnings.append(
                 _failure_message(
@@ -597,7 +582,7 @@ class ProjectMigrator:
             )
 
         try:
-            verification = self._workspace.verify(plan)
+            verification = cast("ProjectMigrationVerification", self._workspace.verify(plan))
         except Exception as exc:
             warnings.append(
                 _failure_message(
@@ -709,9 +694,7 @@ def _normalize_request(
     request: ProjectMigrationRequest,
 ) -> ProjectMigrationRequest:
     if not isinstance(request, ProjectMigrationRequest):
-        raise TypeError(
-            "request must be ProjectMigrationRequest"
-        )
+        raise TypeError("request must be ProjectMigrationRequest")
 
     source_root = _require_absolute_path(
         request.source_root,
@@ -738,14 +721,8 @@ def _normalize_request(
     )
 
     entrypoints, checkpoints = validate_module_targets(
-        tuple(
-            path.as_posix()
-            for path in request.entrypoints
-        ),
-        tuple(
-            path.as_posix()
-            for path in request.checkpoints
-        ),
+        tuple(path.as_posix() for path in request.entrypoints),
+        tuple(path.as_posix() for path in request.checkpoints),
         require_entrypoint=False,
     )
 
@@ -762,38 +739,18 @@ def _normalize_request(
         ),
         source_root=source_root,
         project_root=project_root,
-        project_id=validate_project_id(
-            request.project_id
-        ),
-        project_name=validate_project_name(
-            request.project_name
-        ),
-        language_code=validate_language_code(
-            request.language_code
-        ),
+        project_id=validate_project_id(request.project_id),
+        project_name=validate_project_name(request.project_name),
+        language_code=validate_language_code(request.language_code),
         source_directory=Path(source_directory),
-        source_glob=validate_source_glob(
-            request.source_glob
-        ),
-        gf_path_parts=deduplicate_declared_path_parts(
-            request.gf_path_parts
-        ),
-        minimum_version=validate_minimum_version(
-            request.minimum_version
-        ),
-        entrypoints=tuple(
-            Path(value)
-            for value in entrypoints
-        ),
-        checkpoints=tuple(
-            Path(value)
-            for value in checkpoints
-        ),
+        source_glob=validate_source_glob(request.source_glob),
+        gf_path_parts=deduplicate_declared_path_parts(request.gf_path_parts),
+        minimum_version=validate_minimum_version(request.minimum_version),
+        entrypoints=tuple(Path(value) for value in entrypoints),
+        checkpoints=tuple(Path(value) for value in checkpoints),
         required_scenarios=required,
         optional_scenarios=optional,
-        release_requires_pgf=validate_release_requires_pgf(
-            request.release_requires_pgf
-        ),
+        release_requires_pgf=validate_release_requires_pgf(request.release_requires_pgf),
     )
 
 
@@ -809,10 +766,7 @@ def _validate_strategy(
         issues.append(
             ProjectMigrationIssue.blocker(
                 code="migration.source_is_project_root",
-                message=(
-                    "The migration source must not be the destination "
-                    "project root."
-                ),
+                message=("The migration source must not be the destination project root."),
                 path=request.source_root,
             )
         )
@@ -825,10 +779,7 @@ def _validate_strategy(
             issues.append(
                 ProjectMigrationIssue.blocker(
                     code="migration.source_equals_target",
-                    message=(
-                        "The source and managed destination source roots "
-                        "must differ."
-                    ),
+                    message=("The source and managed destination source roots must differ."),
                     path=request.source_root,
                 )
             )
@@ -870,9 +821,7 @@ def _build_config_draft(
     issues: list[ProjectMigrationIssue],
     manual_actions: list[str],
 ) -> ProjectConfig:
-    paths = ProjectPaths.from_root(
-        request.project_root
-    )
+    paths = ProjectPaths.from_root(request.project_root)
     source_root = resolve_source_root(
         paths.root,
         request.source_directory,
@@ -882,24 +831,19 @@ def _build_config_draft(
         issues.append(
             ProjectMigrationIssue.warning(
                 code="migration.entrypoints_pending",
-                message=(
-                    "No entrypoint is declared in the migration draft."
-                ),
+                message=("No entrypoint is declared in the migration draft."),
                 path=paths.config_file,
             )
         )
         manual_actions.append(
-            "Declare and review at least one modules.entrypoints target "
-            "before release."
+            "Declare and review at least one modules.entrypoints target before release."
         )
 
     if not request.required_scenarios:
         issues.append(
             ProjectMigrationIssue.warning(
                 code="migration.required_scenarios_pending",
-                message=(
-                    "No required scenario is declared in the migration draft."
-                ),
+                message=("No required scenario is declared in the migration draft."),
                 path=paths.config_file,
             )
         )
@@ -908,7 +852,7 @@ def _build_config_draft(
         schema_id=PROJECT_SCHEMA_ID,
         schema_version=PROJECT_SCHEMA_VERSION,
         identity=ProjectIdentity(
-            id=request.project_id,
+            id=ProjectId(request.project_id),
             name=request.project_name,
             language_code=request.language_code,
             root=Path("."),
@@ -928,8 +872,8 @@ def _build_config_draft(
             checkpoints=request.checkpoints,
         ),
         validation=ValidationPolicy(
-            required_scenarios=request.required_scenarios,
-            optional_scenarios=request.optional_scenarios,
+            required_scenarios=tuple(ScenarioId(value) for value in request.required_scenarios),
+            optional_scenarios=tuple(ScenarioId(value) for value in request.optional_scenarios),
             release_requires_pgf=request.release_requires_pgf,
         ),
         project_file=paths.config_file,
@@ -951,9 +895,7 @@ def _build_actions(
             source=None,
             destination=project_paths.root,
             asset=None,
-            description=(
-                "Materialize the canonical language-neutral project template."
-            ),
+            description=("Materialize the canonical language-neutral project template."),
         )
     ]
 
@@ -961,16 +903,10 @@ def _build_actions(
         actions.extend(
             ProjectMigrationAction(
                 kind=ProjectMigrationActionKind.COPY_FILE,
-                source=request.source_root.joinpath(
-                    *asset.relative_path.parts
-                ),
-                destination=target_source_root.joinpath(
-                    *asset.relative_path.parts
-                ),
+                source=request.source_root.joinpath(*asset.relative_path.parts),
+                destination=target_source_root.joinpath(*asset.relative_path.parts),
                 asset=asset,
-                description=(
-                    "Copy original bytes into the managed source tree."
-                ),
+                description=("Copy original bytes into the managed source tree."),
             )
             for asset in assets
             if asset.copy_to_managed_source
@@ -983,9 +919,7 @@ def _build_actions(
                 source=request.source_root,
                 destination=target_source_root,
                 asset=None,
-                description=(
-                    "Reference the existing project-relative source tree."
-                ),
+                description=("Reference the existing project-relative source tree."),
             )
         )
 
@@ -996,9 +930,7 @@ def _build_actions(
                 source=request.source_root,
                 destination=target_source_root,
                 asset=None,
-                description=(
-                    "Perform the authorized history-preserving source import."
-                ),
+                description=("Perform the authorized history-preserving source import."),
             )
         )
 
@@ -1009,19 +941,14 @@ def _build_actions(
                 source=None,
                 destination=project_paths.config_file,
                 asset=None,
-                description=(
-                    "Write the canonical project.toml draft atomically."
-                ),
+                description=("Write the canonical project.toml draft atomically."),
             ),
             ProjectMigrationAction(
                 kind=ProjectMigrationActionKind.VERIFY_PROJECT,
                 source=None,
                 destination=project_paths.root,
                 asset=None,
-                description=(
-                    "Verify project paths, configuration, and migration "
-                    "invariants."
-                ),
+                description=("Verify project paths, configuration, and migration invariants."),
             ),
         )
     )
@@ -1058,10 +985,7 @@ def _validate_external_mapping(
         )
         return
 
-    if (
-        relative.as_posix()
-        != request.source_directory.as_posix()
-    ):
+    if relative.as_posix() != request.source_directory.as_posix():
         issues.append(
             ProjectMigrationIssue.blocker(
                 code="migration.external_source_mismatch",
@@ -1078,29 +1002,16 @@ def _required_manual_actions(
     strategy: ProjectMigrationStrategy,
 ) -> tuple[str, ...]:
     actions = [
-        (
-            "Review proposed entrypoints and checkpoints before declaring "
-            "migration complete."
-        ),
-        (
-            "Create or review scenarios, inputs, and gold files; no gold is "
-            "accepted automatically."
-        ),
-        (
-            "Complete project contract documents and retain rollback evidence."
-        ),
-        (
-            "Run the documented baseline and release validations after cutover."
-        ),
+        ("Review proposed entrypoints and checkpoints before declaring migration complete."),
+        ("Create or review scenarios, inputs, and gold files; no gold is accepted automatically."),
+        ("Complete project contract documents and retain rollback evidence."),
+        ("Run the documented baseline and release validations after cutover."),
     ]
 
     if strategy is ProjectMigrationStrategy.HISTORY_IMPORT:
         actions.insert(
             0,
-            (
-                "Record the source repository, revision, import method, "
-                "and preserved path mapping."
-            ),
+            ("Record the source repository, revision, import method, and preserved path mapping."),
         )
 
     return tuple(actions)
@@ -1125,20 +1036,12 @@ def _result(
         source_path=plan.request.source_root.as_posix(),
         destination_path=plan.request.project_root.as_posix(),
         status=status,
-        warnings=tuple(
-            _deduplicate_text(warnings)
-        ),
-        losses=tuple(
-            _deduplicate_text(losses)
-        ),
+        warnings=tuple(_deduplicate_text(warnings)),
+        losses=tuple(_deduplicate_text(losses)),
         manual_actions=plan.manual_actions,
         changed=changed,
         written=written,
-        backup_path=(
-            backup_path.as_posix()
-            if backup_path is not None
-            else None
-        ),
+        backup_path=(backup_path.as_posix() if backup_path is not None else None),
     )
 
 
@@ -1168,13 +1071,7 @@ def _deduplicate_issues(
 def _deduplicate_text(
     values: Iterable[str],
 ) -> list[str]:
-    return list(
-        dict.fromkeys(
-            value.strip()
-            for value in values
-            if value.strip()
-        )
-    )
+    return list(dict.fromkeys(value.strip() for value in values if value.strip()))
 
 
 def _string_tuple(
@@ -1186,25 +1083,18 @@ def _string_tuple(
         values,
         (str, bytes, bytearray),
     ):
-        raise TypeError(
-            f"{field} must be an iterable of strings"
-        )
+        raise TypeError(f"{field} must be an iterable of strings")
 
     result = tuple(values)
 
-    if any(
-        not isinstance(value, str)
-        for value in result
-    ):
-        raise TypeError(
-            f"{field} must contain only strings"
-        )
+    if any(not isinstance(value, str) for value in result):
+        raise TypeError(f"{field} must contain only strings")
 
     return result
 
 
 def _path_tuple(
-    values: Iterable[Path],
+    values: Iterable[Path] | str | bytes | bytearray,
     *,
     field: str,
 ) -> tuple[Path, ...]:
@@ -1212,14 +1102,9 @@ def _path_tuple(
         values,
         (str, bytes, bytearray),
     ):
-        raise TypeError(
-            f"{field} must be an iterable of paths"
-        )
+        raise TypeError(f"{field} must be an iterable of paths")
 
-    return tuple(
-        Path(value)
-        for value in values
-    )
+    return tuple(Path(value) for value in values)
 
 
 def _single_line(
@@ -1228,21 +1113,10 @@ def _single_line(
     field: str,
 ) -> str:
     if not isinstance(value, str):
-        raise TypeError(
-            f"{field} must be a string"
-        )
+        raise TypeError(f"{field} must be a string")
 
-    if (
-        not value
-        or value != value.strip()
-        or any(
-            character in value
-            for character in "\x00\r\n"
-        )
-    ):
-        raise ValueError(
-            f"{field} must be a non-empty single-line string"
-        )
+    if not value or value != value.strip() or any(character in value for character in "\x00\r\n"):
+        raise ValueError(f"{field} must be a non-empty single-line string")
 
     return value
 
@@ -1256,26 +1130,11 @@ def _require_relative_path(
     text = path.as_posix()
     windows = PureWindowsPath(text)
 
-    if (
-        not text
-        or path.is_absolute()
-        or windows.is_absolute()
-        or windows.drive
-    ):
-        raise ValueError(
-            f"{field} must be a relative path"
-        )
+    if not text or path.is_absolute() or windows.is_absolute() or windows.drive:
+        raise ValueError(f"{field} must be a relative path")
 
-    if (
-        text == "."
-        or any(
-            part in {"", ".", ".."}
-            for part in path.parts
-        )
-    ):
-        raise ValueError(
-            f"{field} must identify a contained child path"
-        )
+    if text == "." or any(part in {"", ".", ".."} for part in path.parts):
+        raise ValueError(f"{field} must identify a contained child path")
 
     return path
 
@@ -1288,17 +1147,10 @@ def _require_absolute_path(
     path = Path(value)
 
     if not path.is_absolute():
-        raise ValueError(
-            f"{field} must be an absolute path"
-        )
+        raise ValueError(f"{field} must be an absolute path")
 
-    if any(
-        part == ".."
-        for part in path.parts
-    ):
-        raise ValueError(
-            f"{field} must not contain unresolved parent traversal"
-        )
+    if any(part == ".." for part in path.parts):
+        raise ValueError(f"{field} must not contain unresolved parent traversal")
 
     return Path(*path.parts)
 
@@ -1320,18 +1172,12 @@ def _failure_message(
     *,
     operation: str,
 ) -> str:
-    message = (
-        str(exc).strip()
-        or exc.__class__.__name__
-    )
+    message = str(exc).strip() or exc.__class__.__name__
     prefix = f"migration {operation} failed: "
     limit = _MAX_FAILURE_MESSAGE_LENGTH - len(prefix)
 
     if len(message) > limit:
-        message = (
-            message[: max(0, limit - 3)]
-            + "..."
-        )
+        message = message[: max(0, limit - 3)] + "..."
 
     return prefix + message
 

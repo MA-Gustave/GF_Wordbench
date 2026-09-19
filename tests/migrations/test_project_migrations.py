@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 import pytest
 
@@ -22,6 +22,7 @@ from gf_wordbench.projects.migrator import (
     migrate_project,
     plan_project_migration,
 )
+from gf_wordbench.projects.ports import ProjectMigrationWorkspacePort
 from gf_wordbench.projects.models import (
     PROJECT_SCHEMA_ID,
     PROJECT_SCHEMA_VERSION,
@@ -65,9 +66,7 @@ class _FakeWorkspace:
     destination_requests: list[dict[str, object]] = field(default_factory=list)
     applied_plans: list[ProjectMigrationPlan] = field(default_factory=list)
     verified_plans: list[ProjectMigrationPlan] = field(default_factory=list)
-    rollback_receipts: list[ProjectMigrationWriteReceipt] = field(
-        default_factory=list
-    )
+    rollback_receipts: list[ProjectMigrationWriteReceipt] = field(default_factory=list)
 
     def inspect_source(
         self,
@@ -139,14 +138,10 @@ def _request(
     project_root: Path | None = None,
 ) -> ProjectMigrationRequest:
     resolved_source = (
-        source_root
-        if source_root is not None
-        else (tmp_path / "legacy-language").resolve()
+        source_root if source_root is not None else (tmp_path / "legacy-language").resolve()
     )
     resolved_project = (
-        project_root
-        if project_root is not None
-        else (tmp_path / "project").resolve()
+        project_root if project_root is not None else (tmp_path / "project").resolve()
     )
 
     return ProjectMigrationRequest(
@@ -192,9 +187,7 @@ def _workspace(
             ),
             issues=source_issues,
         ),
-        destination=ProjectMigrationDestinationInspection(
-            matches_request=destination_matches
-        ),
+        destination=ProjectMigrationDestinationInspection(matches_request=destination_matches),
     )
 
 
@@ -206,7 +199,7 @@ def test_planning_is_read_only_and_builds_the_canonical_copy_plan(
 
     plan = plan_project_migration(
         request,
-        workspace=workspace,
+        workspace=cast(ProjectMigrationWorkspacePort, workspace),
         clock=_FixedClock(),
     )
 
@@ -221,9 +214,7 @@ def test_planning_is_read_only_and_builds_the_canonical_copy_plan(
     assert plan.config.identity.language_code == request.language_code
     assert plan.config.sources.directory == request.source_directory
     assert plan.config.modules.entrypoints == request.entrypoints
-    assert plan.config.validation.required_scenarios == (
-        request.required_scenarios
-    )
+    assert plan.config.validation.required_scenarios == (request.required_scenarios)
 
     assert tuple(action.kind for action in plan.actions) == (
         ProjectMigrationActionKind.INITIALIZE_PROJECT,
@@ -233,11 +224,7 @@ def test_planning_is_read_only_and_builds_the_canonical_copy_plan(
     )
     copied = plan.actions[1]
     assert copied.source == request.source_root / "GrammarEx.gf"
-    assert copied.destination == (
-        request.project_root
-        / request.source_directory
-        / "GrammarEx.gf"
-    )
+    assert copied.destination == (request.project_root / request.source_directory / "GrammarEx.gf")
 
     assert workspace.inspected_sources == [request.source_root]
     assert len(workspace.destination_requests) == 1
@@ -260,7 +247,7 @@ def test_successful_migration_applies_then_verifies_and_reports_backup(
 
     result = migrate_project(
         request,
-        workspace=workspace,
+        workspace=cast(ProjectMigrationWorkspacePort, workspace),
         clock=_FixedClock(),
     )
 
@@ -284,7 +271,7 @@ def test_dry_run_never_applies_or_verifies_the_plan(tmp_path: Path) -> None:
 
     result = migrate_project(
         request,
-        workspace=workspace,
+        workspace=cast(ProjectMigrationWorkspacePort, workspace),
         clock=_FixedClock(),
     )
 
@@ -305,12 +292,12 @@ def test_matching_destination_is_idempotent_and_requires_no_write(
 
     plan = plan_project_migration(
         request,
-        workspace=workspace,
+        workspace=cast(ProjectMigrationWorkspacePort, workspace),
         clock=_FixedClock(),
     )
     result = migrate_project(
         request,
-        workspace=workspace,
+        workspace=cast(ProjectMigrationWorkspacePort, workspace),
         clock=_FixedClock(),
     )
 
@@ -336,15 +323,12 @@ def test_blockers_prevent_publication(tmp_path: Path) -> None:
 
     result = migrate_project(
         request,
-        workspace=workspace,
+        workspace=cast(ProjectMigrationWorkspacePort, workspace),
         clock=_FixedClock(),
     )
 
     assert result.status is ProjectMigrationStatus.BLOCKED
-    assert any(
-        "must not be the destination project root" in warning
-        for warning in result.warnings
-    )
+    assert any("must not be the destination project root" in warning for warning in result.warnings)
     assert not result.changed
     assert not result.written
     assert workspace.applied_plans == []
@@ -370,7 +354,7 @@ def test_failed_verification_rolls_back_the_published_destination(
 
     result = migrate_project(
         request,
-        workspace=workspace,
+        workspace=cast(ProjectMigrationWorkspacePort, workspace),
         clock=_FixedClock(),
     )
 
@@ -378,10 +362,7 @@ def test_failed_verification_rolls_back_the_published_destination(
     assert not result.changed
     assert not result.written
     assert result.backup_path == backup.as_posix()
-    assert any(
-        "failed canonical validation" in warning
-        for warning in result.warnings
-    )
+    assert any("failed canonical validation" in warning for warning in result.warnings)
     assert len(workspace.applied_plans) == 1
     assert len(workspace.verified_plans) == 1
     assert workspace.rollback_receipts == [workspace.receipt]
@@ -400,7 +381,7 @@ def test_failed_rollback_reports_that_published_changes_remain(
 
     result = migrate_project(
         request,
-        workspace=workspace,
+        workspace=cast(ProjectMigrationWorkspacePort, workspace),
         clock=_FixedClock(),
     )
 

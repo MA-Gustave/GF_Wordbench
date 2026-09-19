@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field, replace
 import hashlib
 import os
-import shutil
-from dataclasses import dataclass, field, replace
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -13,6 +13,7 @@ from gf_wordbench.config.models import (
     RunConfig,
     ValidationTarget,
 )
+from gf_wordbench.kernel.ids import ProjectId
 from gf_wordbench.kernel.errors import (
     ConfigurationError,
     EvidenceIOError,
@@ -20,10 +21,10 @@ from gf_wordbench.kernel.errors import (
 )
 from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
 from gf_wordbench.projects.models import (
-    GFProjectConfig,
-    ModuleTargets,
     PROJECT_SCHEMA_ID,
     PROJECT_SCHEMA_VERSION,
+    GFProjectConfig,
+    ModuleTargets,
     ProjectConfig,
     ProjectIdentity,
     SourceConfig,
@@ -49,9 +50,7 @@ class RecordingFilesystem:
 
     def _record(self, method: str, path: Path) -> None:
         self.calls.append((method, path))
-        if self.fail_method == method and (
-            self.fail_name is None or path.name == self.fail_name
-        ):
+        if self.fail_method == method and (self.fail_name is None or path.name == self.fail_name):
             raise OSError(f"forced {method} failure for {path}")
 
     def resolve(self, path: Path, *, strict: bool) -> Path:
@@ -116,7 +115,7 @@ def _run_config(
         schema_id=PROJECT_SCHEMA_ID,
         schema_version=PROJECT_SCHEMA_VERSION,
         identity=ProjectIdentity(
-            id="selection-service-fixture",
+            id=ProjectId("selection-service-fixture"),
             name="Selection Service Fixture",
             language_code="xss",
             root=Path("."),
@@ -130,15 +129,11 @@ def _run_config(
         gf=GFProjectConfig(path_parts=("src",), minimum_version=""),
         modules=ModuleTargets(
             entrypoints=tuple(
-                path.relative_to(source_root)
-                if path.is_absolute()
-                else path
+                path.relative_to(source_root) if path.is_absolute() else path
                 for path in selected_entrypoints
             ),
             checkpoints=tuple(
-                path.relative_to(source_root)
-                if path.is_absolute()
-                else path
+                path.relative_to(source_root) if path.is_absolute() else path
                 for path in selected_checkpoints
             ),
         ),
@@ -192,6 +187,14 @@ def _run_config(
     )
 
 
+def _project_of(run_config: RunConfig) -> ProjectConfig:
+    project = run_config.project
+    assert isinstance(project, ProjectConfig)
+    return project
+
+
+
+
 def _tree_snapshot(root: Path) -> dict[str, tuple[str, int]]:
     snapshot: dict[str, tuple[str, int]] = {}
     for path in sorted(root.rglob("*")):
@@ -219,19 +222,19 @@ def test_select_files_requires_a_run_config() -> None:
 
 def test_select_files_uses_the_supplied_filesystem_port(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path)
-    alpha = _write_gf(run_config.project.source_root / "Alpha.gf")
+    alpha = _write_gf(_project_of(run_config).source_root / "Alpha.gf")
     filesystem = RecordingFilesystem(rglob_result=(alpha,))
 
     selected, excluded = select_files(run_config, filesystem=filesystem)
 
     assert selected == [alpha]
     assert excluded == []
-    assert ("rglob", run_config.project.source_root) in filesystem.calls
+    assert ("rglob", _project_of(run_config).source_root) in filesystem.calls
 
 
 def test_service_returns_absolute_resolved_paths(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path)
-    alpha = _write_gf(run_config.project.source_root / "nested" / "Alpha.gf")
+    alpha = _write_gf(_project_of(run_config).source_root / "nested" / "Alpha.gf")
 
     selected, excluded = SelectionService().select(run_config)
 
@@ -243,7 +246,7 @@ def test_service_returns_absolute_resolved_paths(tmp_path: Path) -> None:
 
 def test_service_rejects_a_missing_project_root(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path)
-    shutil.rmtree(run_config.project.project_root)
+    shutil.rmtree(_project_of(run_config).project_root)
 
     with pytest.raises(ConfigurationError) as captured:
         SelectionService().select(run_config)
@@ -254,7 +257,7 @@ def test_service_rejects_a_missing_project_root(tmp_path: Path) -> None:
 
 def test_service_rejects_a_missing_source_root(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path)
-    run_config.project.source_root.rmdir()
+    _project_of(run_config).source_root.rmdir()
 
     with pytest.raises(ConfigurationError) as captured:
         SelectionService().select(run_config)
@@ -265,7 +268,7 @@ def test_service_rejects_a_missing_source_root(tmp_path: Path) -> None:
 
 def test_service_rejects_a_source_root_that_is_a_file(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path)
-    source_root = run_config.project.source_root
+    source_root = _project_of(run_config).source_root
     source_root.rmdir()
     source_root.write_text("not a directory\n", encoding="utf-8")
 
@@ -279,7 +282,7 @@ def test_service_rejects_a_source_root_that_is_a_file(tmp_path: Path) -> None:
 def test_service_rejects_an_unreadable_required_root(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path)
     filesystem = RecordingFilesystem(
-        unreadable_names=frozenset({run_config.project.source_root.name})
+        unreadable_names=frozenset({_project_of(run_config).source_root.name})
     )
 
     with pytest.raises(EvidenceIOError) as captured:
@@ -309,7 +312,7 @@ def test_service_rejects_environment_project_root_drift(tmp_path: Path) -> None:
 
 def test_service_rejects_loaded_source_root_drift(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path)
-    drifted_root = (run_config.project.project_root / "other-src").resolve()
+    drifted_root = (_project_of(run_config).project_root / "other-src").resolve()
     object.__setattr__(run_config.project, "source_root", drifted_root)
 
     with pytest.raises(ConfigurationError) as captured:
@@ -321,7 +324,7 @@ def test_service_rejects_loaded_source_root_drift(tmp_path: Path) -> None:
 
 def test_service_rejects_a_source_root_symlink_escape(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path)
-    source_root = run_config.project.source_root
+    source_root = _project_of(run_config).source_root
     source_root.rmdir()
     outside = (tmp_path / "outside-source").resolve()
     outside.mkdir()
@@ -374,7 +377,7 @@ def test_service_adapts_candidate_enumeration_os_errors(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path)
     filesystem = RecordingFilesystem(
         fail_method="rglob",
-        fail_name=run_config.project.source_root.name,
+        fail_name=_project_of(run_config).source_root.name,
     )
 
     with pytest.raises(EvidenceIOError) as captured:
@@ -382,7 +385,7 @@ def test_service_adapts_candidate_enumeration_os_errors(tmp_path: Path) -> None:
 
     assert captured.value.code == "GF-WB-IO-222"
     assert captured.value.operation == "enumerate_candidate_files"
-    assert captured.value.subject == str(run_config.project.source_root)
+    assert captured.value.subject == str(_project_of(run_config).source_root)
     assert captured.value.retryable is True
     assert isinstance(captured.value.__cause__, OSError)
 
@@ -403,7 +406,7 @@ def test_service_adapts_candidate_inspection_os_errors(
     expected_operation: str,
 ) -> None:
     run_config = _run_config(tmp_path)
-    alpha = _write_gf(run_config.project.source_root / "Alpha.gf")
+    alpha = _write_gf(_project_of(run_config).source_root / "Alpha.gf")
     filesystem = RecordingFilesystem(
         fail_method=fail_method,
         fail_name=alpha.name,
@@ -424,13 +427,13 @@ def test_service_does_not_create_output_directories_or_modify_sources(
     tmp_path: Path,
 ) -> None:
     run_config = _run_config(tmp_path)
-    _write_gf(run_config.project.source_root / "Alpha.gf")
-    _write_gf(run_config.project.source_root / "nested" / "Beta.gf")
-    before = _tree_snapshot(run_config.project.project_root)
+    _write_gf(_project_of(run_config).source_root / "Alpha.gf")
+    _write_gf(_project_of(run_config).source_root / "nested" / "Beta.gf")
+    before = _tree_snapshot(_project_of(run_config).project_root)
 
     selected, excluded = SelectionService().select(run_config)
 
-    after = _tree_snapshot(run_config.project.project_root)
+    after = _tree_snapshot(_project_of(run_config).project_root)
     assert [path.name for path in selected] == ["Alpha.gf", "Beta.gf"]
     assert excluded == []
     assert before == after

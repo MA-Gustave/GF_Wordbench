@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
+from collections.abc import Iterable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -19,7 +20,9 @@ from gf_wordbench.kernel.statuses import (
     ValidationStatus,
 )
 from gf_wordbench.runs import result_builder
-from gf_wordbench.runs.models.results import RunResult
+from gf_wordbench.diagnostics.models import TopError
+from gf_wordbench.runs.models.results import FileResult, RunResult
+from gf_wordbench.validation.scenarios.models import ScenarioResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +60,7 @@ def _file_result(
     error_kind: ErrorKind = ErrorKind.OK,
     message: str = "",
     blocked_by: tuple[str, ...] = (),
-):
+) -> FileResult:
     return result_builder.build_file_result(
         file_path=tmp_path / name,
         module_name=Path(name).stem,
@@ -89,6 +92,7 @@ def _subject(
         error_kind=error_kind,
         primary_message=message,
         scenario_id=scenario_id,
+        file_path=Path(f"{scenario_id}.gf"),
     )
 
 
@@ -109,6 +113,18 @@ def _diff(
         current_status=current_status,
         message=message,
     )
+
+
+def _as_file_results(values: Iterable[object]) -> Iterable[FileResult]:
+    return cast(Iterable[FileResult], values)
+
+
+def _as_scenario_results(values: Iterable[object]) -> Iterable[ScenarioResult]:
+    return cast(Iterable[ScenarioResult], values)
+
+
+def _expected_top_errors(values: list[_TopErrorRecord]) -> list[TopError]:
+    return cast(list[TopError], values)
 
 
 @pytest.fixture(autouse=True)
@@ -267,6 +283,7 @@ def test_build_scenario_result_forwards_canonical_values(
     result = result_builder.build_scenario_result(
         scenario_id="smoke",
         script_path=tmp_path / "validation" / "smoke.gfs",
+        script_sha256="0" * 64,
         required=True,
         status=ValidationStatus.FAIL,
         diagnostic_class=DiagnosticClass.DOWNSTREAM,
@@ -296,7 +313,7 @@ def test_build_scenario_result_forwards_canonical_values(
     assert result.diagnostic_class is DiagnosticClass.DOWNSTREAM
     assert result.error_kind is ErrorKind.SCRIPT
     assert result.primary_message == "expected marker missing"
-    assert result.blocked_by == ["a", "B"]
+    assert result.blocked_by == ("a", "B")
     assert result.command == ("gf", "--run")
     assert result.working_directory == tmp_path
     assert result.exit_code == 1
@@ -304,9 +321,9 @@ def test_build_scenario_result_forwards_canonical_values(
     assert result.timed_out is False
     assert result.duration_ms == 15
     assert result.gold_match is False
-    assert result.sections == ["section"]
-    assert result.assertions == ["assertion"]
-    assert result.artifacts == ["artifact"]
+    assert result.sections == ("section",)
+    assert result.assertions == ("assertion",)
+    assert result.artifacts == ("artifact",)
 
 
 @pytest.mark.parametrize(
@@ -377,6 +394,7 @@ def test_build_scenario_result_rejects_invalid_combinations(
     values: dict[str, object] = {
         "scenario_id": "smoke",
         "script_path": tmp_path / "smoke.gfs",
+        "script_sha256": "0" * 64,
         "required": True,
         "status": ValidationStatus.FAIL,
         "diagnostic_class": DiagnosticClass.DIRECT,
@@ -426,9 +444,9 @@ def test_bucket_top_errors_groups_normalized_messages_and_subjects() -> None:
         )
     ]
 
-    records = result_builder.bucket_top_errors(files, scenarios)
+    records = result_builder.bucket_top_errors(_as_file_results(files), _as_scenario_results(scenarios))
 
-    assert records == [
+    assert records == _expected_top_errors([
         _TopErrorRecord(
             error_kind=ErrorKind.SYNTAX,
             message="MISSING SEMICOLON",
@@ -441,12 +459,12 @@ def test_bucket_top_errors_groups_normalized_messages_and_subjects() -> None:
             count=1,
             subject_kinds=("file",),
         ),
-    ]
+    ])
 
 
 def test_bucket_top_errors_uses_deterministic_tie_breakers() -> None:
     records = result_builder.bucket_top_errors(
-        (
+        _as_file_results((
             _subject(
                 status=ValidationStatus.FAIL,
                 error_kind=ErrorKind.TYPE,
@@ -462,14 +480,11 @@ def test_bucket_top_errors_uses_deterministic_tie_breakers() -> None:
                 error_kind=ErrorKind.SCRIPT,
                 message="Alpha",
             ),
-        ),
+        )),
         (),
     )
 
-    assert [
-        (record.error_kind, record.message)
-        for record in records
-    ] == [
+    assert [(record.error_kind, record.message) for record in records] == [
         (ErrorKind.SCRIPT, "Alpha"),
         (ErrorKind.SCRIPT, "beta"),
         (ErrorKind.TYPE, "zeta"),
@@ -542,8 +557,8 @@ def test_derive_overall_status_applies_required_status_precedence(
 ) -> None:
     assert (
         result_builder.derive_overall_status(
-            files,
-            scenarios,
+            _as_file_results(files),
+            _as_scenario_results(scenarios),
             required_stage_statuses=stage_statuses,
         )
         is expected
@@ -551,16 +566,22 @@ def test_derive_overall_status_applies_required_status_precedence(
 
 
 def test_derive_overall_status_promotes_framework_or_evidence_failure() -> None:
-    assert result_builder.derive_overall_status(
-        (),
-        (),
-        required_evidence_complete=False,
-    ) is OverallStatus.ERROR
-    assert result_builder.derive_overall_status(
-        (),
-        (),
-        framework_error=True,
-    ) is OverallStatus.ERROR
+    assert (
+        result_builder.derive_overall_status(
+            (),
+            (),
+            required_evidence_complete=False,
+        )
+        is OverallStatus.ERROR
+    )
+    assert (
+        result_builder.derive_overall_status(
+            (),
+            (),
+            framework_error=True,
+        )
+        is OverallStatus.ERROR
+    )
 
 
 @pytest.mark.parametrize(
@@ -575,11 +596,14 @@ def test_derive_overall_status_requires_real_booleans(
     value: int,
 ) -> None:
     with pytest.raises(TypeError, match="must be a boolean"):
-        result_builder.derive_overall_status(
-            (),
-            (),
-            **{keyword: value},
-        )
+        if keyword == "required_evidence_complete":
+            result_builder.derive_overall_status(
+                (), (), required_evidence_complete=cast(bool, value)
+            )
+        else:
+            result_builder.derive_overall_status(
+                (), (), framework_error=cast(bool, value)
+            )
 
 
 def test_derive_overall_status_rejects_foreign_status_values() -> None:
@@ -623,8 +647,8 @@ def test_update_run_counts_derives_all_canonical_totals() -> None:
     )
 
     totals = result_builder.update_run_counts(
-        files,
-        scenarios,
+        _as_file_results(files),
+        _as_scenario_results(scenarios),
         files_seen=7,
         files_excluded=2,
         excluded_noise=3,
@@ -652,7 +676,7 @@ def test_update_run_counts_derives_all_canonical_totals() -> None:
 
 def test_update_run_counts_derives_files_seen_when_omitted() -> None:
     totals = result_builder.update_run_counts(
-        (_subject(status=ValidationStatus.OK),),
+        _as_file_results((_subject(status=ValidationStatus.OK),)),
         (),
         files_excluded=2,
     )
@@ -668,7 +692,7 @@ def test_update_run_counts_rejects_inconsistent_files_seen() -> None:
         match="files_seen must equal files_included plus files_excluded",
     ):
         result_builder.update_run_counts(
-            (_subject(status=ValidationStatus.OK),),
+            _as_file_results((_subject(status=ValidationStatus.OK),)),
             (),
             files_seen=9,
             files_excluded=1,
@@ -690,11 +714,12 @@ def test_update_run_counts_rejects_invalid_counts(
     exception: type[Exception],
 ) -> None:
     with pytest.raises(exception):
-        result_builder.update_run_counts(
-            (),
-            (),
-            **{keyword: value},
-        )
+        if keyword == "files_excluded":
+            result_builder.update_run_counts((), (), files_excluded=cast(int, value))
+        elif keyword == "excluded_noise":
+            result_builder.update_run_counts((), (), excluded_noise=cast(int, value))
+        else:
+            result_builder.update_run_counts((), (), files_seen=cast(int, value))
 
 
 def test_build_run_result_orders_and_derives_terminal_data(
@@ -751,7 +776,7 @@ def test_build_run_result_orders_and_derives_terminal_data(
         duration_ms=1000,
         gf_version="  GF 3.12  ",
         file_results=(failed, passed),
-        scenario_results=scenarios,
+        scenario_results=_as_scenario_results(scenarios),
         diff_entries=diffs,  # type: ignore[arg-type]
         files_excluded=1,
         excluded_noise=1,
@@ -786,7 +811,7 @@ def test_build_run_result_orders_and_derives_terminal_data(
     assert result.totals.files_included == 2
     assert result.totals.files_excluded == 1
     assert result.totals.excluded_noise == 1
-    assert result.top_errors == [
+    assert result.top_errors == _expected_top_errors([
         _TopErrorRecord(
             error_kind=ErrorKind.SCRIPT,
             message="Optional mismatch",
@@ -799,7 +824,7 @@ def test_build_run_result_orders_and_derives_terminal_data(
             count=1,
             subject_kinds=("file",),
         ),
-    ]
+    ])
 
 
 def test_build_run_result_promotes_missing_required_evidence_to_error(

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import IntEnum, StrEnum, unique
 from pathlib import Path, PurePath, PurePosixPath
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -216,9 +216,7 @@ class EvidenceCandidate:
             raise TypeError("required must be a boolean")
         if type(self.release_significant) is not bool:
             raise TypeError("release_significant must be a boolean")
-        if isinstance(self.configured_order, bool) or not isinstance(
-            self.configured_order, int
-        ):
+        if isinstance(self.configured_order, bool) or not isinstance(self.configured_order, int):
             raise TypeError("configured_order must be an integer")
         if self.configured_order < 0:
             raise ValueError("configured_order must be non-negative")
@@ -291,9 +289,10 @@ class PacketEvidenceItem:
     metadata: EvidenceMetadata = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.evidence_id, str) or _EVIDENCE_ID_RE.fullmatch(
-            self.evidence_id
-        ) is None:
+        if (
+            not isinstance(self.evidence_id, str)
+            or _EVIDENCE_ID_RE.fullmatch(self.evidence_id) is None
+        ):
             raise ValueError(f"invalid evidence_id {self.evidence_id!r}")
         candidate = EvidenceCandidate(
             domain=self.domain,
@@ -376,8 +375,7 @@ class PacketEvidenceItem:
     @property
     def is_truncated_by_plan(self) -> bool:
         return (
-            self.estimated_total_lines is not None
-            and self.estimated_total_lines > self.line_limit
+            self.estimated_total_lines is not None and self.estimated_total_lines > self.line_limit
         )
 
 
@@ -513,10 +511,7 @@ def build_evidence_catalog(
             file_subjects.add(candidate.subject_id)
         elif candidate.domain in (EvidenceDomain.SCENARIO, EvidenceDomain.GOLD):
             is_new_subject = candidate.subject_id not in scenario_subjects
-            if (
-                is_new_subject
-                and len(scenario_subjects) >= limits.maximum_failing_scenario_entries
-            ):
+            if is_new_subject and len(scenario_subjects) >= limits.maximum_failing_scenario_entries:
                 omitted.append(
                     OmittedEvidence(candidate, "maximum failing scenario entry limit reached")
                 )
@@ -666,16 +661,20 @@ def evidence_index_rows(
 
 
 def _prepare_candidates(
-    candidates: Iterable[EvidenceCandidate],
+    candidates: Iterable[object],
 ) -> tuple[EvidenceCandidate, ...]:
     if isinstance(candidates, (str, bytes)):
         raise TypeError("candidates must be an iterable of EvidenceCandidate")
-    prepared = tuple(candidates)
-    if len(prepared) > _MAX_CANDIDATES:
+    raw_candidates = tuple(candidates)
+    if len(raw_candidates) > _MAX_CANDIDATES:
         raise ValueError("candidate count exceeds the supported limit")
-    if any(not isinstance(candidate, EvidenceCandidate) for candidate in prepared):
-        raise TypeError("candidates must contain EvidenceCandidate objects")
-    return prepared
+
+    prepared: list[EvidenceCandidate] = []
+    for candidate in raw_candidates:
+        if not isinstance(candidate, EvidenceCandidate):
+            raise TypeError("candidates must contain EvidenceCandidate objects")
+        prepared.append(candidate)
+    return tuple(prepared)
 
 
 def _deduplicate_candidates(
@@ -831,7 +830,6 @@ def _freeze_metadata(values: EvidenceMetadata) -> EvidenceMetadata:
             )
         copied[key] = value
     return MappingProxyType(copied)
-
 
 
 __all__ = (

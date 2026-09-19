@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
-from typing import Final, Iterable, Sequence
+import re
+from typing import Final
 
 from gf_wordbench.kernel.ids import SectionId, validate_section_id
 
@@ -19,9 +20,7 @@ _MARKER_LINE_RE: Final[re.Pattern[str]] = re.compile(
     r"^[ \t]*GF_WORDBENCH_(?P<kind>BEGIN|END)"
     r"[ \t]+(?P<section>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)[ \t]*$"
 )
-_MARKER_PREFIX_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[ \t]*GF_WORDBENCH_[A-Z_]*"
-)
+_MARKER_PREFIX_RE: Final[re.Pattern[str]] = re.compile(r"^[ \t]*GF_WORDBENCH_[A-Z_]*")
 
 
 @unique
@@ -148,9 +147,7 @@ class MarkerIssue:
             )
         if self.line_number is not None:
             if type(self.line_number) is not int or self.line_number <= 0:
-                raise ValueError(
-                    "line_number must be a positive integer when present"
-                )
+                raise ValueError("line_number must be a positive integer when present")
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,20 +173,14 @@ class MarkerValidationResult:
             )
 
         section_ids = tuple(
-            validate_section_id(item.id, field="section result ID")
-            for item in self.sections
+            validate_section_id(item.id, field="section result ID") for item in self.sections
         )
         if section_ids != expected:
-            raise ValueError(
-                "section results must match expected section order exactly"
-            )
+            raise ValueError("section results must match expected section order exactly")
 
     @property
     def valid(self) -> bool:
-        return not any(
-            issue.severity is MarkerIssueSeverity.FAILURE
-            for issue in self.issues
-        )
+        return not any(issue.severity is MarkerIssueSeverity.FAILURE for issue in self.issues)
 
     @property
     def complete(self) -> bool:
@@ -198,17 +189,13 @@ class MarkerValidationResult:
     @property
     def warnings(self) -> tuple[MarkerIssue, ...]:
         return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is MarkerIssueSeverity.WARNING
+            issue for issue in self.issues if issue.severity is MarkerIssueSeverity.WARNING
         )
 
     @property
     def failures(self) -> tuple[MarkerIssue, ...]:
         return tuple(
-            issue
-            for issue in self.issues
-            if issue.severity is MarkerIssueSeverity.FAILURE
+            issue for issue in self.issues if issue.severity is MarkerIssueSeverity.FAILURE
         )
 
     @property
@@ -240,11 +227,7 @@ def parse_marker_events(output: str) -> MarkerParseResult:
     for line_number, raw_line in enumerate(output.splitlines(), start=1):
         match = _MARKER_LINE_RE.fullmatch(raw_line)
         if match is not None:
-            kind = (
-                MarkerKind.BEGIN
-                if match.group("kind") == "BEGIN"
-                else MarkerKind.END
-            )
+            kind = MarkerKind.BEGIN if match.group("kind") == "BEGIN" else MarkerKind.END
             events.append(
                 MarkerEvent(
                     kind=kind,
@@ -291,35 +274,18 @@ def validate_marker_events(
     normalized_malformed = _normalize_malformed(malformed)
 
     if not isinstance(unexpected_policy, UnexpectedMarkerPolicy):
-        raise TypeError(
-            "unexpected_policy must be an UnexpectedMarkerPolicy"
-        )
+        raise TypeError("unexpected_policy must be an UnexpectedMarkerPolicy")
     if type(allow_nested) is not bool:
         raise TypeError("allow_nested must be a bool")
 
-    states = {
-        section_id: MarkerState.NOT_SEEN
-        for section_id in expected
-    }
-    begin_lines: dict[SectionId, int | None] = {
-        section_id: None
-        for section_id in expected
-    }
-    end_lines: dict[SectionId, int | None] = {
-        section_id: None
-        for section_id in expected
-    }
-    section_issues: dict[SectionId, list[MarkerIssue]] = {
-        section_id: []
-        for section_id in expected
-    }
+    states = dict.fromkeys(expected, MarkerState.NOT_SEEN)
+    begin_lines: dict[SectionId, int | None] = dict.fromkeys(expected)
+    end_lines: dict[SectionId, int | None] = dict.fromkeys(expected)
+    section_issues: dict[SectionId, list[MarkerIssue]] = {section_id: [] for section_id in expected}
     issues: list[MarkerIssue] = []
     open_stack: list[SectionId] = []
     next_expected_index = 0
-    expected_indexes = {
-        section_id: index
-        for index, section_id in enumerate(expected)
-    }
+    expected_indexes = {section_id: index for index, section_id in enumerate(expected)}
 
     for item in normalized_malformed:
         issues.append(
@@ -342,10 +308,7 @@ def validate_marker_events(
                     if unexpected_policy is UnexpectedMarkerPolicy.WARN
                     else MarkerIssueSeverity.FAILURE
                 ),
-                message=(
-                    f"unexpected {event.kind.value} marker for section "
-                    f"{section_id!r}"
-                ),
+                message=(f"unexpected {event.kind.value} marker for section {section_id!r}"),
                 section_id=section_id,
                 line_number=event.line_number,
             )
@@ -361,10 +324,7 @@ def validate_marker_events(
                     issue = MarkerIssue(
                         kind=MarkerIssueKind.OUT_OF_ORDER_SECTION,
                         severity=MarkerIssueSeverity.FAILURE,
-                        message=(
-                            f"section {section_id!r} began out of configured "
-                            "order"
-                        ),
+                        message=(f"section {section_id!r} began out of configured order"),
                         section_id=section_id,
                         line_number=event.line_number,
                     )
@@ -376,8 +336,7 @@ def validate_marker_events(
                         kind=MarkerIssueKind.NESTED_SECTION,
                         severity=MarkerIssueSeverity.FAILURE,
                         message=(
-                            f"section {section_id!r} began before section "
-                            f"{open_stack[-1]!r} ended"
+                            f"section {section_id!r} began before section {open_stack[-1]!r} ended"
                         ),
                         section_id=section_id,
                         line_number=event.line_number,
@@ -391,8 +350,7 @@ def validate_marker_events(
 
                 while (
                     next_expected_index < len(expected)
-                    and states[expected[next_expected_index]]
-                    is not MarkerState.NOT_SEEN
+                    and states[expected[next_expected_index]] is not MarkerState.NOT_SEEN
                 ):
                     next_expected_index += 1
                 continue
@@ -401,9 +359,7 @@ def validate_marker_events(
                 issue = MarkerIssue(
                     kind=MarkerIssueKind.DUPLICATE_BEGIN,
                     severity=MarkerIssueSeverity.FAILURE,
-                    message=(
-                        f"section {section_id!r} has a duplicate begin marker"
-                    ),
+                    message=(f"section {section_id!r} has a duplicate begin marker"),
                     section_id=section_id,
                     line_number=event.line_number,
                 )
@@ -411,9 +367,7 @@ def validate_marker_events(
                 issue = MarkerIssue(
                     kind=MarkerIssueKind.BEGIN_AFTER_COMPLETED,
                     severity=MarkerIssueSeverity.FAILURE,
-                    message=(
-                        f"section {section_id!r} began again after completion"
-                    ),
+                    message=(f"section {section_id!r} began again after completion"),
                     section_id=section_id,
                     line_number=event.line_number,
                 )
@@ -425,9 +379,7 @@ def validate_marker_events(
             issue = MarkerIssue(
                 kind=MarkerIssueKind.END_BEFORE_BEGIN,
                 severity=MarkerIssueSeverity.FAILURE,
-                message=(
-                    f"section {section_id!r} ended before its begin marker"
-                ),
+                message=(f"section {section_id!r} ended before its begin marker"),
                 section_id=section_id,
                 line_number=event.line_number,
             )
@@ -439,9 +391,7 @@ def validate_marker_events(
             issue = MarkerIssue(
                 kind=MarkerIssueKind.DUPLICATE_END,
                 severity=MarkerIssueSeverity.FAILURE,
-                message=(
-                    f"section {section_id!r} has a duplicate end marker"
-                ),
+                message=(f"section {section_id!r} has a duplicate end marker"),
                 section_id=section_id,
                 line_number=event.line_number,
             )
@@ -539,9 +489,7 @@ def _normalize_expected_sections(
     section_ids: Iterable[str],
 ) -> tuple[SectionId, ...]:
     if isinstance(section_ids, (str, bytes)):
-        raise TypeError(
-            "expected_section_ids must be an iterable of section IDs"
-        )
+        raise TypeError("expected_section_ids must be an iterable of section IDs")
 
     try:
         normalized = tuple(
@@ -552,9 +500,7 @@ def _normalize_expected_sections(
             for index, section_id in enumerate(section_ids)
         )
     except TypeError as exc:
-        raise TypeError(
-            "expected_section_ids must be an iterable of section IDs"
-        ) from exc
+        raise TypeError("expected_section_ids must be an iterable of section IDs") from exc
 
     if len(normalized) != len(set(normalized)):
         raise ValueError("expected section IDs must be unique")
@@ -563,54 +509,36 @@ def _normalize_expected_sections(
 
 
 def _normalize_events(
-    events: Iterable[MarkerEvent],
+    events: object,
 ) -> tuple[MarkerEvent, ...]:
-    if isinstance(events, (str, bytes)):
+    if isinstance(events, (str, bytes)) or not isinstance(events, Iterable):
         raise TypeError("events must be an iterable of MarkerEvent values")
 
-    try:
-        normalized = tuple(events)
-    except TypeError as exc:
-        raise TypeError(
-            "events must be an iterable of MarkerEvent values"
-        ) from exc
+    normalized_items: list[MarkerEvent] = []
+    for event in events:
+        if not isinstance(event, MarkerEvent):
+            raise TypeError("events must contain only MarkerEvent values")
+        normalized_items.append(event)
+    normalized = tuple(normalized_items)
 
-    if not all(isinstance(event, MarkerEvent) for event in normalized):
-        raise TypeError("events must contain only MarkerEvent values")
-
-    if any(
-        left.line_number > right.line_number
-        for left, right in zip(normalized, normalized[1:])
-    ):
+    if any(left.line_number > right.line_number for left, right in zip(normalized, normalized[1:])):
         raise ValueError("events must preserve source line order")
 
     return normalized
 
 
 def _normalize_malformed(
-    malformed: Iterable[MalformedMarker],
+    malformed: object,
 ) -> tuple[MalformedMarker, ...]:
-    if isinstance(malformed, (str, bytes)):
-        raise TypeError(
-            "malformed must be an iterable of MalformedMarker values"
-        )
+    if isinstance(malformed, (str, bytes)) or not isinstance(malformed, Iterable):
+        raise TypeError("malformed must be an iterable of MalformedMarker values")
 
-    try:
-        normalized = tuple(malformed)
-    except TypeError as exc:
-        raise TypeError(
-            "malformed must be an iterable of MalformedMarker values"
-        ) from exc
-
-    if not all(
-        isinstance(item, MalformedMarker)
-        for item in normalized
-    ):
-        raise TypeError(
-            "malformed must contain only MalformedMarker values"
-        )
-
-    return normalized
+    normalized_items: list[MalformedMarker] = []
+    for item in malformed:
+        if not isinstance(item, MalformedMarker):
+            raise TypeError("malformed must contain only MalformedMarker values")
+        normalized_items.append(item)
+    return tuple(normalized_items)
 
 
 def _build_section_result(
@@ -621,10 +549,7 @@ def _build_section_result(
     end_line: int | None,
     issues: Sequence[MarkerIssue],
 ) -> ScenarioSectionResult:
-    has_failure = any(
-        issue.severity is MarkerIssueSeverity.FAILURE
-        for issue in issues
-    )
+    has_failure = any(issue.severity is MarkerIssueSeverity.FAILURE for issue in issues)
     completed = state is MarkerState.COMPLETED and not has_failure
 
     if completed:

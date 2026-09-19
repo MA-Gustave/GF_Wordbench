@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from hashlib import sha256
+import re
 from types import MappingProxyType
-from typing import Final, Generic, Protocol, TypeVar, cast
+from typing import Final, Generic, Protocol, TypeVar
 
 from gf_wordbench.kernel.errors import (
     ConfigurationError,
@@ -24,9 +24,7 @@ RegistryResultT = TypeVar("RegistryResultT")
 
 ASSERTION_REGISTRY_VERSION: Final[str] = "1.0.0"
 
-_ASSERTION_TYPE_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
-)
+_ASSERTION_TYPE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
 _SERIALIZATION_NAME_RE: Final[re.Pattern[str]] = re.compile(
     r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$"
 )
@@ -116,16 +114,12 @@ def _normalize_sources(
     sources: Iterable[AssertionInputSource],
 ) -> tuple[AssertionInputSource, ...]:
     if isinstance(sources, (str, bytes)):
-        raise TypeError(
-            "input_sources must be an iterable of AssertionInputSource values"
-        )
+        raise TypeError("input_sources must be an iterable of AssertionInputSource values")
 
     try:
         normalized = tuple(sources)
     except TypeError as exc:
-        raise TypeError(
-            "input_sources must be an iterable of AssertionInputSource values"
-        ) from exc
+        raise TypeError("input_sources must be an iterable of AssertionInputSource values") from exc
 
     if not normalized:
         raise ValueError("input_sources must not be empty")
@@ -134,13 +128,9 @@ def _normalize_sources(
 
     for index, source in enumerate(normalized):
         if not isinstance(source, AssertionInputSource):
-            raise TypeError(
-                f"input_sources[{index}] must be an AssertionInputSource"
-            )
+            raise TypeError(f"input_sources[{index}] must be an AssertionInputSource")
         if source in seen:
-            raise ValueError(
-                f"duplicate assertion input source: {source.value}"
-            )
+            raise ValueError(f"duplicate assertion input source: {source.value}")
         seen.add(source)
 
     return normalized
@@ -161,17 +151,14 @@ class AssertionTypeDescriptor:
         type_id = _require_text("type_id", self.type_id)
 
         if _ASSERTION_TYPE_ID_RE.fullmatch(type_id) is None:
-            raise ValueError(
-                "type_id must use lowercase dotted or kebab syntax"
-            )
+            raise ValueError("type_id must use lowercase dotted or kebab syntax")
 
         if not isinstance(self.family, AssertionFamily):
             raise TypeError("family must be an AssertionFamily")
 
         if not type_id.startswith(f"{self.family.value}."):
             raise ValueError(
-                f"type_id {type_id!r} must begin with "
-                f"{self.family.value!r} followed by a dot"
+                f"type_id {type_id!r} must begin with {self.family.value!r} followed by a dot"
             )
 
         object.__setattr__(
@@ -193,13 +180,8 @@ class AssertionTypeDescriptor:
             "serialization_name",
             self.serialization_name,
         )
-        if _SERIALIZATION_NAME_RE.fullmatch(
-            serialization_name
-        ) is None:
-            raise ValueError(
-                "serialization_name must use lowercase dotted "
-                "snake-case syntax"
-            )
+        if _SERIALIZATION_NAME_RE.fullmatch(serialization_name) is None:
+            raise ValueError("serialization_name must use lowercase dotted snake-case syntax")
 
         _require_text("report_label", self.report_label)
 
@@ -207,10 +189,7 @@ class AssertionTypeDescriptor:
         return {
             "type_id": self.type_id,
             "family": self.family.value,
-            "input_sources": [
-                source.value
-                for source in self.input_sources
-            ],
+            "input_sources": [source.value for source in self.input_sources],
             "order": self.order,
             "comparison_semantics": self.comparison_semantics,
             "failure_representation": self.failure_representation,
@@ -235,11 +214,19 @@ class RegisteredAssertionType(
             self.descriptor,
             AssertionTypeDescriptor,
         ):
-            raise TypeError(
-                "descriptor must be an AssertionTypeDescriptor"
-            )
+            raise TypeError("descriptor must be an AssertionTypeDescriptor")
         if not callable(self.evaluator):
             raise TypeError("evaluator must be callable")
+
+
+def _reject_text_iterable(
+    value: object,
+    *,
+    field_name: str,
+    item_name: str,
+) -> None:
+    if isinstance(value, (str, bytes)):
+        raise TypeError(f"{field_name} must be an iterable of {item_name} values")
 
 
 class AssertionRegistry(
@@ -262,10 +249,11 @@ class AssertionRegistry(
             ]
         ],
     ) -> None:
-        if isinstance(entries, (str, bytes)):
-            raise TypeError(
-                "entries must be an iterable of RegisteredAssertionType values"
-            )
+        _reject_text_iterable(
+            entries,
+            field_name="entries",
+            item_name="RegisteredAssertionType",
+        )
 
         try:
             supplied = tuple(entries)
@@ -275,9 +263,7 @@ class AssertionRegistry(
             ) from exc
 
         if not supplied:
-            raise ValueError(
-                "assertion registry must contain at least one type"
-            )
+            raise ValueError("assertion registry must contain at least one type")
 
         by_id: dict[
             str,
@@ -291,9 +277,7 @@ class AssertionRegistry(
 
         for index, entry in enumerate(supplied):
             if not isinstance(entry, RegisteredAssertionType):
-                raise TypeError(
-                    f"entries[{index}] must be a RegisteredAssertionType"
-                )
+                raise TypeError(f"entries[{index}] must be a RegisteredAssertionType")
 
             descriptor = entry.descriptor
 
@@ -335,14 +319,9 @@ class AssertionRegistry(
         )
 
         self._entries = ordered
-        self._descriptors = tuple(
-            entry.descriptor
-            for entry in ordered
-        )
+        self._descriptors = tuple(entry.descriptor for entry in ordered)
         self._by_id = MappingProxyType(by_id)
-        self._fingerprint = _registry_fingerprint(
-            self._descriptors
-        )
+        self._fingerprint = _registry_fingerprint(self._descriptors)
 
     @property
     def entries(
@@ -365,10 +344,7 @@ class AssertionRegistry(
 
     @property
     def type_ids(self) -> tuple[str, ...]:
-        return tuple(
-            descriptor.type_id
-            for descriptor in self._descriptors
-        )
+        return tuple(descriptor.type_id for descriptor in self._descriptors)
 
     @property
     def fingerprint(self) -> str:
@@ -400,10 +376,7 @@ class AssertionRegistry(
             raise UnknownAssertionTypeError(
                 "unknown scenario assertion type",
                 code="GF-WB-SCENARIO-003",
-                detail=(
-                    f"received {candidate!r}; "
-                    f"supported types: {supported}"
-                ),
+                detail=(f"received {candidate!r}; supported types: {supported}"),
                 stage="scenario",
                 operation="resolve_assertion_type",
                 subject=candidate,
@@ -427,15 +400,9 @@ class AssertionRegistry(
         ...,
     ]:
         if not isinstance(family, AssertionFamily):
-            raise TypeError(
-                "family must be an AssertionFamily"
-            )
+            raise TypeError("family must be an AssertionFamily")
 
-        return tuple(
-            entry
-            for entry in self._entries
-            if entry.descriptor.family is family
-        )
+        return tuple(entry for entry in self._entries if entry.descriptor.family is family)
 
     def evaluate(
         self,
@@ -452,10 +419,7 @@ class AssertionRegistry(
         return {
             "registry_version": ASSERTION_REGISTRY_VERSION,
             "fingerprint": self.fingerprint,
-            "assertion_types": [
-                descriptor.to_serializable()
-                for descriptor in self._descriptors
-            ],
+            "assertion_types": [descriptor.to_serializable() for descriptor in self._descriptors],
         }
 
 
@@ -474,17 +438,14 @@ def _descriptor(
         order=order,
         comparison_semantics=comparison_semantics,
         failure_representation=(
-            "A completed false comparison is failed; "
-            "an unevaluable comparison is error."
+            "A completed false comparison is failed; an unevaluable comparison is error."
         ),
         serialization_name=type_id.replace("-", "_"),
         report_label=report_label,
     )
 
 
-CANONICAL_ASSERTION_TYPES: Final[
-    tuple[AssertionTypeDescriptor, ...]
-] = (
+CANONICAL_ASSERTION_TYPES: Final[tuple[AssertionTypeDescriptor, ...]] = (
     _descriptor(
         "process.completed",
         AssertionFamily.PROCESS,
@@ -736,19 +697,15 @@ CANONICAL_ASSERTION_TYPES: Final[
 )
 
 
-def _canonical_descriptor_map(
-) -> Mapping[str, AssertionTypeDescriptor]:
+def _canonical_descriptor_map() -> Mapping[str, AssertionTypeDescriptor]:
     return MappingProxyType(
-        {
-            descriptor.type_id: descriptor
-            for descriptor in CANONICAL_ASSERTION_TYPES
-        }
+        {descriptor.type_id: descriptor for descriptor in CANONICAL_ASSERTION_TYPES}
     )
 
 
-CANONICAL_ASSERTION_TYPE_BY_ID: Final[
-    Mapping[str, AssertionTypeDescriptor]
-] = _canonical_descriptor_map()
+CANONICAL_ASSERTION_TYPE_BY_ID: Final[Mapping[str, AssertionTypeDescriptor]] = (
+    _canonical_descriptor_map()
+)
 
 
 def _registry_fingerprint(
@@ -763,10 +720,7 @@ def _registry_fingerprint(
             (
                 descriptor.type_id,
                 descriptor.family.value,
-                ",".join(
-                    source.value
-                    for source in descriptor.input_sources
-                ),
+                ",".join(source.value for source in descriptor.input_sources),
                 str(descriptor.order),
                 descriptor.comparison_semantics,
                 descriptor.failure_representation,
@@ -787,16 +741,11 @@ def canonical_assertion_descriptor(
     try:
         return CANONICAL_ASSERTION_TYPE_BY_ID[candidate]
     except KeyError as exc:
-        supported = ", ".join(
-            CANONICAL_ASSERTION_TYPE_BY_ID
-        )
+        supported = ", ".join(CANONICAL_ASSERTION_TYPE_BY_ID)
         raise UnknownAssertionTypeError(
             "unknown scenario assertion type",
             code="GF-WB-SCENARIO-003",
-            detail=(
-                f"received {candidate!r}; "
-                f"supported types: {supported}"
-            ),
+            detail=(f"received {candidate!r}; supported types: {supported}"),
             stage="scenario",
             operation="resolve_assertion_type",
             subject=candidate,
@@ -821,31 +770,21 @@ def bind_canonical_assertion_registry(
         raise TypeError("evaluators must be a mapping")
 
     supplied_ids = set(evaluators)
-    canonical_ids = set(
-        CANONICAL_ASSERTION_TYPE_BY_ID
-    )
+    canonical_ids = set(CANONICAL_ASSERTION_TYPE_BY_ID)
     missing = tuple(
         descriptor.type_id
         for descriptor in CANONICAL_ASSERTION_TYPES
         if descriptor.type_id not in supplied_ids
     )
-    unexpected = tuple(
-        sorted(supplied_ids - canonical_ids)
-    )
+    unexpected = tuple(sorted(supplied_ids - canonical_ids))
 
     if missing or unexpected:
         detail_parts: list[str] = []
 
         if missing:
-            detail_parts.append(
-                "missing evaluators: "
-                + ", ".join(missing)
-            )
+            detail_parts.append("missing evaluators: " + ", ".join(missing))
         if unexpected:
-            detail_parts.append(
-                "unexpected evaluator IDs: "
-                + ", ".join(unexpected)
-            )
+            detail_parts.append("unexpected evaluator IDs: " + ", ".join(unexpected))
 
         raise AssertionEvaluatorBindingError(
             "canonical assertion evaluator binding is incomplete",
@@ -879,14 +818,7 @@ def bind_canonical_assertion_registry(
         entries.append(
             RegisteredAssertionType(
                 descriptor=descriptor,
-                evaluator=cast(
-                    AssertionEvaluator[
-                        RegistrySpecT,
-                        RegistryContextT,
-                        RegistryResultT,
-                    ],
-                    evaluator,
-                ),
+                evaluator=evaluator,
             )
         )
 
@@ -895,6 +827,8 @@ def bind_canonical_assertion_registry(
 
 __all__ = (
     "ASSERTION_REGISTRY_VERSION",
+    "CANONICAL_ASSERTION_TYPES",
+    "CANONICAL_ASSERTION_TYPE_BY_ID",
     "AssertionEvaluator",
     "AssertionEvaluatorBindingError",
     "AssertionFamily",
@@ -902,8 +836,6 @@ __all__ = (
     "AssertionRegistry",
     "AssertionRegistryError",
     "AssertionTypeDescriptor",
-    "CANONICAL_ASSERTION_TYPES",
-    "CANONICAL_ASSERTION_TYPE_BY_ID",
     "DuplicateAssertionTypeError",
     "InvalidAssertionTypeError",
     "RegisteredAssertionType",

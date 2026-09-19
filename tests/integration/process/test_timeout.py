@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import sys
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
+import sys
+import time
 
 from gf_wordbench.infrastructure.process import ProcessRequest, run_process
 from gf_wordbench.infrastructure.process.models import (

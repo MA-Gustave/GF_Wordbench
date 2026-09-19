@@ -1,8 +1,8 @@
 """Mechanism-neutral ports owned by the active-project module.
 
 These interfaces isolate TOML transport, filesystem access, template
-materialization, archive creation, lifecycle locking, migration workspace
-operations, and clock access from project-domain and application services.
+materialization, archive creation, lifecycle locking, and clock access from
+project-domain and application services.
 
 They remain language-neutral and never infer project identity from application
 state, previous runs, process-global working directories, or external portfolio
@@ -20,14 +20,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from gf_wordbench.projects.migrator import (
-        ProjectMigrationDestinationInspection,
-        ProjectMigrationPlan,
-        ProjectMigrationSourceInspection,
-        ProjectMigrationStrategy,
-        ProjectMigrationVerification,
-        ProjectMigrationWriteReceipt,
-    )
     from gf_wordbench.projects.models import ProjectConfig
 
 __all__ = (
@@ -98,9 +90,7 @@ class TreeEntry:
                 field_name="link_target",
             )
         elif link_target is not None:
-            raise ValueError(
-                "link_target is valid only for symlink entries"
-            )
+            raise ValueError("link_target is valid only for symlink entries")
 
         object.__setattr__(self, "relative_path", relative_path)
         object.__setattr__(self, "link_target", link_target)
@@ -166,10 +156,7 @@ class LifecycleLockRequest:
 
         if not isinstance(self.started_at, datetime):
             raise TypeError("started_at must be a datetime")
-        if (
-            self.started_at.tzinfo is None
-            or self.started_at.utcoffset() is None
-        ):
+        if self.started_at.tzinfo is None or self.started_at.utcoffset() is None:
             raise ValueError("started_at must be timezone-aware")
 
         workspace_root = _path(
@@ -340,6 +327,57 @@ class ProjectFilesystem(Protocol):
 
 
 @runtime_checkable
+class ProjectMigrationWorkspacePort(Protocol):
+    """Provide the operations required by explicit project migration."""
+
+    def inspect_source(
+        self,
+        source_root: Path,
+    ) -> object:
+        """Inspect the legacy source tree without modifying it."""
+        ...
+
+    def inspect_destination(
+        self,
+        *,
+        project_root: Path,
+        migration_id: str,
+        project_id: object,
+        language_code: str,
+        source_directory: Path,
+        source_root: Path,
+        strategy: object,
+    ) -> object:
+        """Inspect whether the destination already matches the request."""
+        ...
+
+    def is_cancelled(self) -> bool:
+        """Return whether migration cancellation was requested."""
+        ...
+
+    def apply(
+        self,
+        plan: object,
+    ) -> object:
+        """Apply an approved migration plan."""
+        ...
+
+    def verify(
+        self,
+        plan: object,
+    ) -> object:
+        """Verify the published destination against the plan."""
+        ...
+
+    def rollback(
+        self,
+        receipt: object,
+    ) -> str | None:
+        """Attempt rollback and return a bounded warning on incomplete recovery."""
+        ...
+
+
+@runtime_checkable
 class ProjectTemplateSource(Protocol):
     """Read-only source of the reusable blank active-project structure."""
 
@@ -413,62 +451,6 @@ class ProjectLifecycleLock(Protocol):
         ...
 
 
-@runtime_checkable
-class ProjectMigrationWorkspacePort(Protocol):
-    """Provide explicit, mechanism-neutral project-migration operations.
-
-    Planning methods are read-only. Publication, verification, and rollback
-    remain explicit so the migration service can preserve atomicity and
-    evidence without depending on a concrete filesystem implementation.
-    """
-
-    def inspect_source(
-        self,
-        source_root: Path,
-    ) -> ProjectMigrationSourceInspection:
-        """Return read-only facts discovered from the migration source."""
-        ...
-
-    def inspect_destination(
-        self,
-        *,
-        project_root: Path,
-        migration_id: str,
-        project_id: str,
-        language_code: str,
-        source_directory: Path,
-        source_root: Path,
-        strategy: ProjectMigrationStrategy,
-    ) -> ProjectMigrationDestinationInspection:
-        """Return read-only facts about the requested destination."""
-        ...
-
-    def is_cancelled(self) -> bool:
-        """Return whether controlled cancellation has been requested."""
-        ...
-
-    def apply(
-        self,
-        plan: ProjectMigrationPlan,
-    ) -> ProjectMigrationWriteReceipt:
-        """Publish one migration plan and return its durable write receipt."""
-        ...
-
-    def verify(
-        self,
-        plan: ProjectMigrationPlan,
-    ) -> ProjectMigrationVerification:
-        """Verify the published destination against the migration plan."""
-        ...
-
-    def rollback(
-        self,
-        receipt: ProjectMigrationWriteReceipt,
-    ) -> str | None:
-        """Roll back a failed publication and return an optional warning."""
-        ...
-
-
 def _validate_required_text(
     value: object,
     *,
@@ -477,15 +459,11 @@ def _validate_required_text(
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a string")
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if not value.strip():
         raise ValueError(f"{field_name} must not be empty")
     if value != value.strip():
-        raise ValueError(
-            f"{field_name} must not have outer whitespace"
-        )
+        raise ValueError(f"{field_name} must not have outer whitespace")
     return value
 
 
@@ -496,19 +474,13 @@ def _path(
     require_absolute: bool = False,
 ) -> Path:
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field_name} must be a pathlib.Path"
-        )
+        raise TypeError(f"{field_name} must be a pathlib.Path")
 
     if "\x00" in str(value):
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
 
     if require_absolute and not value.is_absolute():
-        raise ValueError(
-            f"{field_name} must be an absolute path"
-        )
+        raise ValueError(f"{field_name} must be an absolute path")
 
     return value
 
@@ -521,17 +493,11 @@ def _relative_path(
     path = _path(value, field_name=field_name)
 
     if path.is_absolute():
-        raise ValueError(
-            f"{field_name} must be relative"
-        )
+        raise ValueError(f"{field_name} must be relative")
     if not path.parts:
-        raise ValueError(
-            f"{field_name} must identify a tree entry"
-        )
+        raise ValueError(f"{field_name} must identify a tree entry")
     if ".." in path.parts:
-        raise ValueError(
-            f"{field_name} must not contain parent traversal"
-        )
+        raise ValueError(f"{field_name} must not contain parent traversal")
 
     return path
 
@@ -556,9 +522,7 @@ def _validate_non_negative_integer(
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{field_name} must be an integer")
     if value < 0:
-        raise ValueError(
-            f"{field_name} must be non-negative"
-        )
+        raise ValueError(f"{field_name} must be non-negative")
     return value
 
 

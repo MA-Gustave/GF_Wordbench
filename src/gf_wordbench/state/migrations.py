@@ -12,15 +12,16 @@ repository.
 
 from __future__ import annotations
 
-import math
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, TypeAlias
+import math
+import re
+from typing import Final, TypeAlias, TypeVar
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 JsonObject: TypeAlias = dict[str, JsonValue]
+_KeyT = TypeVar("_KeyT")
 
 _CANONICAL_GROUPS: Final[tuple[str, ...]] = (
     "environment",
@@ -115,12 +116,8 @@ _LEGACY_MODE_ALIASES: Final[dict[str, str]] = {
     "file": "quick",
     "all": "diagnostic",
 }
-_LEGACY_TRUE_STRINGS: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
-_LEGACY_FALSE_STRINGS: Final[frozenset[str]] = frozenset(
-    {"0", "false", "no", "off"}
-)
+_LEGACY_TRUE_STRINGS: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
+_LEGACY_FALSE_STRINGS: Final[frozenset[str]] = frozenset({"0", "false", "no", "off"})
 _INTEGER_TEXT: Final[re.Pattern[str]] = re.compile(r"^[+-]?\d+$")
 _DEFAULT_STATUS_MESSAGE_LIMIT: Final[int] = 512
 
@@ -159,9 +156,7 @@ class _MigrationBuilder:
     def set_value(self, group: str, field: str, value: JsonValue) -> None:
         group_value = self.payload.get(group)
         if not isinstance(group_value, dict):
-            raise StateMigrationError(
-                f"Canonical defaults group {group!r} must be a JSON object"
-            )
+            raise StateMigrationError(f"Canonical defaults group {group!r} must be a JSON object")
         if field not in group_value:
             raise StateMigrationError(
                 f"Canonical defaults group {group!r} is missing field {field!r}"
@@ -169,9 +164,7 @@ class _MigrationBuilder:
         group_value[field] = value
 
     def warn(self, code: str, field: str, message: str) -> None:
-        self.warnings.append(
-            StateMigrationWarning(code=code, field=field, message=message)
-        )
+        self.warnings.append(StateMigrationWarning(code=code, field=field, message=message))
 
 
 def migrate_legacy_state(
@@ -194,12 +187,8 @@ def migrate_legacy_state(
     if not isinstance(legacy_state, Mapping):
         raise StateMigrationError("Legacy application state must be a JSON object")
     if "schema_id" in legacy_state or "schema_version" in legacy_state:
-        raise StateMigrationError(
-            "Versioned state must be handled by the canonical state reader"
-        )
-    if isinstance(status_message_limit, bool) or not isinstance(
-        status_message_limit, int
-    ):
+        raise StateMigrationError("Versioned state must be handled by the canonical state reader")
+    if isinstance(status_message_limit, bool) or not isinstance(status_message_limit, int):
         raise TypeError("status_message_limit must be an integer")
     if status_message_limit < 1:
         raise ValueError("status_message_limit must be greater than zero")
@@ -225,9 +214,7 @@ def migrate_legacy_state(
     _record_discarded_fields(legacy_state, builder)
 
     source_fields = {key for key in legacy_state if isinstance(key, str)}
-    unknown_fields = tuple(
-        sorted(source_fields.difference(_RECOGNIZED_LEGACY_FIELDS))
-    )
+    unknown_fields = tuple(sorted(source_fields.difference(_RECOGNIZED_LEGACY_FIELDS)))
 
     return LegacyStateMigration(
         payload=payload,
@@ -252,7 +239,7 @@ def _copy_canonical_defaults(defaults: Mapping[str, object]) -> JsonObject:
 
 
 def _copy_json_mapping(
-    value: Mapping[object, object],
+    value: Mapping[_KeyT, object],
     *,
     path: tuple[str, ...],
 ) -> JsonObject:
@@ -260,8 +247,7 @@ def _copy_json_mapping(
     for key, child in value.items():
         if not isinstance(key, str) or not key:
             raise StateMigrationError(
-                f"Canonical default key at {_display_path(path)} must be a "
-                "non-empty string"
+                f"Canonical default key at {_display_path(path)} must be a non-empty string"
             )
         copied[key] = _copy_json_value(child, path=(*path, key))
     return copied
@@ -273,25 +259,19 @@ def _copy_json_value(value: object, *, path: tuple[str, ...]) -> JsonValue:
 
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise StateMigrationError(
-                f"Canonical default at {_display_path(path)} is not finite"
-            )
+            raise StateMigrationError(f"Canonical default at {_display_path(path)} is not finite")
         return value
 
     if isinstance(value, Mapping):
         return _copy_json_mapping(value, path=path)
 
-    if isinstance(value, Sequence) and not isinstance(
-        value, (str, bytes, bytearray, memoryview)
-    ):
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray, memoryview)):
         return [
-            _copy_json_value(child, path=(*path, f"[{index}]"))
-            for index, child in enumerate(value)
+            _copy_json_value(child, path=(*path, f"[{index}]")) for index, child in enumerate(value)
         ]
 
     raise StateMigrationError(
-        f"Canonical default at {_display_path(path)} is not JSON-compatible: "
-        f"{type(value).__name__}"
+        f"Canonical default at {_display_path(path)} is not JSON-compatible: {type(value).__name__}"
     )
 
 
@@ -306,7 +286,7 @@ def _migrate_paths(
         builder.consumed.add(legacy_key)
         value = legacy_state[legacy_key]
         normalized = _coerce_legacy_path(value, nullable=nullable)
-        if normalized is _INVALID:
+        if isinstance(normalized, _InvalidValue):
             builder.warn(
                 "invalid_legacy_path",
                 legacy_key,
@@ -330,7 +310,7 @@ def _migrate_project_root_candidate(
 
     builder.consumed.add(key)
     normalized = _coerce_legacy_path(legacy_state[key], nullable=True)
-    if normalized is _INVALID:
+    if isinstance(normalized, _InvalidValue):
         builder.warn(
             "invalid_legacy_project_root",
             key,
@@ -546,7 +526,7 @@ def _coerce_legacy_path(
     value: object,
     *,
     nullable: bool,
-) -> str | None | _InvalidValue:
+) -> str | _InvalidValue | None:
     if value is None:
         return None if nullable else ""
     if not isinstance(value, str):

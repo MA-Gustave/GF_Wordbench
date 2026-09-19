@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from typing import Final
@@ -90,12 +91,8 @@ _REASON_MESSAGES: Final[dict[ContinuationReason, str]] = {
     ContinuationReason.PREREQUISITE_FAILED: (
         "The work is blocked by one or more failed or unavailable prerequisites."
     ),
-    ContinuationReason.FAIL_FAST: (
-        "Fail-fast stopped new work after the first gating failure."
-    ),
-    ContinuationReason.CANCELLATION: (
-        "Cancellation stopped scheduling new work."
-    ),
+    ContinuationReason.FAIL_FAST: ("Fail-fast stopped new work after the first gating failure."),
+    ContinuationReason.CANCELLATION: ("Cancellation stopped scheduling new work."),
     ContinuationReason.BUDGET_EXHAUSTED: (
         "The usable execution budget is exhausted or insufficient."
     ),
@@ -105,15 +102,9 @@ _REASON_MESSAGES: Final[dict[ContinuationReason, str]] = {
     ContinuationReason.EVIDENCE_UNTRUSTWORTHY: (
         "Additional execution could produce misleading or untrustworthy evidence."
     ),
-    ContinuationReason.NO_MEANINGFUL_WORK: (
-        "No safe and meaningful validation work remains."
-    ),
-    ContinuationReason.FINALIZATION_UNAVAILABLE: (
-        "A reliable run result cannot be finalized."
-    ),
-    ContinuationReason.CONFIGURATION_INVALID: (
-        "Required project or run configuration is invalid."
-    ),
+    ContinuationReason.NO_MEANINGFUL_WORK: ("No safe and meaningful validation work remains."),
+    ContinuationReason.FINALIZATION_UNAVAILABLE: ("A reliable run result cannot be finalized."),
+    ContinuationReason.CONFIGURATION_INVALID: ("Required project or run configuration is invalid."),
     ContinuationReason.TOOL_UNAVAILABLE: (
         "The required shared tool cannot be launched or used reliably."
     ),
@@ -144,7 +135,7 @@ def _require_bool(value: object, *, field_name: str) -> bool:
     return value
 
 
-def _normalize_blockers(values: tuple[str, ...]) -> tuple[str, ...]:
+def _normalize_blockers(values: Iterable[object]) -> tuple[str, ...]:
     if isinstance(values, (str, bytes)):
         raise TypeError("blocked_by must be a tuple of stable subject IDs")
 
@@ -155,9 +146,7 @@ def _normalize_blockers(values: tuple[str, ...]) -> tuple[str, ...]:
         if not isinstance(value, str):
             raise TypeError(f"blocked_by[{index}] must be a string")
         if not value or "\x00" in value:
-            raise ValueError(
-                f"blocked_by[{index}] must be non-empty and contain no NUL"
-            )
+            raise ValueError(f"blocked_by[{index}] must be non-empty and contain no NUL")
         if value not in seen:
             seen.add(value)
             normalized.append(value)
@@ -183,13 +172,10 @@ class ContinuationFacts:
     blocked_by: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if (
-            self.completed_status is not None
-            and not isinstance(self.completed_status, ValidationStatus)
+        if self.completed_status is not None and not isinstance(
+            self.completed_status, ValidationStatus
         ):
-            raise TypeError(
-                "completed_status must be a ValidationStatus or None"
-            )
+            raise TypeError("completed_status must be a ValidationStatus or None")
 
         for field_name in (
             "completed_required",
@@ -207,52 +193,31 @@ class ContinuationFacts:
                 field_name=field_name,
             )
 
-        if self.completed_status is None and (
-            self.completed_required or self.completed_gating
-        ):
-            raise ValueError(
-                "completed requiredness and gating require completed_status"
-            )
+        if self.completed_status is None and (self.completed_required or self.completed_gating):
+            raise ValueError("completed requiredness and gating require completed_status")
 
         if self.completed_gating and not self.completed_required:
             raise ValueError("a gating completed item must be required")
 
-        if (
-            self.global_blocker is not None
-            and not isinstance(self.global_blocker, ContinuationReason)
+        if self.global_blocker is not None and not isinstance(
+            self.global_blocker, ContinuationReason
         ):
-            raise TypeError(
-                "global_blocker must be a ContinuationReason or None"
-            )
+            raise TypeError("global_blocker must be a ContinuationReason or None")
 
-        if (
-            self.global_blocker is not None
-            and self.global_blocker not in _GLOBAL_BLOCKING_REASONS
-        ):
-            raise ValueError(
-                "global_blocker must use a global blocking reason"
-            )
+        if self.global_blocker is not None and self.global_blocker not in _GLOBAL_BLOCKING_REASONS:
+            raise ValueError("global_blocker must use a global blocking reason")
 
-        blockers = _normalize_blockers(tuple(self.blocked_by))
+        blockers = _normalize_blockers(self.blocked_by)
         object.__setattr__(self, "blocked_by", blockers)
 
         if self.prerequisites_available and blockers:
-            raise ValueError(
-                "blocked_by must be empty when prerequisites are available"
-            )
+            raise ValueError("blocked_by must be empty when prerequisites are available")
 
         if not self.prerequisites_available and not blockers:
-            raise ValueError(
-                "unavailable prerequisites require at least one blocker ID"
-            )
+            raise ValueError("unavailable prerequisites require at least one blocker ID")
 
-        if (
-            self.global_blocker is not None
-            and not self.prerequisites_available
-        ):
-            raise ValueError(
-                "global_blocker and unavailable item prerequisites are distinct"
-            )
+        if self.global_blocker is not None and not self.prerequisites_available:
+            raise ValueError("global_blocker and unavailable item prerequisites are distinct")
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,13 +241,10 @@ class ContinuationDecision:
             raise TypeError("message must be a string")
         if not self.message or "\x00" in self.message:
             raise ValueError("message must be non-empty and contain no NUL")
-        if (
-            self.trigger_status is not None
-            and not isinstance(self.trigger_status, ValidationStatus)
+        if self.trigger_status is not None and not isinstance(
+            self.trigger_status, ValidationStatus
         ):
-            raise TypeError(
-                "trigger_status must be a ValidationStatus or None"
-            )
+            raise TypeError("trigger_status must be a ValidationStatus or None")
 
         _require_bool(
             self.gating_failure_observed,
@@ -293,47 +255,28 @@ class ContinuationDecision:
             field_name="plan_incomplete",
         )
 
-        blockers = _normalize_blockers(tuple(self.blocked_by))
+        blockers = _normalize_blockers(self.blocked_by)
         object.__setattr__(self, "blocked_by", blockers)
 
         if self.action is ContinuationAction.SKIP_DEPENDENT:
             if self.reason is not ContinuationReason.PREREQUISITE_FAILED:
-                raise ValueError(
-                    "skip_dependent requires reason prerequisite_failed"
-                )
+                raise ValueError("skip_dependent requires reason prerequisite_failed")
             if not blockers:
-                raise ValueError(
-                    "skip_dependent requires at least one blocker ID"
-                )
+                raise ValueError("skip_dependent requires at least one blocker ID")
         elif blockers:
-            raise ValueError(
-                "blocked_by is reserved for skip_dependent decisions"
-            )
+            raise ValueError("blocked_by is reserved for skip_dependent decisions")
 
         if self.action is ContinuationAction.CONTINUE and self.plan_incomplete:
-            raise ValueError(
-                "a continue decision cannot mark the plan incomplete"
-            )
+            raise ValueError("a continue decision cannot mark the plan incomplete")
 
-        if (
-            self.gating_failure_observed
-            and self.trigger_status not in _FAILURE_STATUSES
+        if self.gating_failure_observed and self.trigger_status not in _FAILURE_STATUSES:
+            raise ValueError("gating_failure_observed requires FAIL or ERROR")
+
+        if self.reason is ContinuationReason.RELEASE_EVIDENCE_COLLECTION and (
+            self.action is not ContinuationAction.CONTINUE or not self.gating_failure_observed
         ):
             raise ValueError(
-                "gating_failure_observed requires FAIL or ERROR"
-            )
-
-        if (
-            self.reason
-            is ContinuationReason.RELEASE_EVIDENCE_COLLECTION
-            and (
-                self.action is not ContinuationAction.CONTINUE
-                or not self.gating_failure_observed
-            )
-        ):
-            raise ValueError(
-                "release evidence collection requires continued work "
-                "after a gating failure"
+                "release evidence collection requires continued work after a gating failure"
             )
 
     @property

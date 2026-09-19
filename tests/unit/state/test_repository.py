@@ -36,7 +36,7 @@ pytestmark = pytest.mark.schema
 
 
 def _document() -> dict[str, Any]:
-    return deepcopy(cast(dict[str, Any], default_app_state_document()))
+    return deepcopy(cast("dict[str, Any]", default_app_state_document()))
 
 
 def _write_document(path: Path, document: object) -> None:
@@ -52,8 +52,8 @@ def _custom_state() -> AppState:
         state,
         environment=replace(
             state.environment,
-            project_root="C:/workspace/project",
-            rgl_root="C:/GF/RGL",
+            last_selected_language_path="C:/workspace/project",
+            last_rgl_root="C:/GF/RGL",
             gf_executable="C:/Program Files/GF/gf.exe",
             output_root="C:/workspace/runs",
         ),
@@ -76,14 +76,11 @@ def _custom_state() -> AppState:
     )
 
 
-
 def test_default_paths_are_workspace_owned_and_resolved(tmp_path: Path) -> None:
     repository = StateRepository(tmp_path)
 
     assert repository.workspace_root == tmp_path.resolve()
-    assert repository.resolved_state_path == (
-        tmp_path / CANONICAL_STATE_FILENAME
-    )
+    assert repository.resolved_state_path == (tmp_path / CANONICAL_STATE_FILENAME)
     assert repository.legacy_state_path == tmp_path / LEGACY_STATE_FILENAME
 
 
@@ -191,17 +188,12 @@ def test_missing_state_returns_defaults_without_creating_a_file(
     assert result.state == default_app_state()
     assert result.source_path == tmp_path / CANONICAL_STATE_FILENAME
     assert result.migrated is False
-    assert tuple(item.code for item in result.diagnostics) == (
-        StateDiagnosticCode.MISSING,
-    )
+    assert tuple(item.code for item in result.diagnostics) == (StateDiagnosticCode.MISSING,)
     assert not result.source_path.exists()
     record = caplog.records[-1]
     assert record.levelno == logging.WARNING
     assert getattr(record, "operation") == "load"
-    assert (
-        getattr(record, "state_diagnostic")
-        == StateDiagnosticCode.MISSING.value
-    )
+    assert getattr(record, "state_diagnostic") == StateDiagnosticCode.MISSING.value
 
 
 def test_valid_canonical_state_loads_with_structured_loaded_diagnostic(
@@ -223,16 +215,11 @@ def test_valid_canonical_state_loads_with_structured_loaded_diagnostic(
     assert result.state.selection.target_file == "src/UnicodeÉ.gf"
     assert result.source_path == destination
     assert result.migrated is False
-    assert tuple(item.code for item in result.diagnostics) == (
-        StateDiagnosticCode.LOADED,
-    )
+    assert tuple(item.code for item in result.diagnostics) == (StateDiagnosticCode.LOADED,)
     record = caplog.records[-1]
     assert record.levelno == logging.INFO
     assert getattr(record, "operation") == "load"
-    assert (
-        getattr(record, "state_diagnostic")
-        == StateDiagnosticCode.LOADED.value
-    )
+    assert getattr(record, "state_diagnostic") == StateDiagnosticCode.LOADED.value
 
 
 @pytest.mark.parametrize(
@@ -301,10 +288,7 @@ def test_invalid_schema_version_is_malformed_and_may_be_quarantined(
 
     assert result.state == default_app_state()
     assert result.diagnostics[0].code is StateDiagnosticCode.MALFORMED
-    assert any(
-        item.code is StateDiagnosticCode.QUARANTINED
-        for item in result.diagnostics
-    )
+    assert any(item.code is StateDiagnosticCode.QUARANTINED for item in result.diagnostics)
 
 
 def test_unsupported_major_fails_closed_without_quarantine(
@@ -332,7 +316,7 @@ def test_supported_recovery_returns_one_diagnostic_per_warning(
 ) -> None:
     state_path = tmp_path / CANONICAL_STATE_FILENAME
     document = _document()
-    selection = cast(dict[str, object], document["selection"])
+    selection = cast("dict[str, object]", document["selection"])
     selection["mode"] = "unsupported"
     selection["timeout_sec"] = 0
     document["unknown_optional"] = True
@@ -347,15 +331,9 @@ def test_supported_recovery_returns_one_diagnostic_per_warning(
     assert result.state.selection.timeout_sec == 60
     assert result.migrated is False
     assert result.diagnostics
-    assert all(
-        item.code is StateDiagnosticCode.PARTIALLY_DEFAULTED
-        for item in result.diagnostics
-    )
+    assert all(item.code is StateDiagnosticCode.PARTIALLY_DEFAULTED for item in result.diagnostics)
     assert any("$.selection.mode" in item.message for item in result.diagnostics)
-    assert any(
-        "$.selection.timeout_sec" in item.message
-        for item in result.diagnostics
-    )
+    assert any("$.selection.timeout_sec" in item.message for item in result.diagnostics)
     assert not tuple(tmp_path.glob(".gf_wordbench_state.invalid-*.json"))
 
 
@@ -372,9 +350,7 @@ def test_quarantine_preserves_original_bytes_beside_state_file(
     ).load_with_diagnostics()
 
     quarantine = next(
-        item.path
-        for item in result.diagnostics
-        if item.code is StateDiagnosticCode.QUARANTINED
+        item.path for item in result.diagnostics if item.code is StateDiagnosticCode.QUARANTINED
     )
     assert quarantine.parent == state_path.parent
     assert quarantine.name.startswith(".gf_wordbench_state.invalid-")
@@ -404,9 +380,7 @@ def test_quarantine_failure_does_not_prevent_default_fallback(
     ).load_with_diagnostics()
 
     assert result.state == default_app_state()
-    assert tuple(item.code for item in result.diagnostics) == (
-        StateDiagnosticCode.MALFORMED,
-    )
+    assert tuple(item.code for item in result.diagnostics) == (StateDiagnosticCode.MALFORMED,)
     assert "application state quarantine failed" in caplog.text
 
 
@@ -483,10 +457,10 @@ def test_save_uses_atomic_writer_with_canonical_validated_payload(
         captured["data"] = data
         captured.update(kwargs)
         candidate = tmp_path / ".candidate.json"
-        candidate.write_bytes(bytes(cast(bytes, data)))
-        validator = cast(Callable[[Path], None], kwargs["validator"])
+        candidate.write_bytes(bytes(cast("bytes", data)))
+        validator = cast("Callable[[Path], None]", kwargs["validator"])
         validator(candidate)
-        return cast(Path, destination)
+        return cast("Path", destination)
 
     monkeypatch.setattr(
         repository_module,
@@ -495,8 +469,8 @@ def test_save_uses_atomic_writer_with_canonical_validated_payload(
     )
 
     destination = repository.save(_custom_state())
-    payload = cast(bytes, captured["data"])
-    document = cast(dict[str, Any], json.loads(payload.decode("utf-8")))
+    payload = cast("bytes", captured["data"])
+    document = cast("dict[str, Any]", json.loads(payload.decode("utf-8")))
 
     assert destination == tmp_path / CANONICAL_STATE_FILENAME
     assert captured["destination"] == destination
@@ -535,7 +509,7 @@ def test_save_validates_typed_state_before_calling_atomic_writer(
     )
 
     with pytest.raises(TypeError, match="state must be an AppState"):
-        StateRepository(tmp_path).save(cast(AppState, object()))
+        StateRepository(tmp_path).save(cast("AppState", object()))
 
     assert called is False
 
@@ -608,10 +582,9 @@ def test_unexpected_save_failure_is_wrapped_with_path_and_cause(
     assert error.subject == str(state_path)
     assert error.evidence_paths == (str(state_path),)
     assert isinstance(error.__cause__, OSError)
-    assert "application state could not be written atomically" == error.message
+    assert error.message == "application state could not be written atomically"
     assert any(
-        getattr(record, "state_diagnostic", None)
-        == StateDiagnosticCode.WRITE_FAILED.value
+        getattr(record, "state_diagnostic", None) == StateDiagnosticCode.WRITE_FAILED.value
         for record in caplog.records
     )
 
@@ -620,9 +593,7 @@ def test_alternate_parent_creation_is_never_implicit(tmp_path: Path) -> None:
     state_path = tmp_path / "portable" / "nested" / CANONICAL_STATE_FILENAME
 
     with pytest.raises(StateWriteError) as captured:
-        StateRepository(tmp_path, state_path=state_path).save(
-            default_app_state()
-        )
+        StateRepository(tmp_path, state_path=state_path).save(default_app_state())
 
     assert isinstance(captured.value.__cause__, FileNotFoundError)
     assert not state_path.parent.exists()
@@ -674,9 +645,7 @@ def test_reset_can_replace_existing_state_with_canonical_defaults(
 
 def test_reset_requires_a_real_boolean(tmp_path: Path) -> None:
     with pytest.raises(TypeError, match="replace_with_defaults must be a bool"):
-        StateRepository(tmp_path).reset(
-            replace_with_defaults=cast(bool, 1)
-        )
+        StateRepository(tmp_path).reset(replace_with_defaults=cast("bool", 1))
 
 
 def test_reset_preserves_adapter_state_write_errors(

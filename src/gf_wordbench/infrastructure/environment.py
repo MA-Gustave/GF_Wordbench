@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+import os
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -81,9 +81,7 @@ def _validated_environment(
         _validate_environment_entry(key, value, field_name=field_name)
         identity = _key_identity(key)
         if identity in seen:
-            raise ValueError(
-                f"{field_name} contains duplicate environment key {key!r}"
-            )
+            raise ValueError(f"{field_name} contains duplicate environment key {key!r}")
         seen.add(identity)
         validated[key] = value
 
@@ -124,9 +122,7 @@ def _validate_environment_key(key: object, *, field_name: str) -> None:
     if not key:
         raise ValueError(f"{field_name} environment keys must not be empty")
     if "\x00" in key:
-        raise ValueError(
-            f"{field_name} environment keys must not contain a NUL character"
-        )
+        raise ValueError(f"{field_name} environment keys must not contain a NUL character")
     if "=" in key:
         raise ValueError(f"{field_name} environment keys must not contain '='")
 
@@ -167,8 +163,8 @@ def _key_identity(key: str) -> str:
 
 __all__ = (
     "CONTROLLED_INHERIT_V1",
+    "REDACTED_VALUE",
     "EnvironmentMapping",
     "PreparedEnvironment",
-    "REDACTED_VALUE",
     "build_child_environment",
 )

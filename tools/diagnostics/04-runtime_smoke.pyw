@@ -27,7 +27,8 @@ LEVEL_NAME = "Runtime Smoke"
 PURPOSE = (
     "Smoke-test public CLI and GUI imports, path-resolved language startup, "
     "optional validation-profile contracts, schema checks, and an optional "
-    "quick validation run."
+    "quick validation run. When no language path is configured explicitly, "
+    "N04 may use the English RGL directory as an isolated diagnostic fixture."
 )
 
 
@@ -55,6 +56,50 @@ def _configured_path(config: DiagConfig, name: str) -> Path | None:
     if not path.is_absolute():
         path = config.repo_root / path
     return path.resolve(strict=False)
+
+
+def _diagnostic_language_path(
+    config: DiagConfig,
+) -> tuple[Path | None, str]:
+    """Resolve N04's effective language path and report its source.
+
+    An explicit ``language_path`` always wins. When it is absent, N04 may use
+    the standard English RGL directory strictly as diagnostic configuration.
+    This does not define or alter the application's production startup default.
+    """
+
+    explicit = _configured_path(config, "language_path")
+    if explicit is not None:
+        return explicit, "explicit"
+
+    candidate_roots: list[Path] = []
+    if config.rgl_root is not None:
+        candidate_roots.append(Path(config.rgl_root))
+
+    # Common checkout layouts around:
+    #   .../Grammatical_Framework/GF_Wordbench/GF_Wordbench
+    candidate_roots.extend(
+        (
+            config.repo_root / "gf-rgl",
+            config.repo_root.parent / "gf-rgl",
+            config.repo_root.parent.parent / "gf-rgl",
+        )
+    )
+
+    seen: set[Path] = set()
+    for root in candidate_roots:
+        normalized_root = root.expanduser().resolve(strict=False)
+        if normalized_root in seen:
+            continue
+        seen.add(normalized_root)
+
+        english_directory = (
+            normalized_root / "src" / "english"
+        ).resolve(strict=False)
+        if english_directory.is_dir():
+            return english_directory, "diagnostic_english_fallback"
+
+    return None, "unresolved"
 
 
 def _environment_arguments(
@@ -142,21 +187,42 @@ def run_checks(config: DiagConfig, report: DiagReport, log) -> None:
         timeout=short_timeout,
     )
 
-    language_path = _configured_path(config, "language_path")
+    configured_language_path = _configured_path(config, "language_path")
+    language_path, language_source = _diagnostic_language_path(config)
     validation_profile = _configured_path(config, "validation_profile")
+
+    # DiagReport is created before N04 resolves its isolated fallback.
+    # Publish the effective path and its provenance before any early return.
+    report.language_path = str(language_path) if language_path is not None else None
+    report.metadata.update(
+        {
+            "configured_language_path": (
+                str(configured_language_path)
+                if configured_language_path is not None
+                else None
+            ),
+            "effective_language_path": (
+                str(language_path) if language_path is not None else None
+            ),
+            "language_source": language_source,
+        }
+    )
 
     if language_path is None:
         report.add(
             "runtime.language.configuration",
             CONFIG_ERROR,
             "configuration",
-            "N04 requires one explicit GF language directory or .gf file",
+            (
+                "N04 could not resolve a language path and could not find "
+                "the English diagnostic fixture"
+            ),
             recommendation=(
-                "Set language_path in diag.config.local.json or define "
-                "WORDBENCH_DIAG_LANGUAGE_PATH."
+                "Set language_path or WORDBENCH_DIAG_LANGUAGE_PATH, or set "
+                "rgl_root so that <rgl_root>/src/english exists."
             ),
         )
-        log("CONFIG_ERROR N04 requires language_path")
+        log("CONFIG_ERROR N04 could not resolve a diagnostic language path")
         _add_profile_skips(
             report,
             log,
@@ -172,6 +238,28 @@ def run_checks(config: DiagConfig, report: DiagReport, log) -> None:
             recommendation="Configure language_path, then rerun N04.",
         )
         return
+
+    if language_source == "diagnostic_english_fallback":
+        report.add(
+            "runtime.language.configuration",
+            PASS,
+            "configuration",
+            "N04 selected English as its isolated diagnostic language fixture",
+            evidence=str(language_path),
+            recommendation=(
+                "Set language_path explicitly to exercise another language."
+            ),
+        )
+        log(f"PASS N04 English diagnostic fixture: {language_path}")
+    else:
+        report.add(
+            "runtime.language.configuration",
+            PASS,
+            "configuration",
+            "N04 is using the explicitly configured language path",
+            evidence=str(language_path),
+        )
+        log(f"PASS N04 explicit language path: {language_path}")
 
     usable_profile = validation_profile
     if validation_profile is not None and not validation_profile.is_file():

@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
 from gf_wordbench.diagnostics.parsing.deduplication import (
+    DiagnosticDeduplicationResult,
     DiagnosticOccurrence,
     deduplicate_diagnostics,
     deduplicated_records,
@@ -53,13 +55,18 @@ class _Record:
     raw_excerpt: str = "Main.gf:12:4: type mismatch"
 
 
+def _replace_record(record: _Record, changes: dict[str, object]) -> _Record:
+    """Apply deliberately dynamic field changes at one test-only boundary."""
+    return cast(Any, replace)(record, **changes)
+
+
 def _record(index: int, **changes: object) -> _Record:
     base = _Record(record_id=f"diag-{index:016x}")
-    return replace(base, **changes)
+    return _replace_record(base, changes)
 
 
 def test_empty_input_produces_an_empty_stable_view() -> None:
-    result = deduplicate_diagnostics(())
+    result: DiagnosticDeduplicationResult[_Record] = deduplicate_diagnostics(())
 
     assert result.records == ()
     assert result.groups == ()
@@ -173,10 +180,7 @@ def test_semantically_distinct_diagnostics_are_never_merged(
     different_value: object,
 ) -> None:
     first = _record(1)
-    second = replace(
-        _record(2),
-        **{field_name: different_value},
-    )
+    second = _replace_record(_record(2), {field_name: different_value})
 
     result = deduplicate_diagnostics((first, second))
 
@@ -260,9 +264,7 @@ def test_message_fallback_normalizes_only_nonsemantic_whitespace() -> None:
     result = deduplicate_diagnostics((first, second))
 
     assert result.representatives == (first,)
-    assert result.groups[0].key.normalized_signature.startswith(
-        "Unknown constructor Foo"
-    )
+    assert result.groups[0].key.normalized_signature.startswith("Unknown constructor Foo")
 
 
 def test_meaningful_numbers_and_language_text_remain_in_the_identity() -> None:
@@ -307,9 +309,7 @@ def test_duplicate_key_is_deterministic_for_mapping_order() -> None:
         expected={"a": 1, "b": 2},
     )
 
-    assert diagnostic_duplicate_key(first_view) == diagnostic_duplicate_key(
-        second_view
-    )
+    assert diagnostic_duplicate_key(first_view) == diagnostic_duplicate_key(second_view)
 
 
 def test_occurrence_extraction_preserves_exact_raw_evidence_reference() -> None:

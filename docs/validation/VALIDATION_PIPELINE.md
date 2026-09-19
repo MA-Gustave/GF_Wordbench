@@ -2,15 +2,30 @@
 
 **Document ID:** `GF-WB-VALIDATION-PIPELINE`  
 **Status:** Normative validation architecture  
-**Applies to:** GF Wordbench framework and one active GF language project  
+**Applies to:** GF Wordbench framework and one selected GF language context  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
 **Owner:** GF Wordbench maintainers  
 **Target path:** `docs/validation/VALIDATION_PIPELINE.md`  
 **Document version:** `1.1.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document defines the complete GF Wordbench validation pipeline.
@@ -38,7 +53,7 @@ Detailed contracts remain owned by:
 docs/INTERFILE_CONTRACT_LOCK.md
 docs/EXTERNAL_TOOL_CONTRACT_LOCK.md
 docs/PERSISTED_SCHEMA_LOCK.md
-project/docs/INTERFILE_CONTRACT_LOCK.md
+<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Detailed GF integration remains owned by:
@@ -79,7 +94,7 @@ The pipeline is successful only when every required criterion for the selected m
 
 The pipeline must:
 
-- build one resolved run configuration for one active project and one normative language target;
+- build one resolved run configuration for one selected language context and one normative language target;
 - create one owned run directory;
 - use one GF executable and one compatibility decision per run;
 - preserve raw stdout and stderr before parsing;
@@ -133,9 +148,9 @@ GF Wordbench determines:
 - reports;
 - overall validation status.
 
-### 4.3 Active project authority
+### 4.3 Validation profile authority
 
-The active project determines:
+The selected language context determines:
 
 - language identity;
 - source roots;
@@ -150,13 +165,13 @@ The active project determines:
 The authoritative source is:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 with supporting project specifications under:
 
 ```text
-project/docs/
+<validation-profile-root>/docs/
 ```
 
 ### 4.4 Portfolio boundary
@@ -172,7 +187,7 @@ gf-portfolio -> public versioned GF Wordbench artifacts
 GF Wordbench must not:
 
 - discover Portfolio workspaces during a validation run;
-- aggregate several active projects in one pipeline;
+- aggregate several selected language contexts in one pipeline;
 - import or call `gf-portfolio`;
 - require Portfolio storage, configuration or runtime services;
 - write Portfolio registry or aggregation state into Wordbench schemas.
@@ -204,12 +219,12 @@ Examples:
 
 Framework defaults must not contain active-language identifiers.
 
-### 5.2 Active project configuration
+### 5.2 Validation profile configuration
 
 Owned by:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 Examples:
@@ -235,7 +250,7 @@ Examples:
 - temporary directory;
 - optional local path overrides.
 
-Local environment configuration is not portable project identity.
+Local environment configuration is not portable resolved language identity.
 
 ### 5.4 Explicit invocation overrides
 
@@ -263,7 +278,7 @@ Canonical precedence:
 
 ```text
 framework safe defaults
-→ active project configuration
+→ selected language context configuration
 → local environment configuration
 → persisted UI convenience state
 → explicit CLI/GUI invocation values
@@ -284,13 +299,13 @@ Examples:
 
 The following are prohibited:
 
-- GUI state overriding project identity;
+- GUI state overriding resolved language identity;
 - framework defaults overriding explicit project entrypoints;
 - a scenario silently selecting another project;
 - launcher scripts changing validation semantics;
 - stale previous-run data filling missing current configuration;
 - reports reconstructing configuration from prose;
-- Portfolio state selecting, replacing or aggregating the active project.
+- Portfolio state selecting, replacing or aggregating the selected language context.
 
 ---
 
@@ -349,7 +364,7 @@ The canonical logical pipeline is:
 ```text
 VAL-000  accept invocation
 VAL-010  load framework defaults
-VAL-020  load and validate active project
+VAL-020  load and validate selected language context
 VAL-030  resolve environment and GF toolchain
 VAL-040  build resolved run configuration
 VAL-050  create run directory and initial metadata
@@ -568,7 +583,7 @@ No language validation may continue.
 
 ---
 
-## 12.3 VAL-020 — Load and validate active project
+## 12.3 VAL-020 — Load and validate selected language context
 
 **Owner**
 
@@ -579,12 +594,12 @@ app/bootstrap.py
 
 **Purpose**
 
-Load `project/project.toml` and validate its schema and internal references.
+Load `<validation-profile-root>/project.toml` and validate its schema and internal references.
 
 **Required checks**
 
 - schema ID and version;
-- one active project identity;
+- one selected language context identity;
 - project root;
 - source directory;
 - source glob;
@@ -597,7 +612,7 @@ Load `project/project.toml` and validate its schema and internal references.
 - expected release artifacts;
 - project-relative path containment;
 - duplicate IDs;
-- unresolved placeholders in the active project.
+- unresolved placeholders in the selected language context.
 
 **Failure policy**
 
@@ -1576,7 +1591,7 @@ Identify improvements, regressions, additions, and removals.
 
 A previous run must be compatible by:
 
-- project identity;
+- resolved language identity;
 - schema support;
 - validation mode or comparison policy;
 - normalization version where relevant;
@@ -2169,12 +2184,12 @@ Normal validation is read-only with respect to project source assets.
 The pipeline must not modify:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 project/**/*.gf
 project/**/*.gfs
-project/validation/inputs/
-project/validation/gold/
-project/docs/
+<validation-profile-root>/validation/inputs/
+<validation-profile-root>/validation/gold/
+<validation-profile-root>/docs/
 ```
 
 Explicit migration or gold-update commands are separate workflows.
@@ -2306,7 +2321,7 @@ A required artifact is not complete at `created`.
 The following are always required.
 
 1. One resolved configuration per run.
-2. One project identity per run.
+2. One resolved language identity per run.
 3. One run directory per run.
 4. Raw external evidence precedes interpretation.
 5. Static scan truth is separate from GF truth.
@@ -2325,7 +2340,7 @@ The following are always required.
 18. A failed report cannot rewrite raw evidence.
 19. The active language is not inferred from old runs.
 20. Finalization does not silently overwrite another run.
-21. A run never aggregates several active projects.
+21. A run never aggregates several selected language contexts.
 22. GF Wordbench validation does not depend on `gf-portfolio`.
 
 ---
@@ -2352,7 +2367,7 @@ build run paths
 The Wordbench pipeline also defines:
 
 ```text
-active project schema loading
+selected language context schema loading
 four canonical modes
 contract preflight
 scenario selection and execution
@@ -2628,9 +2643,9 @@ docs/scenarios/OUTPUT_NORMALIZATION.md
 docs/scenarios/GOLDEN_TESTS.md
 docs/reports/REPORTING_OVERVIEW.md
 docs/reports/ARTIFACT_MANIFEST.md
-project/project.toml
-project/docs/VALIDATION_SPEC__PROJECT_DOCS.md
-project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
+<validation-profile-root>/project.toml
+<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md
+<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
 ```
 
 ---

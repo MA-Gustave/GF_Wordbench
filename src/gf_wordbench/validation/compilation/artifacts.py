@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Final
+from typing import Final, Protocol, TypeVar
 
 from gf_wordbench.infrastructure.process.models import (
     ArtifactExpectation,
@@ -24,6 +24,13 @@ from gf_wordbench.kernel.paths import (
 GFO_SUFFIX: Final[str] = ".gfo"
 PGF_SUFFIX: Final[str] = ".pgf"
 SHA256_HEX_LENGTH: Final[int] = 64
+
+
+class _HasPath(Protocol):
+    path: Path
+
+
+_PathValueT = TypeVar("_PathValueT", bound=_HasPath)
 
 
 @unique
@@ -179,35 +186,21 @@ class ArtifactSnapshot:
 
         if not self.exists:
             if self.is_file:
-                raise ValueError(
-                    "a missing artifact cannot be a regular file"
-                )
+                raise ValueError("a missing artifact cannot be a regular file")
             if self.size_bytes is not None:
-                raise ValueError(
-                    "a missing artifact cannot report size_bytes"
-                )
+                raise ValueError("a missing artifact cannot report size_bytes")
             if self.modified_time_ns is not None:
-                raise ValueError(
-                    "a missing artifact cannot report modified_time_ns"
-                )
+                raise ValueError("a missing artifact cannot report modified_time_ns")
             if sha256 is not None:
-                raise ValueError(
-                    "a missing artifact cannot report sha256"
-                )
+                raise ValueError("a missing artifact cannot report sha256")
             if self.is_symlink:
-                raise ValueError(
-                    "a missing artifact cannot be a symlink"
-                )
+                raise ValueError("a missing artifact cannot be a symlink")
 
         if self.exists and not self.is_file and self.size_bytes is not None:
-            raise ValueError(
-                "a non-file artifact cannot report a file size"
-            )
+            raise ValueError("a non-file artifact cannot report a file size")
 
         if sha256 is not None and not self.is_file:
-            raise ValueError(
-                "sha256 is valid only for a regular file"
-            )
+            raise ValueError("sha256 is valid only for a regular file")
 
         object.__setattr__(self, "path", path)
         object.__setattr__(self, "sha256", sha256)
@@ -228,17 +221,12 @@ class ArtifactSnapshot:
         observation: ArtifactObservation,
     ) -> ArtifactSnapshot:
         if not isinstance(observation, ArtifactObservation):
-            raise TypeError(
-                "observation must be an ArtifactObservation"
-            )
+            raise TypeError("observation must be an ArtifactObservation")
 
         return cls(
             path=observation.path,
             exists=observation.exists,
-            is_file=(
-                observation.exists
-                and observation.kind_matches
-            ),
+            is_file=(observation.exists and observation.kind_matches),
             size_bytes=observation.size_bytes,
         )
 
@@ -296,9 +284,7 @@ class ArtifactIssue:
         if not isinstance(self.code, ArtifactIssueCode):
             raise TypeError("code must be an ArtifactIssueCode")
         if not isinstance(self.severity, ArtifactIssueSeverity):
-            raise TypeError(
-                "severity must be an ArtifactIssueSeverity"
-            )
+            raise TypeError("severity must be an ArtifactIssueSeverity")
 
         message = _required_text(
             self.message,
@@ -337,20 +323,13 @@ class ArtifactVerification:
             self.expectation,
             CompileArtifactExpectation,
         ):
-            raise TypeError(
-                "expectation must be a CompileArtifactExpectation"
-            )
+            raise TypeError("expectation must be a CompileArtifactExpectation")
 
-        if (
-            self.observation is not None
-            and not isinstance(
-                self.observation,
-                ArtifactObservation,
-            )
+        if self.observation is not None and not isinstance(
+            self.observation,
+            ArtifactObservation,
         ):
-            raise TypeError(
-                "observation must be an ArtifactObservation or None"
-            )
+            raise TypeError("observation must be an ArtifactObservation or None")
 
         for field_name in ("before", "after"):
             value = getattr(self, field_name)
@@ -358,20 +337,13 @@ class ArtifactVerification:
                 value,
                 ArtifactSnapshot,
             ):
-                raise TypeError(
-                    f"{field_name} must be an ArtifactSnapshot or None"
-                )
+                raise TypeError(f"{field_name} must be an ArtifactSnapshot or None")
 
-        if (
-            self.provenance is not None
-            and not isinstance(
-                self.provenance,
-                ArtifactProvenance,
-            )
+        if self.provenance is not None and not isinstance(
+            self.provenance,
+            ArtifactProvenance,
         ):
-            raise TypeError(
-                "provenance must be an ArtifactProvenance or None"
-            )
+            raise TypeError("provenance must be an ArtifactProvenance or None")
 
         for field_name in (
             "contained",
@@ -383,18 +355,11 @@ class ArtifactVerification:
                 raise TypeError(f"{field_name} must be a bool")
 
         if not isinstance(self.freshness, ArtifactFreshness):
-            raise TypeError(
-                "freshness must be an ArtifactFreshness"
-            )
+            raise TypeError("freshness must be an ArtifactFreshness")
 
         issues = tuple(self.issues)
-        if not all(
-            isinstance(issue, ArtifactIssue)
-            for issue in issues
-        ):
-            raise TypeError(
-                "issues must contain ArtifactIssue values"
-            )
+        if not all(isinstance(issue, ArtifactIssue) for issue in issues):
+            raise TypeError("issues must contain ArtifactIssue values")
 
         object.__setattr__(self, "issues", issues)
 
@@ -428,11 +393,7 @@ class ArtifactVerification:
 
     @property
     def retained(self) -> bool:
-        return (
-            self.exists
-            and self.kind_matches
-            and self.contained
-        )
+        return self.exists and self.kind_matches and self.contained
 
 
 @dataclass(frozen=True, slots=True)
@@ -446,28 +407,12 @@ class ArtifactCheck:
         unexpected_artifacts = tuple(self.unexpected_artifacts)
         issues = tuple(self.issues)
 
-        if not all(
-            isinstance(item, ArtifactVerification)
-            for item in artifacts
-        ):
-            raise TypeError(
-                "artifacts must contain ArtifactVerification values"
-            )
-        if not all(
-            isinstance(item, ArtifactObservation)
-            for item in unexpected_artifacts
-        ):
-            raise TypeError(
-                "unexpected_artifacts must contain "
-                "ArtifactObservation values"
-            )
-        if not all(
-            isinstance(item, ArtifactIssue)
-            for item in issues
-        ):
-            raise TypeError(
-                "issues must contain ArtifactIssue values"
-            )
+        if not all(isinstance(item, ArtifactVerification) for item in artifacts):
+            raise TypeError("artifacts must contain ArtifactVerification values")
+        if not all(isinstance(item, ArtifactObservation) for item in unexpected_artifacts):
+            raise TypeError("unexpected_artifacts must contain ArtifactObservation values")
+        if not all(isinstance(item, ArtifactIssue) for item in issues):
+            raise TypeError("issues must contain ArtifactIssue values")
 
         object.__setattr__(self, "artifacts", artifacts)
         object.__setattr__(
@@ -499,33 +444,20 @@ class ArtifactCheck:
 
     @property
     def expected_artifacts(self) -> tuple[Path, ...]:
-        return tuple(
-            verification.expectation.path
-            for verification in self.artifacts
-        )
+        return tuple(verification.expectation.path for verification in self.artifacts)
 
     @property
     def retained_artifacts(
         self,
     ) -> tuple[ArtifactVerification, ...]:
-        return tuple(
-            verification
-            for verification in self.artifacts
-            if verification.retained
-        )
+        return tuple(verification for verification in self.artifacts if verification.retained)
 
     @property
     def manifest_ready(self) -> bool:
-        return (
-            self.passed
-            and all(
-                (
-                    not verification.expectation.manifest_required
-                    or verification.manifest_registered
-                )
-                for verification in self.artifacts
-                if verification.retained
-            )
+        return self.passed and all(
+            (not verification.expectation.manifest_required or verification.manifest_registered)
+            for verification in self.artifacts
+            if verification.retained
         )
 
 
@@ -577,10 +509,7 @@ def build_process_artifact_expectations(
     normalized = _expectation_tuple(expectations)
     _ensure_unique_expectations(normalized)
 
-    return tuple(
-        expectation.to_process_expectation()
-        for expectation in normalized
-    )
+    return tuple(expectation.to_process_expectation() for expectation in normalized)
 
 
 def verify_compile_artifacts(
@@ -605,16 +534,11 @@ def verify_compile_artifacts(
     after_tuple = _snapshot_tuple(after_snapshots)
     provenance_tuple = _provenance_tuple(provenance)
     manifest_tuple = tuple(
-        _absolute_path(path, field_name="manifest path")
-        for path in manifest_paths
+        _absolute_path(path, field_name="manifest path") for path in manifest_paths
     )
 
-    duplicate_expectation_issues = _duplicate_expectation_issues(
-        expectations_tuple
-    )
-    duplicate_observation_issues = _duplicate_observation_issues(
-        observations_tuple
-    )
+    duplicate_expectation_issues = _duplicate_expectation_issues(expectations_tuple)
+    duplicate_observation_issues = _duplicate_observation_issues(observations_tuple)
 
     observation_map = _unique_map_by_path(
         observations_tuple,
@@ -633,8 +557,7 @@ def verify_compile_artifacts(
         field_name="provenance",
     )
     manifest_keys = frozenset(
-        path_identity_key(path, role="manifest artifact path")
-        for path in manifest_tuple
+        path_identity_key(path, role="manifest artifact path") for path in manifest_tuple
     )
 
     verifications: list[ArtifactVerification] = []
@@ -671,9 +594,7 @@ def verify_compile_artifacts(
             provenance=artifact_provenance,
             run_root=run_root,
             manifest_registered=registered,
-            require_manifest_registration=(
-                require_manifest_registration
-            ),
+            require_manifest_registration=(require_manifest_registration),
             allow_symlinks=allow_symlinks,
         )
         verifications.append(verification)
@@ -735,15 +656,10 @@ def artifact_paths_by_role(
     if not isinstance(check, ArtifactCheck):
         raise TypeError("check must be an ArtifactCheck")
 
-    grouped: dict[CompileArtifactRole, list[Path]] = {
-        role: []
-        for role in CompileArtifactRole
-    }
+    grouped: dict[CompileArtifactRole, list[Path]] = {role: [] for role in CompileArtifactRole}
 
     for verification in check.retained_artifacts:
-        grouped[verification.expectation.role].append(
-            verification.expectation.path
-        )
+        grouped[verification.expectation.role].append(verification.expectation.path)
 
     return MappingProxyType(
         {
@@ -822,18 +738,12 @@ def _verify_one(
                 )
             )
 
-    if (
-        after is not None
-        and after.is_symlink
-        and not allow_symlinks
-    ):
+    if after is not None and after.is_symlink and not allow_symlinks:
         issues.append(
             ArtifactIssue(
                 code=ArtifactIssueCode.SYMLINK_PROHIBITED,
                 severity=ArtifactIssueSeverity.ERROR,
-                message=(
-                    "compile artifacts must not be symbolic links"
-                ),
+                message=("compile artifacts must not be symbolic links"),
                 path=expectation.path,
             )
         )
@@ -844,8 +754,7 @@ def _verify_one(
                 code=ArtifactIssueCode.OBSERVATION_MISSING,
                 severity=severity,
                 message=(
-                    "the process result contains no observation for "
-                    "the expected compile artifact"
+                    "the process result contains no observation for the expected compile artifact"
                 ),
                 path=expectation.path,
             )
@@ -869,8 +778,7 @@ def _verify_one(
                     code=ArtifactIssueCode.REQUIRED_FLAG_MISMATCH,
                     severity=severity,
                     message=(
-                        "artifact observation required flag does not "
-                        "match the compile expectation"
+                        "artifact observation required flag does not match the compile expectation"
                     ),
                     path=expectation.path,
                 )
@@ -878,29 +786,12 @@ def _verify_one(
 
     effective_after = after
     if effective_after is None and observation is not None:
-        effective_after = ArtifactSnapshot.from_observation(
-            observation
-        )
+        effective_after = ArtifactSnapshot.from_observation(observation)
 
-    exists = (
-        effective_after.exists
-        if effective_after is not None
-        else False
-    )
-    kind_matches = (
-        effective_after.is_file
-        if effective_after is not None
-        else False
-    )
-    size_bytes = (
-        effective_after.size_bytes
-        if effective_after is not None
-        else None
-    )
-    size_matches = (
-        size_bytes is not None
-        and size_bytes >= expectation.minimum_size_bytes
-    )
+    exists = effective_after.exists if effective_after is not None else False
+    kind_matches = effective_after.is_file if effective_after is not None else False
+    size_bytes = effective_after.size_bytes if effective_after is not None else None
+    size_matches = size_bytes is not None and size_bytes >= expectation.minimum_size_bytes
 
     if not exists:
         if expectation.required:
@@ -917,9 +808,7 @@ def _verify_one(
             ArtifactIssue(
                 code=ArtifactIssueCode.WRONG_KIND,
                 severity=severity,
-                message=(
-                    "compile artifact is not a regular file"
-                ),
+                message=("compile artifact is not a regular file"),
                 path=expectation.path,
             )
         )
@@ -928,9 +817,7 @@ def _verify_one(
             ArtifactIssue(
                 code=ArtifactIssueCode.SIZE_MISMATCH,
                 severity=severity,
-                message=(
-                    "compile artifact size was not observed"
-                ),
+                message=("compile artifact size was not observed"),
                 path=expectation.path,
             )
         )
@@ -963,34 +850,21 @@ def _verify_one(
         provenance=provenance,
     )
 
-    if (
-        expectation.freshness_required
-        and exists
-        and freshness is ArtifactFreshness.STALE
-    ):
+    if expectation.freshness_required and exists and freshness is ArtifactFreshness.STALE:
         issues.append(
             ArtifactIssue(
                 code=ArtifactIssueCode.STALE,
                 severity=severity,
-                message=(
-                    "compile artifact is not proven to belong to "
-                    "the current request"
-                ),
+                message=("compile artifact is not proven to belong to the current request"),
                 path=expectation.path,
             )
         )
-    elif (
-        expectation.freshness_required
-        and exists
-        and freshness is ArtifactFreshness.UNKNOWN
-    ):
+    elif expectation.freshness_required and exists and freshness is ArtifactFreshness.UNKNOWN:
         issues.append(
             ArtifactIssue(
                 code=ArtifactIssueCode.FRESHNESS_UNKNOWN,
                 severity=severity,
-                message=(
-                    "compile artifact freshness could not be proven"
-                ),
+                message=("compile artifact freshness could not be proven"),
                 path=expectation.path,
             )
         )
@@ -1010,15 +884,9 @@ def _verify_one(
     ):
         issues.append(
             ArtifactIssue(
-                code=(
-                    ArtifactIssueCode
-                    .MANIFEST_REGISTRATION_MISSING
-                ),
+                code=(ArtifactIssueCode.MANIFEST_REGISTRATION_MISSING),
                 severity=severity,
-                message=(
-                    "retained compile artifact is not registered "
-                    "for manifest publication"
-                ),
+                message=("retained compile artifact is not registered for manifest publication"),
                 path=expectation.path,
             )
         )
@@ -1029,19 +897,13 @@ def _verify_one(
         and exists
         and effective_after is not None
         and effective_after.sha256 is None
-        and (
-            provenance is None
-            or provenance.artifact_sha256 is None
-        )
+        and (provenance is None or provenance.artifact_sha256 is None)
     ):
         issues.append(
             ArtifactIssue(
                 code=ArtifactIssueCode.HASH_REQUIRED,
                 severity=severity,
-                message=(
-                    "manifest-ready compile artifact requires a "
-                    "finalized SHA-256 digest"
-                ),
+                message=("manifest-ready compile artifact requires a finalized SHA-256 digest"),
                 path=expectation.path,
             )
         )
@@ -1097,8 +959,7 @@ def _evaluate_freshness(
         if (
             before.modified_time_ns is not None
             and after.modified_time_ns is not None
-            and before.modified_time_ns
-            != after.modified_time_ns
+            and before.modified_time_ns != after.modified_time_ns
         ):
             return ArtifactFreshness.CURRENT
 
@@ -1124,24 +985,16 @@ def _provenance_matches(
     if provenance is None:
         return False
 
-    if (
-        expectation.operation_id is not None
-        and provenance.operation_id
-        != expectation.operation_id
-    ):
+    if expectation.operation_id is not None and provenance.operation_id != expectation.operation_id:
         return False
 
     if (
         expectation.source_fingerprint is not None
-        and provenance.source_fingerprint
-        != expectation.source_fingerprint
+        and provenance.source_fingerprint != expectation.source_fingerprint
     ):
         return False
 
-    return (
-        expectation.operation_id is not None
-        or expectation.source_fingerprint is not None
-    )
+    return expectation.operation_id is not None or expectation.source_fingerprint is not None
 
 
 def _provenance_issue(
@@ -1152,25 +1005,17 @@ def _provenance_issue(
     if provenance is None:
         return None
 
-    if (
-        expectation.operation_id is not None
-        and provenance.operation_id
-        != expectation.operation_id
-    ):
+    if expectation.operation_id is not None and provenance.operation_id != expectation.operation_id:
         return ArtifactIssue(
             code=ArtifactIssueCode.PROVENANCE_MISMATCH,
             severity=_expectation_severity(expectation),
-            message=(
-                "artifact provenance operation_id does not match "
-                "the current compile request"
-            ),
+            message=("artifact provenance operation_id does not match the current compile request"),
             path=expectation.path,
         )
 
     if (
         expectation.source_fingerprint is not None
-        and provenance.source_fingerprint
-        != expectation.source_fingerprint
+        and provenance.source_fingerprint != expectation.source_fingerprint
     ):
         return ArtifactIssue(
             code=ArtifactIssueCode.PROVENANCE_MISMATCH,
@@ -1200,10 +1045,7 @@ def _unexpected_issue(
         )
     except (TypeError, ValueError, OSError, RuntimeError) as exc:
         return ArtifactIssue(
-            code=(
-                ArtifactIssueCode
-                .UNEXPECTED_ARTIFACT_OUTSIDE_ROOT
-            ),
+            code=(ArtifactIssueCode.UNEXPECTED_ARTIFACT_OUTSIDE_ROOT),
             severity=ArtifactIssueSeverity.ERROR,
             message=str(exc),
             path=observation.path,
@@ -1217,19 +1059,14 @@ def _unexpected_issue(
         return ArtifactIssue(
             code=ArtifactIssueCode.UNEXPECTED_ARTIFACT_CONFLICT,
             severity=ArtifactIssueSeverity.ERROR,
-            message=(
-                "unexpected artifact conflicts with an expected "
-                "artifact identity"
-            ),
+            message=("unexpected artifact conflicts with an expected artifact identity"),
             path=observation.path,
         )
 
     return ArtifactIssue(
         code=ArtifactIssueCode.UNEXPECTED_ARTIFACT,
         severity=ArtifactIssueSeverity.WARNING,
-        message=(
-            "compile operation produced an undeclared artifact"
-        ),
+        message=("compile operation produced an undeclared artifact"),
         path=observation.path,
     )
 
@@ -1248,15 +1085,9 @@ def _duplicate_expectation_issues(
         if key in seen:
             issues.append(
                 ArtifactIssue(
-                    code=(
-                        ArtifactIssueCode
-                        .DUPLICATE_EXPECTATION
-                    ),
+                    code=(ArtifactIssueCode.DUPLICATE_EXPECTATION),
                     severity=ArtifactIssueSeverity.ERROR,
-                    message=(
-                        "compile artifact expectation path is "
-                        "declared more than once"
-                    ),
+                    message=("compile artifact expectation path is declared more than once"),
                     path=expectation.path,
                 )
             )
@@ -1279,14 +1110,9 @@ def _duplicate_observation_issues(
         if key in seen:
             issues.append(
                 ArtifactIssue(
-                    code=(
-                        ArtifactIssueCode
-                        .DUPLICATE_OBSERVATION
-                    ),
+                    code=(ArtifactIssueCode.DUPLICATE_OBSERVATION),
                     severity=ArtifactIssueSeverity.ERROR,
-                    message=(
-                        "compile artifact was observed more than once"
-                    ),
+                    message=("compile artifact was observed more than once"),
                     path=observation.path,
                 )
             )
@@ -1304,18 +1130,16 @@ def _ensure_unique_expectations(
 
 
 def _unique_map_by_path(
-    values: tuple[object, ...],
+    values: tuple[_PathValueT, ...],
     *,
     field_name: str,
-) -> Mapping[str, object]:
-    result: dict[str, object] = {}
+) -> Mapping[str, _PathValueT]:
+    result: dict[str, _PathValueT] = {}
 
     for value in values:
-        path = getattr(value, "path", None)
+        path = value.path
         if not isinstance(path, Path):
-            raise TypeError(
-                f"every {field_name} value must expose a Path"
-            )
+            raise TypeError(f"every {field_name} value must expose a Path")
 
         key = path_identity_key(
             path,
@@ -1327,82 +1151,50 @@ def _unique_map_by_path(
 
 
 def _expectation_tuple(
-    values: Iterable[CompileArtifactExpectation],
+    values: object,
 ) -> tuple[CompileArtifactExpectation, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "expectations must be an iterable of "
-            "CompileArtifactExpectation values"
-        )
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
+        raise TypeError("expectations must be an iterable of CompileArtifactExpectation values")
 
     result = tuple(values)
-    if not all(
-        isinstance(item, CompileArtifactExpectation)
-        for item in result
-    ):
-        raise TypeError(
-            "expectations must contain "
-            "CompileArtifactExpectation values"
-        )
+    if not all(isinstance(item, CompileArtifactExpectation) for item in result):
+        raise TypeError("expectations must contain CompileArtifactExpectation values")
     return result
 
 
 def _observation_tuple(
-    values: Iterable[ArtifactObservation],
+    values: object,
 ) -> tuple[ArtifactObservation, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "observations must be an iterable of "
-            "ArtifactObservation values"
-        )
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
+        raise TypeError("observations must be an iterable of ArtifactObservation values")
 
     result = tuple(values)
-    if not all(
-        isinstance(item, ArtifactObservation)
-        for item in result
-    ):
-        raise TypeError(
-            "observations must contain ArtifactObservation values"
-        )
+    if not all(isinstance(item, ArtifactObservation) for item in result):
+        raise TypeError("observations must contain ArtifactObservation values")
     return result
 
 
 def _snapshot_tuple(
-    values: Iterable[ArtifactSnapshot],
+    values: object,
 ) -> tuple[ArtifactSnapshot, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "snapshots must be an iterable of ArtifactSnapshot values"
-        )
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
+        raise TypeError("snapshots must be an iterable of ArtifactSnapshot values")
 
     result = tuple(values)
-    if not all(
-        isinstance(item, ArtifactSnapshot)
-        for item in result
-    ):
-        raise TypeError(
-            "snapshots must contain ArtifactSnapshot values"
-        )
+    if not all(isinstance(item, ArtifactSnapshot) for item in result):
+        raise TypeError("snapshots must contain ArtifactSnapshot values")
     return result
 
 
 def _provenance_tuple(
-    values: Iterable[ArtifactProvenance],
+    values: object,
 ) -> tuple[ArtifactProvenance, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "provenance must be an iterable of "
-            "ArtifactProvenance values"
-        )
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
+        raise TypeError("provenance must be an iterable of ArtifactProvenance values")
 
     result = tuple(values)
-    if not all(
-        isinstance(item, ArtifactProvenance)
-        for item in result
-    ):
-        raise TypeError(
-            "provenance must contain ArtifactProvenance values"
-        )
+    if not all(isinstance(item, ArtifactProvenance) for item in result):
+        raise TypeError("provenance must contain ArtifactProvenance values")
     return result
 
 
@@ -1417,11 +1209,7 @@ def _expectation_severity(
 def _issue_sort_key(
     issue: ArtifactIssue,
 ) -> tuple[int, str, str, str]:
-    severity_order = (
-        0
-        if issue.severity is ArtifactIssueSeverity.ERROR
-        else 1
-    )
+    severity_order = 0 if issue.severity is ArtifactIssueSeverity.ERROR else 1
     path_text = str(issue.path) if issue.path is not None else ""
     return (
         severity_order,
@@ -1438,13 +1226,9 @@ def _validate_role_suffix(
     suffix = path.suffix.lower()
 
     if role is CompileArtifactRole.GFO and suffix != GFO_SUFFIX:
-        raise ValueError(
-            f"gfo artifact path must end with {GFO_SUFFIX!r}"
-        )
+        raise ValueError(f"gfo artifact path must end with {GFO_SUFFIX!r}")
     if role is CompileArtifactRole.PGF and suffix != PGF_SUFFIX:
-        raise ValueError(
-            f"pgf artifact path must end with {PGF_SUFFIX!r}"
-        )
+        raise ValueError(f"pgf artifact path must end with {PGF_SUFFIX!r}")
 
 
 def _absolute_path(
@@ -1455,9 +1239,7 @@ def _absolute_path(
     if not isinstance(value, Path):
         raise TypeError(f"{field_name} must be a pathlib.Path")
     if "\x00" in str(value):
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if not value.is_absolute():
         raise ValueError(f"{field_name} must be absolute")
     return value
@@ -1471,15 +1253,11 @@ def _required_text(
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a string")
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     if not value.strip():
         raise ValueError(f"{field_name} must not be empty")
     if value != value.strip():
-        raise ValueError(
-            f"{field_name} must not have outer whitespace"
-        )
+        raise ValueError(f"{field_name} must not have outer whitespace")
     return value
 
 
@@ -1529,24 +1307,18 @@ def _optional_sha256(
         raise TypeError(f"{field_name} must be a string")
     if len(value) != SHA256_HEX_LENGTH:
         raise ValueError(
-            f"{field_name} must contain exactly "
-            f"{SHA256_HEX_LENGTH} hexadecimal digits"
+            f"{field_name} must contain exactly {SHA256_HEX_LENGTH} hexadecimal digits"
         )
     if value.lower() != value:
-        raise ValueError(
-            f"{field_name} must use lowercase hexadecimal digits"
-        )
-    if any(
-        character not in "0123456789abcdef"
-        for character in value
-    ):
-        raise ValueError(
-            f"{field_name} must contain only hexadecimal digits"
-        )
+        raise ValueError(f"{field_name} must use lowercase hexadecimal digits")
+    if any(character not in "0123456789abcdef" for character in value):
+        raise ValueError(f"{field_name} must contain only hexadecimal digits")
     return value
 
 
 __all__ = (
+    "GFO_SUFFIX",
+    "PGF_SUFFIX",
     "ArtifactCheck",
     "ArtifactFreshness",
     "ArtifactIssue",
@@ -1557,8 +1329,6 @@ __all__ = (
     "ArtifactVerification",
     "CompileArtifactExpectation",
     "CompileArtifactRole",
-    "GFO_SUFFIX",
-    "PGF_SUFFIX",
     "artifact_paths_by_role",
     "build_process_artifact_expectations",
     "required_gfo_expectation",

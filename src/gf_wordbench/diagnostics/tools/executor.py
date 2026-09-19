@@ -25,34 +25,89 @@ ProcessRunner: TypeAlias = Callable[..., ProcessResult]
 
 
 class ValidatedDiagnosticToolRequest(Protocol):
-    request_id: str
-    tool_id: str
-    catalog_version: str
-    operation_id: str
-    active_project_id: str
-    run_id: str
-    subject_ids: tuple[str, ...]
-    executable: Path
-    args: tuple[str, ...]
-    working_directory: Path
-    stdout_path: Path
-    stderr_path: Path
-    timeout_sec: float
-    approved_read_roots: tuple[Path, ...]
-    approved_write_roots: tuple[Path, ...]
-    stdin: ProcessInput
-    environment_policy: str
-    env_overrides: Mapping[str, str]
-    env_removals: Collection[str]
-    sensitive_env_keys: Collection[str]
-    sensitive_arg_indexes: Collection[int]
-    termination_grace_sec: float
-    output_limit_bytes: int
-    expected_artifacts: tuple[ArtifactExpectation, ...]
-    metadata: Mapping[str, str]
-    mutability_class: str
-    network_policy: str
-    evidence_policy: str
+    @property
+    def request_id(self) -> str: ...
+
+    @property
+    def tool_id(self) -> str: ...
+
+    @property
+    def catalog_version(self) -> str: ...
+
+    @property
+    def operation_id(self) -> str: ...
+
+    @property
+    def active_project_id(self) -> str: ...
+
+    @property
+    def run_id(self) -> str: ...
+
+    @property
+    def subject_ids(self) -> tuple[str, ...]: ...
+
+    @property
+    def executable(self) -> Path: ...
+
+    @property
+    def args(self) -> tuple[str, ...]: ...
+
+    @property
+    def working_directory(self) -> Path: ...
+
+    @property
+    def stdout_path(self) -> Path: ...
+
+    @property
+    def stderr_path(self) -> Path: ...
+
+    @property
+    def timeout_sec(self) -> float: ...
+
+    @property
+    def approved_read_roots(self) -> tuple[Path, ...]: ...
+
+    @property
+    def approved_write_roots(self) -> tuple[Path, ...]: ...
+
+    @property
+    def stdin(self) -> ProcessInput: ...
+
+    @property
+    def environment_policy(self) -> str: ...
+
+    @property
+    def env_overrides(self) -> Mapping[str, str]: ...
+
+    @property
+    def env_removals(self) -> Collection[str]: ...
+
+    @property
+    def sensitive_env_keys(self) -> Collection[str]: ...
+
+    @property
+    def sensitive_arg_indexes(self) -> Collection[int]: ...
+
+    @property
+    def termination_grace_sec(self) -> float: ...
+
+    @property
+    def output_limit_bytes(self) -> int: ...
+
+    @property
+    def expected_artifacts(self) -> tuple[ArtifactExpectation, ...]: ...
+
+    @property
+    def metadata(self) -> Mapping[str, str]: ...
+
+    @property
+    def mutability_class(self) -> str: ...
+
+    @property
+    def network_policy(self) -> str: ...
+
+    @property
+    def evidence_policy(self) -> str: ...
 
 
 def build_diagnostic_process_request(
@@ -164,9 +219,7 @@ def _execution_metadata(
     for key, value in metadata.items():
         _require_text(key, "metadata key")
         if not isinstance(value, str) or "\x00" in value:
-            raise ContractViolationError(
-                f"metadata value for {key!r} must be a NUL-free string."
-            )
+            raise ContractViolationError(f"metadata value for {key!r} must be a NUL-free string.")
     return metadata
 
 

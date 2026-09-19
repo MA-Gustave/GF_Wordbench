@@ -95,13 +95,9 @@ class RunPaths:
             "master_log": run_dir / _RAW_DIRECTORY / _MASTER_LOG,
             "all_scan_logs": run_dir / _RAW_DIRECTORY / _ALL_SCAN_LOGS,
             "all_logs": run_dir / _RAW_DIRECTORY / _ALL_LOGS,
-            "raw_compile_dir": (
-                run_dir / _RAW_DIRECTORY / _RAW_COMPILE_DIRECTORY
-            ),
+            "raw_compile_dir": (run_dir / _RAW_DIRECTORY / _RAW_COMPILE_DIRECTORY),
             "raw_scan_dir": run_dir / _RAW_DIRECTORY / _RAW_SCAN_DIRECTORY,
-            "raw_scenarios_dir": (
-                run_dir / _RAW_DIRECTORY / _RAW_SCENARIOS_DIRECTORY
-            ),
+            "raw_scenarios_dir": (run_dir / _RAW_DIRECTORY / _RAW_SCENARIOS_DIRECTORY),
             "artifacts_dir": run_dir / _ARTIFACTS_DIRECTORY,
             "gfo_dir": run_dir / _ARTIFACTS_DIRECTORY / _GFO_DIRECTORY,
             "out_dir": run_dir / _ARTIFACTS_DIRECTORY / _OUT_DIRECTORY,
@@ -128,9 +124,7 @@ class RunPaths:
             normalized_paths[field_name] = candidate
 
         if len(set(normalized_paths.values())) != len(normalized_paths):
-            raise ContractViolationError(
-                "canonical run-owned paths must be pairwise distinct"
-            )
+            raise ContractViolationError("canonical run-owned paths must be pairwise distinct")
 
         for field_name, candidate in normalized_paths.items():
             object.__setattr__(self, field_name, candidate)
@@ -201,11 +195,7 @@ class RunPaths:
     ) -> Path:
         """Normalize a path and require lexical containment in this run."""
 
-        mode = (
-            ContainmentMode.INSIDE_OR_EQUAL
-            if allow_run_dir
-            else ContainmentMode.STRICTLY_INSIDE
-        )
+        mode = ContainmentMode.INSIDE_OR_EQUAL if allow_run_dir else ContainmentMode.STRICTLY_INSIDE
         return require_lexical_containment(
             self.run_dir,
             value,
@@ -222,11 +212,7 @@ class RunPaths:
     ) -> PurePosixPath:
         """Return the canonical run-relative portable form of a path."""
 
-        mode = (
-            ContainmentMode.INSIDE_OR_EQUAL
-            if allow_run_dir
-            else ContainmentMode.STRICTLY_INSIDE
-        )
+        mode = ContainmentMode.INSIDE_OR_EQUAL if allow_run_dir else ContainmentMode.STRICTLY_INSIDE
         return relative_portable_path(
             self.run_dir,
             value,

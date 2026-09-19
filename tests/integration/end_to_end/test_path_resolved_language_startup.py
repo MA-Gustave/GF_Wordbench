@@ -1,9 +1,10 @@
-"""End-to-end acceptance tests for path-resolved language startup.
+"""End-to-end acceptance tests for explicit path-resolved language startup.
 
 These tests exercise the public projects façade and a real temporary RGL-shaped
-filesystem.  The probe dependencies are deterministic recording test doubles;
-they model the public language-probe ports without using a catalog, a mandatory
-``project.toml`` profile, GF, subprocesses, or GUI state.
+filesystem. English and French are explicit integration fixtures; neither is an
+application default or fallback. The probe dependencies are deterministic
+recording test doubles that model the public language-probe ports without using
+a catalog, a mandatory ``project.toml`` profile, GF, subprocesses, or GUI state.
 """
 
 from __future__ import annotations
@@ -12,19 +13,19 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
 import pytest
 
 from gf_wordbench.projects.public import (
     LanguageCapability,
+    LanguageModuleCandidate,
     LanguageProbeRequest,
     LanguageProbeResult,
     ResolvedLanguageContext,
     SelectedPathKind,
     probe_language_path,
 )
-
 
 _STANDARD_SHARED_DIRECTORIES: Final[tuple[str, ...]] = (
     "abstract",
@@ -300,7 +301,7 @@ def rgl_fixture(tmp_path: Path) -> _RglFixture:
     )
 
 
-def test_directory_selection_resolves_without_catalog_or_validation_profile(
+def test_explicit_english_directory_selection_resolves_without_catalog_or_profile(
     rgl_fixture: _RglFixture,
 ) -> None:
     selector = _RecordingSourceSelector()
@@ -320,9 +321,7 @@ def test_directory_selection_resolves_without_catalog_or_validation_profile(
     context = _resolved_context(result)
 
     assert context.selected_path == rgl_fixture.english
-    assert _enum_value(context.selected_path_kind) == _enum_value(
-        SelectedPathKind.DIRECTORY
-    )
+    assert _enum_value(context.selected_path_kind) == _enum_value(SelectedPathKind.DIRECTORY)
     assert context.language_directory == rgl_fixture.english
     assert context.rgl_source_root == rgl_fixture.source_root
     assert context.rgl_root == rgl_fixture.root
@@ -345,13 +344,11 @@ def test_directory_selection_resolves_without_catalog_or_validation_profile(
     assert _capability_available(context, LanguageCapability.SCAN_READY)
 
     assert selector.roots == [rgl_fixture.english]
-    assert gf_path_resolver.calls == [
-        (rgl_fixture.english, rgl_fixture.source_root)
-    ]
+    assert gf_path_resolver.calls == [(rgl_fixture.english, rgl_fixture.source_root)]
     assert len(preflight.calls) == 1
 
 
-def test_file_selection_preserves_the_explicit_focused_target(
+def test_explicit_english_file_selection_preserves_focused_target(
     rgl_fixture: _RglFixture,
 ) -> None:
     result = _probe(
@@ -363,9 +360,7 @@ def test_file_selection_preserves_the_explicit_focused_target(
     context = _resolved_context(result)
 
     assert context.selected_path == rgl_fixture.english_focused_file
-    assert _enum_value(context.selected_path_kind) == _enum_value(
-        SelectedPathKind.FILE
-    )
+    assert _enum_value(context.selected_path_kind) == _enum_value(SelectedPathKind.FILE)
     assert context.language_directory == rgl_fixture.english
     assert context.selected_file == rgl_fixture.english_focused_file
     assert context.focused_target == rgl_fixture.english_focused_file
@@ -377,39 +372,48 @@ def test_file_selection_preserves_the_explicit_focused_target(
     )
 
 
-def test_missing_selection_fails_closed_without_sibling_fallback(
+def test_missing_selection_fails_closed_without_language_fallback(
     rgl_fixture: _RglFixture,
 ) -> None:
     selector = _RecordingSourceSelector()
+    gf_path_resolver = _RecordingGFPathResolver()
+    preflight = _RecordingStructuralPreflight()
     missing = rgl_fixture.source_root / "missing" / "LangMissing.gf"
 
     result = _probe(
         missing,
         selector=selector,
-        gf_path_resolver=_RecordingGFPathResolver(),
-        preflight=_RecordingStructuralPreflight(),
+        gf_path_resolver=gf_path_resolver,
+        preflight=preflight,
     )
 
     assert result.is_resolved is False
     assert result.context is None
     assert result.diagnostics
+
+    # A missing explicit selection must not be replaced by a sibling language.
     assert selector.roots == []
     assert all(
-        rgl_fixture.french.as_posix() not in _diagnostic_text(diagnostic)
-        for diagnostic in result.diagnostics
+        language_directory not in {rgl_fixture.english, rgl_fixture.french}
+        for language_directory, _source_root in gf_path_resolver.calls
     )
+    diagnostic_text = " ".join(_diagnostic_text(diagnostic) for diagnostic in result.diagnostics)
+    assert rgl_fixture.english.as_posix() not in diagnostic_text
+    assert rgl_fixture.french.as_posix() not in diagnostic_text
 
 
-def test_resolving_two_languages_does_not_mix_sources_or_gf_paths(
+def test_explicit_english_then_french_resolution_does_not_mix_state(
     rgl_fixture: _RglFixture,
 ) -> None:
+    english_selector = _RecordingSourceSelector()
+    french_selector = _RecordingSourceSelector()
     english_resolver = _RecordingGFPathResolver()
     french_resolver = _RecordingGFPathResolver()
 
     english = _resolved_context(
         _probe(
             rgl_fixture.english,
-            selector=_RecordingSourceSelector(),
+            selector=english_selector,
             gf_path_resolver=english_resolver,
             preflight=_RecordingStructuralPreflight(),
         )
@@ -417,13 +421,17 @@ def test_resolving_two_languages_does_not_mix_sources_or_gf_paths(
     french = _resolved_context(
         _probe(
             rgl_fixture.french,
-            selector=_RecordingSourceSelector(),
+            selector=french_selector,
             gf_path_resolver=french_resolver,
             preflight=_RecordingStructuralPreflight(),
         )
     )
 
     assert english is not french
+    assert english.selected_path == rgl_fixture.english
+    assert french.selected_path == rgl_fixture.french
+    assert english_selector.roots == [rgl_fixture.english]
+    assert french_selector.roots == [rgl_fixture.french]
     assert english.language_key == "english"
     assert french.language_key == "french"
     assert english.module_suffix == "Eng"
@@ -479,16 +487,13 @@ def _probe(
 def _resolved_context(result: LanguageProbeResult) -> ResolvedLanguageContext:
     assert result.is_resolved is True
     assert result.context is not None
-    assert not any(
-        _diagnostic_severity(diagnostic) == "error"
-        for diagnostic in result.diagnostics
-    )
+    assert not any(_diagnostic_severity(diagnostic) == "error" for diagnostic in result.diagnostics)
     return result.context
 
 
 def _write_gf(path: Path, module_name: str) -> None:
     path.write_text(
-        f"resource {module_name} = {{ oper marker : Str = \"{module_name}\" ; }}\n",
+        f'resource {module_name} = {{ oper marker : Str = "{module_name}" ; }}\n',
         encoding="utf-8",
         newline="\n",
     )
@@ -573,9 +578,7 @@ def _effective_gf_path(
     language_directory, source_root = resolver.calls[-1]
     fallback = [language_directory]
     fallback.extend(
-        source_root / name
-        for name in _STANDARD_SHARED_DIRECTORIES
-        if (source_root / name).is_dir()
+        source_root / name for name in _STANDARD_SHARED_DIRECTORIES if (source_root / name).is_dir()
     )
     return tuple(fallback)
 
@@ -608,9 +611,7 @@ def _capability_available(
     if direct is not None:
         return _status_available(direct)
 
-    raise AssertionError(
-        f"ResolvedLanguageContext exposes no status for {capability!r}"
-    )
+    raise AssertionError(f"ResolvedLanguageContext exposes no status for {capability!r}")
 
 
 def _status_available(value: object) -> bool:
@@ -630,8 +631,13 @@ def _enum_value(value: object) -> str:
     return str(value).casefold().replace("_", "-")
 
 
-def _path_names(paths: Iterable[Path]) -> tuple[str, ...]:
-    return tuple(path.name for path in paths)
+def _path_names(
+    paths: Iterable[Path | LanguageModuleCandidate],
+) -> tuple[str, ...]:
+    return tuple(
+        (path.file_path if isinstance(path, LanguageModuleCandidate) else path).name
+        for path in paths
+    )
 
 
 def _diagnostic_text(diagnostic: object) -> str:

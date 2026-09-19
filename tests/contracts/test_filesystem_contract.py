@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import errno
-import os
 from pathlib import Path
 from typing import Final
 
@@ -49,8 +49,7 @@ def _temporary_files(directory: Path, destination_name: str) -> tuple[Path, ...]
     return tuple(
         item
         for item in directory.iterdir()
-        if item.name.startswith(f".{destination_name}.")
-        and item.name.endswith(".tmp")
+        if item.name.startswith(f".{destination_name}.") and item.name.endswith(".tmp")
     )
 
 
@@ -73,7 +72,9 @@ def _temporary_files(directory: Path, destination_name: str) -> tuple[Path, ...]
         lambda path: atomic_write_text(path, "x"),
     ],
 )
-def test_filesystem_boundaries_require_absolute_paths(operation) -> None:
+def test_filesystem_boundaries_require_absolute_paths(
+    operation: Callable[[Path], object],
+) -> None:
     with pytest.raises(ValueError, match="must be absolute"):
         operation(Path("relative/path"))
 
@@ -434,14 +435,13 @@ def test_atomic_writer_does_not_publish_on_body_failure(
     destination = tmp_path / "manifest.json"
     destination.write_bytes(b"stable")
 
-    with pytest.raises(RuntimeError, match="abort publication"):
-        with atomic_binary_writer(
-            destination,
-            root=tmp_path,
-            sync=False,
-        ) as stream:
-            stream.write(b"partial")
-            raise RuntimeError("abort publication")
+    with pytest.raises(RuntimeError, match="abort publication"), atomic_binary_writer(
+        destination,
+        root=tmp_path,
+        sync=False,
+    ) as stream:
+        stream.write(b"partial")
+        raise RuntimeError("abort publication")
 
     assert destination.read_bytes() == b"stable"
     assert _temporary_files(tmp_path, destination.name) == ()
@@ -529,14 +529,13 @@ def test_atomic_writer_rejects_stream_closed_by_caller(
 ) -> None:
     destination = tmp_path / "artifact.txt"
 
-    with pytest.raises(ValueError, match="closed by the caller"):
-        with atomic_text_writer(
-            destination,
-            root=tmp_path,
-            sync=False,
-        ) as stream:
-            stream.write("incomplete")
-            stream.close()
+    with pytest.raises(ValueError, match="closed by the caller"), atomic_text_writer(
+        destination,
+        root=tmp_path,
+        sync=False,
+    ) as stream:
+        stream.write("incomplete")
+        stream.close()
 
     assert not destination.exists()
     assert _temporary_files(tmp_path, destination.name) == ()

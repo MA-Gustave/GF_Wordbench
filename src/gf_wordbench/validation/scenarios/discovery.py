@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Final, Protocol, runtime_checkable
 
@@ -43,20 +43,15 @@ class ScenarioDiscoveryFilesystem(Protocol):
         path: Path,
         *,
         strict: bool,
-    ) -> Path:
-        ...
+    ) -> Path: ...
 
-    def exists(self, path: Path) -> bool:
-        ...
+    def exists(self, path: Path) -> bool: ...
 
-    def is_file(self, path: Path) -> bool:
-        ...
+    def is_file(self, path: Path) -> bool: ...
 
-    def is_directory(self, path: Path) -> bool:
-        ...
+    def is_directory(self, path: Path) -> bool: ...
 
-    def is_readable(self, path: Path) -> bool:
-        ...
+    def is_readable(self, path: Path) -> bool: ...
 
 
 class _LocalScenarioDiscoveryFilesystem:
@@ -83,9 +78,7 @@ class _LocalScenarioDiscoveryFilesystem:
         return os.access(path, os.R_OK)
 
 
-_LOCAL_FILESYSTEM: Final[ScenarioDiscoveryFilesystem] = (
-    _LocalScenarioDiscoveryFilesystem()
-)
+_LOCAL_FILESYSTEM: Final[ScenarioDiscoveryFilesystem] = _LocalScenarioDiscoveryFilesystem()
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,10 +90,7 @@ class ScenarioDiscoveryService:
             self.filesystem,
             ScenarioDiscoveryFilesystem,
         ):
-            raise TypeError(
-                "filesystem must satisfy "
-                "ScenarioDiscoveryFilesystem"
-            )
+            raise TypeError("filesystem must satisfy ScenarioDiscoveryFilesystem")
 
     def discover(
         self,
@@ -109,7 +99,15 @@ class ScenarioDiscoveryService:
         *,
         explicit_scenario_ids: Sequence[str] | None = None,
     ) -> tuple[ScenarioSpec, ...]:
-        _require_run_config(run_config)
+        run_config = _require_run_config(run_config)
+        project = run_config.project
+        if project is None:
+            raise _configuration_error(
+                "Scenario discovery requires a resolved validation profile.",
+                code="GF-WB-CONFIG-309",
+                subject="project",
+                detail="run_config.project is not configured",
+            )
         normalized_catalog = _normalize_catalog(catalog)
         explicit_ids = _normalize_explicit_ids(
             run_config.selected_scenarios
@@ -120,26 +118,16 @@ class ScenarioDiscoveryService:
         required_ids = tuple(
             validate_scenario_id(
                 value,
-                field=(
-                    "project.validation."
-                    f"required_scenarios[{index}]"
-                ),
+                field=(f"project.validation.required_scenarios[{index}]"),
             )
-            for index, value in enumerate(
-                run_config.project.validation.required_scenarios
-            )
+            for index, value in enumerate(project.validation.required_scenarios)
         )
         optional_ids = tuple(
             validate_scenario_id(
                 value,
-                field=(
-                    "project.validation."
-                    f"optional_scenarios[{index}]"
-                ),
+                field=(f"project.validation.optional_scenarios[{index}]"),
             )
-            for index, value in enumerate(
-                run_config.project.validation.optional_scenarios
-            )
+            for index, value in enumerate(project.validation.optional_scenarios)
         )
 
         _validate_registry_size(
@@ -152,9 +140,7 @@ class ScenarioDiscoveryService:
             optional_ids=optional_ids,
         )
 
-        project_paths = ProjectPaths.from_root(
-            run_config.project.project_root
-        )
+        project_paths = ProjectPaths.from_root(project.project_root)
         resolved_project_root = self._require_directory(
             project_paths.root,
             field="project.project_root",
@@ -170,8 +156,7 @@ class ScenarioDiscoveryService:
             allow_equal=False,
         ):
             raise PathSecurityError(
-                "The canonical scenario directory escapes "
-                "the active project root.",
+                "The canonical scenario directory escapes the active project root.",
                 code="GF-WB-PATH-310",
                 detail=(
                     f"project_root={resolved_project_root!s}\n"
@@ -187,14 +172,10 @@ class ScenarioDiscoveryService:
             spec = normalized_catalog.get(str(scenario_id))
             if spec is None:
                 raise _configuration_error(
-                    "A required registered scenario has no "
-                    "resolved ScenarioSpec.",
+                    "A required registered scenario has no resolved ScenarioSpec.",
                     code="GF-WB-CONFIG-310",
                     subject=str(scenario_id),
-                    detail=(
-                        f"scenario_id={scenario_id}\n"
-                        "registry=required"
-                    ),
+                    detail=(f"scenario_id={scenario_id}\nregistry=required"),
                 )
             self._validate_spec(
                 spec,
@@ -212,50 +193,32 @@ class ScenarioDiscoveryService:
         for scenario_id in required_ids:
             spec = validated_required[str(scenario_id)]
 
-            if (
-                run_config.mode is ValidationMode.RELEASE
-                and not spec.is_enabled_for(
-                    ValidationMode.RELEASE
-                )
+            if run_config.mode is ValidationMode.RELEASE and not spec.is_enabled_for(
+                ValidationMode.RELEASE
             ):
                 raise _configuration_error(
-                    "A required release scenario is disabled "
-                    "for release mode.",
+                    "A required release scenario is disabled for release mode.",
                     code="GF-WB-CONFIG-311",
                     subject=str(scenario_id),
-                    detail=(
-                        f"scenario_id={scenario_id}\n"
-                        "mode=release"
-                    ),
+                    detail=(f"scenario_id={scenario_id}\nmode=release"),
                 )
 
             if spec.is_enabled_for(run_config.mode):
                 selected.append(spec)
                 selected_ids.add(str(scenario_id))
 
-        explicit_set = {
-            str(scenario_id)
-            for scenario_id in explicit_ids
-        }
+        explicit_set = {str(scenario_id) for scenario_id in explicit_ids}
 
         for scenario_id in explicit_ids:
             key = str(scenario_id)
             spec = normalized_catalog.get(key)
             if spec is None:
-                registry_kind = (
-                    "required"
-                    if scenario_id in required_ids
-                    else "optional"
-                )
+                registry_kind = "required" if scenario_id in required_ids else "optional"
                 raise _configuration_error(
-                    "An explicitly selected registered scenario "
-                    "has no resolved ScenarioSpec.",
+                    "An explicitly selected registered scenario has no resolved ScenarioSpec.",
                     code="GF-WB-CONFIG-312",
                     subject=key,
-                    detail=(
-                        f"scenario_id={key}\n"
-                        f"registry={registry_kind}"
-                    ),
+                    detail=(f"scenario_id={key}\nregistry={registry_kind}"),
                 )
 
             required = scenario_id in required_ids
@@ -270,14 +233,10 @@ class ScenarioDiscoveryService:
 
             if not spec.is_enabled_for(run_config.mode):
                 raise _configuration_error(
-                    "The explicitly selected scenario is disabled "
-                    "for the current validation mode.",
+                    "The explicitly selected scenario is disabled for the current validation mode.",
                     code="GF-WB-CONFIG-313",
                     subject=key,
-                    detail=(
-                        f"scenario_id={key}\n"
-                        f"mode={run_config.mode.value}"
-                    ),
+                    detail=(f"scenario_id={key}\nmode={run_config.mode.value}"),
                 )
 
         for scenario_id in optional_ids:
@@ -299,25 +258,19 @@ class ScenarioDiscoveryService:
             )
             if missing_required:
                 raise _configuration_error(
-                    "Release scenario selection omitted required "
-                    "project scenarios.",
+                    "Release scenario selection omitted required project scenarios.",
                     code="GF-WB-CONFIG-314",
                     subject="selected_scenarios",
                     detail="\n".join(missing_required),
                 )
 
-        if (
-            not selected
-            and explicit_ids
-        ):
+        if not selected and explicit_ids:
             raise _configuration_error(
-                "The explicit scenario selection produced no "
-                "runnable scenarios.",
+                "The explicit scenario selection produced no runnable scenarios.",
                 code="GF-WB-CONFIG-315",
                 subject="selected_scenarios",
                 detail=(
-                    f"mode={run_config.mode.value}\n"
-                    f"requested={','.join(map(str, explicit_ids))}"
+                    f"mode={run_config.mode.value}\nrequested={','.join(map(str, explicit_ids))}"
                 ),
             )
 
@@ -335,49 +288,35 @@ class ScenarioDiscoveryService:
         resolved_scenarios_root: Path,
     ) -> None:
         if not isinstance(spec, ScenarioSpec):
-            raise TypeError(
-                "catalog values must be ScenarioSpec instances"
-            )
+            raise TypeError("catalog values must be ScenarioSpec instances")
         if spec.scenario_id != scenario_id:
             raise _configuration_error(
-                "ScenarioSpec identity does not match the "
-                "project registry.",
+                "ScenarioSpec identity does not match the project registry.",
                 code="GF-WB-CONFIG-316",
                 subject=str(scenario_id),
-                detail=(
-                    f"registry_id={scenario_id}\n"
-                    f"spec_id={spec.scenario_id}"
-                ),
+                detail=(f"registry_id={scenario_id}\nspec_id={spec.scenario_id}"),
             )
         if spec.required is not required:
             raise _configuration_error(
-                "ScenarioSpec required state does not match the "
-                "project registry.",
+                "ScenarioSpec required state does not match the project registry.",
                 code="GF-WB-CONFIG-317",
                 subject=str(scenario_id),
-                detail=(
-                    f"registry_required={required}\n"
-                    f"spec_required={spec.required}"
-                ),
+                detail=(f"registry_required={required}\nspec_required={spec.required}"),
             )
 
         expected_absolute = resolve_scenario_path(
             project_paths,
             str(scenario_id),
         )
-        expected_relative = expected_absolute.relative_to(
-            project_paths.root
-        )
+        expected_relative = expected_absolute.relative_to(project_paths.root)
 
         if spec.script_path != expected_relative:
             raise _configuration_error(
-                "ScenarioSpec script_path does not use the "
-                "canonical scenario registry path.",
+                "ScenarioSpec script_path does not use the canonical scenario registry path.",
                 code="GF-WB-CONFIG-318",
                 subject=str(scenario_id),
                 detail=(
-                    f"expected={expected_relative.as_posix()}\n"
-                    f"actual={spec.script_path.as_posix()}"
+                    f"expected={expected_relative.as_posix()}\nactual={spec.script_path.as_posix()}"
                 ),
             )
 
@@ -404,13 +343,9 @@ class ScenarioDiscoveryService:
             allow_equal=False,
         ):
             raise PathSecurityError(
-                "A registered scenario script escapes the "
-                "active project root.",
+                "A registered scenario script escapes the active project root.",
                 code="GF-WB-PATH-311",
-                detail=(
-                    f"scenario_id={scenario_id}\n"
-                    f"path={resolved_script_path!s}"
-                ),
+                detail=(f"scenario_id={scenario_id}\npath={resolved_script_path!s}"),
                 stage="scenario_discovery",
                 operation="validate_script_path",
                 subject=str(resolved_script_path),
@@ -422,13 +357,9 @@ class ScenarioDiscoveryService:
             allow_equal=False,
         ):
             raise PathSecurityError(
-                "A registered scenario script escapes the "
-                "canonical scenario directory.",
+                "A registered scenario script escapes the canonical scenario directory.",
                 code="GF-WB-PATH-312",
-                detail=(
-                    f"scenario_id={scenario_id}\n"
-                    f"path={resolved_script_path!s}"
-                ),
+                detail=(f"scenario_id={scenario_id}\npath={resolved_script_path!s}"),
                 stage="scenario_discovery",
                 operation="validate_script_path",
                 subject=str(resolved_script_path),
@@ -438,10 +369,7 @@ class ScenarioDiscoveryService:
             raise EvidenceIOError(
                 "A registered scenario script is not readable.",
                 code="GF-WB-IO-310",
-                detail=(
-                    f"scenario_id={scenario_id}\n"
-                    f"path={resolved_script_path!s}"
-                ),
+                detail=(f"scenario_id={scenario_id}\npath={resolved_script_path!s}"),
                 stage="scenario_discovery",
                 operation="validate_script_readability",
                 subject=str(resolved_script_path),
@@ -461,24 +389,21 @@ class ScenarioDiscoveryService:
         )
         if not self._exists(normalized):
             raise _configuration_error(
-                "A required scenario discovery directory "
-                "does not exist.",
+                "A required scenario discovery directory does not exist.",
                 code="GF-WB-CONFIG-320",
                 subject=field,
                 detail=f"path={normalized!s}",
             )
         if not self._is_directory(normalized):
             raise _configuration_error(
-                "A required scenario discovery path is not "
-                "a directory.",
+                "A required scenario discovery path is not a directory.",
                 code="GF-WB-CONFIG-321",
                 subject=field,
                 detail=f"path={normalized!s}",
             )
         if not self._is_readable(normalized):
             raise EvidenceIOError(
-                "A required scenario discovery directory is "
-                "not readable.",
+                "A required scenario discovery directory is not readable.",
                 code="GF-WB-IO-311",
                 detail=f"path={normalized!s}",
                 stage="scenario_discovery",
@@ -512,8 +437,7 @@ class ScenarioDiscoveryService:
             )
         if not self._is_file(normalized):
             raise _configuration_error(
-                "A referenced scenario script is not a "
-                "regular file.",
+                "A referenced scenario script is not a regular file.",
                 code="GF-WB-CONFIG-323",
                 subject=field,
                 detail=f"path={normalized!s}",
@@ -532,13 +456,9 @@ class ScenarioDiscoveryService:
         operation: str,
     ) -> Path:
         if not isinstance(path, Path):
-            raise TypeError(
-                "scenario discovery paths must be pathlib.Path"
-            )
+            raise TypeError("scenario discovery paths must be pathlib.Path")
         if "\x00" in str(path):
-            raise ValueError(
-                "scenario discovery paths must not contain NUL"
-            )
+            raise ValueError("scenario discovery paths must not contain NUL")
 
         try:
             return self.filesystem.resolve(
@@ -551,8 +471,7 @@ class ScenarioDiscoveryService:
             return path.absolute()
         except OSError as exc:
             raise EvidenceIOError(
-                "A scenario discovery path could not be "
-                "resolved.",
+                "A scenario discovery path could not be resolved.",
                 code="GF-WB-IO-312",
                 detail=f"path={path!s}\nerror={exc}",
                 stage="scenario_discovery",
@@ -566,8 +485,7 @@ class ScenarioDiscoveryService:
             return self.filesystem.exists(path)
         except OSError as exc:
             raise EvidenceIOError(
-                "A scenario discovery path could not be "
-                "inspected.",
+                "A scenario discovery path could not be inspected.",
                 code="GF-WB-IO-313",
                 detail=f"path={path!s}\nerror={exc}",
                 stage="scenario_discovery",
@@ -626,9 +544,7 @@ def discover_scenarios(
     explicit_scenario_ids: Sequence[str] | None = None,
     filesystem: ScenarioDiscoveryFilesystem | None = None,
 ) -> tuple[ScenarioSpec, ...]:
-    service = ScenarioDiscoveryService(
-        filesystem=filesystem or _LOCAL_FILESYSTEM
-    )
+    service = ScenarioDiscoveryService(filesystem=filesystem or _LOCAL_FILESYSTEM)
     return service.discover(
         run_config,
         catalog,
@@ -640,14 +556,9 @@ def _normalize_catalog(
     catalog: Mapping[str, ScenarioSpec],
 ) -> dict[str, ScenarioSpec]:
     if not isinstance(catalog, Mapping):
-        raise TypeError(
-            "catalog must be a mapping of scenario IDs "
-            "to ScenarioSpec values"
-        )
+        raise TypeError("catalog must be a mapping of scenario IDs to ScenarioSpec values")
     if len(catalog) > _MAX_REGISTERED_SCENARIOS:
-        raise ValueError(
-            "catalog exceeds the supported scenario limit"
-        )
+        raise ValueError("catalog exceeds the supported scenario limit")
 
     normalized: dict[str, ScenarioSpec] = {}
     for raw_key, spec in catalog.items():
@@ -658,18 +569,13 @@ def _normalize_catalog(
         key = str(scenario_id)
 
         if not isinstance(spec, ScenarioSpec):
-            raise TypeError(
-                f"catalog[{key!r}] must be a ScenarioSpec"
-            )
+            raise TypeError(f"catalog[{key!r}] must be a ScenarioSpec")
         if spec.scenario_id != scenario_id:
             raise ValueError(
-                f"catalog key {key!r} does not match "
-                f"ScenarioSpec ID {spec.scenario_id!r}"
+                f"catalog key {key!r} does not match ScenarioSpec ID {spec.scenario_id!r}"
             )
         if key in normalized:
-            raise ValueError(
-                f"catalog contains duplicate scenario ID {key!r}"
-            )
+            raise ValueError(f"catalog contains duplicate scenario ID {key!r}")
 
         normalized[key] = spec
 
@@ -680,14 +586,9 @@ def _normalize_explicit_ids(
     values: Sequence[str],
 ) -> tuple[ScenarioId, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "explicit_scenario_ids must be a sequence "
-            "of scenario IDs"
-        )
+        raise TypeError("explicit_scenario_ids must be a sequence of scenario IDs")
     if len(values) > _MAX_REGISTERED_SCENARIOS:
-        raise ValueError(
-            "explicit_scenario_ids exceeds the supported limit"
-        )
+        raise ValueError("explicit_scenario_ids exceeds the supported limit")
 
     normalized: list[ScenarioId] = []
     seen: set[str] = set()
@@ -724,14 +625,11 @@ def _validate_explicit_membership(
         )
     }
     unknown = tuple(
-        str(scenario_id)
-        for scenario_id in explicit_ids
-        if str(scenario_id) not in registered
+        str(scenario_id) for scenario_id in explicit_ids if str(scenario_id) not in registered
     )
     if unknown:
         raise _configuration_error(
-            "Explicit scenario filters reference "
-            "unregistered scenario IDs.",
+            "Explicit scenario filters reference unregistered scenario IDs.",
             code="GF-WB-CONFIG-325",
             subject="selected_scenarios",
             detail="\n".join(unknown),
@@ -742,22 +640,12 @@ def _validate_registry_size(
     required_ids: tuple[ScenarioId, ...],
     optional_ids: tuple[ScenarioId, ...],
 ) -> None:
-    if (
-        len(required_ids) + len(optional_ids)
-        > _MAX_REGISTERED_SCENARIOS
-    ):
-        raise ValueError(
-            "project scenario registry exceeds the supported limit"
-        )
+    if len(required_ids) + len(optional_ids) > _MAX_REGISTERED_SCENARIOS:
+        raise ValueError("project scenario registry exceeds the supported limit")
 
-    required_keys = {
-        str(scenario_id)
-        for scenario_id in required_ids
-    }
+    required_keys = {str(scenario_id) for scenario_id in required_ids}
     overlap = tuple(
-        str(scenario_id)
-        for scenario_id in optional_ids
-        if str(scenario_id) in required_keys
+        str(scenario_id) for scenario_id in optional_ids if str(scenario_id) in required_keys
     )
     if overlap:
         raise _configuration_error(
@@ -775,9 +663,7 @@ def _require_unique_selected_ids(
     for spec in specs:
         key = str(spec.scenario_id)
         if key in seen:
-            raise AssertionError(
-                "scenario discovery produced duplicate IDs"
-            )
+            raise AssertionError("scenario discovery produced duplicate IDs")
         seen.add(key)
 
 
@@ -785,13 +671,9 @@ def _require_run_config(
     value: object,
 ) -> RunConfig:
     if not isinstance(value, RunConfig):
-        raise TypeError(
-            "run_config must be a RunConfig"
-        )
+        raise TypeError("run_config must be a RunConfig")
     if not isinstance(value.mode, ValidationMode):
-        raise TypeError(
-            "run_config.mode must be a ValidationMode"
-        )
+        raise TypeError("run_config.mode must be a ValidationMode")
     return value
 
 
@@ -802,28 +684,19 @@ def _contains(
     allow_equal: bool,
 ) -> bool:
     try:
-        common = Path(
-            os.path.commonpath(
-                (str(root), str(candidate))
-            )
-        )
+        common = Path(os.path.commonpath((str(root), str(candidate))))
     except ValueError:
         return False
 
     if _path_key(common) != _path_key(root):
         return False
-    if (
-        not allow_equal
-        and _path_key(candidate) == _path_key(root)
-    ):
+    if not allow_equal and _path_key(candidate) == _path_key(root):
         return False
     return True
 
 
 def _path_key(path: Path) -> str:
-    return os.path.normcase(
-        os.path.normpath(str(path))
-    )
+    return os.path.normcase(os.path.normpath(str(path)))
 
 
 def _configuration_error(

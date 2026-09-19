@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,7 +7,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from gf_wordbench.diagnostics.patterns.common import (
-        DiagnosticPatternDefinition,
+        DiagnosticPattern,
     )
     from gf_wordbench.diagnostics.tools.models import (
         DiagnosticToolRequest,
@@ -84,9 +83,7 @@ class EvidenceTextRequest:
             "replace",
             "surrogateescape",
         }:
-            raise ValueError(
-                "errors must be strict, replace, or surrogateescape"
-            )
+            raise ValueError("errors must be strict, replace, or surrogateescape")
         offset = _non_negative_int(self.offset, "offset")
         object.__setattr__(self, "path", path)
         object.__setattr__(self, "root", root)
@@ -119,13 +116,9 @@ class EvidenceBytes:
             raise ValueError("offset must not exceed total_size_bytes")
         if len(self.data) > total_size_bytes - offset:
             raise ValueError("data exceeds the declared evidence size")
-        expected_truncated = (
-            offset + len(self.data) < total_size_bytes
-        )
+        expected_truncated = offset + len(self.data) < total_size_bytes
         if self.truncated is not expected_truncated:
-            raise ValueError(
-                "truncated must reflect unread evidence bytes"
-            )
+            raise ValueError("truncated must reflect unread evidence bytes")
         object.__setattr__(self, "path", path)
         object.__setattr__(self, "offset", offset)
         object.__setattr__(
@@ -166,16 +159,10 @@ class EvidenceText:
         if offset > total_size_bytes:
             raise ValueError("offset must not exceed total_size_bytes")
         if consumed_bytes > total_size_bytes - offset:
-            raise ValueError(
-                "consumed_bytes exceeds the declared evidence size"
-            )
-        expected_truncated = (
-            offset + consumed_bytes < total_size_bytes
-        )
+            raise ValueError("consumed_bytes exceeds the declared evidence size")
+        expected_truncated = offset + consumed_bytes < total_size_bytes
         if self.truncated is not expected_truncated:
-            raise ValueError(
-                "truncated must reflect unread evidence bytes"
-            )
+            raise ValueError("truncated must reflect unread evidence bytes")
         object.__setattr__(self, "path", path)
         object.__setattr__(self, "text", text)
         object.__setattr__(self, "encoding", encoding)
@@ -212,14 +199,9 @@ class PatternSelection:
             if stream not in {"stdout", "stderr", "process", "derived"}
         )
         if invalid_streams:
-            raise ValueError(
-                "unsupported source streams: "
-                + ", ".join(invalid_streams)
-            )
+            raise ValueError("unsupported source streams: " + ", ".join(invalid_streams))
         gf_version = (
-            None
-            if self.gf_version is None
-            else _required_text(self.gf_version, "gf_version")
+            None if self.gf_version is None else _required_text(self.gf_version, "gf_version")
         )
         if type(self.include_fallbacks) is not bool:
             raise TypeError("include_fallbacks must be a boolean")
@@ -243,8 +225,7 @@ class EvidenceReader(Protocol):
         path: Path,
         *,
         root: Path,
-    ) -> Path:
-        ...
+    ) -> Path: ...
 
     def metadata(
         self,
@@ -252,46 +233,38 @@ class EvidenceReader(Protocol):
         *,
         root: Path,
         include_sha256: bool = False,
-    ) -> EvidenceMetadata:
-        ...
+    ) -> EvidenceMetadata: ...
 
     def read_bytes(
         self,
         request: EvidenceReadRequest,
-    ) -> EvidenceBytes:
-        ...
+    ) -> EvidenceBytes: ...
 
     def read_text(
         self,
         request: EvidenceTextRequest,
-    ) -> EvidenceText:
-        ...
+    ) -> EvidenceText: ...
 
 
 @runtime_checkable
 class DiagnosticPatternRegistry(Protocol):
     @property
-    def catalog_version(self) -> str:
-        ...
+    def catalog_version(self) -> str: ...
 
     @property
-    def parser_version(self) -> str:
-        ...
+    def parser_version(self) -> str: ...
 
     def get(
         self,
         pattern_id: str,
-    ) -> DiagnosticPatternDefinition:
-        ...
+    ) -> DiagnosticPattern: ...
 
     def select(
         self,
         selection: PatternSelection,
-    ) -> tuple[DiagnosticPatternDefinition, ...]:
-        ...
+    ) -> tuple[DiagnosticPattern, ...]: ...
 
-    def pattern_ids(self) -> tuple[str, ...]:
-        ...
+    def pattern_ids(self) -> tuple[str, ...]: ...
 
 
 @runtime_checkable
@@ -302,17 +275,14 @@ class DiagnosticToolPort(Protocol):
         *,
         cancellation: CancellationToken | None = None,
         event_sink: ProcessEventSink | None = None,
-    ) -> DiagnosticToolResult:
-        ...
+    ) -> DiagnosticToolResult: ...
 
 
 def validate_pattern_registry(
     registry: DiagnosticPatternRegistry,
 ) -> tuple[str, ...]:
     if not isinstance(registry, DiagnosticPatternRegistry):
-        raise TypeError(
-            "registry must satisfy DiagnosticPatternRegistry"
-        )
+        raise TypeError("registry must satisfy DiagnosticPatternRegistry")
     catalog_version = _required_text(
         registry.catalog_version,
         "catalog_version",
@@ -331,9 +301,7 @@ def validate_pattern_registry(
         definition = registry.get(pattern_id)
         actual = getattr(definition, "pattern_id", None)
         if actual != pattern_id:
-            raise ValueError(
-                f"registry identity mismatch for {pattern_id!r}"
-            )
+            raise ValueError(f"registry identity mismatch for {pattern_id!r}")
     return (catalog_version, parser_version, *pattern_ids)
 
 
@@ -352,9 +320,7 @@ def _required_text(value: object, field_name: str) -> str:
     if not text.strip():
         raise ValueError(f"{field_name} must not be empty")
     if text != text.strip():
-        raise ValueError(
-            f"{field_name} must not have outer whitespace"
-        )
+        raise ValueError(f"{field_name} must not have outer whitespace")
     return text
 
 
@@ -378,9 +344,7 @@ def _non_negative_int(value: object, field_name: str) -> int:
     if type(value) is not int:
         raise TypeError(f"{field_name} must be an integer")
     if value < 0:
-        raise ValueError(
-            f"{field_name} must be non-negative"
-        )
+        raise ValueError(f"{field_name} must be non-negative")
     return value
 
 
@@ -397,13 +361,8 @@ def _optional_sha256(value: object) -> str | None:
     if value is None:
         return None
     text = _required_text(value, "sha256").lower()
-    if len(text) != 64 or any(
-        character not in "0123456789abcdef"
-        for character in text
-    ):
-        raise ValueError(
-            "sha256 must contain 64 lowercase hexadecimal characters"
-        )
+    if len(text) != 64 or any(character not in "0123456789abcdef" for character in text):
+        raise ValueError("sha256 must contain 64 lowercase hexadecimal characters")
     return text
 
 
@@ -412,24 +371,19 @@ def _unique_text_tuple(
     field_name: str,
 ) -> tuple[str, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            f"{field_name} must be an iterable of strings"
-        )
+        raise TypeError(f"{field_name} must be an iterable of strings")
     ordered: list[str] = []
     seen: set[str] = set()
     for value in values:
         text = _required_text(value, f"{field_name} item")
         if text in seen:
-            raise ValueError(
-                f"{field_name} must not contain duplicates"
-            )
+            raise ValueError(f"{field_name} must not contain duplicates")
         seen.add(text)
         ordered.append(text)
     return tuple(ordered)
 
 
 __all__ = (
-    "DiagnosticPatternRegistry",
     "DiagnosticToolPort",
     "EvidenceBytes",
     "EvidenceMetadata",

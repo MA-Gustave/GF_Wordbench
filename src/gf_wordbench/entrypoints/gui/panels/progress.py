@@ -9,9 +9,8 @@ from enum import StrEnum, unique
 from pathlib import Path
 from typing import Final, TypeVar
 
-from PySide6.QtCore import QElapsedTimer, QTimer, Qt, Signal, Slot
+from PySide6.QtCore import QElapsedTimer, Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
-    QFormLayout,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -19,6 +18,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -129,11 +129,7 @@ class ProgressActivityItem:
 
     def render(self) -> str:
         timestamp = self.timestamp.strftime("%H:%M:%S")
-        context = tuple(
-            value
-            for value in (self.stage, self.subject)
-            if value is not None
-        )
+        context = tuple(value for value in (self.stage, self.subject) if value is not None)
         prefix = f"[{timestamp}] [{self.severity.value}]"
         if context:
             prefix += f" [{' · '.join(context)}]"
@@ -185,11 +181,7 @@ class ProgressPanelModel:
         )
         _count_or_none(self.completed, "completed")
         _count_or_none(self.total, "total")
-        if (
-            self.completed is not None
-            and self.total is not None
-            and self.completed > self.total
-        ):
+        if self.completed is not None and self.total is not None and self.completed > self.total:
             raise ValueError("completed cannot exceed total")
         object.__setattr__(
             self,
@@ -272,6 +264,7 @@ class ProgressPanel(QWidget):
         stage: str | None = None,
         subject: str | None = None,
     ) -> None:
+        self._activity_toggle.setChecked(True)
         self.set_model(
             ProgressPanelModel(
                 run_id=run_id,
@@ -368,20 +361,12 @@ class ProgressPanel(QWidget):
                 total=next_total,
                 stage=stage if stage is not None else current.stage,
                 subject=subject if subject is not None else current.subject,
-                status_text=(
-                    status_text
-                    if status_text is not None
-                    else current.status_text
-                ),
+                status_text=(status_text if status_text is not None else current.status_text),
                 warning_count=(
-                    warning_count
-                    if warning_count is not None
-                    else current.warning_count
+                    warning_count if warning_count is not None else current.warning_count
                 ),
                 failure_count=(
-                    failure_count
-                    if failure_count is not None
-                    else current.failure_count
+                    failure_count if failure_count is not None else current.failure_count
                 ),
             )
         )
@@ -417,16 +402,8 @@ class ProgressPanel(QWidget):
                 state=terminal_state,
                 status_text=status_text,
                 completed=completed,
-                warning_count=(
-                    current.warning_count
-                    if warning_count is None
-                    else warning_count
-                ),
-                failure_count=(
-                    current.failure_count
-                    if failure_count is None
-                    else failure_count
-                ),
+                warning_count=(current.warning_count if warning_count is None else warning_count),
+                failure_count=(current.failure_count if failure_count is None else failure_count),
             )
         )
 
@@ -466,6 +443,8 @@ class ProgressPanel(QWidget):
         self.setAccessibleName(self.tr("Validation progress"))
 
         root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(4)
 
         summary_group = QGroupBox(self.tr("Progress"), self)
         summary_layout = QGridLayout(summary_group)
@@ -486,9 +465,7 @@ class ProgressPanel(QWidget):
             self._failure_value,
         ):
             label.setWordWrap(True)
-            label.setTextInteractionFlags(
-                Qt.TextInteractionFlag.TextSelectableByMouse
-            )
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         summary_layout.addWidget(QLabel(self.tr("Status"), summary_group), 0, 0)
         summary_layout.addWidget(self._status_value, 0, 1)
@@ -519,10 +496,20 @@ class ProgressPanel(QWidget):
 
         root.addWidget(summary_group)
 
-        activity_group = QGroupBox(self.tr("Activity"), self)
-        activity_layout = QVBoxLayout(activity_group)
+        self._activity_toggle = QToolButton(self)
+        self._activity_toggle.setObjectName("progressActivityToggle")
+        self._activity_toggle.setText(self.tr("Show Activity"))
+        self._activity_toggle.setCheckable(True)
+        self._activity_toggle.setChecked(False)
+        self._activity_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._activity_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        root.addWidget(self._activity_toggle, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self._activity = QPlainTextEdit(activity_group)
+        self._activity_group = QGroupBox(self.tr("Activity"), self)
+        self._activity_group.setObjectName("progressActivityGroup")
+        activity_layout = QVBoxLayout(self._activity_group)
+
+        self._activity = QPlainTextEdit(self._activity_group)
         self._activity.setObjectName("progressActivity")
         self._activity.setAccessibleName(self.tr("Bounded validation activity"))
         self._activity.setReadOnly(True)
@@ -534,19 +521,28 @@ class ProgressPanel(QWidget):
         activity_actions.addStretch(1)
         self._clear_activity_button = QPushButton(
             self.tr("Clear Activity"),
-            activity_group,
+            self._activity_group,
         )
-        self._clear_activity_button.setAccessibleName(
-            self.tr("Clear displayed activity")
-        )
+        self._clear_activity_button.setAccessibleName(self.tr("Clear displayed activity"))
         activity_actions.addWidget(self._clear_activity_button)
         activity_layout.addLayout(activity_actions)
 
-        root.addWidget(activity_group, 1)
+        root.addWidget(self._activity_group, 1)
+        self._set_activity_visible(False)
 
     def _connect_signals(self) -> None:
         self._cancel_button.clicked.connect(self.request_cancellation)
         self._clear_activity_button.clicked.connect(self.clear_activity)
+        self._activity_toggle.toggled.connect(self._set_activity_visible)
+
+    def _set_activity_visible(self, visible: bool) -> None:
+        self._activity_group.setVisible(visible)
+        self._activity_toggle.setArrowType(
+            Qt.ArrowType.DownArrow if visible else Qt.ArrowType.RightArrow
+        )
+        self._activity_toggle.setText(
+            self.tr("Hide Activity") if visible else self.tr("Show Activity")
+        )
 
     def _synchronize_clock(
         self,
@@ -578,22 +574,15 @@ class ProgressPanel(QWidget):
         self._timer.stop()
 
     def _current_elapsed_seconds(self) -> float:
-        if (
-            self._model.state.is_active
-            and self._elapsed_clock.isValid()
-        ):
-            elapsed = self._elapsed_baseline + (
-                self._elapsed_clock.elapsed() / 1_000.0
-            )
+        if self._model.state.is_active and self._elapsed_clock.isValid():
+            elapsed = self._elapsed_baseline + (self._elapsed_clock.elapsed() / 1_000.0)
             return min(elapsed, _MAX_ELAPSED_SECONDS)
         return self._model.elapsed_seconds
 
     def _render(self, *, reset_activity: bool) -> None:
         model = self._model
         self._status_value.setText(model.status_text)
-        self._status_value.setAccessibleName(
-            self.tr("Status: %1").replace("%1", model.status_text)
-        )
+        self._status_value.setAccessibleName(self.tr("Status: %1").replace("%1", model.status_text))
         self._stage_value.setText(model.stage or self.tr("Not started"))
         self._subject_value.setText(model.subject or self.tr("None"))
         self._warning_value.setText(str(model.warning_count))
@@ -601,18 +590,14 @@ class ProgressPanel(QWidget):
         self._update_elapsed_display()
         self._render_progress_bar()
 
-        self._cancel_button.setEnabled(
-            model.state is ProgressRunState.RUNNING
-        )
+        self._cancel_button.setEnabled(model.state is ProgressRunState.RUNNING)
         if model.state is ProgressRunState.CANCELLING:
             self._cancel_button.setText(self.tr("Cancelling…"))
         else:
             self._cancel_button.setText(self.tr("Cancel"))
 
         if reset_activity:
-            self._activity.setPlainText(
-                "\n".join(item.render() for item in model.activity)
-            )
+            self._activity.setPlainText("\n".join(item.render() for item in model.activity))
 
     @Slot()
     def _update_elapsed_display(self) -> None:
@@ -635,9 +620,11 @@ class ProgressPanel(QWidget):
             value = max(0, min(1000, round(fraction * 1000)))
             assert model.completed is not None
             assert model.total is not None
-            text = self.tr("%1 of %2").replace(
-                "%1", str(model.completed)
-            ).replace("%2", str(model.total))
+            text = (
+                self.tr("%1 of %2")
+                .replace("%1", str(model.completed))
+                .replace("%2", str(model.total))
+            )
         self._progress.setValue(value)
         self._progress.setFormat(text)
 
@@ -663,8 +650,7 @@ def _field_count(
         if key not in fields:
             continue
         value = fields[key]
-        _count(value, key)
-        return value
+        return _count(value, key)
     return default
 
 
@@ -692,6 +678,8 @@ def _format_elapsed(seconds: float) -> str:
 def _enum(value: object, enum_type: type[_E], field: str) -> _E:
     if isinstance(value, enum_type):
         return value
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be a string or {enum_type.__name__}")
     try:
         return enum_type(value)
     except (TypeError, ValueError) as exc:
@@ -755,9 +743,7 @@ def _elapsed(value: object) -> float:
     if result < 0.0:
         raise ValueError("elapsed_seconds cannot be negative")
     if result > _MAX_ELAPSED_SECONDS:
-        raise ValueError(
-            f"elapsed_seconds exceeds {_MAX_ELAPSED_SECONDS}"
-        )
+        raise ValueError(f"elapsed_seconds exceeds {_MAX_ELAPSED_SECONDS}")
     return result
 
 
@@ -770,7 +756,5 @@ def _typed_tuple(
         raise TypeError(f"{field} must be an iterable")
     result = tuple(values)
     if not all(isinstance(value, item_type) for value in result):
-        raise TypeError(
-            f"{field} must contain only {item_type.__name__} values"
-        )
+        raise TypeError(f"{field} must contain only {item_type.__name__} values")
     return result

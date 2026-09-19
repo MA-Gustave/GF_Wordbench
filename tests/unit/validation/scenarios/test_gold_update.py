@@ -220,9 +220,7 @@ def test_prepare_missing_gold_is_read_only_and_produces_visible_diff(
     assert plan.candidate is not None
     assert plan.candidate.text == _gold_text()
     assert plan.candidate_sha256 == _sha256(_gold_text().encode())
-    assert plan.gold_path == (
-        tmp_path / "validation" / "gold" / f"{SCENARIO_ID}.gold"
-    )
+    assert plan.gold_path == (tmp_path / "validation" / "gold" / f"{SCENARIO_ID}.gold")
     assert not plan.gold_path.exists()
     assert "# scenario_id: parse-basic" in plan.diff_text
     assert "--- /dev/null" in plan.diff_text
@@ -279,9 +277,7 @@ def test_prepare_refuses_empty_output_unless_explicitly_allowed(
 ) -> None:
     empty_output = _normalized_output(body="")
 
-    refused = prepare_gold_update(
-        _request(tmp_path, normalized_output_text=empty_output)
-    )
+    refused = prepare_gold_update(_request(tmp_path, normalized_output_text=empty_output))
     allowed = prepare_gold_update(
         _request(
             tmp_path,
@@ -549,10 +545,7 @@ def test_build_gold_diff_is_stable_and_names_previous_and_candidate(
         scenario_id=SCENARIO_ID,
     )
 
-    assert diff.startswith(
-        "# scenario_id: parse-basic\n"
-        f"# gold_path: {gold_path.as_posix()}\n"
-    )
+    assert diff.startswith(f"# scenario_id: parse-basic\n# gold_path: {gold_path.as_posix()}\n")
     assert f"--- {gold_path.as_posix()}@previous" in diff
     assert f"+++ {gold_path.as_posix()}@candidate" in diff
     assert "-old" in diff

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -69,7 +70,7 @@ def _successful_executor(
     calls: list[ValidationStageId],
     *,
     artifact: Path | None = None,
-):
+) -> Callable[[PipelineStageContext], PipelineStageResult]:
     def execute(context: PipelineStageContext) -> PipelineStageResult:
         calls.append(context.stage_id)
         return _stage_result(
@@ -135,9 +136,7 @@ def test_diagnostic_mode_runs_broad_evidence_pipeline_after_language_failure(
     assert result.mode is ValidationMode.DIAGNOSTIC
     assert result.overall_status is OverallStatus.FAIL
     assert result.cancelled is False
-    assert tuple(item.stage_id for item in result.stage_results) == (
-        CANONICAL_STAGE_ORDER
-    )
+    assert tuple(item.stage_id for item in result.stage_results) == (CANONICAL_STAGE_ORDER)
     assert calls == [
         ValidationStageId.SELECT,
         ValidationStageId.INVENTORY,
@@ -152,9 +151,7 @@ def test_diagnostic_mode_runs_broad_evidence_pipeline_after_language_failure(
 
     scan = result.result_for(ValidationStageId.STATIC_SCAN)
     compile_result = result.result_for(ValidationStageId.COMPILE)
-    scenario_result = result.result_for(
-        ValidationStageId.EXECUTE_SCENARIOS
-    )
+    scenario_result = result.result_for(ValidationStageId.EXECUTE_SCENARIOS)
 
     assert scan.validation_status is ValidationStatus.FAIL
     assert scan.error_kind is ErrorKind.SYNTAX
@@ -251,9 +248,7 @@ def test_diagnostic_timeout_remains_error_while_classification_continues() -> No
     )
 
     compile_result = result.result_for(ValidationStageId.COMPILE)
-    classification = result.result_for(
-        ValidationStageId.CLASSIFY_FAILURES
-    )
+    classification = result.result_for(ValidationStageId.CLASSIFY_FAILURES)
 
     assert result.overall_status is OverallStatus.ERROR
     assert compile_result.validation_status is ValidationStatus.ERROR

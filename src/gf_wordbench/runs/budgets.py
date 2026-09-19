@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import math
-import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import math
 from threading import RLock
+import time
 from typing import Final
 
 Clock = Callable[[], float]
@@ -161,9 +161,7 @@ class BudgetDecision:
     def __post_init__(self) -> None:
         _require_non_negative_duration(self.available_sec, field="available_sec")
         if (self.allocation is None) == (self.denial_reason is None):
-            raise ValueError(
-                "exactly one of allocation and denial_reason must be present"
-            )
+            raise ValueError("exactly one of allocation and denial_reason must be present")
 
     @property
     def granted(self) -> bool:
@@ -202,10 +200,7 @@ class BudgetUnavailableError(RuntimeError):
         self.reason = reason
         self.available_sec = available_sec
         self.snapshot = snapshot
-        super().__init__(
-            f"budget unavailable: {reason.value}; "
-            f"available={available_sec:.6f}s"
-        )
+        super().__init__(f"budget unavailable: {reason.value}; available={available_sec:.6f}s")
 
 
 class RunBudget:
@@ -246,9 +241,7 @@ class RunBudget:
             field="finalization_reserve_sec",
         )
         if reserve >= total:
-            raise ValueError(
-                "finalization_reserve_sec must be smaller than total_sec"
-            )
+            raise ValueError("finalization_reserve_sec must be smaller than total_sec")
         if not callable(clock):
             raise TypeError("clock must be callable")
 
@@ -439,11 +432,9 @@ class RunBudget:
             snapshot = self.snapshot()
             reason = (
                 BudgetDenialReason.EXECUTION_EXHAUSTED
-                if allocation.kind is BudgetKind.STAGE
-                and available <= _EPSILON_SEC
+                if allocation.kind is BudgetKind.STAGE and available <= _EPSILON_SEC
                 else BudgetDenialReason.FINALIZATION_EXHAUSTED
-                if allocation.kind is BudgetKind.FINALIZATION
-                and available <= _EPSILON_SEC
+                if allocation.kind is BudgetKind.FINALIZATION and available <= _EPSILON_SEC
                 else BudgetDenialReason.BELOW_MINIMUM
             )
             raise BudgetUnavailableError(
@@ -607,9 +598,7 @@ class RunBudget:
                 )
 
             deadline_cap = (
-                self._execution_deadline
-                if kind is BudgetKind.STAGE
-                else self._run_deadline
+                self._execution_deadline if kind is BudgetKind.STAGE else self._run_deadline
             )
             token = self._next_token
             self._next_token += 1
@@ -707,10 +696,7 @@ class RunBudget:
             self._phase = BudgetPhase.CLOSED
             self._stop_reason = "global_budget_exhausted"
             return
-        if (
-            self._phase is BudgetPhase.EXECUTION
-            and now + _EPSILON_SEC >= self._execution_deadline
-        ):
+        if self._phase is BudgetPhase.EXECUTION and now + _EPSILON_SEC >= self._execution_deadline:
             self._phase = BudgetPhase.FINALIZATION
             if self._stop_reason is None:
                 self._stop_reason = "execution_budget_exhausted"
@@ -723,11 +709,7 @@ class RunBudget:
             if self._phase is BudgetPhase.EXECUTION
             else 0.0
         )
-        remaining_finalization = (
-            remaining_total
-            if self._phase is BudgetPhase.FINALIZATION
-            else 0.0
-        )
+        remaining_finalization = remaining_total if self._phase is BudgetPhase.FINALIZATION else 0.0
         active_stages = tuple(
             sorted(
                 allocation.name

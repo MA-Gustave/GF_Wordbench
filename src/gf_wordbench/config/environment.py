@@ -13,13 +13,13 @@ model migrations are complete.
 
 from __future__ import annotations
 
-import inspect
-import os
-import re
-import shutil
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
+import inspect
+import os
 from pathlib import Path
+import re
+import shutil
 from typing import Final, TypeVar, cast
 
 from .models import (
@@ -36,7 +36,6 @@ from .precedence import (
     PrecedenceResolution,
     resolve_precedence,
 )
-
 
 ENVIRONMENT_PREFIX: Final[str] = "GF_WORDBENCH_"
 
@@ -57,9 +56,7 @@ CANONICAL_ENVIRONMENT_VARIABLES: Final[tuple[str, ...]] = (
     OUTPUT_ROOT_ENV,
     STATE_PATH_ENV,
 )
-LEGACY_ENVIRONMENT_VARIABLES: Final[tuple[str, ...]] = (
-    LEGACY_PROJECT_ROOT_ENV,
-)
+LEGACY_ENVIRONMENT_VARIABLES: Final[tuple[str, ...]] = (LEGACY_PROJECT_ROOT_ENV,)
 KNOWN_ENVIRONMENT_VARIABLES: Final[tuple[str, ...]] = (
     *CANONICAL_ENVIRONMENT_VARIABLES,
     *LEGACY_ENVIRONMENT_VARIABLES,
@@ -72,6 +69,7 @@ _ENV_REFERENCE_PATTERNS: Final = (
     re.compile(r"(?<!\$)\$[A-Za-z_][A-Za-z0-9_]*"),
 )
 _STANDARD_SOURCE_ROOT_NAME: Final[str] = "src"
+_STANDARD_SOURCE_MARKERS: Final[tuple[str, ...]] = ("abstract", "api", "common", "prelude")
 _MAX_ANCESTOR_DEPTH: Final[int] = 16
 _MAX_GF_PATH_PARTS: Final[int] = 256
 
@@ -361,16 +359,8 @@ def _resolve_language_paths(
         )
         return None
 
-    context_source_raw = (
-        getattr(context, "rgl_source_root", None)
-        if context is not None
-        else None
-    )
-    context_root_raw = (
-        getattr(context, "rgl_root", None)
-        if context is not None
-        else None
-    )
+    context_source_raw = getattr(context, "rgl_source_root", None) if context is not None else None
+    context_root_raw = getattr(context, "rgl_root", None) if context is not None else None
 
     explicit_root: Path | None = None
     if raw_rgl_root is not None:
@@ -456,33 +446,24 @@ def _choose_rgl_layout(
     if explicit_root is not None:
         return _layout_from_explicit_root(language_directory, explicit_root)
 
-    source_root = (
-        None
-        if context_source_root is None
-        else _normalize_machine_path(context_source_root)
-    )
-    root = (
-        None
-        if context_root is None
-        else _normalize_machine_path(context_root)
-    )
+    source_root = _optional_machine_path(context_source_root, "language context source_root")
+    root = _optional_machine_path(context_root, "language context root")
 
     if source_root is not None:
         if not source_root.is_dir():
             raise ValueError(f"RGL source root does not exist: {source_root}")
-        if not language_directory.is_relative_to(source_root):
-            raise ValueError(
-                "resolved language directory is outside the resolved RGL "
-                f"source root: {language_directory}"
-            )
+        if not _is_supported_rgl_source_root(source_root):
+            raise ValueError(f"RGL source root has an unsupported layout: {source_root}")
         effective_root = root or source_root.parent
         if root is not None and source_root.parent != root:
             expected_source = root / _STANDARD_SOURCE_ROOT_NAME
             if source_root != expected_source:
                 raise ValueError(
-                    "resolved RGL root and source root disagree: "
-                    f"{root} versus {source_root}"
+                    f"resolved RGL root and source root disagree: {root} versus {source_root}"
                 )
+        # The language directory may be an external GF project.  The resolved
+        # RGL source root is then a dependency provider rather than a source
+        # containment parent.
         return source_root, effective_root
 
     if root is not None:
@@ -495,22 +476,29 @@ def _layout_from_explicit_root(
     language_directory: Path,
     explicit_root: Path,
 ) -> tuple[Path, Path]:
+    del language_directory  # source ownership is independent from dependency ownership
+
     repository_source = explicit_root / _STANDARD_SOURCE_ROOT_NAME
-    if repository_source.is_dir() and language_directory.is_relative_to(
-        repository_source
-    ):
+    if repository_source.is_dir() and _is_supported_rgl_source_root(repository_source):
         return repository_source, explicit_root
 
     if (
         explicit_root.name.casefold() == _STANDARD_SOURCE_ROOT_NAME
-        and language_directory.is_relative_to(explicit_root)
+        and explicit_root.is_dir()
+        and _is_supported_rgl_source_root(explicit_root)
     ):
         return explicit_root, explicit_root.parent
 
     raise ValueError(
-        "explicit RGL root does not contain the resolved language directory "
-        "under a supported src/ boundary"
+        "explicit RGL root is not a supported repository root or src/ directory"
     )
+
+
+def _is_supported_rgl_source_root(path: Path) -> bool:
+    if (path / "languages.csv").is_file():
+        return True
+    markers = sum((path / name).is_dir() for name in _STANDARD_SOURCE_MARKERS)
+    return markers >= 2
 
 
 def _discover_standard_rgl_layout(
@@ -576,9 +564,7 @@ def _resolve_required_path(
                 source=source,
                 field_path=field_path,
                 provided_value=raw_value,
-                message=(
-                    f"The selected {field_path!r} is not {expected}: {path}."
-                ),
+                message=(f"The selected {field_path!r} is not {expected}: {path}."),
                 remediation=remediation,
             )
         )
@@ -611,8 +597,7 @@ def _resolve_gf_executable(
                             "did not find 'gf'."
                         ),
                         remediation=(
-                            f"Set {GF_EXECUTABLE_ENV} or provide an explicit "
-                            "path to gf or gf.exe."
+                            f"Set {GF_EXECUTABLE_ENV} or provide an explicit path to gf or gf.exe."
                         ),
                     )
                 )
@@ -642,9 +627,7 @@ def _resolve_gf_executable(
         executable = _normalize_machine_path(candidate)
     except (OSError, TypeError, ValueError) as exc:
         severity = (
-            IssueSeverity.ERROR
-            if required or raw_value is not None
-            else IssueSeverity.WARNING
+            IssueSeverity.ERROR if required or raw_value is not None else IssueSeverity.WARNING
         )
         issues.append(
             _issue(
@@ -660,9 +643,7 @@ def _resolve_gf_executable(
 
     if not _is_gf_executable(executable):
         severity = (
-            IssueSeverity.ERROR
-            if required or raw_value is not None
-            else IssueSeverity.WARNING
+            IssueSeverity.ERROR if required or raw_value is not None else IssueSeverity.WARNING
         )
         issues.append(
             _issue(
@@ -787,13 +768,8 @@ def _resolve_gf_path(
                     source=requirement.source,
                     field_path=field,
                     provided_value=requirement.value,
-                    message=(
-                        "The resolved GF path directory does not exist: "
-                        f"{candidate}."
-                    ),
-                    remediation=(
-                        "Correct the path requirement or select the matching RGL root."
-                    ),
+                    message=(f"The resolved GF path directory does not exist: {candidate}."),
+                    remediation=("Correct the path requirement or select the matching RGL root."),
                 )
             )
             continue
@@ -903,19 +879,26 @@ def _resolve_gf_path_part(
             resolved = language_paths.rgl_source_root
         elif text == "rgl_root":
             resolved = language_paths.rgl_root
-        elif (
-            candidate.parts
-            and candidate.parts[0].casefold() == _STANDARD_SOURCE_ROOT_NAME
-        ):
+        elif candidate.parts and candidate.parts[0].casefold() == _STANDARD_SOURCE_ROOT_NAME:
             resolved = (language_paths.rgl_root / candidate).resolve(strict=False)
         else:
-            resolved = (
-                language_paths.rgl_source_root / candidate
-            ).resolve(strict=False)
+            resolved = (language_paths.rgl_source_root / candidate).resolve(strict=False)
 
-    if not resolved.is_relative_to(language_paths.rgl_root):
+    approved_roots = [language_paths.rgl_root]
+    if not language_paths.language_directory.is_relative_to(
+        language_paths.rgl_source_root
+    ):
+        # External project source root.  The probe deliberately adds only this
+        # bounded project source directory to GF-path requirements.
+        approved_roots.append(language_paths.language_directory.parent)
+
+    if not any(
+        resolved == root or resolved.is_relative_to(root)
+        for root in approved_roots
+    ):
         raise ValueError(
-            f"path escapes the approved RGL root: {resolved}"
+            "path escapes the approved RGL dependency root and external "
+            f"project source root: {resolved}"
         )
     return resolved
 
@@ -928,11 +911,7 @@ def _validate_output_separation(
     provided_value: object,
     issues: list[ConfigurationIssue],
 ) -> None:
-    overlaps = [
-        label
-        for label, root in protected_roots
-        if _paths_overlap(output_root, root)
-    ]
+    overlaps = [label for label, root in protected_roots if _paths_overlap(output_root, root)]
     if not overlaps:
         return
 
@@ -942,9 +921,7 @@ def _validate_output_separation(
             field_path="output_root",
             provided_value=provided_value,
             message=(
-                "The selected output root overlaps "
-                + " and ".join(overlaps)
-                + f": {output_root}."
+                "The selected output root overlaps " + " and ".join(overlaps) + f": {output_root}."
             ),
             remediation=(
                 "Select a writable output directory outside the resolved "
@@ -971,11 +948,7 @@ def _profile_root_value(
     request: ConfigurationResolutionRequest,
 ) -> object:
     profile = getattr(request, "validation_profile", None)
-    candidate = (
-        getattr(profile, "profile_root", None)
-        if profile is not None
-        else None
-    )
+    candidate = getattr(profile, "profile_root", None) if profile is not None else None
     if candidate is None:
         legacy_project = getattr(request, "project", None)
         candidate = getattr(legacy_project, "project_root", None)
@@ -989,7 +962,7 @@ def _optional_profile_root(
     if candidate is None:
         return None
 
-    root = _normalize_machine_path(cast(str | os.PathLike[str], candidate))
+    root = _normalize_machine_path(cast("str | os.PathLike[str]", candidate))
     if not root.is_dir():
         raise ValueError(f"profile root does not exist: {root}")
     return root
@@ -1012,9 +985,7 @@ def _construct_resolved_environment(
         "validation_profile_root": language_paths.profile_root,
         # Legacy model compatibility. The value is only a structural adapter;
         # it is not treated as startup or language authority.
-        "project_root": (
-            language_paths.profile_root or language_paths.language_directory
-        ),
+        "project_root": (language_paths.profile_root or language_paths.language_directory),
     }
     return _construct_dataclass(ResolvedEnvironment, values)
 
@@ -1027,9 +998,7 @@ def _construct_dataclass(
         accepted = {field.name for field in fields(cls)}
     else:
         accepted = set(inspect.signature(cls).parameters)
-    return cls(
-        **{name: value for name, value in values.items() if name in accepted}
-    )
+    return cls(**{name: value for name, value in values.items() if name in accepted})
 
 
 def _provenance(
@@ -1080,15 +1049,21 @@ def _nested_attr(obj: object, path: str, *, default: object) -> object:
     return current
 
 
+def _optional_machine_path(value: object, field_name: str) -> Path | None:
+    if value is None:
+        return None
+    if not isinstance(value, (str, os.PathLike)):
+        raise TypeError(f"{field_name} must be path-like")
+    return _normalize_machine_path(value)
+
+
 def _normalize_machine_path(
     value: str | os.PathLike[str],
 ) -> Path:
     text = _path_text(value)
 
     if any(pattern.search(text) for pattern in _ENV_REFERENCE_PATTERNS):
-        raise ValueError(
-            "inline environment-variable references are not permitted"
-        )
+        raise ValueError("inline environment-variable references are not permitted")
 
     path = Path(text).expanduser()
     if not path.is_absolute():
@@ -1126,18 +1101,12 @@ def _is_usable_output_root(path: Path) -> bool:
 
 def _is_gf_executable(path: Path) -> bool:
     return (
-        path.is_file()
-        and path.name.casefold() in _GF_EXECUTABLE_NAMES
-        and os.access(path, os.X_OK)
+        path.is_file() and path.name.casefold() in _GF_EXECUTABLE_NAMES and os.access(path, os.X_OK)
     )
 
 
 def _paths_overlap(left: Path, right: Path) -> bool:
-    return (
-        _same_path(left, right)
-        or left.is_relative_to(right)
-        or right.is_relative_to(left)
-    )
+    return _same_path(left, right) or left.is_relative_to(right) or right.is_relative_to(left)
 
 
 def _same_path(left: Path, right: Path) -> bool:
@@ -1192,9 +1161,7 @@ def _merge_provenance(
         for record in group:
             merged[record.field_path] = record
 
-    return tuple(
-        sorted(merged.values(), key=lambda record: record.field_path)
-    )
+    return tuple(sorted(merged.values(), key=lambda record: record.field_path))
 
 
 def _issue(
@@ -1235,10 +1202,7 @@ def _error(
 
 
 def _error_count(issues: Sequence[ConfigurationIssue]) -> int:
-    return sum(
-        issue.severity is IssueSeverity.ERROR
-        for issue in issues
-    )
+    return sum(issue.severity is IssueSeverity.ERROR for issue in issues)
 
 
 def _has_errors(issues: Sequence[ConfigurationIssue]) -> bool:
@@ -1282,13 +1246,9 @@ def _optional_value(
 
 def _require_string(name: str, value: object) -> str:
     if not isinstance(value, str):
-        raise TypeError(
-            f"environment variable {name!r} must contain a string"
-        )
+        raise TypeError(f"environment variable {name!r} must contain a string")
     if "\x00" in value:
-        raise ValueError(
-            f"environment variable {name!r} must not contain a NUL character"
-        )
+        raise ValueError(f"environment variable {name!r} must not contain a NUL character")
     return value
 
 

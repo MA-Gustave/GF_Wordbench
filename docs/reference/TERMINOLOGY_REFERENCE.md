@@ -10,10 +10,25 @@
 **Related diagnostic reference:** `docs/reference/DIAGNOSTIC_KINDS.md`  
 **Related schema reference:** `docs/reference/SCHEMA_INDEX.md`  
 **Reference version:** `1.1.0`  
-**Last reviewed:** `2026-07-24`
+**Last reviewed:** 2026-08-05
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
 ## 1. Purpose
 
 This document is the compact canonical terminology reference for GF Wordbench.
@@ -46,7 +61,7 @@ The core rule is:
 - Human-facing prose may use natural grammar, but machine values remain exact.
 - A deprecated term may appear only in migration, compatibility or historical context.
 - A term that changes schema or contract meaning requires coordinated review.
-- Project-specific linguistic terminology belongs in `project/docs/`.
+- Project-specific linguistic terminology belongs in `<validation-profile-root>/docs/`.
 
 ---
 
@@ -81,29 +96,15 @@ templates/
 
 ### Workspace
 
-The local GF Wordbench working boundary containing the reusable framework, exactly one active project, configuration context and run outputs.
-
-A workspace does not contain a registry of several active projects.
+The local GF Wordbench framework and execution boundary. A workspace may open different language paths over time, but each ordinary session and run has exactly one resolved language context.
 
 ### Active project
 
-The one GF language project configured in the current workspace.
-
-Canonical location:
-
-```text
-project/
-```
+Deprecated runtime term. Use **resolved language context** for the selected language and **validation profile** for optional policy.
 
 ### Project template
 
-The reusable generic project structure copied when creating a new active project.
-
-Canonical location:
-
-```text
-templates/project/
-```
+Deprecated name for the reusable validation-profile template. Canonical location: `templates/validation-profile/`.
 
 ### `gf-portfolio`
 
@@ -144,33 +145,15 @@ bootstrap
 
 ### Active language
 
-The language configured by the active project.
-
-The framework itself is language-neutral.
+The language represented by the current `ResolvedLanguageContext`.
 
 ### Project identity
 
-The authoritative set of facts identifying the active project.
-
-Primary owner:
-
-```text
-project/project.toml
-```
+Deprecated term. Use **resolved language identity**, owned by `ResolvedLanguageContext` and derived from the selected source.
 
 ### Project asset
 
-A maintained, reviewed project-owned input.
-
-Examples:
-
-```text
-project/project.toml
-project/docs/
-project/validation/scenarios/
-project/validation/inputs/
-project/validation/gold/
-```
+Legacy term for assets under an old root `project/` layout. Current policy assets are **validation-profile assets** under the explicitly loaded profile root.
 
 ### Source file
 
@@ -190,11 +173,7 @@ Framework-wide and local execution configuration used to construct a run.
 
 ### Project configuration
 
-Project facts and validation policy persisted in:
-
-```text
-project/project.toml
-```
+Deprecated combined authority. Current configuration is composed from resolved language facts, optional validation-profile policy, environment/tool configuration, application state and the run request.
 
 ### Application state
 
@@ -214,7 +193,7 @@ Typed framework/application defaults and environment-derived configuration.
 
 ### `RunConfig`
 
-Complete immutable or effectively immutable configuration required to execute one non-interactive audit for one active project and one normative language target.
+Complete immutable or effectively immutable configuration required to execute one non-interactive audit for one resolved language context and one normative language target.
 
 ### Configuration builder
 
@@ -232,7 +211,7 @@ Local paths should not become portable project identity.
 
 ### Project-relative path
 
-A path resolved against the active project root.
+Legacy path category for old `project/` layouts. Current paths are source-relative, profile-relative or run-relative.
 
 ### Run-relative path
 
@@ -248,11 +227,11 @@ A path resolved against the GF Wordbench repository root.
 
 ### Audit
 
-One GF Wordbench validation execution for one active project and one normative language target.
+One GF Wordbench validation execution for one resolved language context and one normative language target.
 
 ### Run
 
-A single persisted audit instance with one run ID, one run directory, one active project identity and one normative language target.
+A single persisted audit instance with one run ID, one run directory, one resolved language identity and one normative language target.
 
 ### Normative language target
 
@@ -911,14 +890,14 @@ Recommended form:
 
 ### Scenario registry
 
-Required and optional scenario lists in `project/project.toml`.
+Required and optional scenario declarations supplied by an explicit validation profile or scenario-capable request.
 
 ### Scenario file
 
 Canonical script:
 
 ```text
-project/validation/scenarios/<scenario-id>.gfs
+<validation-profile-root>/validation/scenarios/<scenario-id>.gfs
 ```
 
 ### Required scenario
@@ -961,7 +940,7 @@ Inline or project-owned data consumed by a scenario.
 Reviewed file under:
 
 ```text
-project/validation/inputs/
+<validation-profile-root>/validation/inputs/
 ```
 
 ### Scenario assertion
@@ -1077,7 +1056,7 @@ Reviewed project-owned expected normalized output.
 Canonical location:
 
 ```text
-project/validation/gold/<scenario-id>.gold
+<validation-profile-root>/validation/gold/<scenario-id>.gold
 ```
 
 ### Gold-backed scenario
@@ -1560,7 +1539,7 @@ MAJOR.MINOR.PATCH
 
 ### Project version
 
-Independent semantic version of the active-language project.
+Independent semantic version of the selected language and its optional validation profile.
 
 ### Template version
 
@@ -1915,7 +1894,7 @@ The following terms are ambiguous or non-canonical unless explicitly qualified.
 | expected output | gold, when referring to project acceptance |
 | current output | actual normalized output |
 | build | compilation, PGF build or package build |
-| project | active project, workspace or project template |
+| project | selected language context, workspace or project template |
 | repository copy | workspace |
 | multi-project Wordbench | `gf-portfolio` for cross-workspace aggregation |
 | language | active language, GF language module or concrete language |
@@ -1992,7 +1971,7 @@ Invalid legacy assumption.
 Canonical authority:
 
 ```text
-project/project.toml
+<validation-profile-root>/project.toml
 ```
 
 ---

@@ -4,6 +4,5 @@ from __future__ import annotations
 
 from gf_wordbench.entrypoints.cli.main import main
 
-
 if __name__ == "__main__":
     raise SystemExit(main())

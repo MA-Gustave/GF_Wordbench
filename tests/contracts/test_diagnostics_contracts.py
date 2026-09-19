@@ -4,16 +4,26 @@ from __future__ import annotations
 
 import ast
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, MutableMapping
 from dataclasses import FrozenInstanceError, dataclass, fields, is_dataclass
 from importlib import import_module
 from pathlib import Path
-from types import ModuleType, MappingProxyType
-from typing import Final, cast
+from types import MappingProxyType, ModuleType
+from typing import Final, Protocol, cast
 
 import pytest
 
 pytestmark = pytest.mark.contract
+
+
+class _DataclassParamsLike(Protocol):
+    frozen: bool
+
+
+class _PatternMatchView(Protocol):
+    pattern_id: str
+    raw_excerpt: str
+    references: tuple[str, ...]
 
 _DIAGNOSTICS_PACKAGE: Final[str] = "gf_wordbench.diagnostics"
 _CANONICAL_PATTERN_ID: Final[str] = (
@@ -22,23 +32,15 @@ _CANONICAL_PATTERN_ID: Final[str] = (
 )
 _PUBLIC_FACADE_OWNERS: Final[Mapping[str, str]] = MappingProxyType(
     {
-        "DEFAULT_TOP_ERROR_POLICY": (
-            "gf_wordbench.diagnostics.classification.top_errors"
-        ),
+        "DEFAULT_TOP_ERROR_POLICY": ("gf_wordbench.diagnostics.classification.top_errors"),
         "DiagnosticEvidence": "gf_wordbench.diagnostics.models",
         "DiagnosticParseResult": "gf_wordbench.diagnostics.models",
         "DiagnosticRecord": "gf_wordbench.diagnostics.models",
-        "TopErrorAggregationPolicy": (
-            "gf_wordbench.diagnostics.classification.top_errors"
-        ),
+        "TopErrorAggregationPolicy": ("gf_wordbench.diagnostics.classification.top_errors"),
         "TopErrorCandidate": "gf_wordbench.diagnostics.classification.top_errors",
         "bucket_top_errors": "gf_wordbench.diagnostics.classification.top_errors",
-        "classify_file_results": (
-            "gf_wordbench.diagnostics.classification.service"
-        ),
-        "classify_scenario_results": (
-            "gf_wordbench.diagnostics.classification.service"
-        ),
+        "classify_file_results": ("gf_wordbench.diagnostics.classification.service"),
+        "classify_scenario_results": ("gf_wordbench.diagnostics.classification.service"),
         "parse_diagnostics": "gf_wordbench.diagnostics.parsing.service",
     }
 )
@@ -82,9 +84,7 @@ class _Registry:
 
     def __init__(self, pattern_ids: tuple[str, ...]) -> None:
         self._pattern_ids = pattern_ids
-        self._definitions = {
-            pattern_id: _Definition(pattern_id) for pattern_id in pattern_ids
-        }
+        self._definitions = {pattern_id: _Definition(pattern_id) for pattern_id in pattern_ids}
 
     def get(self, pattern_id: str) -> _Definition:
         return self._definitions[pattern_id]
@@ -179,7 +179,7 @@ def _import_all_modules() -> Mapping[str, ModuleType]:
     for module_name in _diagnostic_module_names():
         try:
             modules[module_name] = import_module(module_name)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             failures.append(f"{module_name}: {type(exc).__name__}: {exc}")
     assert not failures, "diagnostic runtime modules must all import:\n" + "\n".join(failures)
     return MappingProxyType(modules)
@@ -189,7 +189,7 @@ def _public_names(module: ModuleType) -> tuple[str, ...]:
     value = getattr(module, "__all__", None)
     assert isinstance(value, (tuple, list)), f"{module.__name__} must define literal __all__"
     assert all(isinstance(name, str) for name in value)
-    return tuple(cast(Iterable[str], value))
+    return tuple(cast("Iterable[str]", value))
 
 
 def _pattern_id_literals(path: Path) -> Iterator[tuple[str, str]]:
@@ -214,28 +214,31 @@ def _pattern_id_literals(path: Path) -> Iterator[tuple[str, str]]:
                     yield f"{statement.name}.{target.id}", member.value.value
 
 
-def _make_match(*, line: int = 7):
+def _make_match(*, line: int = 7) -> _PatternMatchView:
     models = import_module("gf_wordbench.diagnostics.models")
-    return models.PatternMatch(
-        pattern_id="DP-GFTYPE-001",
-        operation="compile_module",
-        stream="stderr",
-        start_line=line,
-        end_line=line,
-        severity="error",
-        error_kind="TYPE",
-        message="Expected type X but inferred Y",
-        detail="module=Demo",
-        source_path=Path("grammar/Demo.gf"),
-        source_module="Demo",
-        line=line,
-        column=3,
-        pattern_version="1.0",
-        confidence="high",
-        raw_excerpt="grammar/Demo.gf:7:3: Expected type X but inferred Y",
-        continuation_lines=("Expected: X", "Inferred: Y"),
-        references=("stderr.log#L7", "grammar/Demo.gf#L7"),
-        metadata={"origin": "gf", "nested": {"stable": True}},
+    return cast(
+        "_PatternMatchView",
+        models.PatternMatch(
+            pattern_id="DP-GFTYPE-001",
+            operation="compile_module",
+            stream="stderr",
+            start_line=line,
+            end_line=line,
+            severity="error",
+            error_kind="TYPE",
+            message="Expected type X but inferred Y",
+            detail="module=Demo",
+            source_path=Path("grammar/Demo.gf"),
+            source_module="Demo",
+            line=line,
+            column=3,
+            pattern_version="1.0",
+            confidence="high",
+            raw_excerpt="grammar/Demo.gf:7:3: Expected type X but inferred Y",
+            continuation_lines=("Expected: X", "Inferred: Y"),
+            references=("stderr.log#L7", "grammar/Demo.gf#L7"),
+            metadata={"origin": "gf", "nested": {"stable": True}},
+        ),
     )
 
 
@@ -249,7 +252,7 @@ def test_empty_package_initializers_are_narrow(module_name: str) -> None:
     module = import_module(module_name)
     assert _public_names(module) == ()
 
-    module_path = Path(cast(str, module.__file__))
+    module_path = Path(cast("str", module.__file__))
     imports = tuple(_import_targets(module_path))
     assert imports in ((), ("__future__",))
 
@@ -257,9 +260,7 @@ def test_empty_package_initializers_are_narrow(module_name: str) -> None:
 def test_parsing_initializer_is_a_single_symbol_facade() -> None:
     module = import_module("gf_wordbench.diagnostics.parsing")
     assert _public_names(module) == ("parse_diagnostics",)
-    assert module.parse_diagnostics.__module__ == (
-        "gf_wordbench.diagnostics.parsing.service"
-    )
+    assert module.parse_diagnostics.__module__ == ("gf_wordbench.diagnostics.parsing.service")
 
 
 def test_public_facade_exports_exact_registered_contracts() -> None:
@@ -297,9 +298,7 @@ def test_public_contract_definitions_have_one_owner() -> None:
         for symbol, modules in owners.items()
         if len(set(modules)) > 1
     }
-    assert duplicates == {}, "public diagnostic symbols have multiple owners: " + repr(
-        duplicates
-    )
+    assert duplicates == {}, "public diagnostic symbols have multiple owners: " + repr(duplicates)
 
 
 def test_vocabulary_types_are_defined_only_by_vocabulary_owner() -> None:
@@ -308,9 +307,7 @@ def test_vocabulary_types_are_defined_only_by_vocabulary_owner() -> None:
         if path.name == "vocabulary.py":
             continue
         definitions = {
-            statement.name
-            for statement in _tree(path).body
-            if isinstance(statement, ast.ClassDef)
+            statement.name for statement in _tree(path).body if isinstance(statement, ast.ClassDef)
         }
         for name in sorted(definitions.intersection(_VOCABULARY_OWNED_TYPES)):
             violations.append(f"{_module_name(path)} redefines {name}")
@@ -342,9 +339,7 @@ def test_production_diagnostics_use_no_wildcard_imports() -> None:
     violations: list[str] = []
     for path in _diagnostic_module_paths():
         for node in ast.walk(_tree(path)):
-            if isinstance(node, ast.ImportFrom) and any(
-                alias.name == "*" for alias in node.names
-            ):
+            if isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):
                 violations.append(f"{_module_name(path)}:{node.lineno}")
     assert violations == []
 
@@ -359,7 +354,7 @@ def test_all_public_dataclasses_are_frozen_and_slotted() -> None:
                 continue
             if value.__module__ != module_name:
                 continue
-            parameters = value.__dataclass_params__
+            parameters = cast(_DataclassParamsLike, getattr(value, "__dataclass_params__"))
             if not parameters.frozen:
                 violations.append(f"{module_name}.{name} is not frozen")
             if "__dict__" in value.__dict__ or "__slots__" not in value.__dict__:
@@ -470,9 +465,7 @@ def test_port_registry_contract_is_structural_and_deterministic() -> None:
     )
 
     with pytest.raises(ValueError, match="duplicates"):
-        ports.validate_pattern_registry(
-            _Registry(("DP-PROC-001", "DP-PROC-001"))
-        )
+        ports.validate_pattern_registry(_Registry(("DP-PROC-001", "DP-PROC-001")))
 
 
 def test_evidence_is_immutable_and_preserves_separate_stream_identity(
@@ -502,7 +495,11 @@ def test_evidence_is_immutable_and_preserves_separate_stream_identity(
     assert isinstance(evidence.metadata["nested"], MappingProxyType)
 
     with pytest.raises(TypeError):
-        evidence.metadata["run_id"] = "changed"
+        mutable_metadata = cast(
+            MutableMapping[str, object],
+            evidence.metadata,
+        )
+        mutable_metadata["run_id"] = "changed"
     with pytest.raises(FrozenInstanceError):
         evidence.exit_code = 0
 
@@ -593,8 +590,7 @@ def test_public_dataclass_fields_use_immutable_collection_contracts() -> None:
             for field in fields(value):
                 annotation = str(field.type).replace("typing.", "")
                 if any(
-                    annotation == mutable
-                    or annotation.startswith(f"{mutable}[")
+                    annotation == mutable or annotation.startswith(f"{mutable}[")
                     for mutable in mutable_annotations
                 ):
                     violations.append(f"{module_name}.{name}.{field.name}: {annotation}")

@@ -1,27 +1,39 @@
 """Deterministic per-file and per-scenario Markdown detail reports."""
 
 from __future__ import annotations
-import hashlib, os, re
+
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+import hashlib
+import os
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Final
 from urllib.parse import quote
+
 from gf_wordbench.infrastructure.atomic_io import atomic_write_text
 from gf_wordbench.kernel.statuses import ValidationStatus
+
 if TYPE_CHECKING:
     from gf_wordbench.runs.models.results import FileResult, RunResult
     from gf_wordbench.validation.scenarios.models import ScenarioResult
 _MAX_ROWS: Final = 1_000
 _MAX_TEXT: Final = 32_000
 _UNSAFE_KEY: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9._-]+")
-_RESERVED: Final[frozenset[str]] = frozenset({"CON", "PRN", "AUX", "NUL"} | {f"COM{i}" for i in range(1, 10)} | {f"LPT{i}" for i in range(1, 10)})
+_RESERVED: Final[frozenset[str]] = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)}
+)
+
+
 @dataclass(frozen=True, slots=True)
 class DetailWritePolicy:
     keep_ok_details: bool = False
     max_rows: int = _MAX_ROWS
     max_text_characters: int = _MAX_TEXT
+
     def __post_init__(self) -> None:
         if type(self.keep_ok_details) is not bool:
             raise TypeError("keep_ok_details must be a boolean")
@@ -29,36 +41,44 @@ class DetailWritePolicy:
             raise ValueError("max_rows must be a positive integer")
         if type(self.max_text_characters) is not int or self.max_text_characters < 1:
             raise ValueError("max_text_characters must be a positive integer")
+
+
 @dataclass(frozen=True, slots=True)
 class DetailArtifact:
     subject_kind: str
     subject_id: str
     path: Path
+
+
 @dataclass(frozen=True, slots=True)
 class DetailWriteFailure:
     subject_kind: str
     subject_id: str
     message: str
+
+
 @dataclass(frozen=True, slots=True)
 class DetailWriteResult:
     artifacts: tuple[DetailArtifact, ...]
     skipped_subjects: tuple[str, ...]
     failures: tuple[DetailWriteFailure, ...]
+
     @property
     def ok(self) -> bool:
         return not self.failures
+
     @property
     def paths(self) -> tuple[Path, ...]:
         return tuple(item.path for item in self.artifacts)
+
+
 def write_detail_reports(
     run_result: RunResult,
     *,
     details_root: Path | None = None,
     policy: DetailWritePolicy | None = None,
 ) -> DetailWriteResult:
-    effective = policy or DetailWritePolicy(
-        keep_ok_details=_configured_keep_ok_details(run_result)
-    )
+    effective = policy or DetailWritePolicy(keep_ok_details=_configured_keep_ok_details(run_result))
     root = _details_root(run_result, details_root)
     run_root = _run_root(run_result)
     artifacts: list[DetailArtifact] = []
@@ -107,6 +127,8 @@ def write_detail_reports(
     skipped.sort(key=str.casefold)
     failures.sort(key=lambda item: (item.subject_kind, item.subject_id.casefold()))
     return DetailWriteResult(tuple(artifacts), tuple(skipped), tuple(failures))
+
+
 def write_file_detail(
     file_result: FileResult,
     *,
@@ -132,6 +154,8 @@ def write_file_detail(
         root=root,
         role="file detail report",
     )
+
+
 def write_scenario_detail(
     scenario_result: ScenarioResult,
     *,
@@ -141,11 +165,7 @@ def write_scenario_detail(
 ) -> Path:
     effective = policy or DetailWritePolicy()
     root, owned_root = _validated_roots(details_root, run_root)
-    destination = (
-        root
-        / "scenarios"
-        / f"{scenario_detail_key(_scenario_id(scenario_result))}.md"
-    )
+    destination = root / "scenarios" / f"{scenario_detail_key(_scenario_id(scenario_result))}.md"
     text = render_scenario_detail(
         scenario_result,
         report_path=destination,
@@ -161,6 +181,8 @@ def write_scenario_detail(
         root=root,
         role="scenario detail report",
     )
+
+
 def render_file_detail(
     file_result: FileResult,
     *,
@@ -209,10 +231,10 @@ def render_file_detail(
         report,
         root,
     )
-    lines += _artifact_section(
-        getattr(file_result, "artifacts", ()), report, root, effective
-    )
+    lines += _artifact_section(getattr(file_result, "artifacts", ()), report, root, effective)
     return _finish(lines)
+
+
 def render_scenario_detail(
     scenario_result: ScenarioResult,
     *,
@@ -261,9 +283,7 @@ def render_scenario_detail(
         ]
     lines += _blockers(getattr(scenario_result, "blocked_by", ()))
     lines += _sections(getattr(scenario_result, "sections", ()), effective)
-    lines += _assertions(
-        getattr(scenario_result, "assertions", ()), report, root, effective
-    )
+    lines += _assertions(getattr(scenario_result, "assertions", ()), report, root, effective)
     lines += _gold_section(scenario_result, report, root)
     lines += _evidence_section(
         (
@@ -276,16 +296,20 @@ def render_scenario_detail(
         report,
         root,
     )
-    lines += _artifact_section(
-        getattr(scenario_result, "artifacts", ()), report, root, effective
-    )
+    lines += _artifact_section(getattr(scenario_result, "artifacts", ()), report, root, effective)
     return _finish(lines)
+
+
 def file_detail_key(file_identity: str | Path) -> str:
     identity = _required(_portable(file_identity), "file_identity")
     return _safe_key(identity, Path(identity).name)
+
+
 def scenario_detail_key(scenario_id: str) -> str:
     identity = _required(scenario_id, "scenario_id")
     return _safe_key(identity, identity)
+
+
 def _compile_section(summary: object, policy: DetailWritePolicy) -> list[str]:
     if summary is None:
         return ["## Compilation", "", "No compilation summary is available.", ""]
@@ -306,6 +330,8 @@ def _compile_section(summary: object, policy: DetailWritePolicy) -> list[str]:
     if detail:
         lines += ["### Diagnostic Detail", "", _block(detail), ""]
     return lines
+
+
 def _field_table(
     title: str,
     value: object,
@@ -316,11 +342,10 @@ def _field_table(
         return [f"## {title}", "", "None.", ""]
     shown = fields[: policy.max_rows]
     lines = [f"## {title}", "", "| Field | Value |", "|---|---:|"]
-    lines += [
-        f"| {_cell(_human(name))} | {_cell(_text(item))} |"
-        for name, item in shown
-    ]
+    lines += [f"| {_cell(_human(name))} | {_cell(_text(item))} |" for name, item in shown]
     return lines + [""] + _notice(len(shown), len(fields))
+
+
 def _sections(items: Iterable[object], policy: DetailWritePolicy) -> list[str]:
     values = tuple(items)
     if not values:
@@ -340,12 +365,19 @@ def _sections(items: Iterable[object], policy: DetailWritePolicy) -> list[str]:
                     _cell(_attr(item, "section_id", "id")),
                     _cell(_yes_no(bool(_attr(item, "completed", default=False)))),
                     _cell(_yes_no(bool(_attr(item, "required", default=False)))),
-                    _cell(_bounded(_text(_attr(item, "message", default="")), policy.max_text_characters) or "—"),
+                    _cell(
+                        _bounded(
+                            _text(_attr(item, "message", default="")), policy.max_text_characters
+                        )
+                        or "—"
+                    ),
                 )
             )
             + " |"
         )
     return lines + [""] + _notice(len(shown), len(values))
+
+
 def _assertions(
     items: Iterable[object],
     report: Path,
@@ -371,13 +403,20 @@ def _assertions(
                     _cell(_enum(_attr(item, "assertion_kind", "kind"))),
                     _cell(_enum(_attr(item, "status"))),
                     _cell(_text(_attr(item, "section_id", default="")) or "—"),
-                    _cell(_bounded(_text(_attr(item, "message", default="")), policy.max_text_characters) or "—"),
+                    _cell(
+                        _bounded(
+                            _text(_attr(item, "message", default="")), policy.max_text_characters
+                        )
+                        or "—"
+                    ),
                     _path_ref("evidence", _attr(item, "evidence_path", default=None), report, root),
                 )
             )
             + " |"
         )
     return lines + [""] + _notice(len(shown), len(values))
+
+
 def _gold_section(result: object, report: Path, root: Path) -> list[str]:
     gold = getattr(result, "gold_path", None)
     matched = getattr(result, "gold_match", None)
@@ -398,11 +437,15 @@ def _gold_section(result: object, report: Path, root: Path) -> list[str]:
         f"- Diff: {_path_ref('diff', getattr(result, 'gold_diff_path', None), report, root)}",
         "",
     ]
+
+
 def _blockers(items: Iterable[object]) -> list[str]:
     values = sorted({_text(item) for item in items if _text(item)}, key=str.casefold)
     if not values:
         return ["## Blockers", "", "None.", ""]
     return ["## Blockers", "", *(f"- {_code(item)}" for item in values), ""]
+
+
 def _evidence_section(
     items: Iterable[tuple[str, object]],
     report: Path,
@@ -417,6 +460,8 @@ def _evidence_section(
         ),
         "",
     ]
+
+
 def _artifact_section(
     items: Iterable[object],
     report: Path,
@@ -447,9 +492,13 @@ def _artifact_section(
             + " |"
         )
     return lines + [""] + _notice(len(shown), len(values))
+
+
 def _path_ref(label: str, value: object, report: Path, root: Path) -> str:
     if value in (None, ""):
         return "—"
+    if isinstance(value, bytes) or not isinstance(value, (str, os.PathLike)):
+        raise TypeError("path reference must be path-like text")
     path = Path(value)
     display = _portable(path)
     resolved = (path if path.is_absolute() else root / path).resolve(strict=False)
@@ -460,6 +509,8 @@ def _path_ref(label: str, value: object, report: Path, root: Path) -> str:
     relative = Path(os.path.relpath(resolved, report.parent)).as_posix()
     href = quote(relative, safe="/._-~")
     return f"[{_escape(label)}]({href}) — {_code(display)}"
+
+
 def _details_root(run_result: object, explicit: Path | None) -> Path:
     run_paths = getattr(run_result, "run_paths", None)
     candidate = explicit
@@ -472,6 +523,8 @@ def _details_root(run_result: object, explicit: Path | None) -> Path:
     root = _absolute(candidate, "details_root")
     require_owned = getattr(run_paths, "require_owned_path", None)
     return Path(require_owned(root)) if callable(require_owned) else root
+
+
 def _run_root(run_result: object) -> Path:
     run_paths = getattr(run_result, "run_paths", None)
     for name in ("run_dir", "run_root"):
@@ -479,33 +532,49 @@ def _run_root(run_result: object) -> Path:
         if value is not None:
             return _absolute(value, name)
     raise ValueError("RunPaths must provide run_dir or run_root")
+
+
 def _configured_keep_ok_details(run_result: object) -> bool:
     value = getattr(getattr(run_result, "run_config", None), "keep_ok_details", False)
     if type(value) is not bool:
         raise TypeError("RunConfig.keep_ok_details must be a boolean")
     return value
+
+
 def _validated_roots(details_root: Path, run_root: Path) -> tuple[Path, Path]:
     root = _absolute(details_root, "details_root")
     owned = _absolute(run_root, "run_root")
     if not _contained(root, owned):
         raise ValueError("details_root escapes run_root")
     return root, owned
+
+
 def _validated_report_paths(report: Path, run_root: Path) -> tuple[Path, Path]:
     report_path = _absolute(report, "report_path")
     root = _absolute(run_root, "run_root")
     if not _contained(report_path, root):
         raise ValueError("report_path escapes run_root")
     return report_path, root
+
+
 def _should_write(result: object, policy: DetailWritePolicy) -> bool:
     status = getattr(result, "status", None)
     text = _enum(status)
     return policy.keep_ok_details or text != ValidationStatus.OK.value
+
+
 def _subject_id(kind: str, result: object) -> str:
     return _file_id(result) if kind == "file" else _scenario_id(result)
+
+
 def _file_id(result: object) -> str:
     return _required(_portable(_attr(result, "file_path")), "file_path")
+
+
 def _scenario_id(result: object) -> str:
     return _required(_text(_attr(result, "scenario_id")), "scenario_id")
+
+
 def _safe_key(identity: str, preferred: str) -> str:
     name = _UNSAFE_KEY.sub("-", preferred.replace("\\", "/")).strip("-._ ")
     name = (name or "subject")[:96].rstrip(". ")
@@ -513,6 +582,8 @@ def _safe_key(identity: str, preferred: str) -> str:
         name = f"_{name}"
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
     return f"{name}--{digest}"
+
+
 def _fields(value: object) -> list[tuple[str, object]]:
     if value is None:
         return []
@@ -530,33 +601,55 @@ def _fields(value: object) -> list[tuple[str, object]]:
         and hasattr(value, name)
         and not callable(getattr(value, name))
     ]
+
+
 def _attr(value: object, *names: str, default: object = "") -> object:
     for name in names:
         if hasattr(value, name):
             return getattr(value, name)
     return default
+
+
 def _notice(shown: int, total: int) -> list[str]:
     return [] if shown >= total else [f"Showing {shown} of {total}.", ""]
+
+
 def _finish(lines: Sequence[str]) -> str:
     return "\n".join(lines).rstrip() + "\n"
+
+
 def _paragraph(value: str) -> str:
     return "  \n".join(_escape(line) for line in value.splitlines())
+
+
 def _block(value: str) -> str:
     return "\n".join(f"    {line}" for line in value.rstrip().splitlines())
+
+
 def _code(value: object) -> str:
     text = _text(value).replace("\r", " ").replace("\n", " ")
     longest = max((len(item) for item in re.findall(r"`+", text)), default=0)
     fence = "`" * (longest + 1)
     padding = " " if text.startswith("`") or text.endswith("`") else ""
     return f"{fence}{padding}{text}{padding}{fence}"
+
+
 def _escape(value: object) -> str:
     return re.sub(r"([\\`*_\[\]<>])", r"\\\1", _text(value))
+
+
 def _cell(value: object) -> str:
     return _escape(value).replace("|", r"\|").replace("\r", " ").replace("\n", " / ")
+
+
 def _portable(value: object) -> str:
     return "" if value is None else str(value).replace("\\", "/")
+
+
 def _enum(value: object) -> str:
     return _text(value.value) if isinstance(value, Enum) else _text(value)
+
+
 def _text(value: object) -> str:
     if value is None:
         return ""
@@ -567,33 +660,61 @@ def _text(value: object) -> str:
     if isinstance(value, Enum):
         return _text(value.value)
     return str(value)
+
+
 def _human(value: str) -> str:
     return value.replace("_", " ").replace("-", " ").title()
+
+
 def _yes_no(value: bool) -> str:
     return "Yes" if value else "No"
+
+
 def _duration(value: object) -> str:
     return f"{value / 1000:.3f} s" if type(value) is int and value > 0 else "0 s"
+
+
 def _bounded(value: str, limit: int) -> str:
     if len(value) <= limit:
         return value
     marker = " … [truncated; see raw evidence]"
     return value[: max(0, limit - len(marker))].rstrip() + marker[:limit]
+
+
 def _absolute(value: object, field: str) -> Path:
     if not isinstance(value, Path):
         raise TypeError(f"{field} must be pathlib.Path")
     if not value.is_absolute():
         raise ValueError(f"{field} must be absolute")
     return value.resolve(strict=False)
+
+
 def _contained(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
     except ValueError:
         return False
     return True
+
+
 def _required(value: object, field: str) -> str:
     if not isinstance(value, str):
         raise TypeError(f"{field} must be a string")
     if not value.strip() or "\x00" in value:
         raise ValueError(f"{field} must be non-empty and contain no NUL")
     return value
-__all__ = ("DetailArtifact", "DetailWriteFailure", "DetailWritePolicy", "DetailWriteResult", "file_detail_key", "render_file_detail", "render_scenario_detail", "scenario_detail_key", "write_detail_reports", "write_file_detail", "write_scenario_detail")
+
+
+__all__ = (
+    "DetailArtifact",
+    "DetailWriteFailure",
+    "DetailWritePolicy",
+    "DetailWriteResult",
+    "file_detail_key",
+    "render_file_detail",
+    "render_scenario_detail",
+    "scenario_detail_key",
+    "write_detail_reports",
+    "write_file_detail",
+    "write_scenario_detail",
+)

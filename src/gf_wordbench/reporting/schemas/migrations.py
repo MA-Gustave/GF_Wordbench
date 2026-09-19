@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
-import mimetypes
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum, unique
+import hashlib
+import mimetypes
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
@@ -126,9 +126,7 @@ _DEFAULT_ARTIFACTS: Final[Mapping[str, str]] = MappingProxyType(
         "pgf_dir": "artifacts/pgf",
     }
 )
-_MODE_ALIASES: Final[Mapping[str, str]] = MappingProxyType(
-    {"file": "quick", "all": "diagnostic"}
-)
+_MODE_ALIASES: Final[Mapping[str, str]] = MappingProxyType({"file": "quick", "all": "diagnostic"})
 _CANONICAL_MODES: Final = frozenset({"quick", "checkpoint", "release", "diagnostic"})
 _CANONICAL_STATUSES: Final = frozenset({"OK", "FAIL", "ERROR", "SKIPPED"})
 _CANONICAL_OVERALL_STATUSES: Final = frozenset({"OK", "FAIL", "ERROR"})
@@ -238,7 +236,7 @@ class DocumentMigration:
 
 
 class _Recorder:
-    __slots__ = ("warnings", "losses")
+    __slots__ = ("losses", "warnings")
 
     def __init__(self) -> None:
         self.warnings: list[str] = []
@@ -391,7 +389,10 @@ def migrate_summary_document(
     canonical: JsonObject = {
         "schema_id": RUN_SUMMARY_SCHEMA_ID,
         "schema_version": RUN_SUMMARY_SCHEMA_VERSION,
-        "producer": {"name": PRODUCER_NAME, "version": _nonempty_text(producer_version, "producer_version")},
+        "producer": {
+            "name": PRODUCER_NAME,
+            "version": _nonempty_text(producer_version, "producer_version"),
+        },
         "metadata": metadata,
         "totals": totals,
         "artifacts": artifacts,
@@ -401,7 +402,9 @@ def migrate_summary_document(
         "top_errors": top_errors,
     }
 
-    unknown = sorted(set(source).difference(_SUMMARY_ROOT_FIELDS).difference(_legacy_summary_root_fields()))
+    unknown = sorted(
+        set(source).difference(_SUMMARY_ROOT_FIELDS).difference(_legacy_summary_root_fields())
+    )
     if unknown:
         recorder.warn("Ignored undocumented legacy root fields: " + ", ".join(unknown) + ".")
 
@@ -419,7 +422,9 @@ def migrate_summary_document(
     return DocumentMigration(
         result=_result(
             migration_id=SUMMARY_MIGRATION_ID,
-            source_schema="gf-audit.run-summary" if shape is SummaryShape.FLAT_UNVERSIONED else "unversioned.run-summary",
+            source_schema="gf-audit.run-summary"
+            if shape is SummaryShape.FLAT_UNVERSIONED
+            else "unversioned.run-summary",
             source_version="0",
             target_schema=RUN_SUMMARY_SCHEMA_ID,
             target_version=RUN_SUMMARY_SCHEMA_VERSION,
@@ -436,9 +441,23 @@ def migrate_summary_document(
 
 def migrate_summary_v0_to_v1(
     document: Mapping[str, object],
-    **kwargs: object,
+    *,
+    source_path: str = "",
+    destination_path: str | None = None,
+    run_root: Path | None = None,
+    project_root: Path | None = None,
+    producer_version: str = __version__,
+    strict: bool = False,
 ) -> Mapping[str, JsonValue]:
-    migrated = migrate_summary_document(document, **kwargs)
+    migrated = migrate_summary_document(
+        document,
+        source_path=source_path,
+        destination_path=destination_path,
+        run_root=run_root,
+        project_root=project_root,
+        producer_version=producer_version,
+        strict=strict,
+    )
     if migrated.document is None:
         detail = "; ".join(migrated.result.losses) or "summary migration was blocked"
         raise ValueError(detail)
@@ -462,9 +481,8 @@ def migrate_manifest_document(
 ) -> DocumentMigration:
     if document is not None:
         _require_mapping(document, "document")
-        if (
-            document.get("schema_id") == ARTIFACT_MANIFEST_SCHEMA_ID
-            and _supported_v1(document.get("schema_version"))
+        if document.get("schema_id") == ARTIFACT_MANIFEST_SCHEMA_ID and _supported_v1(
+            document.get("schema_version")
         ):
             copied = _json_object(document, "document")
             return DocumentMigration(
@@ -490,14 +508,21 @@ def migrate_manifest_document(
     source = {} if document is None else _json_object(document, "document")
 
     paths = _manifest_candidate_paths(source, artifact_paths, recorder)
-    required = frozenset(_portable_run_path(value, run_root=root, recorder=recorder, field="required path") for value in required_paths)
+    required = frozenset(
+        _portable_run_path(value, run_root=root, recorder=recorder, field="required path")
+        for value in required_paths
+    )
     roles = _normalized_string_map(role_by_path or {}, root, recorder, "role_by_path")
-    producers = _normalized_string_map(created_by_by_path or {}, root, recorder, "created_by_by_path")
+    producers = _normalized_string_map(
+        created_by_by_path or {}, root, recorder, "created_by_by_path"
+    )
 
     entries: list[JsonValue] = []
     seen: set[str] = set()
     for raw_path in paths:
-        relative = _portable_run_path(raw_path, run_root=root, recorder=recorder, field="artifact path")
+        relative = _portable_run_path(
+            raw_path, run_root=root, recorder=recorder, field="artifact path"
+        )
         if not relative:
             continue
         if relative == "manifest.json":
@@ -527,7 +552,9 @@ def migrate_manifest_document(
         required_value = relative in required
         if legacy_entry is not None and isinstance(legacy_entry.get("required"), bool):
             required_value = bool(legacy_entry["required"])
-        created_by = producers.get(relative) or _entry_text(legacy_entry, "created_by") or "migration"
+        created_by = (
+            producers.get(relative) or _entry_text(legacy_entry, "created_by") or "migration"
+        )
 
         entries.append(
             {
@@ -546,7 +573,10 @@ def migrate_manifest_document(
     canonical: JsonObject = {
         "schema_id": ARTIFACT_MANIFEST_SCHEMA_ID,
         "schema_version": ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        "producer": {"name": PRODUCER_NAME, "version": _nonempty_text(producer_version, "producer_version")},
+        "producer": {
+            "name": PRODUCER_NAME,
+            "version": _nonempty_text(producer_version, "producer_version"),
+        },
         "run_id": canonical_run_id,
         "generated_at": timestamp,
         "hash_algorithm": "sha256",
@@ -584,9 +614,33 @@ def migrate_manifest_document(
 
 def migrate_manifest_v0_to_v1(
     document: Mapping[str, object] | None,
-    **kwargs: object,
+    *,
+    run_root: Path,
+    run_id: str,
+    source_path: str = "",
+    destination_path: str | None = None,
+    generated_at: datetime | str | None = None,
+    producer_version: str = __version__,
+    artifact_paths: Iterable[str] | None = None,
+    required_paths: Iterable[str] = (),
+    role_by_path: Mapping[str, str] | None = None,
+    created_by_by_path: Mapping[str, str] | None = None,
+    strict: bool = True,
 ) -> Mapping[str, JsonValue]:
-    migrated = migrate_manifest_document(document, **kwargs)
+    migrated = migrate_manifest_document(
+        document,
+        run_root=run_root,
+        run_id=run_id,
+        source_path=source_path,
+        destination_path=destination_path,
+        generated_at=generated_at,
+        producer_version=producer_version,
+        artifact_paths=artifact_paths,
+        required_paths=required_paths,
+        role_by_path=role_by_path,
+        created_by_by_path=created_by_by_path,
+        strict=strict,
+    )
     if migrated.document is None:
         detail = "; ".join(migrated.result.losses) or "manifest migration was blocked"
         raise ValueError(detail)
@@ -688,11 +742,6 @@ def _metadata_value(
     if field in {"duration_ms", "timeout_sec", "max_files"}:
         default = 0
         integer = _coerce_nonnegative_int(value, field, recorder, default=default)
-        if field == "duration_ms" and value is None:
-            started = None
-            finished = None
-            if started is not None and finished is not None:
-                return max(0, int((finished - started).total_seconds() * 1000))
         return integer
     if field in {
         "skip_version_probe",
@@ -713,11 +762,13 @@ def _metadata_value(
     if field == "run_dir":
         if value is None and run_root is not None:
             return run_root.as_posix()
-        return "" if value is None else _path_text(value).replace("\\", "/") if _path_text(value) else ""
+        run_dir_text = _path_text(value)
+        return "" if run_dir_text is None else run_dir_text.replace("\\", "/")
     if field == "project_root":
         if value is None and project_root is not None:
             return project_root.as_posix()
-        return "" if value is None else _path_text(value).replace("\\", "/") if _path_text(value) else ""
+        project_root_text = _path_text(value)
+        return "" if project_root_text is None else project_root_text.replace("\\", "/")
     if field in {"rgl_root", "gf_executable", "output_root"}:
         text = _path_text(value)
         return "" if text is None else text.replace("\\", "/")
@@ -735,7 +786,12 @@ def _migrate_totals(
     recorder: _Recorder,
     strict: bool,
 ) -> JsonObject:
-    aliases = {"ok": "files_ok", "fail": "files_fail", "error": "files_error", "skipped": "files_skipped"}
+    aliases = {
+        "ok": "files_ok",
+        "fail": "files_fail",
+        "error": "files_error",
+        "skipped": "files_skipped",
+    }
     values: dict[str, int] = {}
     for field in _TOTAL_FIELDS:
         raw = source.get(field)
@@ -747,15 +803,26 @@ def _migrate_totals(
         values[field] = _coerce_nonnegative_int(raw, field, recorder, default=0)
 
     if values["files_included"] == 0:
-        values["files_included"] = sum(values[name] for name in ("files_ok", "files_fail", "files_error", "files_skipped"))
+        values["files_included"] = sum(
+            values[name] for name in ("files_ok", "files_fail", "files_error", "files_skipped")
+        )
     if values["files_seen"] == 0:
         values["files_seen"] = values["files_included"] + values["files_excluded"]
     if values["scenarios_seen"] == 0:
-        values["scenarios_seen"] = sum(values[name] for name in ("scenarios_ok", "scenarios_fail", "scenarios_error", "scenarios_skipped"))
+        values["scenarios_seen"] = sum(
+            values[name]
+            for name in ("scenarios_ok", "scenarios_fail", "scenarios_error", "scenarios_skipped")
+        )
 
     overall_raw = source.get("overall_status", source.get("status"))
     if overall_raw is None:
-        overall = "ERROR" if values["files_error"] or values["scenarios_error"] else "FAIL" if values["files_fail"] or values["scenarios_fail"] or values["required_scenario_fail"] else "OK"
+        overall = (
+            "ERROR"
+            if values["files_error"] or values["scenarios_error"]
+            else "FAIL"
+            if values["files_fail"] or values["scenarios_fail"] or values["required_scenario_fail"]
+            else "OK"
+        )
         recorder.warn("Derived overall_status from migrated status counts.")
     else:
         overall = str(overall_raw).upper()
@@ -785,14 +852,21 @@ def _migrate_artifact_map(
     for field in _ARTIFACT_FIELDS:
         value = source.get(field)
         if value is None:
-            alias = next((old for old, new in aliases.items() if new == field and old in source), None)
+            alias = next(
+                (old for old, new in aliases.items() if new == field and old in source), None
+            )
             if alias is not None:
                 value = source[alias]
                 recorder.warn(f"Mapped legacy artifact field {alias!r} to {field!r}.")
         if value is None:
             result[field] = _DEFAULT_ARTIFACTS[field]
             continue
-        result[field] = _portable_run_path(value, run_root=run_root, recorder=recorder, field=f"artifacts.{field}") or None
+        result[field] = (
+            _portable_run_path(
+                value, run_root=run_root, recorder=recorder, field=f"artifacts.{field}"
+            )
+            or None
+        )
     return result
 
 
@@ -811,18 +885,27 @@ def _migrate_file_results(
             recorder.lose(f"file_results[{index}] is not an object.")
             continue
         item = dict(raw)
-        file_path = _portable_project_path(item.get("file_path", item.get("path", "")), project_root, recorder, f"file_results[{index}].file_path")
+        file_path = _portable_project_path(
+            item.get("file_path", item.get("path", "")),
+            project_root,
+            recorder,
+            f"file_results[{index}].file_path",
+        )
         status = _canonical_status(item.get("status"), recorder, f"file_results[{index}].status")
-        diagnostic_class = _diagnostic_class(item.get("diagnostic_class"), status, bool(item.get("is_direct")), recorder)
+        diagnostic_class = _diagnostic_class(
+            item.get("diagnostic_class"), status, bool(item.get("is_direct")), recorder
+        )
         blocked_by_raw = item.get("blocked_by", [])
         blocked_by = []
-        for blocker in _list_or_empty(blocked_by_raw, f"file_results[{index}].blocked_by", recorder):
+        for blocker in _list_or_empty(
+            blocked_by_raw, f"file_results[{index}].blocked_by", recorder
+        ):
             normalized = _portable_project_path(blocker, project_root, recorder, "blocked_by")
             if normalized and normalized not in blocked_by:
                 blocked_by.append(normalized)
         scan_counts_source = item.get("scan_counts", {})
         scan_counts_map = scan_counts_source if isinstance(scan_counts_source, Mapping) else {}
-        scan_counts = {
+        scan_counts: dict[str, JsonValue] = {
             name: _coerce_nonnegative_int(scan_counts_map.get(name), name, recorder, default=0)
             for name in (
                 "single_slash_eq",
@@ -833,17 +916,27 @@ def _migrate_file_results(
                 "trailing_spaces",
             )
         }
+        blocked_by_value: list[JsonValue] = [value for value in blocked_by]
         fingerprint = _migrate_fingerprint(item.get("fingerprint", item), recorder, index)
-        compile_summary = _migrate_compile_summary(item.get("compile_summary", item.get("compile", {})), run_root, recorder, index)
-        scan_log_path = _portable_run_path(item.get("scan_log_path", ""), run_root=run_root, recorder=recorder, field="scan_log_path")
+        compile_summary = _migrate_compile_summary(
+            item.get("compile_summary", item.get("compile", {})), run_root, recorder, index
+        )
+        scan_log_path = _portable_run_path(
+            item.get("scan_log_path", ""),
+            run_root=run_root,
+            recorder=recorder,
+            field="scan_log_path",
+        )
         result.append(
             {
                 "file_path": file_path,
-                "module_name": str(item.get("module_name", PurePosixPath(file_path).stem if file_path else "")),
+                "module_name": str(
+                    item.get("module_name", PurePosixPath(file_path).stem if file_path else "")
+                ),
                 "status": status,
                 "diagnostic_class": diagnostic_class,
                 "is_direct": diagnostic_class == "direct",
-                "blocked_by": blocked_by,
+                "blocked_by": blocked_by_value,
                 "scan_counts": scan_counts,
                 "fingerprint": fingerprint,
                 "compile_summary": compile_summary,
@@ -860,25 +953,33 @@ def _migrate_fingerprint(value: object, recorder: _Recorder, index: int) -> Json
     digest = source.get("hash")
     if algorithm == "sha256" and isinstance(digest, str) and _SHA256_RE.fullmatch(digest.lower()):
         return {
-            "size_bytes": _coerce_nonnegative_int(source.get("size_bytes"), "size_bytes", recorder, default=0),
+            "size_bytes": _coerce_nonnegative_int(
+                source.get("size_bytes"), "size_bytes", recorder, default=0
+            ),
             "hash_algorithm": "sha256",
             "hash": digest.lower(),
             "last_modified_utc": _optional_timestamp(source.get("last_modified_utc"), recorder),
         }
     legacy = source.get("sha1_short")
     if legacy is not None:
-        recorder.lose(f"file_results[{index}] contains sha1_short, which cannot be converted to SHA-256.")
+        recorder.lose(
+            f"file_results[{index}] contains sha1_short, which cannot be converted to SHA-256."
+        )
     elif source:
         recorder.lose(f"file_results[{index}] has no recoverable SHA-256 fingerprint.")
     return {
-        "size_bytes": _coerce_nonnegative_int(source.get("size_bytes"), "size_bytes", recorder, default=0),
+        "size_bytes": _coerce_nonnegative_int(
+            source.get("size_bytes"), "size_bytes", recorder, default=0
+        ),
         "hash_algorithm": None,
         "hash": None,
         "last_modified_utc": _optional_timestamp(source.get("last_modified_utc"), recorder),
     }
 
 
-def _migrate_compile_summary(value: object, run_root: Path | None, recorder: _Recorder, index: int) -> JsonObject:
+def _migrate_compile_summary(
+    value: object, run_root: Path | None, recorder: _Recorder, index: int
+) -> JsonObject:
     source = value if isinstance(value, Mapping) else {}
     error_kind = str(source.get("error_kind", "OK")).upper()
     if error_kind not in _CANONICAL_ERROR_KINDS:
@@ -891,12 +992,18 @@ def _migrate_compile_summary(value: object, run_root: Path | None, recorder: _Re
     return {
         "exit_code": exit_code,
         "timed_out": _coerce_bool(source.get("timed_out"), "timed_out", recorder, default=False),
-        "duration_ms": _coerce_nonnegative_int(source.get("duration_ms"), "duration_ms", recorder, default=0),
+        "duration_ms": _coerce_nonnegative_int(
+            source.get("duration_ms"), "duration_ms", recorder, default=0
+        ),
         "error_kind": error_kind,
         "first_error": str(source.get("first_error", "")),
         "error_detail": str(source.get("error_detail", "")),
-        "stdout_path": _portable_run_path(source.get("stdout_path", ""), run_root=run_root, recorder=recorder, field="stdout_path"),
-        "stderr_path": _portable_run_path(source.get("stderr_path", ""), run_root=run_root, recorder=recorder, field="stderr_path"),
+        "stdout_path": _portable_run_path(
+            source.get("stdout_path", ""), run_root=run_root, recorder=recorder, field="stdout_path"
+        ),
+        "stderr_path": _portable_run_path(
+            source.get("stderr_path", ""), run_root=run_root, recorder=recorder, field="stderr_path"
+        ),
     }
 
 
@@ -909,7 +1016,9 @@ def _migrate_scenario_results(
     strict: bool,
 ) -> list[JsonValue]:
     if value is None:
-        recorder.warn("Legacy summary predates scenario results; scenario_results was set to an empty array.")
+        recorder.warn(
+            "Legacy summary predates scenario results; scenario_results was set to an empty array."
+        )
         recorder.lose("Historical run contains no scenario evidence.")
         return []
     items = _list_or_empty(value, "scenario_results", recorder)
@@ -919,14 +1028,20 @@ def _migrate_scenario_results(
             recorder.lose(f"scenario_results[{index}] is not an object.")
             continue
         item = dict(raw)
-        status = _canonical_status(item.get("status"), recorder, f"scenario_results[{index}].status")
+        status = _canonical_status(
+            item.get("status"), recorder, f"scenario_results[{index}].status"
+        )
         diagnostic_class = _diagnostic_class(item.get("diagnostic_class"), status, False, recorder)
         error_kind = str(item.get("error_kind", "OK")).upper()
         if error_kind not in _CANONICAL_ERROR_KINDS:
             error_kind = "OTHER"
-            recorder.warn(f"Unknown scenario error kind in scenario_results[{index}] was mapped to OTHER.")
+            recorder.warn(
+                f"Unknown scenario error kind in scenario_results[{index}] was mapped to OTHER."
+            )
         command_raw = item.get("command", [])
-        command = [str(part) for part in command_raw] if isinstance(command_raw, (list, tuple)) else []
+        command: list[JsonValue] = (
+            [str(part) for part in command_raw] if isinstance(command_raw, (list, tuple)) else []
+        )
         exit_code = item.get("exit_code")
         if exit_code is not None and type(exit_code) is not int:
             exit_code = None
@@ -934,19 +1049,48 @@ def _migrate_scenario_results(
         result.append(
             {
                 "scenario_id": str(item.get("scenario_id", item.get("id", ""))),
-                "script_path": _portable_project_path(item.get("script_path", ""), project_root, recorder, "script_path"),
+                "script_path": _portable_project_path(
+                    item.get("script_path", ""), project_root, recorder, "script_path"
+                ),
                 "required": _coerce_bool(item.get("required"), "required", recorder, default=False),
                 "status": status,
                 "command": command,
-                "working_directory": (_path_text(item.get("working_directory")) or "").replace("\\", "/"),
+                "working_directory": (_path_text(item.get("working_directory")) or "").replace(
+                    "\\", "/"
+                ),
                 "exit_code": exit_code,
-                "timed_out": _coerce_bool(item.get("timed_out"), "timed_out", recorder, default=False),
-                "duration_ms": _coerce_nonnegative_int(item.get("duration_ms"), "duration_ms", recorder, default=0),
-                "stdout_path": _portable_run_path(item.get("stdout_path", ""), run_root=run_root, recorder=recorder, field="stdout_path"),
-                "stderr_path": _portable_run_path(item.get("stderr_path", ""), run_root=run_root, recorder=recorder, field="stderr_path"),
-                "normalized_output_path": _portable_run_path(item.get("normalized_output_path", ""), run_root=run_root, recorder=recorder, field="normalized_output_path"),
-                "gold_path": None if item.get("gold_path") in (None, "") else _portable_project_path(item.get("gold_path"), project_root, recorder, "gold_path"),
-                "gold_match": item.get("gold_match") if isinstance(item.get("gold_match"), bool) else None,
+                "timed_out": _coerce_bool(
+                    item.get("timed_out"), "timed_out", recorder, default=False
+                ),
+                "duration_ms": _coerce_nonnegative_int(
+                    item.get("duration_ms"), "duration_ms", recorder, default=0
+                ),
+                "stdout_path": _portable_run_path(
+                    item.get("stdout_path", ""),
+                    run_root=run_root,
+                    recorder=recorder,
+                    field="stdout_path",
+                ),
+                "stderr_path": _portable_run_path(
+                    item.get("stderr_path", ""),
+                    run_root=run_root,
+                    recorder=recorder,
+                    field="stderr_path",
+                ),
+                "normalized_output_path": _portable_run_path(
+                    item.get("normalized_output_path", ""),
+                    run_root=run_root,
+                    recorder=recorder,
+                    field="normalized_output_path",
+                ),
+                "gold_path": None
+                if item.get("gold_path") in (None, "")
+                else _portable_project_path(
+                    item.get("gold_path"), project_root, recorder, "gold_path"
+                ),
+                "gold_match": item.get("gold_match")
+                if isinstance(item.get("gold_match"), bool)
+                else None,
                 "diagnostic_class": diagnostic_class,
                 "error_kind": error_kind,
                 "primary_message": str(item.get("primary_message", "")),
@@ -1001,7 +1145,9 @@ def _migrate_top_errors(value: object, *, recorder: _Recorder, strict: bool) -> 
                 recorder.lose(f"top_errors[{index}] is not an object.")
                 continue
             message = raw.get("message")
-            count = _coerce_nonnegative_int(raw.get("count"), "top error count", recorder, default=0)
+            count = _coerce_nonnegative_int(
+                raw.get("count"), "top error count", recorder, default=0
+            )
             if not isinstance(message, str) or not message.strip() or count <= 0:
                 recorder.lose(f"top_errors[{index}] is invalid.")
                 continue
@@ -1010,8 +1156,18 @@ def _migrate_top_errors(value: object, *, recorder: _Recorder, strict: bool) -> 
                 error_kind = "OTHER"
                 recorder.warn(f"Unknown top-error kind at index {index} was mapped to OTHER.")
             result.append({"error_kind": error_kind, "message": message, "count": count})
-    result.sort(key=lambda item: (-int(item["count"]), str(item["message"]).casefold()) if isinstance(item, dict) else (0, ""))
+    result.sort(key=_top_error_sort_key)
     return result
+
+
+def _top_error_sort_key(item: JsonValue) -> tuple[int, str]:
+    if not isinstance(item, dict):
+        return (0, "")
+    count = item.get("count")
+    message = item.get("message")
+    numeric_count = count if isinstance(count, int) and not isinstance(count, bool) else 0
+    message_text = message if isinstance(message, str) else ""
+    return (-numeric_count, message_text.casefold())
 
 
 def _merge_flat_metadata(source: Mapping[str, object], recorder: _Recorder) -> Mapping[str, object]:
@@ -1049,13 +1205,24 @@ def _merge_flat_artifacts(source: Mapping[str, object]) -> Mapping[str, object]:
     run_paths = source.get("run_paths")
     if isinstance(run_paths, Mapping):
         artifacts.update(run_paths)
-    for field in (*_ARTIFACT_FIELDS, "ai_brief_path", "ai_ready_path", "summary_path", "summary_md_path", "top_errors_path", "manifest_path", "master_log_path"):
+    for field in (
+        *_ARTIFACT_FIELDS,
+        "ai_brief_path",
+        "ai_ready_path",
+        "summary_path",
+        "summary_md_path",
+        "top_errors_path",
+        "manifest_path",
+        "master_log_path",
+    ):
         if field in source:
             artifacts[field] = source[field]
     return artifacts
 
 
-def _manifest_candidate_paths(source: Mapping[str, object], explicit: Iterable[str] | None, recorder: _Recorder) -> tuple[str, ...]:
+def _manifest_candidate_paths(
+    source: Mapping[str, object], explicit: Iterable[str] | None, recorder: _Recorder
+) -> tuple[str, ...]:
     if explicit is not None:
         if isinstance(explicit, (str, bytes)):
             raise TypeError("artifact_paths must be an iterable of paths")
@@ -1078,7 +1245,9 @@ def _manifest_candidate_paths(source: Mapping[str, object], explicit: Iterable[s
     return ()
 
 
-def _legacy_manifest_entry(source: Mapping[str, object], raw_path: str, relative: str) -> Mapping[str, object] | None:
+def _legacy_manifest_entry(
+    source: Mapping[str, object], raw_path: str, relative: str
+) -> Mapping[str, object] | None:
     raw = source.get("artifacts", source.get("files", []))
     if isinstance(raw, Mapping):
         value = raw.get(raw_path, raw.get(relative))
@@ -1090,7 +1259,9 @@ def _legacy_manifest_entry(source: Mapping[str, object], raw_path: str, relative
     return None
 
 
-def _normalized_string_map(values: Mapping[str, str], root: Path, recorder: _Recorder, field: str) -> Mapping[str, str]:
+def _normalized_string_map(
+    values: Mapping[str, str], root: Path, recorder: _Recorder, field: str
+) -> Mapping[str, str]:
     result: dict[str, str] = {}
     for key, value in values.items():
         if not isinstance(key, str) or not isinstance(value, str) or not value.strip():
@@ -1101,14 +1272,18 @@ def _normalized_string_map(values: Mapping[str, str], root: Path, recorder: _Rec
     return result
 
 
-def _portable_run_path(value: object, *, run_root: Path | None, recorder: _Recorder, field: str) -> str:
+def _portable_run_path(
+    value: object, *, run_root: Path | None, recorder: _Recorder, field: str
+) -> str:
     text = _path_text(value)
     if text is None or text == "":
         return ""
     normalized = text.replace("\\", "/")
     if _is_absolute_text(normalized):
         if run_root is None:
-            recorder.lose(f"Absolute {field} cannot be made run-relative without run_root: {text!r}.")
+            recorder.lose(
+                f"Absolute {field} cannot be made run-relative without run_root: {text!r}."
+            )
             return ""
         candidate = Path(text).resolve(strict=False)
         if not _is_relative_to(candidate, run_root):
@@ -1119,14 +1294,18 @@ def _portable_run_path(value: object, *, run_root: Path | None, recorder: _Recor
     return _validate_relative_path(normalized, recorder, field)
 
 
-def _portable_project_path(value: object, project_root: Path | None, recorder: _Recorder, field: str) -> str:
+def _portable_project_path(
+    value: object, project_root: Path | None, recorder: _Recorder, field: str
+) -> str:
     text = _path_text(value)
     if text is None or text == "":
         return ""
     normalized = text.replace("\\", "/")
     if _is_absolute_text(normalized):
         if project_root is None:
-            recorder.lose(f"Absolute {field} cannot be made project-relative without project_root: {text!r}.")
+            recorder.lose(
+                f"Absolute {field} cannot be made project-relative without project_root: {text!r}."
+            )
             return ""
         candidate = Path(text).resolve(strict=False)
         if not _is_relative_to(candidate, project_root):
@@ -1139,7 +1318,12 @@ def _portable_project_path(value: object, project_root: Path | None, recorder: _
 
 def _validate_relative_path(value: str, recorder: _Recorder, field: str) -> str:
     path = PurePosixPath(value)
-    if value in {"", "."} or value.startswith("/") or _DRIVE_RE.match(value) or any(part == ".." for part in path.parts):
+    if (
+        value in {"", "."}
+        or value.startswith("/")
+        or _DRIVE_RE.match(value)
+        or any(part == ".." for part in path.parts)
+    ):
         recorder.lose(f"Invalid portable relative {field}: {value!r}.")
         return ""
     return path.as_posix()
@@ -1460,13 +1644,13 @@ migrate_artifact_manifest = migrate_manifest_document
 __all__ = (
     "ARTIFACT_MANIFEST_SCHEMA_ID",
     "ARTIFACT_MANIFEST_SCHEMA_VERSION",
-    "DocumentMigration",
     "MANIFEST_MIGRATION_ID",
-    "MigrationResult",
-    "MigrationStatus",
     "RUN_SUMMARY_SCHEMA_ID",
     "RUN_SUMMARY_SCHEMA_VERSION",
     "SUMMARY_MIGRATION_ID",
+    "DocumentMigration",
+    "MigrationResult",
+    "MigrationStatus",
     "SummaryShape",
     "detect_summary_shape",
     "migrate_artifact_manifest",

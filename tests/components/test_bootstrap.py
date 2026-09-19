@@ -37,7 +37,7 @@ from gf_wordbench.projects.models import (
 from gf_wordbench.projects.schema import validate_project_schema
 from gf_wordbench.runs.paths import allocate_run_paths
 from gf_wordbench.runs.planner import resolve_execution_plan
-from gf_wordbench.runs.preflight import PreflightFilesystem, preflight_run
+from gf_wordbench.runs.preflight import preflight_run
 
 _RUN_ID: Final[str] = "20260725_120000"
 _FORBIDDEN_RUN_PATH_LITERALS: Final[frozenset[str]] = frozenset(
@@ -61,8 +61,6 @@ _FORBIDDEN_RUN_PATH_LITERALS: Final[frozenset[str]] = frozenset(
 )
 
 
-
-
 class _FakeWindow:
     def __init__(self) -> None:
         self.show_count = 0
@@ -74,14 +72,39 @@ class _FakeWindow:
 class _FakeGuiRuntime:
     def __init__(self) -> None:
         self._window = _FakeWindow()
+        self.start_count = 0
         self.shutdown_count = 0
 
     @property
     def window(self) -> _FakeWindow:
         return self._window
 
+    def start(self) -> None:
+        self.start_count += 1
+
     def shutdown(self) -> None:
         self.shutdown_count += 1
+
+
+class _FakeStartupServices:
+    def __init__(
+        self,
+        *,
+        probe_language: object,
+        build_main_runtime: object,
+        load_last_selected_path: object,
+        remember_selected_path: object | None = None,
+        clear_last_selected_path: object | None = None,
+        configure_environment: object | None = None,
+        error_from_exception: object | None = None,
+    ) -> None:
+        self.probe_language = probe_language
+        self.build_main_runtime = build_main_runtime
+        self.load_last_selected_path = load_last_selected_path
+        self.remember_selected_path = remember_selected_path
+        self.clear_last_selected_path = clear_last_selected_path
+        self.configure_environment = configure_environment
+        self.error_from_exception = error_from_exception
 
 
 class _WindowWithoutShow:
@@ -93,7 +116,28 @@ class _RuntimeWithInvalidWindow:
     def window(self) -> _WindowWithoutShow:
         return _WindowWithoutShow()
 
+    def start(self) -> None:
+        return None
+
     def shutdown(self) -> None:
+        return None
+
+
+class _RuntimeWithoutStart:
+    @property
+    def window(self) -> _FakeWindow:
+        return _FakeWindow()
+
+    def shutdown(self) -> None:
+        return None
+
+
+class _RuntimeWithoutShutdown:
+    @property
+    def window(self) -> _FakeWindow:
+        return _FakeWindow()
+
+    def start(self) -> None:
         return None
 
 
@@ -104,14 +148,8 @@ class _FakeFilesystem:
         missing: frozenset[Path] = frozenset(),
         unwritable: frozenset[Path] = frozenset(),
     ) -> None:
-        self._missing = {
-            path.resolve(strict=False)
-            for path in missing
-        }
-        self._unwritable = {
-            path.resolve(strict=False)
-            for path in unwritable
-        }
+        self._missing = {path.resolve(strict=False) for path in missing}
+        self._unwritable = {path.resolve(strict=False) for path in unwritable}
 
     def normalize(self, path: Path) -> Path:
         if not isinstance(path, Path):
@@ -128,10 +166,11 @@ class _FakeFilesystem:
         normalized = self.normalize(path)
         if normalized in self._missing:
             return False
-        return (
-            normalized.name in {"project.toml", "gf", "gf.exe"}
-            or normalized.suffix.casefold() in {".gf", ".gfs"}
-        )
+        return normalized.name in {
+            "project.toml",
+            "gf",
+            "gf.exe",
+        } or normalized.suffix.casefold() in {".gf", ".gfs"}
 
     def is_directory(self, path: Path) -> bool:
         normalized = self.normalize(path)
@@ -145,10 +184,7 @@ class _FakeFilesystem:
 
     def is_writable_directory(self, path: Path) -> bool:
         normalized = self.normalize(path)
-        return (
-            self.is_directory(normalized)
-            and normalized not in self._unwritable
-        )
+        return self.is_directory(normalized) and normalized not in self._unwritable
 
 
 def _bootstrap_source_path() -> Path:
@@ -171,7 +207,7 @@ def _project_document(
         "project": {
             "id": "example-language",
             "name": "Example Language",
-            "language_code": "eng",
+            "language_code": "tst",
             "root": ".",
         },
         "sources": {
@@ -185,8 +221,8 @@ def _project_document(
             "minimum_version": "",
         },
         "modules": {
-            "entrypoints": ["GrammarEng.gf"],
-            "checkpoints": ["MorphoEng.gf"],
+            "entrypoints": ["GrammarTst.gf"],
+            "checkpoints": ["MorphoTst.gf"],
         },
         "validation": {
             "required_scenarios": ["load"],
@@ -205,7 +241,7 @@ def _project_config(tmp_path: Path) -> ProjectConfig:
         identity=ProjectIdentity(
             id=ProjectId("example-language"),
             name="Example Language",
-            language_code="eng",
+            language_code="tst",
             root=Path("."),
         ),
         sources=SourceConfig(
@@ -219,8 +255,8 @@ def _project_config(tmp_path: Path) -> ProjectConfig:
             minimum_version="",
         ),
         modules=ModuleTargets(
-            entrypoints=(Path("GrammarEng.gf"),),
-            checkpoints=(Path("MorphoEng.gf"),),
+            entrypoints=(Path("GrammarTst.gf"),),
+            checkpoints=(Path("MorphoTst.gf"),),
         ),
         validation=ValidationPolicy(
             required_scenarios=(ScenarioId("load"),),
@@ -252,22 +288,14 @@ def _run_config(
 
     if selected_checkpoints is None:
         selected_checkpoints = (
-            (source_root / "MorphoEng.gf",)
-            if mode is ValidationMode.CHECKPOINT
-            else ()
+            (source_root / "MorphoTst.gf",) if mode is ValidationMode.CHECKPOINT else ()
         )
     if selected_entrypoints is None:
         selected_entrypoints = (
-            (source_root / "GrammarEng.gf",)
-            if mode is ValidationMode.RELEASE
-            else ()
+            (source_root / "GrammarTst.gf",) if mode is ValidationMode.RELEASE else ()
         )
     if selected_scenarios is None:
-        selected_scenarios = (
-            ("load",)
-            if mode is ValidationMode.RELEASE
-            else ()
-        )
+        selected_scenarios = ("load",) if mode is ValidationMode.RELEASE else ()
 
     return RunConfig(
         project=project,
@@ -296,14 +324,13 @@ def _run_config(
 
 
 def _issue_codes(result: object) -> frozenset[str]:
-    issues = getattr(result, "issues")
-    return frozenset(issue.code for issue in issues)
+    issues = getattr(result, "issues", None)
+    assert isinstance(issues, tuple)
+    return frozenset(str(getattr(issue, "code")) for issue in issues)
 
 
 def test_bootstrap_module_exists_at_the_canonical_path() -> None:
-    assert _bootstrap_source_path().as_posix().endswith(
-        "/gf_wordbench/bootstrap.py"
-    )
+    assert _bootstrap_source_path().as_posix().endswith("/gf_wordbench/bootstrap.py")
 
 
 def test_bootstrap_import_has_no_mutation_process_or_ui_side_effects(
@@ -363,15 +390,21 @@ assert not any(
         env={
             **os.environ,
             "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPATH": os.pathsep.join(
+                filter(
+                    None,
+                    (
+                        str(_bootstrap_source_path().parent.parent),
+                        os.environ.get("PYTHONPATH", ""),
+                    ),
+                )
+            ),
         },
         capture_output=True,
         text=True,
         check=False,
     )
-    assert completed.returncode == 0, (
-        f"stdout:\n{completed.stdout}\n"
-        f"stderr:\n{completed.stderr}"
-    )
+    assert completed.returncode == 0, f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
 
 
 def test_bootstrap_does_not_eagerly_import_the_gui_startup_module() -> None:
@@ -399,53 +432,67 @@ def test_bootstrap_does_not_reconstruct_run_owned_paths() -> None:
     literals = {
         node.value
         for node in ast.walk(tree)
-        if isinstance(node, ast.Constant)
-        and isinstance(node.value, str)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
     }
     assert literals.isdisjoint(_FORBIDDEN_RUN_PATH_LITERALS)
 
 
-def test_bootstrap_exposes_the_gui_runtime_factory() -> None:
+def test_bootstrap_exposes_only_the_canonical_gui_startup_factory() -> None:
     module = importlib.import_module("gf_wordbench.bootstrap")
     exported = tuple(getattr(module, "__all__", ()))
+
     assert "GuiRuntime" in exported
     assert "GuiRuntimeFactory" in exported
-    assert "build_gui_runtime" in exported
-    assert callable(getattr(module, "build_gui_runtime", None))
+    assert "build_gui_startup_runtime" in exported
+    assert callable(getattr(module, "build_gui_startup_runtime", None))
+    assert "build_gui_runtime" not in exported
+    assert not hasattr(module, "build_gui_runtime")
+    assert "build_startup_gui_runtime" not in exported
+    assert not hasattr(module, "build_startup_gui_runtime")
 
 
-def test_build_gui_runtime_uses_the_injected_factory() -> None:
+def test_build_gui_startup_runtime_uses_the_injected_factory() -> None:
     module = importlib.import_module("gf_wordbench.bootstrap")
     application = object()
+    argv = ("--safe-mode",)
     runtime = _FakeGuiRuntime()
-    received: list[object] = []
+    received: list[tuple[object, tuple[str, ...]]] = []
 
-    def factory(value: object) -> _FakeGuiRuntime:
-        received.append(value)
+    def factory(
+        value: object,
+        arguments: tuple[str, ...],
+    ) -> _FakeGuiRuntime:
+        received.append((value, arguments))
         return runtime
 
-    built = module.build_gui_runtime(
+    built = module.build_gui_startup_runtime(
         application,
+        argv,
         runtime_factory=factory,
     )
 
     assert built is runtime
-    assert received == [application]
+    assert received == [(application, argv)]
+    assert runtime.start_count == 0
     assert runtime.window.show_count == 0
     assert runtime.shutdown_count == 0
 
 
-def test_build_gui_runtime_uses_the_lazy_startup_factory(
+def test_build_gui_startup_runtime_uses_the_lazy_startup_factory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = importlib.import_module("gf_wordbench.bootstrap")
     startup_module = ModuleType("gf_wordbench.entrypoints.gui.startup")
     application = object()
+    argv = ("--diagnostic",)
     runtime = _FakeGuiRuntime()
-    received: list[object] = []
+    received: list[tuple[object, tuple[str, ...]]] = []
 
-    def build_startup_runtime(value: object) -> _FakeGuiRuntime:
-        received.append(value)
+    def build_startup_runtime(
+        value: object,
+        arguments: tuple[str, ...] = (),
+    ) -> _FakeGuiRuntime:
+        received.append((value, arguments))
         return runtime
 
     startup_module.build_startup_runtime = build_startup_runtime  # type: ignore[attr-defined]
@@ -455,36 +502,55 @@ def test_build_gui_runtime_uses_the_lazy_startup_factory(
         startup_module,
     )
 
-    built = module.build_gui_runtime(application)
+    built = module.build_gui_startup_runtime(application, argv)
 
     assert built is runtime
-    assert received == [application]
+    assert received == [(application, argv)]
+    assert runtime.start_count == 0
+    assert runtime.window.show_count == 0
+    assert runtime.shutdown_count == 0
 
 
-def test_build_gui_runtime_rejects_invalid_arguments() -> None:
+def test_build_gui_startup_runtime_rejects_invalid_arguments() -> None:
     module = importlib.import_module("gf_wordbench.bootstrap")
 
     with pytest.raises(TypeError, match="application must not be None"):
-        module.build_gui_runtime(None)
+        module.build_gui_startup_runtime(None)
+
+    with pytest.raises(TypeError, match="argv must be a tuple of strings"):
+        module.build_gui_startup_runtime(object(), ["--invalid"])
+
+    with pytest.raises(TypeError, match=r"argv\[1\] must be a string"):
+        module.build_gui_startup_runtime(object(), ("--valid", 1))
 
     with pytest.raises(TypeError, match="runtime_factory must be callable"):
-        module.build_gui_runtime(object(), runtime_factory=object())
+        module.build_gui_startup_runtime(
+            object(),
+            runtime_factory=object(),
+        )
 
 
-def test_build_gui_runtime_wraps_unstructured_factory_failure() -> None:
+def test_build_gui_startup_runtime_wraps_unstructured_factory_failure() -> None:
     module = importlib.import_module("gf_wordbench.bootstrap")
 
-    def factory(_application: object) -> _FakeGuiRuntime:
+    def factory(
+        _application: object,
+        _argv: tuple[str, ...],
+    ) -> _FakeGuiRuntime:
         raise RuntimeError("factory failed")
 
     with pytest.raises(ConfigurationError) as captured:
-        module.build_gui_runtime(object(), runtime_factory=factory)
+        module.build_gui_startup_runtime(
+            object(),
+            runtime_factory=factory,
+        )
 
     assert captured.value.code == "GF-WB-CONFIG-910"
-    assert "factory failed" in str(captured.value)
+    assert str(captured.value) == "GF Wordbench GUI startup runtime could not be composed."
+    assert "factory failed" in captured.value.detail
 
 
-def test_build_gui_runtime_preserves_structured_factory_failure() -> None:
+def test_build_gui_startup_runtime_preserves_structured_factory_failure() -> None:
     module = importlib.import_module("gf_wordbench.bootstrap")
     expected = ConfigurationError(
         "selection cancelled",
@@ -493,34 +559,58 @@ def test_build_gui_runtime_preserves_structured_factory_failure() -> None:
         operation="test",
     )
 
-    def factory(_application: object) -> _FakeGuiRuntime:
+    def factory(
+        _application: object,
+        _argv: tuple[str, ...],
+    ) -> _FakeGuiRuntime:
         raise expected
 
     with pytest.raises(ConfigurationError) as captured:
-        module.build_gui_runtime(object(), runtime_factory=factory)
+        module.build_gui_startup_runtime(
+            object(),
+            runtime_factory=factory,
+        )
 
     assert captured.value is expected
 
 
-def test_build_gui_runtime_rejects_an_invalid_runtime_contract() -> None:
+def test_build_gui_startup_runtime_rejects_an_invalid_runtime_contract() -> None:
     module = importlib.import_module("gf_wordbench.bootstrap")
 
     with pytest.raises(ContractViolationError) as captured:
-        module.build_gui_runtime(
+        module.build_gui_startup_runtime(
             object(),
-            runtime_factory=lambda _application: object(),
+            runtime_factory=lambda _application, _argv: object(),
         )
 
     assert captured.value.code == "GF-WB-CONTRACT-003"
 
 
-def test_build_gui_runtime_requires_window_show() -> None:
+@pytest.mark.parametrize(
+    "runtime",
+    (_RuntimeWithoutStart(), _RuntimeWithoutShutdown()),
+)
+def test_build_gui_startup_runtime_requires_lifecycle_methods(
+    runtime: object,
+) -> None:
     module = importlib.import_module("gf_wordbench.bootstrap")
 
     with pytest.raises(ContractViolationError) as captured:
-        module.build_gui_runtime(
+        module.build_gui_startup_runtime(
             object(),
-            runtime_factory=lambda _application: _RuntimeWithInvalidWindow(),
+            runtime_factory=lambda _application, _argv: runtime,
+        )
+
+    assert captured.value.code == "GF-WB-CONTRACT-003"
+
+
+def test_build_gui_startup_runtime_requires_window_show() -> None:
+    module = importlib.import_module("gf_wordbench.bootstrap")
+
+    with pytest.raises(ContractViolationError) as captured:
+        module.build_gui_startup_runtime(
+            object(),
+            runtime_factory=(lambda _application, _argv: _RuntimeWithInvalidWindow()),
         )
 
     assert captured.value.code == "GF-WB-CONTRACT-004"
@@ -531,6 +621,7 @@ def test_lazy_startup_factory_must_be_callable(
 ) -> None:
     module = importlib.import_module("gf_wordbench.bootstrap")
     startup_module = ModuleType("gf_wordbench.entrypoints.gui.startup")
+    startup_module.StartupServices = _FakeStartupServices  # type: ignore[attr-defined]
     startup_module.build_startup_runtime = None  # type: ignore[attr-defined]
     monkeypatch.setitem(
         sys.modules,
@@ -539,7 +630,7 @@ def test_lazy_startup_factory_must_be_callable(
     )
 
     with pytest.raises(ContractViolationError) as captured:
-        module.build_gui_runtime(object())
+        module.build_gui_startup_runtime(object())
 
     assert captured.value.code == "GF-WB-CONTRACT-002"
 
@@ -548,11 +639,13 @@ def test_missing_project_is_rejected_before_execution(
     tmp_path: Path,
 ) -> None:
     configuration = _run_config(tmp_path)
+    project = configuration.project
+    assert project is not None
     filesystem = _FakeFilesystem(
         missing=frozenset(
             {
-                configuration.project.project_root,
-                configuration.project.project_file,
+                project.project_root,
+                project.project_file,
             }
         )
     )
@@ -563,9 +656,7 @@ def test_missing_project_is_rejected_before_execution(
     )
 
     assert not result.succeeded
-    assert {"GF-WB-CONFIG-101", "GF-WB-CONFIG-103"} <= _issue_codes(
-        result
-    )
+    assert {"GF-WB-CONFIG-101", "GF-WB-CONFIG-103"} <= _issue_codes(result)
 
 
 def test_unsupported_project_schema_is_rejected() -> None:
@@ -573,9 +664,7 @@ def test_unsupported_project_schema_is_rejected() -> None:
         UnsupportedVersionError,
         match="unsupported major",
     ):
-        validate_project_schema(
-            _project_document(schema_version="2.0")
-        )
+        validate_project_schema(_project_document(schema_version="2.0"))
 
 
 def test_invalid_mode_type_is_rejected(
@@ -632,9 +721,7 @@ def test_unknown_checkpoint_is_rejected_before_execution(
             kind=TargetKind.CHECKPOINT,
             value="Unknown.gf",
         ),
-        selected_checkpoints=(
-            project.source_root / "Unknown.gf",
-        ),
+        selected_checkpoints=(project.source_root / "Unknown.gf",),
     )
 
     result = preflight_run(
@@ -647,32 +734,20 @@ def test_unknown_checkpoint_is_rejected_before_execution(
 
 
 @pytest.mark.parametrize(
-    ("field_name", "overrides", "message"),
+    ("no_compile", "skip_version_probe", "max_files", "message"),
     (
-        (
-            "no_compile",
-            {"no_compile": True},
-            "release mode cannot disable compilation",
-        ),
-        (
-            "skip_version_probe",
-            {"skip_version_probe": True},
-            "release mode cannot skip the version probe",
-        ),
-        (
-            "max_files",
-            {"max_files": 1},
-            "release mode cannot limit selected files",
-        ),
+        (True, False, 0, "release mode cannot disable compilation"),
+        (False, True, 0, "release mode cannot skip the version probe"),
+        (False, False, 1, "release mode cannot limit selected files"),
     ),
 )
 def test_release_mode_rejects_incompatible_flags(
     tmp_path: Path,
-    field_name: str,
-    overrides: dict[str, object],
+    no_compile: bool,
+    skip_version_probe: bool,
+    max_files: int,
     message: str,
 ) -> None:
-    del field_name
     configuration = _run_config(
         tmp_path,
         mode=ValidationMode.RELEASE,
@@ -680,7 +755,9 @@ def test_release_mode_rejects_incompatible_flags(
             kind=TargetKind.PROJECT,
             value=None,
         ),
-        **overrides,
+        no_compile=no_compile,
+        skip_version_probe=skip_version_probe,
+        max_files=max_files,
     )
 
     with pytest.raises(ValueError, match=message):
@@ -691,11 +768,7 @@ def test_unwritable_output_root_is_rejected_before_execution(
     tmp_path: Path,
 ) -> None:
     configuration = _run_config(tmp_path)
-    filesystem = _FakeFilesystem(
-        unwritable=frozenset(
-            {configuration.environment.output_root}
-        )
-    )
+    filesystem = _FakeFilesystem(unwritable=frozenset({configuration.environment.output_root}))
 
     result = preflight_run(
         configuration,

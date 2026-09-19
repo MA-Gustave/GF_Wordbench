@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 import hashlib
-import os
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import MappingProxyType
 
@@ -99,7 +98,10 @@ def _request(
 
 
 def test_publication_entry_normalizes_defaults_and_freezes_metadata() -> None:
-    metadata = {"source": "release", "attempt": 1}
+    metadata: dict[str, str | int | bool | float | None] = {
+        "source": "release",
+        "attempt": 1,
+    }
 
     entry = PublicationEntry(
         source_path="details/report.json",
@@ -238,8 +240,11 @@ def test_discovery_is_deterministic_and_assigns_canonical_metadata(
         exclude_paths=("ignored.tmp",),
     )
 
-    assert [entry.published_path for entry in entries] == sorted(
-        [entry.published_path for entry in entries],
+    published_paths = [entry.published_path for entry in entries]
+    assert all(path is not None for path in published_paths)
+    canonical_paths = [path for path in published_paths if path is not None]
+    assert canonical_paths == sorted(
+        canonical_paths,
         key=lambda value: (value.casefold(), value),
     )
     by_path = {entry.published_path: entry for entry in entries}
@@ -275,7 +280,7 @@ def test_publish_artifacts_copies_exact_bytes_and_records_hashes(
     source = tmp_path / "source"
     files = _make_finalized_source(source)
     destination = tmp_path / "published"
-    started = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
+    started = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
     finished = started + timedelta(milliseconds=125)
     request = _request(source, destination, _entries_for(files))
 
@@ -313,9 +318,7 @@ def test_missing_optional_entry_is_omitted_without_failing_publication(
 ) -> None:
     source = tmp_path / "source"
     files = _make_finalized_source(source)
-    entries = _entries_for(files) + (
-        PublicationEntry(source_path="optional.txt", required=False),
-    )
+    entries = _entries_for(files) + (PublicationEntry(source_path="optional.txt", required=False),)
     destination = tmp_path / "published"
 
     result = publish_artifacts(_request(source, destination, entries))
@@ -349,10 +352,7 @@ def test_source_integrity_mismatch_fails_without_creating_destination(
     assert result.error is not None
     assert "source hash mismatch" in result.error
     assert not destination.exists()
-    assert any(
-        outcome.status is PublicationEntryStatus.FAILED
-        for outcome in result.outcomes
-    )
+    assert any(outcome.status is PublicationEntryStatus.FAILED for outcome in result.outcomes)
 
 
 def test_approved_manifest_digest_is_verified_and_recorded(tmp_path: Path) -> None:
@@ -416,10 +416,7 @@ def test_reuse_identical_returns_already_present_without_rewriting(
     entries = _entries_for(files)
 
     first = publish_artifacts(_request(source, destination, entries))
-    before = {
-        relative: (destination / Path(relative)).stat().st_mtime_ns
-        for relative in files
-    }
+    before = {relative: (destination / Path(relative)).stat().st_mtime_ns for relative in files}
     second = publish_artifacts(
         _request(
             source,
@@ -433,12 +430,10 @@ def test_reuse_identical_returns_already_present_without_rewriting(
     assert second.status is PublicationStatus.ALREADY_PRESENT
     assert second.successful is True
     assert all(
-        outcome.status is PublicationEntryStatus.ALREADY_PRESENT
-        for outcome in second.outcomes
+        outcome.status is PublicationEntryStatus.ALREADY_PRESENT for outcome in second.outcomes
     )
     assert {
-        relative: (destination / Path(relative)).stat().st_mtime_ns
-        for relative in files
+        relative: (destination / Path(relative)).stat().st_mtime_ns for relative in files
     } == before
 
 
@@ -534,9 +529,7 @@ def test_publish_run_promotes_the_exact_discovered_tree(tmp_path: Path) -> None:
     )
 
     expected_paths = {
-        path.relative_to(source).as_posix()
-        for path in source.rglob("*")
-        if path.is_file()
+        path.relative_to(source).as_posix() for path in source.rglob("*") if path.is_file()
     }
     actual_paths = {
         path.relative_to(destination).as_posix()
@@ -579,7 +572,7 @@ def test_naive_clock_result_is_rejected_before_publication(tmp_path: Path) -> No
 
 
 def test_publication_result_contract_and_derived_properties(tmp_path: Path) -> None:
-    started = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
+    started = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
     failed = publisher.PublicationEntryOutcome(
         source_path="summary.json",
         published_path="summary.json",

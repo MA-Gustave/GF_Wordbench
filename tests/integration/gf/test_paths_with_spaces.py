@@ -48,17 +48,13 @@ def _command_profile() -> GfCommandProfile:
 def _resolve_test_gf_executable() -> Path:
     configured = os.environ.get(_TEST_GF_ENV, "").strip()
     if not configured:
-        pytest.skip(
-            f"real GF integration requires {_TEST_GF_ENV} to name the GF executable"
-        )
+        pytest.skip(f"real GF integration requires {_TEST_GF_ENV} to name the GF executable")
 
     candidate = Path(configured).expanduser()
     if not candidate.is_absolute():
         discovered = shutil.which(configured)
         if discovered is None:
-            pytest.skip(
-                f"{_TEST_GF_ENV}={configured!r} does not resolve to an executable"
-            )
+            pytest.skip(f"{_TEST_GF_ENV}={configured!r} does not resolve to an executable")
         candidate = Path(discovered)
 
     try:
@@ -150,11 +146,7 @@ def _assert_structured_space_arguments(
     assert command.argv == (os.fspath(command.executable), *command.arguments)
     assert all("\x00" not in argument for argument in command.arguments)
     assert all(
-        not (
-            len(argument) >= 2
-            and argument[0] == argument[-1]
-            and argument[0] in {'"', "'"}
-        )
+        not (len(argument) >= 2 and argument[0] == argument[-1] and argument[0] in {'"', "'"})
         for argument in command.arguments
     )
 
@@ -255,10 +247,7 @@ def test_real_gf_compiles_with_space_bearing_project_and_run_paths(
         network_policy="denied",
     )
 
-    source_before = {
-        path.name: path.read_bytes()
-        for path in sorted(source_root.glob("*.gf"))
-    }
+    source_before = {path.name: path.read_bytes() for path in sorted(source_root.glob("*.gf"))}
     result = run_process(request)
 
     assert result.execution_state is ExecutionState.COMPLETED
@@ -292,7 +281,6 @@ def test_real_gf_compiles_with_space_bearing_project_and_run_paths(
     assert expected_gfo.is_file()
     assert expected_gfo.stat().st_size == observation.size_bytes
     assert {
-        path.name: path.read_bytes()
-        for path in sorted(source_root.glob("*.gf"))
+        path.name: path.read_bytes() for path in sorted(source_root.glob("*.gf"))
     } == source_before
     assert not (source_root / expected_gfo.name).exists()

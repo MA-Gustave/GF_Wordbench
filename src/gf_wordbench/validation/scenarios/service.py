@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+import inspect
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Protocol, TypeVar, cast
 
@@ -72,6 +72,10 @@ class _ArtifactEvaluation(Protocol):
     error: bool
 
 
+class _NormalizationRegistry(Protocol):
+    def require(self, profile_id: str, profile_version: str) -> object: ...
+
+
 @dataclass(frozen=True, slots=True)
 class ScenarioStageFunctions:
     execute: Callable[..., object]
@@ -120,7 +124,7 @@ def run_scenario(
     normalization = _load_normalization_module()
 
     execution = cast(
-        _ExecutionEvidence,
+        "_ExecutionEvidence",
         stages.execute(
             spec,
             run_config,
@@ -131,7 +135,7 @@ def run_scenario(
     _validate_execution_evidence(execution, run_paths=run_paths)
 
     marker_evaluation = cast(
-        _MarkerEvaluation,
+        "_MarkerEvaluation",
         stages.evaluate_markers(
             spec,
             execution.stdout_text,
@@ -143,10 +147,7 @@ def run_scenario(
     normalized_output_path: Path | None = None
     normalization_error: str | None = None
 
-    if (
-        execution.execution_state is ExecutionState.COMPLETED
-        and marker_evaluation.complete
-    ):
+    if execution.execution_state is ExecutionState.COMPLETED and marker_evaluation.complete:
         try:
             registry = _normalization_registry(
                 run_config,
@@ -193,9 +194,7 @@ def run_scenario(
         except Exception as exc:
             if _is_contract_exception(exc):
                 raise
-            normalization_error = _bounded_message(
-                f"Scenario output normalization failed: {exc}"
-            )
+            normalization_error = _bounded_message(f"Scenario output normalization failed: {exc}")
 
     assertion_evaluations: tuple[_AssertionEvaluation, ...] = ()
     assertion_error: str | None = None
@@ -211,18 +210,12 @@ def run_scenario(
                 normalized_sections,
                 run_paths=run_paths,
             )
-            assertion_evaluations = tuple(
-                cast(Iterable[_AssertionEvaluation], produced_assertions)
-            )
-            _validate_assertion_evaluations(
-                assertion_evaluations
-            )
+            assertion_evaluations = tuple(cast("Iterable[_AssertionEvaluation]", produced_assertions))
+            _validate_assertion_evaluations(assertion_evaluations)
         except Exception as exc:
             if _is_contract_exception(exc):
                 raise
-            assertion_error = _bounded_message(
-                f"Scenario assertions could not be evaluated: {exc}"
-            )
+            assertion_error = _bounded_message(f"Scenario assertions could not be evaluated: {exc}")
 
     gold_evaluation: _GoldEvaluation | None = None
     gold_error: str | None = None
@@ -235,7 +228,7 @@ def run_scenario(
     ):
         try:
             gold_evaluation = cast(
-                _GoldEvaluation,
+                "_GoldEvaluation",
                 stages.compare_gold(
                     spec,
                     normalized_sections,
@@ -249,16 +242,14 @@ def run_scenario(
         except Exception as exc:
             if _is_contract_exception(exc):
                 raise
-            gold_error = _bounded_message(
-                f"Scenario gold comparison failed: {exc}"
-            )
+            gold_error = _bounded_message(f"Scenario gold comparison failed: {exc}")
 
     artifact_evaluation: _ArtifactEvaluation | None = None
     artifact_error: str | None = None
 
     try:
         artifact_evaluation = cast(
-            _ArtifactEvaluation,
+            "_ArtifactEvaluation",
             stages.verify_artifacts(
                 spec,
                 execution,
@@ -269,9 +260,7 @@ def run_scenario(
     except Exception as exc:
         if _is_contract_exception(exc):
             raise
-        artifact_error = _bounded_message(
-            f"Scenario artifact verification failed: {exc}"
-        )
+        artifact_error = _bounded_message(f"Scenario artifact verification failed: {exc}")
 
     interpretation = _interpret_scenario(
         spec=spec,
@@ -293,50 +282,61 @@ def run_scenario(
     )
     result_values = {
         "scenario_id": _required_attribute(spec, "scenario_id"),
-        "script_path": Path(
-            _required_attribute(spec, "script_path")
+        "script_path": Path(_required_attribute(spec, "script_path")),
+        "script_sha256": _required_attribute(
+            execution,
+            "script_sha256",
+            fallback=_required_attribute(spec, "script_sha256", fallback=""),
         ),
-        "required": bool(
-            _required_attribute(spec, "required")
-        ),
+        "required": bool(_required_attribute(spec, "required")),
         "status": interpretation.status,
         "diagnostic_class": interpretation.diagnostic_class,
         "error_kind": interpretation.error_kind,
         "primary_message": interpretation.primary_message,
-        "blocked_by": tuple(
-            _optional_sequence(spec, "blocked_by")
-        ),
+        "blocked_by": tuple(_optional_sequence(spec, "blocked_by")),
         "command": tuple(execution.command),
         "working_directory": execution.working_directory,
         "exit_code": execution.exit_code,
         "execution_state": execution.execution_state,
+        "cancelled": bool(
+            getattr(execution, "cancelled", False)
+            or execution.execution_state is ExecutionState.CANCELLED
+        ),
         "timed_out": execution.timed_out,
         "duration_ms": execution.duration_ms,
-        "stdout_path": execution.stdout_path,
-        "stderr_path": execution.stderr_path,
+        "stdout_path": (
+            run_paths.relative_path(execution.stdout_path, role="stdout path")
+            if execution.stdout_path is not None
+            else None
+        ),
+        "stderr_path": (
+            run_paths.relative_path(execution.stderr_path, role="stderr path")
+            if execution.stderr_path is not None
+            else None
+        ),
+        "stdout_relative_path": (
+            run_paths.relative_path(execution.stdout_path, role="stdout path")
+            if execution.stdout_path is not None
+            else None
+        ),
+        "stderr_relative_path": (
+            run_paths.relative_path(execution.stderr_path, role="stderr path")
+            if execution.stderr_path is not None
+            else None
+        ),
         "normalized_output_path": normalized_output_path,
         "gold_path": (
             gold_evaluation.gold_path
             if gold_evaluation is not None
             else _optional_path(spec, "gold_path")
         ),
-        "gold_match": (
-            gold_evaluation.match
-            if gold_evaluation is not None
-            else None
-        ),
+        "gold_match": (gold_evaluation.match if gold_evaluation is not None else None),
         "sections": section_results,
         "assertions": assertion_evaluations,
         "artifacts": (
-            tuple(artifact_evaluation.records)
-            if artifact_evaluation is not None
-            else ()
+            tuple(artifact_evaluation.records) if artifact_evaluation is not None else ()
         ),
-        "gold_diff_path": (
-            gold_evaluation.diff_path
-            if gold_evaluation is not None
-            else None
-        ),
+        "gold_diff_path": (gold_evaluation.diff_path if gold_evaluation is not None else None),
         "normalization_profile_id": _required_attribute(
             spec,
             "normalization_profile_id",
@@ -356,6 +356,7 @@ def run_scenario(
             required_fields=(
                 "scenario_id",
                 "script_path",
+                "script_sha256",
                 "required",
                 "status",
                 "diagnostic_class",
@@ -366,6 +367,7 @@ def run_scenario(
                 "working_directory",
                 "exit_code",
                 "execution_state",
+                "cancelled",
                 "timed_out",
                 "duration_ms",
                 "stdout_path",
@@ -379,11 +381,8 @@ def run_scenario(
         )
     except Exception as exc:
         raise ScenarioExecutionError(
-            "Scenario evidence was preserved but a valid ScenarioResult "
-            "could not be constructed.",
-            subject=str(
-                _required_attribute(spec, "scenario_id")
-            ),
+            "Scenario evidence was preserved but a valid ScenarioResult could not be constructed.",
+            subject=str(_required_attribute(spec, "scenario_id")),
             evidence_paths=tuple(
                 str(path)
                 for path in (
@@ -399,42 +398,37 @@ def run_scenario(
 
 
 def run_scenarios(
-    specs: Sequence[ScenarioSpec],
+    spec: Sequence[ScenarioSpec],
     run_config: RunConfig,
     run_paths: RunPaths,
     *,
     cancellation_token: CancellationToken | None = None,
 ) -> list[ScenarioResult]:
-    if isinstance(specs, (str, bytes)):
+    raw_specs: object = spec
+    if isinstance(raw_specs, (str, bytes)):
         raise TypeError("specs must be a sequence of ScenarioSpec values")
-    if len(specs) > _MAX_BATCH_SIZE:
-        raise ValueError(
-            f"specs exceed the maximum batch size of {_MAX_BATCH_SIZE}"
-        )
+    if len(spec) > _MAX_BATCH_SIZE:
+        raise ValueError(f"specs exceed the maximum batch size of {_MAX_BATCH_SIZE}")
 
-    normalized = tuple(specs)
+    normalized = tuple(spec)
     scenario_ids: list[str] = []
 
-    for position, spec in enumerate(normalized):
+    for position, scenario_spec in enumerate(normalized):
         scenario_id = _required_attribute(
-            spec,
+            scenario_spec,
             "scenario_id",
         )
         if not isinstance(scenario_id, str):
-            raise TypeError(
-                f"specs[{position}].scenario_id must be a string"
-            )
+            raise TypeError(f"specs[{position}].scenario_id must be a string")
         if scenario_id in scenario_ids:
-            raise ValueError(
-                f"duplicate scenario ID {scenario_id!r}"
-            )
+            raise ValueError(f"duplicate scenario ID {scenario_id!r}")
         scenario_ids.append(scenario_id)
 
     results: list[ScenarioResult] = []
-    for spec in normalized:
+    for scenario_spec in normalized:
         results.append(
             run_scenario(
-                spec,
+                scenario_spec,
                 run_config,
                 run_paths,
                 cancellation_token=cancellation_token,
@@ -492,28 +486,13 @@ def _interpret_scenario(
             ),
         )
 
-    if execution.execution_state is not ExecutionState.COMPLETED:
-        return _ScenarioInterpretation(
-            status=ValidationStatus.ERROR,
-            diagnostic_class=DiagnosticClass.AMBIGUOUS,
-            error_kind=_execution_error_kind(
-                execution,
-                fallback=ErrorKind.OTHER,
-            ),
-            primary_message=_execution_message(
-                execution,
-                "Scenario execution did not complete reliably.",
-            ),
-        )
-
     if not markers.complete:
         return _ScenarioInterpretation(
-            status=ValidationStatus.ERROR,
+            status=ValidationStatus.FAIL,
             diagnostic_class=DiagnosticClass.DIRECT,
             error_kind=ErrorKind.SCRIPT,
             primary_message=_bounded_message(
-                markers.message
-                or "Required scenario markers are incomplete."
+                markers.message or "Required scenario markers are incomplete."
             ),
         )
 
@@ -524,11 +503,7 @@ def _interpret_scenario(
         artifact_error,
     ):
         if message is not None:
-            error_kind = (
-                ErrorKind.IO
-                if message is artifact_error
-                else ErrorKind.OTHER
-            )
+            error_kind = ErrorKind.IO if message is artifact_error else ErrorKind.OTHER
             return _ScenarioInterpretation(
                 status=ValidationStatus.ERROR,
                 diagnostic_class=DiagnosticClass.AMBIGUOUS,
@@ -546,10 +521,7 @@ def _interpret_scenario(
             ),
             primary_message=_execution_message(
                 execution,
-                (
-                    "GF exited with a non-zero status; no accepted "
-                    "scenario outcome was established."
-                ),
+                ("GF exited with a non-zero status; no accepted scenario outcome was established."),
             ),
         )
 
@@ -560,8 +532,7 @@ def _interpret_scenario(
                 diagnostic_class=DiagnosticClass.AMBIGUOUS,
                 error_kind=ErrorKind.SCRIPT,
                 primary_message=_bounded_message(
-                    assertion.message
-                    or "A required assertion could not be evaluated."
+                    assertion.message or "A required assertion could not be evaluated."
                 ),
             )
         if not assertion.passed:
@@ -570,8 +541,7 @@ def _interpret_scenario(
                 diagnostic_class=DiagnosticClass.DIRECT,
                 error_kind=ErrorKind.SCRIPT,
                 primary_message=_bounded_message(
-                    assertion.message
-                    or "A required scenario assertion failed."
+                    assertion.message or "A required scenario assertion failed."
                 ),
             )
 
@@ -581,8 +551,7 @@ def _interpret_scenario(
             diagnostic_class=DiagnosticClass.DIRECT,
             error_kind=ErrorKind.SCRIPT,
             primary_message=_bounded_message(
-                gold.message
-                or "Normalized scenario output does not match gold."
+                gold.message or "Normalized scenario output does not match gold."
             ),
         )
 
@@ -593,8 +562,7 @@ def _interpret_scenario(
                 diagnostic_class=DiagnosticClass.AMBIGUOUS,
                 error_kind=ErrorKind.IO,
                 primary_message=_bounded_message(
-                    artifacts.message
-                    or "Scenario artifact evidence is unreliable."
+                    artifacts.message or "Scenario artifact evidence is unreliable."
                 ),
             )
         if artifacts.missing_required:
@@ -603,8 +571,7 @@ def _interpret_scenario(
                 diagnostic_class=DiagnosticClass.DIRECT,
                 error_kind=ErrorKind.IO,
                 primary_message=_bounded_message(
-                    artifacts.message
-                    or "A required scenario artifact was not produced."
+                    artifacts.message or "A required scenario artifact was not produced."
                 ),
             )
 
@@ -621,10 +588,10 @@ def _load_stage_functions() -> ScenarioStageFunctions:
         verify_scenario_artifacts,
         write_normalized_scenario_output,
     )
-    from .assertions import evaluate_scenario_assertions
-    from .execution import execute_scenario
-    from .gold_compare import compare_scenario_gold
-    from .markers import evaluate_scenario_markers
+    from .assertions import evaluate_assertions as evaluate_scenario_assertions
+    from .execution import prepare_and_execute_scenario as execute_scenario
+    from .gold_compare import compare_gold as compare_scenario_gold
+    from .markers import validate_scenario_markers as evaluate_scenario_markers
 
     return ScenarioStageFunctions(
         execute=execute_scenario,
@@ -651,15 +618,16 @@ def _load_normalization_module() -> Any:
 def _normalization_registry(
     run_config: object,
     normalization: Any,
-) -> object:
+) -> _NormalizationRegistry:
     configured = getattr(
         run_config,
         "normalization_registry",
         None,
     )
-    if configured is not None:
-        return configured
-    return normalization.DEFAULT_NORMALIZATION_REGISTRY
+    registry = configured if configured is not None else normalization.DEFAULT_NORMALIZATION_REGISTRY
+    if not callable(getattr(registry, "require", None)):
+        raise TypeError("normalization registry must provide require()")
+    return cast("_NormalizationRegistry", registry)
 
 
 def _build_section_results(
@@ -669,8 +637,7 @@ def _build_section_results(
     normalized_sections: Sequence[object],
 ) -> tuple[object, ...]:
     normalized_by_id = {
-        str(_required_attribute(section, "section_id")): section
-        for section in normalized_sections
+        str(_required_attribute(section, "section_id")): section for section in normalized_sections
     }
     results: list[object] = []
 
@@ -678,41 +645,37 @@ def _build_section_results(
         section_id = str(marker_section.section_id)
         normalized = normalized_by_id.get(section_id)
         values = {
+            "id": section_id,
+            "completed": True,
+            "message": "",
+            "begin_line": getattr(marker_section, "begin_line", None),
+            "end_line": getattr(marker_section, "end_line", None),
+            # Compatibility fields retained for older result models.
             "section_id": marker_section.section_id,
             "complete": True,
             "raw_text": marker_section.text,
             "source_evidence": marker_section.source_evidence,
             "normalized_text": (
-                getattr(normalized, "normalized_text", None)
-                if normalized is not None
-                else None
+                getattr(normalized, "normalized_text", None) if normalized is not None else None
             ),
             "source_sha256": (
-                getattr(normalized, "source_sha256", None)
-                if normalized is not None
-                else None
+                getattr(normalized, "source_sha256", None) if normalized is not None else None
             ),
             "normalized_sha256": (
-                getattr(normalized, "normalized_sha256", None)
-                if normalized is not None
-                else None
+                getattr(normalized, "normalized_sha256", None) if normalized is not None else None
             ),
             "normalization_profile_id": (
-                getattr(normalized, "profile_id", None)
-                if normalized is not None
-                else None
+                getattr(normalized, "profile_id", None) if normalized is not None else None
             ),
             "normalization_version": (
-                getattr(normalized, "profile_version", None)
-                if normalized is not None
-                else None
+                getattr(normalized, "profile_version", None) if normalized is not None else None
             ),
         }
         results.append(
             _construct_model(
                 models.ScenarioSectionResult,
                 values,
-                required_fields=("section_id",),
+                required_fields=("id", "completed"),
             )
         )
 
@@ -731,8 +694,7 @@ def _construct_model(
     signature = inspect.signature(model_type)
     parameters = signature.parameters
     accepts_keywords = any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
+        parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
     )
 
     missing_contract_fields = tuple(
@@ -749,11 +711,7 @@ def _construct_model(
     accepted = (
         dict(values)
         if accepts_keywords
-        else {
-            field_name: value
-            for field_name, value in values.items()
-            if field_name in parameters
-        }
+        else {field_name: value for field_name, value in values.items() if field_name in parameters}
     )
     return model_type(**accepted)
 
@@ -781,9 +739,7 @@ def _validate_inputs(
         "relative_path",
     ):
         if not callable(getattr(run_paths, method_name, None)):
-            raise TypeError(
-                f"run_paths must provide {method_name}()"
-            )
+            raise TypeError(f"run_paths must provide {method_name}()")
 
     if cancellation_token is not None:
         cancellation_methods = (
@@ -792,23 +748,18 @@ def _validate_inputs(
             "raise_if_cancelled",
         )
         if not any(
-            callable(getattr(cancellation_token, name, None))
-            for name in cancellation_methods
+            callable(getattr(cancellation_token, name, None)) for name in cancellation_methods
         ):
-            raise TypeError(
-                "cancellation_token does not expose a cancellation API"
-            )
+            raise TypeError("cancellation_token does not expose a cancellation API")
 
 
 def _validate_execution_evidence(
     execution: _ExecutionEvidence,
     *,
-    run_paths: object,
+    run_paths: RunPaths,
 ) -> None:
     if not isinstance(execution.execution_state, ExecutionState):
-        raise TypeError(
-            "execution_state must be an ExecutionState"
-        )
+        raise TypeError("execution_state must be an ExecutionState")
     if not isinstance(execution.timed_out, bool):
         raise TypeError("timed_out must be a bool")
     if (
@@ -816,25 +767,17 @@ def _validate_execution_evidence(
         or isinstance(execution.duration_ms, bool)
         or execution.duration_ms < 0
     ):
-        raise ValueError(
-            "duration_ms must be a non-negative integer"
-        )
+        raise ValueError("duration_ms must be a non-negative integer")
     if isinstance(execution.command, (str, bytes)):
         raise TypeError("command must be an argument sequence")
     if not execution.command:
         raise ValueError("command must not be empty")
-    if not all(
-        isinstance(argument, str) and argument
-        for argument in execution.command
-    ):
-        raise ValueError(
-            "command must contain non-empty string arguments"
-        )
+    if not all(isinstance(argument, str) and argument for argument in execution.command):
+        raise ValueError("command must contain non-empty string arguments")
     if not isinstance(execution.working_directory, Path):
         raise TypeError("working_directory must be a Path")
     if execution.exit_code is not None and (
-        not isinstance(execution.exit_code, int)
-        or isinstance(execution.exit_code, bool)
+        not isinstance(execution.exit_code, int) or isinstance(execution.exit_code, bool)
     ):
         raise TypeError("exit_code must be an integer or None")
     if not isinstance(execution.stdout_text, str):
@@ -850,13 +793,8 @@ def _validate_execution_evidence(
                 role=field_name.replace("_", " "),
             )
 
-    if (
-        execution.execution_state is ExecutionState.TIMED_OUT
-        and not execution.timed_out
-    ):
-        raise ValueError(
-            "timed_out must be true for timed_out execution state"
-        )
+    if execution.execution_state is ExecutionState.TIMED_OUT and not execution.timed_out:
+        raise ValueError("timed_out must be true for timed_out execution state")
 
 
 def _validate_marker_evaluation(
@@ -864,24 +802,16 @@ def _validate_marker_evaluation(
 ) -> None:
     if not isinstance(evaluation.complete, bool):
         raise TypeError("marker complete must be a bool")
-    if isinstance(evaluation.sections, (str, bytes)):
-        raise TypeError("marker sections must be a sequence")
     seen: set[str] = set()
     for section in evaluation.sections:
-        section_id = str(
-            _required_attribute(section, "section_id")
-        )
+        section_id = str(_required_attribute(section, "section_id"))
         if section_id in seen:
-            raise ValueError(
-                f"duplicate marker section ID {section_id!r}"
-            )
+            raise ValueError(f"duplicate marker section ID {section_id!r}")
         seen.add(section_id)
         if not isinstance(section.text, str):
             raise TypeError("marker section text must be a string")
         if not isinstance(section.source_evidence, str):
-            raise TypeError(
-                "marker section source_evidence must be a string"
-            )
+            raise TypeError("marker section source_evidence must be a string")
     if not isinstance(evaluation.message, str):
         raise TypeError("marker message must be a string")
 
@@ -901,7 +831,7 @@ def _validate_assertion_evaluations(
 def _validate_gold_evaluation(
     evaluation: _GoldEvaluation,
     *,
-    run_paths: object,
+    run_paths: RunPaths,
 ) -> None:
     if evaluation.match not in (True, False, None):
         raise TypeError("gold match must be bool or None")
@@ -923,9 +853,7 @@ def _validate_artifact_evaluation(
         evaluation.missing_required,
         (str, bytes),
     ):
-        raise TypeError(
-            "missing_required must be a sequence"
-        )
+        raise TypeError("missing_required must be a sequence")
     if not isinstance(evaluation.message, str):
         raise TypeError("artifact message must be a string")
     if not isinstance(evaluation.error, bool):
@@ -943,23 +871,14 @@ def _exit_code_accepted(
     ):
         expected_codes = (expected,)
     else:
-        if isinstance(expected, (str, bytes)):
-            raise TypeError(
-                "expected_exit_codes must be an integer sequence"
-            )
+        if not isinstance(expected, Iterable) or isinstance(expected, (str, bytes)):
+            raise TypeError("expected_exit_codes must be an integer sequence")
         expected_codes = tuple(expected)
 
     if not expected_codes:
-        raise ValueError(
-            "expected_exit_codes must not be empty"
-        )
-    if not all(
-        isinstance(code, int) and not isinstance(code, bool)
-        for code in expected_codes
-    ):
-        raise TypeError(
-            "expected_exit_codes must contain integers"
-        )
+        raise ValueError("expected_exit_codes must not be empty")
+    if not all(isinstance(code, int) and not isinstance(code, bool) for code in expected_codes):
+        raise TypeError("expected_exit_codes must contain integers")
     return exit_code in expected_codes
 
 
@@ -969,7 +888,11 @@ def _execution_error_kind(
     fallback: ErrorKind,
 ) -> ErrorKind:
     value = getattr(execution, "error_kind", fallback)
-    return value if isinstance(value, ErrorKind) else fallback
+    if not isinstance(value, ErrorKind):
+        return fallback
+    if value is ErrorKind.OK and fallback is not ErrorKind.OK:
+        return fallback
+    return value
 
 
 def _execution_message(
@@ -982,11 +905,7 @@ def _execution_message(
     stderr_text = getattr(execution, "stderr_text", "")
     if isinstance(stderr_text, str):
         first_line = next(
-            (
-                line.strip()
-                for line in stderr_text.splitlines()
-                if line.strip()
-            ),
+            (line.strip() for line in stderr_text.splitlines() if line.strip()),
             "",
         )
         if first_line:
@@ -1004,9 +923,7 @@ def _required_attribute(
         return getattr(value, field_name)
     if fallback is not inspect.Parameter.empty:
         return fallback
-    raise TypeError(
-        f"{type(value).__name__} must expose {field_name}"
-    )
+    raise TypeError(f"{type(value).__name__} must expose {field_name}")
 
 
 def _optional_sequence(
@@ -1017,9 +934,7 @@ def _optional_sequence(
     if candidate is None:
         return ()
     if isinstance(candidate, (str, bytes)):
-        raise TypeError(
-            f"{field_name} must be a sequence"
-        )
+        raise TypeError(f"{field_name} must be a sequence")
     return tuple(candidate)
 
 

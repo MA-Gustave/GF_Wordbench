@@ -7,11 +7,11 @@ validation, replacement, permission preservation, and cleanup.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import os
+from pathlib import Path
 import secrets
 import stat
-from collections.abc import Callable
-from pathlib import Path
 from typing import BinaryIO, Final, TypeAlias
 
 PathLike: TypeAlias = str | os.PathLike[str]
@@ -198,9 +198,7 @@ def _select_file_mode(
 
 
 def _create_sibling_temporary(destination: Path) -> tuple[Path, int]:
-    hidden_name = (
-        destination.name if destination.name.startswith(".") else f".{destination.name}"
-    )
+    hidden_name = destination.name if destination.name.startswith(".") else f".{destination.name}"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     flags |= getattr(os, "O_BINARY", 0)
     flags |= getattr(os, "O_CLOEXEC", 0)
@@ -217,8 +215,7 @@ def _create_sibling_temporary(destination: Path) -> tuple[Path, int]:
         return temporary, descriptor
 
     raise FileExistsError(
-        "Could not allocate a collision-safe sibling temporary file for "
-        f"{destination}"
+        f"Could not allocate a collision-safe sibling temporary file for {destination}"
     ) from last_collision
 
 

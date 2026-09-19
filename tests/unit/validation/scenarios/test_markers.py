@@ -23,6 +23,7 @@ from gf_wordbench.validation.scenarios.markers import (
     validate_marker_events,
     validate_scenario_markers,
 )
+from gf_wordbench.kernel.ids import validate_section_id
 from gf_wordbench.validation.scenarios.models import ScenarioSectionResult
 
 
@@ -31,14 +32,10 @@ def _event(
     section_id: str,
     line_number: int,
 ) -> MarkerEvent:
-    prefix = (
-        BEGIN_MARKER_PREFIX
-        if kind is MarkerKind.BEGIN
-        else END_MARKER_PREFIX
-    )
+    prefix = BEGIN_MARKER_PREFIX if kind is MarkerKind.BEGIN else END_MARKER_PREFIX
     return MarkerEvent(
         kind=kind,
-        section_id=section_id,
+        section_id=validate_section_id(section_id),
         line_number=line_number,
         raw_line=f"{prefix} {section_id}",
     )
@@ -51,9 +48,7 @@ def _issue_kinds(result: MarkerValidationResult) -> tuple[MarkerIssueKind, ...]:
 def test_marker_prefixes_and_formatters_are_canonical() -> None:
     assert BEGIN_MARKER_PREFIX == "GF_WORDBENCH_BEGIN"
     assert END_MARKER_PREFIX == "GF_WORDBENCH_END"
-    assert format_begin_marker("load-main") == (
-        "GF_WORDBENCH_BEGIN load-main"
-    )
+    assert format_begin_marker("load-main") == ("GF_WORDBENCH_BEGIN load-main")
     assert format_end_marker("load-main") == "GF_WORDBENCH_END load-main"
 
 
@@ -77,8 +72,7 @@ def test_marker_formatters_reject_noncanonical_section_ids(
         format_end_marker(section_id)
 
 
-def test_parse_marker_events_ignores_unrelated_output_and_preserves_evidence(
-) -> None:
+def test_parse_marker_events_ignores_unrelated_output_and_preserves_evidence() -> None:
     output = "\n".join(
         (
             "GF shell banner",
@@ -94,13 +88,13 @@ def test_parse_marker_events_ignores_unrelated_output_and_preserves_evidence(
     assert parsed.events == (
         MarkerEvent(
             kind=MarkerKind.BEGIN,
-            section_id="load-main",
+            section_id=validate_section_id("load-main"),
             line_number=2,
             raw_line="  GF_WORDBENCH_BEGIN load-main\t",
         ),
         MarkerEvent(
             kind=MarkerKind.END,
-            section_id="load-main",
+            section_id=validate_section_id("load-main"),
             line_number=4,
             raw_line="\tGF_WORDBENCH_END load-main  ",
         ),
@@ -139,8 +133,7 @@ def test_parse_marker_events_reports_malformed_reserved_lines(
 
 def test_parse_marker_events_does_not_reserve_lowercase_normal_output() -> None:
     parsed = parse_marker_events(
-        "gf_wordbench_begin load-main\n"
-        "text containing GF_WORDBENCH_BEGIN load-main"
+        "gf_wordbench_begin load-main\ntext containing GF_WORDBENCH_BEGIN load-main"
     )
 
     assert parsed == MarkerParseResult(events=(), malformed=())
@@ -183,14 +176,14 @@ def test_validate_scenario_markers_accepts_complete_ordered_sections(
     )
     assert result.sections == (
         ScenarioSectionResult(
-            id="load-main",
+            id=validate_section_id("load-main"),
             completed=True,
             message="section completed",
             begin_line=1,
             end_line=3,
         ),
         ScenarioSectionResult(
-            id="parse-basic",
+            id=validate_section_id("parse-basic"),
             completed=True,
             message="section completed",
             begin_line=4,
@@ -210,15 +203,14 @@ def test_validate_scenario_markers_reports_both_markers_missing() -> None:
     )
     assert result.sections == (
         ScenarioSectionResult(
-            id="load-main",
+            id=validate_section_id("load-main"),
             completed=False,
             message="section 'load-main' has no begin marker",
         ),
     )
 
 
-def test_validate_scenario_markers_reports_open_section_at_end_of_output(
-) -> None:
+def test_validate_scenario_markers_reports_open_section_at_end_of_output() -> None:
     result = validate_scenario_markers(
         "GF_WORDBENCH_BEGIN load-main\npartial output",
         ("load-main",),
@@ -229,7 +221,7 @@ def test_validate_scenario_markers_reports_open_section_at_end_of_output(
     assert _issue_kinds(result) == (MarkerIssueKind.MISSING_END,)
     assert result.sections == (
         ScenarioSectionResult(
-            id="load-main",
+            id=validate_section_id("load-main"),
             completed=False,
             message="section 'load-main' has no end marker",
             begin_line=1,
@@ -255,8 +247,7 @@ def test_end_before_begin_is_not_treated_as_completion() -> None:
     assert result.sections[0].end_line is None
 
 
-def test_unexpected_markers_fail_by_default_without_corrupting_expected_state(
-) -> None:
+def test_unexpected_markers_fail_by_default_without_corrupting_expected_state() -> None:
     result = validate_scenario_markers(
         "\n".join(
             (
@@ -275,10 +266,7 @@ def test_unexpected_markers_fail_by_default_without_corrupting_expected_state(
         MarkerIssueKind.UNEXPECTED_MARKER,
         MarkerIssueKind.UNEXPECTED_MARKER,
     )
-    assert all(
-        issue.severity is MarkerIssueSeverity.FAILURE
-        for issue in result.issues
-    )
+    assert all(issue.severity is MarkerIssueSeverity.FAILURE for issue in result.issues)
     assert tuple(map(str, result.completed_section_ids)) == ("load-main",)
 
 
@@ -300,10 +288,7 @@ def test_unexpected_markers_can_be_warnings() -> None:
     assert result.complete is True
     assert result.failures == ()
     assert len(result.warnings) == 2
-    assert all(
-        issue.kind is MarkerIssueKind.UNEXPECTED_MARKER
-        for issue in result.warnings
-    )
+    assert all(issue.kind is MarkerIssueKind.UNEXPECTED_MARKER for issue in result.warnings)
 
 
 def test_malformed_reserved_line_is_a_protocol_failure() -> None:
@@ -423,8 +408,7 @@ def test_validate_marker_events_accepts_preparsed_malformed_evidence() -> None:
     )
 
 
-def test_empty_expected_section_list_accepts_output_without_reserved_markers(
-) -> None:
+def test_empty_expected_section_list_accepts_output_without_reserved_markers() -> None:
     result = validate_scenario_markers("ordinary output", ())
 
     assert result.valid is True
@@ -513,7 +497,7 @@ def test_marker_event_and_malformed_marker_validate_evidence_fields() -> None:
     with pytest.raises(ValueError, match="positive integer"):
         MarkerEvent(
             kind=MarkerKind.BEGIN,
-            section_id="load-main",
+            section_id=validate_section_id("load-main"),
             line_number=0,
             raw_line="GF_WORDBENCH_BEGIN load-main",
         )
@@ -579,11 +563,11 @@ def test_marker_validation_result_requires_exact_expected_section_order() -> Non
         match="section results must match expected section order exactly",
     ):
         MarkerValidationResult(
-            expected_section_ids=("first", "second"),
+            expected_section_ids=(validate_section_id("first"), validate_section_id("second")),
             events=(),
             sections=(
-                ScenarioSectionResult(id="second", completed=False),
-                ScenarioSectionResult(id="first", completed=False),
+                ScenarioSectionResult(id=validate_section_id("second"), completed=False),
+                ScenarioSectionResult(id=validate_section_id("first"), completed=False),
             ),
             issues=(),
         )

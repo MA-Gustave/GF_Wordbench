@@ -80,7 +80,7 @@ class ExceptionHookState:
 class FatalErrorReporter:
     """Record bounded fatal-error details and present a concise Qt dialog."""
 
-    __slots__ = ("_application", "_stderr", "_reporting")
+    __slots__ = ("_application", "_reporting", "_stderr")
 
     def __init__(
         self,
@@ -102,9 +102,7 @@ class FatalErrorReporter:
         show_dialog: bool = True,
     ) -> Path | None:
         if self._reporting:
-            self._write_stderr(
-                f"{title}: {_safe_exception_summary(exception)}"
-            )
+            self._write_stderr(f"{title}: {_safe_exception_summary(exception)}")
             return None
 
         self._reporting = True
@@ -135,9 +133,12 @@ class FatalErrorReporter:
         self,
         args: threading.ExceptHookArgs,
     ) -> None:
+        exception = args.exc_value
+        if exception is None:
+            exception = RuntimeError("GUI worker terminated without an exception payload")
         self.report(
             args.exc_type,
-            args.exc_value,
+            exception,
             args.exc_traceback,
             title="Unexpected GUI worker failure",
             show_dialog=False,
@@ -176,14 +177,11 @@ class FatalErrorReporter:
             dialog.setWindowTitle(title)
             dialog.setText(summary)
             dialog.setInformativeText(
-                (
+                
                     "Review the technical details and restart GF Wordbench."
                     if log_path is None
-                    else (
-                        "Technical details were written to:\n"
-                        f"{log_path}"
-                    )
-                )
+                    else (f"Technical details were written to:\n{log_path}")
+                
             )
             dialog.setDetailedText(details)
             dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
@@ -225,17 +223,17 @@ def main(
     try:
         factory = runtime_factory or _default_runtime_factory
         runtime = factory(application, arguments)
-        _validate_runtime(runtime)
+        introduction_window = _validate_runtime(runtime)
         runtime.start()
-        _show_window(runtime.window)
+        _show_window(introduction_window)
 
         if not owns_application:
-            _retain_embedded_runtime(application, runtime, reporter)
-            runtime_owned_by_main = False
-            runtime = None
+            # Do not nest a Qt event loop. The runtime remains locally owned and
+            # is deterministically shut down by the ``finally`` block.
             return EXIT_OK
 
-        result = _coerce_qt_exit_code(application.exec())
+        exec_application = _require_callable_member(application, "exec")
+        result = _coerce_qt_exit_code(exec_application())
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
             raise
@@ -323,10 +321,7 @@ def _default_runtime_factory(
 
     from gf_wordbench.bootstrap import build_gui_startup_runtime
 
-    runtime = build_gui_startup_runtime(
-        application=application,
-        argv=argv,
-    )
+    runtime = build_gui_startup_runtime(application, argv)
     return runtime
 
 
@@ -338,9 +333,7 @@ def _create_qapplication(
     existing = QApplication.instance()
     if existing is not None:
         if not isinstance(existing, QApplication):
-            raise RuntimeError(
-                "A non-GUI Qt application already exists in this process."
-            )
+            raise RuntimeError("A non-GUI Qt application already exists in this process.")
         return existing, False
 
     return QApplication(list(argv)), True
@@ -364,15 +357,23 @@ def _configure_application(application: object) -> None:
         set_quit(True)
 
 
-def _validate_runtime(runtime: object) -> None:
+def _validate_runtime(runtime: object) -> object:
+    """Validate the startup runtime and return its introduction window.
+
+    Capturing the window before ``start()`` prevents startup callbacks from
+    replacing it with a language runtime before the mandatory introduction
+    surface has been shown.
+    """
+
     if not isinstance(runtime, GuiRuntime):
-        raise TypeError(
-            "build_gui_startup_runtime() must return an object "
-            "satisfying GuiRuntime"
-        )
+        raise TypeError("build_gui_startup_runtime() must return an object satisfying GuiRuntime")
+
     _require_callable_member(runtime, "start")
-    _require_callable_member(runtime.window, "show")
     _require_callable_member(runtime, "shutdown")
+
+    introduction_window = runtime.window
+    _require_callable_member(introduction_window, "show")
+    return introduction_window
 
 
 def _show_window(window: object) -> None:
@@ -397,10 +398,7 @@ def _retain_embedded_runtime(
 
     key = id(application)
     if key in _EMBEDDED_RUNTIMES:
-        raise RuntimeError(
-            "A GF Wordbench GUI runtime is already attached to this "
-            "QApplication."
-        )
+        raise RuntimeError("A GF Wordbench GUI runtime is already attached to this QApplication.")
 
     _EMBEDDED_RUNTIMES[key] = runtime
 
@@ -434,7 +432,11 @@ def _require_callable_member(
     member = getattr(value, name, None)
     if not callable(member):
         raise TypeError(f"{type(value).__name__}.{name} must be callable")
-    return member
+
+    def invoke(*args: object, **kwargs: object) -> object:
+        return member(*args, **kwargs)
+
+    return invoke
 
 
 def _normalize_argv(
@@ -460,7 +462,7 @@ def _normalize_argv(
 def _coerce_qt_exit_code(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError("QApplication.exec() must return an integer exit code")
-    return value
+    return EXIT_OK if value == 0 else EXIT_RUNTIME_ERROR
 
 
 def _application_log_directory() -> Path:
@@ -492,17 +494,12 @@ def _format_exception(
     )
     rendered = _redact_secrets(rendered.replace("\x00", "\\x00"))
     if len(rendered) > _MAX_TRACEBACK_LENGTH:
-        rendered = (
-            f"{rendered[: _MAX_TRACEBACK_LENGTH - 28]}"
-            "\n...[traceback truncated]\n"
-        )
+        rendered = f"{rendered[: _MAX_TRACEBACK_LENGTH - 28]}\n...[traceback truncated]\n"
     return rendered
 
 
 def _safe_exception_summary(exception: BaseException) -> str:
-    message = " ".join(
-        str(exception).replace("\x00", "\\x00").split()
-    )
+    message = " ".join(str(exception).replace("\x00", "\\x00").split())
     message = _redact_secrets(message)
     if not message:
         message = type(exception).__name__
@@ -513,9 +510,7 @@ def _safe_exception_summary(exception: BaseException) -> str:
 
 def _redact_secrets(value: str) -> str:
     return _SECRET_PATTERN.sub(
-        lambda match: (
-            f"{match.group(1)}{match.group(2)}<redacted>"
-        ),
+        lambda match: f"{match.group(1)}{match.group(2)}<redacted>",
         value,
     )
 
@@ -536,8 +531,8 @@ __all__ = (
     "FatalErrorReporter",
     "GuiRuntime",
     "GuiRuntimeFactory",
-    "main",
     "install_exception_hooks",
+    "main",
     "restore_exception_hooks",
 )
 

@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 import codecs
-import hashlib
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum, unique
+import hashlib
 from pathlib import Path, PurePosixPath
+import re
 from typing import Final
 
 from gf_wordbench.infrastructure.atomic_io import atomic_write_text
 from gf_wordbench.kernel.serialization import format_rfc3339_utc
 
 UTF8: Final[str] = "utf-8"
-ALL_SCAN_LOGS_RELATIVE_PATH: Final[PurePosixPath] = PurePosixPath(
-    "raw/ALL_SCAN_LOGS.TXT"
-)
+ALL_SCAN_LOGS_RELATIVE_PATH: Final[PurePosixPath] = PurePosixPath("raw/ALL_SCAN_LOGS.TXT")
 ALL_LOGS_RELATIVE_PATH: Final[PurePosixPath] = PurePosixPath("raw/ALL_LOGS.TXT")
 _SECTION_RULE: Final[str] = "=" * 80
 _CONTENT_RULE: Final[str] = "-" * 80
@@ -383,21 +381,24 @@ def _persist_rendered(
 
 
 def _prepare_sources(
-    sources: Iterable[AggregateLogSource],
+    sources: object,
     *,
     kind: AggregateKind,
     run_root: Path,
     destination: Path | None,
 ) -> tuple[AggregateLogSource, ...]:
-    if isinstance(sources, (str, bytes)):
+    if isinstance(sources, (str, bytes)) or not isinstance(sources, Iterable):
         raise TypeError("sources must be an iterable of AggregateLogSource")
-    prepared = tuple(sources)
+    prepared_items: list[AggregateLogSource] = []
+    for source in sources:
+        if not isinstance(source, AggregateLogSource):
+            raise TypeError("sources must contain AggregateLogSource values")
+        prepared_items.append(source)
+    prepared = tuple(prepared_items)
     seen_paths: set[PurePosixPath] = set()
     seen_identity: set[tuple[str, str, int, str]] = set()
 
     for source in prepared:
-        if not isinstance(source, AggregateLogSource):
-            raise TypeError("sources must contain AggregateLogSource values")
         if kind is AggregateKind.SCAN:
             if source.category is not AggregateSourceCategory.SCAN:
                 raise ValueError("scan aggregates accept only scan sources")
@@ -471,7 +472,7 @@ def _render_scan_section(
     run_root: Path,
 ) -> tuple[str, bool, int]:
     if source.source_path is None or source.relative_path is None:
-        lines = (
+        missing_lines = (
             _SECTION_RULE,
             "BEGIN SCAN LOG",
             f"subject: {source.subject}",
@@ -481,11 +482,11 @@ def _render_scan_section(
             "END SCAN LOG",
             _SECTION_RULE,
         )
-        return "\n".join(lines), True, 0
+        return "\n".join(missing_lines), True, 0
 
     raw, digest = _read_source(source, run_root)
     content, escapes = _aggregate_content(raw)
-    lines = (
+    present_lines = (
         _SECTION_RULE,
         "BEGIN SCAN LOG",
         f"subject: {source.subject}",
@@ -498,7 +499,7 @@ def _render_scan_section(
         "END SCAN LOG",
         _SECTION_RULE,
     )
-    return "\n".join(lines), False, escapes
+    return "\n".join(present_lines), False, escapes
 
 
 def _render_operation_section(
@@ -508,7 +509,7 @@ def _render_operation_section(
     if source.source_path is None or source.relative_path is None:
         missing_path = "null"
         body = f"<MISSING EVIDENCE: {source.subject}>"
-        lines = (
+        missing_lines = (
             _SECTION_RULE,
             "BEGIN LOG",
             f"role: {source.role}",
@@ -525,11 +526,11 @@ def _render_operation_section(
             "END LOG",
             _SECTION_RULE,
         )
-        return "\n".join(lines), True, 0
+        return "\n".join(missing_lines), True, 0
 
     raw, digest = _read_source(source, run_root)
     content, escapes = _aggregate_content(raw)
-    lines = (
+    present_lines = (
         _SECTION_RULE,
         "BEGIN LOG",
         f"role: {source.role}",
@@ -544,7 +545,7 @@ def _render_operation_section(
         "END LOG",
         _SECTION_RULE,
     )
-    return "\n".join(lines), False, escapes
+    return "\n".join(present_lines), False, escapes
 
 
 def _read_source(
@@ -624,9 +625,7 @@ def _validate_source_location(
 
 def _reject_report_source(relative_path: PurePosixPath) -> None:
     if relative_path in _FORBIDDEN_OPERATION_PATHS:
-        raise ValueError(
-            f"operation aggregate must not embed report {relative_path.as_posix()}"
-        )
+        raise ValueError(f"operation aggregate must not embed report {relative_path.as_posix()}")
     if relative_path.parts and relative_path.parts[0] == "details":
         raise ValueError("operation aggregate must not embed details artifacts")
     if relative_path == ALL_SCAN_LOGS_RELATIVE_PATH:

@@ -317,7 +317,15 @@ print(json.dumps({
         value = raw_payload.get(field_name)
         assert isinstance(value, str)
         payload[field_name] = value
-    return _InstalledCliContract(**payload)
+    return _InstalledCliContract(
+        probe_command=payload["probe_command"],
+        probe_language_path=payload["probe_language_path"],
+        probe_profile=payload["probe_profile"],
+        validate_command=payload["validate_command"],
+        validate_language_path=payload["validate_language_path"],
+        validate_profile=payload["validate_profile"],
+        validate_target=payload["validate_target"],
+    )
 
 
 @pytest.mark.slow

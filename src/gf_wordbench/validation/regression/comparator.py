@@ -6,7 +6,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import PurePosixPath
 from typing import Final
 
-from gf_wordbench.kernel.statuses import ChangeKind, OverallStatus, ValidationStatus
+from gf_wordbench.kernel.statuses import ChangeKind, ExecutionState, OverallStatus, ValidationStatus
 
 from .models import ComparisonSubject, DiffEntry, RegressionSubjectKind
 
@@ -73,8 +73,6 @@ def index_subjects(
     *,
     side: str,
 ) -> dict[tuple[RegressionSubjectKind, str], ComparisonSubject]:
-    if isinstance(subjects, (str, bytes)):
-        raise TypeError("subjects must be an iterable of ComparisonSubject values")
     if not isinstance(side, str) or not side.strip():
         raise ValueError("side must be a non-empty string")
 
@@ -85,19 +83,14 @@ def index_subjects(
 
     for position, subject in enumerate(subjects):
         if not isinstance(subject, ComparisonSubject):
-            raise TypeError(
-                f"{side} subjects[{position}] must be a ComparisonSubject"
-            )
+            raise TypeError(f"{side} subjects[{position}] must be a ComparisonSubject")
 
         normalized = normalize_subject(subject)
         identity = (normalized.subject_kind, normalized.subject_id)
 
         if identity in indexed:
             kind, subject_id = identity
-            raise ValueError(
-                f"duplicate {side} subject identity "
-                f"{kind.value}:{subject_id}"
-            )
+            raise ValueError(f"duplicate {side} subject identity {kind.value}:{subject_id}")
 
         indexed[identity] = normalized
 
@@ -124,21 +117,8 @@ def normalize_subject(subject: ComparisonSubject) -> ComparisonSubject:
         subject_kind=subject.subject_kind,
         subject_id=subject_id,
         status=status,
-        required=subject.required,
-        execution_reliable=subject.execution_reliable,
-        error_kind=subject.error_kind,
-        diagnostic_class=subject.diagnostic_class,
-        blocked_by=subject.blocked_by,
-        timed_out=subject.timed_out,
-        first_error=subject.first_error,
-        fingerprint=subject.fingerprint,
-        scan_counts=subject.scan_counts,
-        execution_state=subject.execution_state,
-        gold_match=subject.gold_match,
-        normalization_version=subject.normalization_version,
-        script_hash=subject.script_hash,
-        section_completion=subject.section_completion,
-        artifact_ids=subject.artifact_ids,
+        message=subject.message,
+        details=subject.details,
     )
 
 
@@ -164,9 +144,7 @@ def normalize_subject_id(
     if path.is_absolute():
         raise ValueError("file subject_id must be project-relative")
     if any(part in {"", ".", ".."} for part in path.parts):
-        raise ValueError(
-            "file subject_id must not contain empty, '.' or '..' segments"
-        )
+        raise ValueError("file subject_id must not contain empty, '.' or '..' segments")
     if path.parts and path.parts[0].endswith(":"):
         raise ValueError("file subject_id must not contain a drive prefix")
 
@@ -186,17 +164,12 @@ def normalize_status(
     elif isinstance(status, str):
         value = status
     else:
-        raise TypeError(
-            "status must be a ValidationStatus, OverallStatus or string"
-        )
+        raise TypeError("status must be a ValidationStatus, OverallStatus or string")
 
     if value not in _STATUS_VALUES:
         raise ValueError(f"unsupported regression status {value!r}")
 
-    if (
-        subject_kind is RegressionSubjectKind.RUN
-        and value == ValidationStatus.SKIPPED.value
-    ):
+    if subject_kind is RegressionSubjectKind.RUN and value == ValidationStatus.SKIPPED.value:
         raise ValueError("run subjects cannot use SKIPPED status")
 
     return value
@@ -226,11 +199,7 @@ def classify_transition(
         }:
             return ChangeKind.REGRESSED
         if current_status == ValidationStatus.SKIPPED.value:
-            return (
-                ChangeKind.REGRESSED
-                if previous.required is True
-                else ChangeKind.UNCHANGED
-            )
+            return ChangeKind.REGRESSED if previous.details.required is True else ChangeKind.UNCHANGED
 
     if previous_status == ValidationStatus.FAIL.value:
         if current_status == ValidationStatus.OK.value:
@@ -244,36 +213,22 @@ def classify_transition(
             return ChangeKind.IMPROVED
         if current_status == ValidationStatus.FAIL.value:
             return (
-                ChangeKind.IMPROVED
-                if current.execution_reliable is True
-                else ChangeKind.UNCHANGED
+                ChangeKind.IMPROVED if current.details.execution_state is ExecutionState.COMPLETED else ChangeKind.UNCHANGED
             )
         return ChangeKind.UNCHANGED
 
     if previous_status == ValidationStatus.SKIPPED.value:
-        required_in_both = (
-            previous.required is True and current.required is True
-        )
-        newly_required = (
-            previous.required is False and current.required is True
-        )
+        required_in_both = previous.details.required is True and current.details.required is True
+        newly_required = previous.details.required is False and current.details.required is True
 
         if current_status == ValidationStatus.OK.value:
-            return (
-                ChangeKind.IMPROVED
-                if required_in_both
-                else ChangeKind.UNCHANGED
-            )
+            return ChangeKind.IMPROVED if required_in_both else ChangeKind.UNCHANGED
 
         if current_status in {
             ValidationStatus.FAIL.value,
             ValidationStatus.ERROR.value,
         }:
-            return (
-                ChangeKind.REGRESSED
-                if newly_required
-                else ChangeKind.UNCHANGED
-            )
+            return ChangeKind.REGRESSED if newly_required else ChangeKind.UNCHANGED
 
     return ChangeKind.UNCHANGED
 
@@ -286,10 +241,7 @@ def build_new_entry(subject: ComparisonSubject) -> DiffEntry:
         previous_status=None,
         current_status=normalized.status,
         change_kind=ChangeKind.NEW,
-        message=(
-            f"New {normalized.subject_kind.value} "
-            f"with status {normalized.status}."
-        ),
+        message=(f"New {normalized.subject_kind.value} with status {normalized.status}."),
     )
 
 
@@ -302,8 +254,7 @@ def build_removed_entry(subject: ComparisonSubject) -> DiffEntry:
         current_status=None,
         change_kind=ChangeKind.REMOVED,
         message=(
-            f"Removed {normalized.subject_kind.value}; "
-            f"previous status was {normalized.status}."
+            f"Removed {normalized.subject_kind.value}; previous status was {normalized.status}."
         ),
     )
 
@@ -343,11 +294,7 @@ def build_transition_message(
     change_kind: ChangeKind | None = None,
 ) -> str:
     _require_same_identity(previous, current)
-    resolved_change = (
-        classify_transition(previous, current)
-        if change_kind is None
-        else change_kind
-    )
+    resolved_change = classify_transition(previous, current) if change_kind is None else change_kind
 
     if not isinstance(resolved_change, ChangeKind):
         raise TypeError("change_kind must be a ChangeKind or None")
@@ -367,9 +314,6 @@ def build_transition_message(
 def sort_diff_entries(
     entries: Iterable[DiffEntry],
 ) -> tuple[DiffEntry, ...]:
-    if isinstance(entries, (str, bytes)):
-        raise TypeError("entries must be an iterable of DiffEntry values")
-
     normalized = tuple(entries)
     if not all(isinstance(entry, DiffEntry) for entry in normalized):
         raise TypeError("entries must contain only DiffEntry values")
@@ -392,7 +336,7 @@ def sort_diff_entries(
 def count_changes(
     entries: Iterable[DiffEntry],
 ) -> dict[ChangeKind, int]:
-    counts = {change_kind: 0 for change_kind in ChangeKind}
+    counts = dict.fromkeys(ChangeKind, 0)
 
     for entry in entries:
         if not isinstance(entry, DiffEntry):
@@ -407,11 +351,7 @@ def has_regressions(
     *,
     subject_kinds: Sequence[RegressionSubjectKind] | None = None,
 ) -> bool:
-    allowed = (
-        None
-        if subject_kinds is None
-        else _normalize_subject_kinds(subject_kinds)
-    )
+    allowed = None if subject_kinds is None else _normalize_subject_kinds(subject_kinds)
 
     for entry in entries:
         if not isinstance(entry, DiffEntry):
@@ -442,14 +382,14 @@ def _transition_context(
     ):
         return (
             "The previously required subject was skipped."
-            if previous.required is True
+            if previous.details.required is True
             else "The skip is not classified as a regression."
         )
 
     if previous.status == ValidationStatus.SKIPPED.value:
-        if current.required is True and previous.required is False:
+        if current.details.required is True and previous.details.required is False:
             return "The subject is now required."
-        if previous.required is True and current.required is True:
+        if previous.details.required is True and current.details.required is True:
             return "The subject is required in both scopes."
         return "Required-scope equivalence is not established."
 
@@ -461,81 +401,77 @@ def _first_detail_message(
     current: ComparisonSubject,
 ) -> str | None:
     comparisons = (
-        ("error kind", previous.error_kind, current.error_kind),
+        ("error kind", previous.details.error_kind, current.details.error_kind),
         (
             "diagnostic class",
-            previous.diagnostic_class,
-            current.diagnostic_class,
+            previous.details.diagnostic_class,
+            current.details.diagnostic_class,
         ),
         (
             "blocker roots",
-            previous.blocked_by,
-            current.blocked_by,
+            previous.details.blocked_by,
+            current.details.blocked_by,
         ),
         (
             "timeout state",
-            previous.timed_out,
-            current.timed_out,
+            previous.details.timed_out,
+            current.details.timed_out,
         ),
         (
             "first error",
-            previous.first_error,
-            current.first_error,
+            previous.details.first_error,
+            current.details.first_error,
         ),
         (
             "source fingerprint",
-            previous.fingerprint,
-            current.fingerprint,
+            previous.details.fingerprint_sha256,
+            current.details.fingerprint_sha256,
         ),
         (
             "scan findings",
-            previous.scan_counts,
-            current.scan_counts,
+            previous.details.scan_counts,
+            current.details.scan_counts,
         ),
         (
             "required flag",
-            previous.required,
-            current.required,
+            previous.details.required,
+            current.details.required,
         ),
         (
             "execution state",
-            previous.execution_state,
-            current.execution_state,
+            previous.details.execution_state,
+            current.details.execution_state,
         ),
         (
             "gold match",
-            previous.gold_match,
-            current.gold_match,
+            previous.details.gold_match,
+            current.details.gold_match,
         ),
         (
             "normalization version",
-            previous.normalization_version,
-            current.normalization_version,
+            previous.details.normalization_version,
+            current.details.normalization_version,
         ),
         (
             "script hash",
-            previous.script_hash,
-            current.script_hash,
+            previous.details.script_sha256,
+            current.details.script_sha256,
         ),
         (
             "section completion",
-            previous.section_completion,
-            current.section_completion,
+            previous.details.section_completion,
+            current.details.section_completion,
         ),
         (
             "produced artifact set",
-            previous.artifact_ids,
-            current.artifact_ids,
+            previous.details.produced_artifacts,
+            current.details.produced_artifacts,
         ),
     )
 
     for label, old_value, new_value in comparisons:
         if old_value != new_value:
-            return (
-                f"{label} changed: "
-                f"{_display_value(old_value)} -> "
-                f"{_display_value(new_value)}"
-            )
+            return f"{label} changed: {_display_value(old_value)} -> {_display_value(new_value)}"
 
     return None
 
@@ -577,9 +513,7 @@ def _require_same_identity(
     )
 
     if previous_identity != current_identity:
-        raise ValueError(
-            "previous and current subjects must have the same identity"
-        )
+        raise ValueError("previous and current subjects must have the same identity")
 
 
 def _subject_sort_key(
@@ -594,18 +528,11 @@ def _normalize_subject_kinds(
     values: Sequence[RegressionSubjectKind],
 ) -> frozenset[RegressionSubjectKind]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "subject_kinds must be a sequence of RegressionSubjectKind values"
-        )
+        raise TypeError("subject_kinds must be a sequence of RegressionSubjectKind values")
 
     normalized = frozenset(values)
-    if not all(
-        isinstance(value, RegressionSubjectKind)
-        for value in normalized
-    ):
-        raise TypeError(
-            "subject_kinds must contain only RegressionSubjectKind values"
-        )
+    if not all(isinstance(value, RegressionSubjectKind) for value in normalized):
+        raise TypeError("subject_kinds must contain only RegressionSubjectKind values")
     return normalized
 
 

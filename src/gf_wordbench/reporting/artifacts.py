@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
-import os
-import re
-import stat
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import hashlib
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
+import stat
 from typing import Final, TypeAlias
 
 from gf_wordbench.infrastructure.atomic_io import atomic_write_bytes, atomic_write_text
@@ -19,12 +19,8 @@ SHA256_ALGORITHM: Final[str] = "sha256"
 UTF8: Final[str] = "utf-8"
 MAX_ARTIFACT_SIZE_BYTES: Final[int] = 2**63 - 1
 
-_ROLE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
-_CREATED_BY_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
+_ROLE_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+_CREATED_BY_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 _MEDIA_TYPE_RE: Final[re.Pattern[str]] = re.compile(
     r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+"
     r"(?:; [A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+-]+)*$"
@@ -80,9 +76,7 @@ class ArtifactDeclaration:
 
     @property
     def run_relative_path(self) -> PurePosixPath:
-        return PurePosixPath(
-            self.destination.relative_to(self.run_root).as_posix()
-        )
+        return PurePosixPath(self.destination.relative_to(self.run_root).as_posix())
 
 
 @dataclass(frozen=True, slots=True)
@@ -391,7 +385,8 @@ def verify_published_artifact(
 def canonical_artifact_order(
     artifacts: Iterable[PublishedArtifact],
 ) -> tuple[PublishedArtifact, ...]:
-    if isinstance(artifacts, (str, bytes)):
+    raw_artifacts: object = artifacts
+    if isinstance(raw_artifacts, (str, bytes)):
         raise TypeError("artifacts must be an iterable of PublishedArtifact")
     prepared = tuple(artifacts)
     for artifact in prepared:
@@ -458,9 +453,7 @@ def _absolute_directory_path(value: object, *, field_name: str) -> Path:
 def _portable_relative_path(value: object, *, field_name: str) -> PurePosixPath:
     if isinstance(value, PureWindowsPath):
         raise ValueError(f"{field_name} must use portable '/' separators")
-    if isinstance(value, Path):
-        text = value.as_posix()
-    elif isinstance(value, PurePosixPath):
+    if isinstance(value, Path) or isinstance(value, PurePosixPath):
         text = value.as_posix()
     elif isinstance(value, str):
         text = value

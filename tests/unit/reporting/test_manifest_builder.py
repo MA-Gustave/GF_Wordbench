@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
+import hashlib
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
 import gf_wordbench.reporting.manifest.builder as builder_module
 from gf_wordbench.reporting.manifest.builder import (
-    ArtifactMutationError,
-    DuplicateManifestPathError,
     MANIFEST_FILENAME,
     MANIFEST_HASH_ALGORITHM,
     MANIFEST_PRODUCER_NAME,
     MANIFEST_SCHEMA_ID,
     MANIFEST_SCHEMA_VERSION,
+    ArtifactMutationError,
+    DuplicateManifestPathError,
     ManifestBuildError,
     ManifestBuildPolicy,
     MissingRequiredArtifactError,
@@ -37,7 +38,13 @@ from gf_wordbench.reporting.manifest.declarations import (
     ArtifactRole,
     artifact_declaration,
 )
-from gf_wordbench.reporting.manifest.hashing import FileHash, FileIdentity
+from gf_wordbench.reporting.manifest.hashing import (
+    DEFAULT_HASH_CHUNK_SIZE_BYTES,
+    DEFAULT_MUTATION_RETRIES,
+    FileHash,
+    FileIdentity,
+    hash_file,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,9 +54,13 @@ class _RunPaths:
     manifest_json: Path
 
 
-@dataclass(frozen=True, slots=True)
 class _RunResult:
-    run_paths: _RunPaths
+    def __init__(self, run_paths: _RunPaths) -> None:
+        self._run_paths = run_paths
+
+    @property
+    def run_paths(self) -> builder_module.RunPathsLike:
+        return self._run_paths
 
 
 class _BuilderFileHash(FileHash):
@@ -70,10 +81,21 @@ class _MutatedFileHash(FileHash):
 def _stable_hashing_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep builder tests focused on construction rather than hash internals."""
 
-    real_hash_file = builder_module.hash_file
-
-    def stable_hash_file(*args: object, **kwargs: object) -> _BuilderFileHash:
-        result = real_hash_file(*args, **kwargs)
+    def stable_hash_file(
+        path: Path,
+        *,
+        chunk_size_bytes: int = DEFAULT_HASH_CHUNK_SIZE_BYTES,
+        reject_symlinks: bool = True,
+        mutation_retries: int = DEFAULT_MUTATION_RETRIES,
+        verify_reopen: bool = False,
+    ) -> _BuilderFileHash:
+        result = hash_file(
+            path,
+            chunk_size_bytes=chunk_size_bytes,
+            reject_symlinks=reject_symlinks,
+            mutation_retries=mutation_retries,
+            verify_reopen=verify_reopen,
+        )
         return _BuilderFileHash(
             path=result.path,
             hash_algorithm=result.hash_algorithm,
@@ -88,7 +110,9 @@ def _stable_hashing_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(builder_module, "hash_file", stable_hash_file)
 
 
-def _run_context(tmp_path: Path, *, run_id: str = "20260725_190423_demo") -> tuple[_RunResult, _RunPaths]:
+def _run_context(
+    tmp_path: Path, *, run_id: str = "20260725_190423"
+) -> tuple[_RunResult, _RunPaths]:
     run_dir = (tmp_path / "run").resolve()
     run_dir.mkdir()
     paths = _RunPaths(
@@ -190,7 +214,9 @@ def test_build_manifest_uses_final_bytes_and_canonical_order(tmp_path: Path) -> 
     assert result.warnings == ()
     assert result.entry_count == 3
     assert result.required_entry_count == 3
-    assert result.total_size_bytes == sum(path.stat().st_size for path in (summary, human, master_log))
+    assert result.total_size_bytes == sum(
+        path.stat().st_size for path in (summary, human, master_log)
+    )
 
 
 def test_build_manifest_facades_return_the_same_manifest(tmp_path: Path) -> None:
@@ -204,7 +230,7 @@ def test_build_manifest_facades_return_the_same_manifest(tmp_path: Path) -> None
             created_by=ArtifactProducer.REPORTING_JSON,
         ),
     )
-    generated_at = datetime(2026, 7, 25, 19, 4, 23, tzinfo=timezone.utc)
+    generated_at = datetime(2026, 7, 25, 19, 4, 23, tzinfo=UTC)
 
     explicit = build_manifest(
         run_result,
@@ -230,7 +256,7 @@ def test_optional_missing_artifact_is_omitted_with_bounded_warning(tmp_path: Pat
         run_result,
         run_paths,
         (_text_declaration(Path("details/optional.txt")),),
-        generated_at=datetime(2026, 7, 25, 19, 4, 23, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 7, 25, 19, 4, 23, tzinfo=UTC),
     )
 
     assert result.manifest.artifacts == ()
@@ -467,7 +493,7 @@ def test_hash_mutation_is_reported_as_artifact_failure(
 )
 def test_manifest_build_policy_rejects_invalid_values(kwargs: dict[str, object]) -> None:
     with pytest.raises((TypeError, ValueError)):
-        ManifestBuildPolicy(**kwargs)
+        cast("Any", ManifestBuildPolicy)(**kwargs)
 
 
 def test_artifact_count_limit_is_enforced_before_filesystem_reads(tmp_path: Path) -> None:

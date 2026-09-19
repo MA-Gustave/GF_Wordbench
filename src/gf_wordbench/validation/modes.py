@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Final, Literal, TypeAlias, cast
 
@@ -118,6 +118,122 @@ LEGACY_VALIDATION_MODE_ALIASES: Final[Mapping[str, ValidationMode]] = {
 }
 
 
+# Early validation helpers are intentionally defined before the module-level
+# policy registry.  Dataclass instances are constructed while this module is
+# imported, so their __post_init__ methods must not depend on functions defined
+# later in the file.
+def _require_stage(value: object) -> ValidationStageId:
+    if not isinstance(value, str):
+        raise TypeError("validation stage must be a string")
+    if value not in CANONICAL_VALIDATION_STAGES:
+        raise ValueError(f"unsupported validation stage {value!r}")
+    return value
+
+
+def _require_target_kind(value: object) -> ModeTargetKind:
+    if not isinstance(value, str):
+        raise TypeError("target kind must be a string")
+    allowed = {"file", "module", "checkpoint", "entrypoint", "scenario", "project", "regression"}
+    if value not in allowed:
+        raise ValueError(f"unsupported target kind {value!r}")
+    return cast("ModeTargetKind", value)
+
+
+def _require_override(value: object) -> ModeOverrideName:
+    if not isinstance(value, str):
+        raise TypeError("override name must be a string")
+    allowed = {
+        "target",
+        "extra_target",
+        "extra_checkpoint",
+        "extra_entrypoint",
+        "extra_scenario",
+        "timeout_increase",
+        "keep_full_details",
+        "diff_previous",
+        "skip_version_probe",
+        "scan_only",
+        "no_compile",
+        "skip_required_scenarios",
+        "skip_required_gold",
+        "skip_required_pgf",
+        "skip_manifest",
+        "ignore_blocking_issues",
+        "strict_scan_policy",
+        "manifest_verification",
+        "expanded_evidence",
+    }
+    if value not in allowed:
+        raise ValueError(f"unsupported override name {value!r}")
+    return cast("ModeOverrideName", value)
+
+
+def _require_condition(value: object) -> ModeConditionKey:
+    if not isinstance(value, str):
+        raise TypeError("condition must be a string")
+    allowed = {
+        "target_is_scenario",
+        "checkpoints_selected",
+        "entrypoints_selected",
+        "scenarios_selected",
+        "gold_comparison_required",
+        "release_requires_pgf",
+        "compatible_history_exists",
+        "manifest_requested",
+        "manifest_verification_requested",
+    }
+    if value not in allowed:
+        raise ValueError(f"unsupported mode condition {value!r}")
+    return cast("ModeConditionKey", value)
+
+
+def _require_text(value: object, *, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be a string")
+    if not value or not value.strip():
+        raise ValueError(f"{field_name} must not be empty")
+    if "\x00" in value:
+        raise ValueError(f"{field_name} must not contain NUL characters")
+    return value
+
+
+def _normalize_stages(
+    values: Iterable[ValidationStageId], *, field_name: str
+) -> tuple[ValidationStageId, ...]:
+    if isinstance(values, (str, bytes)):
+        raise TypeError(f"{field_name} must be an iterable of stages")
+    normalized = tuple(values)
+    for value in normalized:
+        _require_stage(value)
+    if len(normalized) != len(set(normalized)):
+        raise ValueError(f"{field_name} must not contain duplicate stages")
+    return normalized
+
+
+def _normalize_target_kinds(values: Iterable[ModeTargetKind]) -> tuple[ModeTargetKind, ...]:
+    if isinstance(values, (str, bytes)):
+        raise TypeError("allowed_target_kinds must be an iterable")
+    normalized = tuple(values)
+    for value in normalized:
+        _require_target_kind(value)
+    if len(normalized) != len(set(normalized)):
+        raise ValueError("allowed_target_kinds must not contain duplicates")
+    return normalized
+
+
+def _normalize_overrides(
+    values: Iterable[ModeOverrideName], *, field_name: str
+) -> tuple[ModeOverrideName, ...]:
+    if isinstance(values, (str, bytes)):
+        raise TypeError(f"{field_name} must be an iterable of override names")
+    normalized = tuple(values)
+    for value in normalized:
+        _require_override(value)
+    if len(normalized) != len(set(normalized)):
+        raise ValueError(f"{field_name} must not contain duplicate overrides")
+    return normalized
+
+
 @dataclass(frozen=True, slots=True)
 class ConditionalStage:
     stage: ValidationStageId
@@ -182,19 +298,12 @@ class ModePolicy:
         )
         conditional = tuple(self.conditional_stages)
 
-        if not all(
-            isinstance(item, ConditionalStage)
-            for item in conditional
-        ):
-            raise TypeError(
-                "conditional_stages must contain ConditionalStage values"
-            )
+        if not all(isinstance(item, ConditionalStage) for item in conditional):
+            raise TypeError("conditional_stages must contain ConditionalStage values")
 
         conditional_ids = tuple(item.stage for item in conditional)
         if len(conditional_ids) != len(set(conditional_ids)):
-            raise ValueError(
-                "conditional_stages must not contain duplicate stages"
-            )
+            raise ValueError("conditional_stages must not contain duplicate stages")
 
         all_declared = (
             *required,
@@ -203,13 +312,9 @@ class ModePolicy:
             *optional,
         )
         if len(all_declared) != len(set(all_declared)):
-            raise ValueError(
-                "a stage may appear in only one mode-policy category"
-            )
+            raise ValueError("a stage may appear in only one mode-policy category")
 
-        target_kinds = _normalize_target_kinds(
-            self.allowed_target_kinds
-        )
+        target_kinds = _normalize_target_kinds(self.allowed_target_kinds)
         allowed_overrides = _normalize_overrides(
             self.allowed_overrides,
             field_name="allowed_overrides",
@@ -219,44 +324,22 @@ class ModePolicy:
             field_name="prohibited_overrides",
         )
 
-        overlap = set(allowed_overrides).intersection(
-            prohibited_overrides
-        )
+        overlap = set(allowed_overrides).intersection(prohibited_overrides)
         if overlap:
             raise ValueError(
-                "overrides cannot be both allowed and prohibited: "
-                + ", ".join(sorted(overlap))
+                "overrides cannot be both allowed and prohibited: " + ", ".join(sorted(overlap))
             )
 
         if self.target_required and not target_kinds:
-            raise ValueError(
-                "target_required policies must allow target kinds"
-            )
+            raise ValueError("target_required policies must allow target kinds")
         if self.release_eligible and self.mode is not ValidationMode.RELEASE:
-            raise ValueError(
-                "only release mode may be release eligible"
-            )
-        if (
-            self.mode is ValidationMode.RELEASE
-            and not self.full_project_scope
-        ):
-            raise ValueError(
-                "release mode must use full project scope"
-            )
-        if (
-            self.mode is ValidationMode.RELEASE
-            and "evaluate_release_gates" not in required
-        ):
-            raise ValueError(
-                "release mode must require release-gate evaluation"
-            )
-        if (
-            self.mode is ValidationMode.RELEASE
-            and "verify_manifest" not in required
-        ):
-            raise ValueError(
-                "release mode must require manifest verification"
-            )
+            raise ValueError("only release mode may be release eligible")
+        if self.mode is ValidationMode.RELEASE and not self.full_project_scope:
+            raise ValueError("release mode must use full project scope")
+        if self.mode is ValidationMode.RELEASE and "evaluate_release_gates" not in required:
+            raise ValueError("release mode must require release-gate evaluation")
+        if self.mode is ValidationMode.RELEASE and "verify_manifest" not in required:
+            raise ValueError("release mode must require manifest verification")
 
         object.__setattr__(self, "required_stages", required)
         object.__setattr__(
@@ -323,13 +406,9 @@ class ModeContext:
             "scenarios_selected": self.scenarios_selected,
             "gold_comparison_required": self.gold_comparison_required,
             "release_requires_pgf": self.release_requires_pgf,
-            "compatible_history_exists": (
-                self.compatible_history_exists
-            ),
+            "compatible_history_exists": (self.compatible_history_exists),
             "manifest_requested": self.manifest_requested,
-            "manifest_verification_requested": (
-                self.manifest_verification_requested
-            ),
+            "manifest_verification_requested": (self.manifest_verification_requested),
         }
 
 
@@ -369,9 +448,7 @@ class ModeStageResolution:
             *inactive,
         )
         if len(all_stages) != len(set(all_stages)):
-            raise ValueError(
-                "resolved stage categories must not overlap"
-            )
+            raise ValueError("resolved stage categories must not overlap")
 
         object.__setattr__(self, "required_stages", required)
         object.__setattr__(
@@ -721,9 +798,7 @@ def parse_validation_mode(
     if isinstance(value, ValidationMode):
         return value
     if not isinstance(value, str):
-        raise TypeError(
-            "validation mode must be a ValidationMode or string"
-        )
+        raise TypeError("validation mode must be a ValidationMode or string")
 
     normalized = value.strip().casefold()
     if not normalized:
@@ -733,14 +808,10 @@ def parse_validation_mode(
         return ValidationMode(normalized)
     except ValueError:
         if allow_legacy_aliases:
-            migrated = LEGACY_VALIDATION_MODE_ALIASES.get(
-                normalized
-            )
+            migrated = LEGACY_VALIDATION_MODE_ALIASES.get(normalized)
             if migrated is not None:
                 return migrated
-        raise ValueError(
-            f"unsupported validation mode {value!r}"
-        ) from None
+        raise ValueError(f"unsupported validation mode {value!r}") from None
 
 
 def migrate_legacy_validation_mode(
@@ -749,9 +820,7 @@ def migrate_legacy_validation_mode(
     if isinstance(value, ValidationMode):
         return value, False
     if not isinstance(value, str):
-        raise TypeError(
-            "validation mode must be a ValidationMode or string"
-        )
+        raise TypeError("validation mode must be a ValidationMode or string")
 
     normalized = value.strip().casefold()
     migrated = LEGACY_VALIDATION_MODE_ALIASES.get(normalized)
@@ -808,17 +877,10 @@ def resolve_mode_stages(
         if not active:
             inactive.append(conditional.stage)
             continue
-        destination = (
-            required
-            if conditional.required_when_active
-            else recommended
-        )
+        destination = required if conditional.required_when_active else recommended
         destination.append(conditional.stage)
 
-    if (
-        policy.mode is ValidationMode.QUICK
-        and resolved_context.target_kind == "scenario"
-    ):
+    if policy.mode is ValidationMode.QUICK and resolved_context.target_kind == "scenario":
         required = [
             stage
             for stage in required
@@ -836,9 +898,7 @@ def resolve_mode_stages(
         required_stages=_canonical_stage_order(required),
         recommended_stages=_canonical_stage_order(recommended),
         optional_stages=_canonical_stage_order(optional),
-        inactive_conditional_stages=_canonical_stage_order(
-            inactive
-        ),
+        inactive_conditional_stages=_canonical_stage_order(inactive),
     )
 
 
@@ -854,24 +914,16 @@ def validate_mode_target(
     )
     if target_kind is None:
         if policy.target_required:
-            raise ValueError(
-                f"{policy.mode.value} mode requires a target"
-            )
+            raise ValueError(f"{policy.mode.value} mode requires a target")
         return
 
     normalized_target = _require_target_kind(target_kind)
     if normalized_target not in policy.allowed_target_kinds:
         raise ValueError(
-            f"target kind {normalized_target!r} is not valid for "
-            f"{policy.mode.value} mode"
+            f"target kind {normalized_target!r} is not valid for {policy.mode.value} mode"
         )
-    if (
-        policy.full_project_scope
-        and normalized_target != "project"
-    ):
-        raise ValueError(
-            "release mode cannot be narrowed by a target"
-        )
+    if policy.full_project_scope and normalized_target != "project":
+        raise ValueError("release mode cannot be narrowed by a target")
 
 
 def validate_mode_overrides(
@@ -895,10 +947,7 @@ def validate_mode_overrides(
             violations.append(
                 ModeOverrideViolation(
                     override=override,
-                    message=(
-                        f"{override} is prohibited in "
-                        f"{policy.mode.value} mode."
-                    ),
+                    message=(f"{override} is prohibited in {policy.mode.value} mode."),
                 )
             )
             continue
@@ -907,8 +956,7 @@ def validate_mode_overrides(
                 ModeOverrideViolation(
                     override=override,
                     message=(
-                        f"{override} is not an accepted override for "
-                        f"{policy.mode.value} mode."
+                        f"{override} is not an accepted override for {policy.mode.value} mode."
                     ),
                 )
             )
@@ -928,9 +976,7 @@ def require_valid_mode_overrides(
         allow_legacy_aliases=allow_legacy_aliases,
     )
     if violations:
-        raise ValueError(
-            "; ".join(item.message for item in violations)
-        )
+        raise ValueError("; ".join(item.message for item in violations))
 
 
 def is_release_eligible_mode(mode: object) -> bool:
@@ -953,160 +999,17 @@ def _canonical_stage_order(
         field_name="stages",
     )
     stage_set = set(normalized)
-    return tuple(
-        stage
-        for stage in CANONICAL_VALIDATION_STAGES
-        if stage in stage_set
-    )
-
-
-def _normalize_stages(
-    values: Iterable[ValidationStageId],
-    *,
-    field_name: str,
-) -> tuple[ValidationStageId, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(f"{field_name} must be an iterable of stages")
-    normalized = tuple(values)
-    for value in normalized:
-        _require_stage(value)
-    if len(normalized) != len(set(normalized)):
-        raise ValueError(
-            f"{field_name} must not contain duplicate stages"
-        )
-    return normalized
-
-
-def _normalize_target_kinds(
-    values: Iterable[ModeTargetKind],
-) -> tuple[ModeTargetKind, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "allowed_target_kinds must be an iterable"
-        )
-    normalized = tuple(values)
-    for value in normalized:
-        _require_target_kind(value)
-    if len(normalized) != len(set(normalized)):
-        raise ValueError(
-            "allowed_target_kinds must not contain duplicates"
-        )
-    return normalized
-
-
-def _normalize_overrides(
-    values: Iterable[ModeOverrideName],
-    *,
-    field_name: str,
-) -> tuple[ModeOverrideName, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(
-            f"{field_name} must be an iterable of override names"
-        )
-    normalized = tuple(values)
-    for value in normalized:
-        _require_override(value)
-    if len(normalized) != len(set(normalized)):
-        raise ValueError(
-            f"{field_name} must not contain duplicate overrides"
-        )
-    return normalized
-
-
-def _require_stage(value: object) -> ValidationStageId:
-    if not isinstance(value, str):
-        raise TypeError("validation stage must be a string")
-    if value not in CANONICAL_VALIDATION_STAGES:
-        raise ValueError(
-            f"unsupported validation stage {value!r}"
-        )
-    return cast(ValidationStageId, value)
-
-
-def _require_target_kind(value: object) -> ModeTargetKind:
-    if not isinstance(value, str):
-        raise TypeError("target kind must be a string")
-    allowed = {
-        "file",
-        "module",
-        "checkpoint",
-        "entrypoint",
-        "scenario",
-        "project",
-        "regression",
-    }
-    if value not in allowed:
-        raise ValueError(f"unsupported target kind {value!r}")
-    return cast(ModeTargetKind, value)
-
-
-def _require_override(value: object) -> ModeOverrideName:
-    if not isinstance(value, str):
-        raise TypeError("override name must be a string")
-    allowed = {
-        "target",
-        "extra_target",
-        "extra_checkpoint",
-        "extra_entrypoint",
-        "extra_scenario",
-        "timeout_increase",
-        "keep_full_details",
-        "diff_previous",
-        "skip_version_probe",
-        "scan_only",
-        "no_compile",
-        "skip_required_scenarios",
-        "skip_required_gold",
-        "skip_required_pgf",
-        "skip_manifest",
-        "ignore_blocking_issues",
-        "strict_scan_policy",
-        "manifest_verification",
-        "expanded_evidence",
-    }
-    if value not in allowed:
-        raise ValueError(f"unsupported override name {value!r}")
-    return cast(ModeOverrideName, value)
-
-
-def _require_condition(value: object) -> ModeConditionKey:
-    if not isinstance(value, str):
-        raise TypeError("condition must be a string")
-    allowed = {
-        "target_is_scenario",
-        "checkpoints_selected",
-        "entrypoints_selected",
-        "scenarios_selected",
-        "gold_comparison_required",
-        "release_requires_pgf",
-        "compatible_history_exists",
-        "manifest_requested",
-        "manifest_verification_requested",
-    }
-    if value not in allowed:
-        raise ValueError(f"unsupported mode condition {value!r}")
-    return cast(ModeConditionKey, value)
-
-
-def _require_text(value: object, *, field_name: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError(f"{field_name} must be a string")
-    if not value or not value.strip():
-        raise ValueError(f"{field_name} must not be empty")
-    if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
-    return value
+    return tuple(stage for stage in CANONICAL_VALIDATION_STAGES if stage in stage_set)
 
 
 __all__ = (
     "CANONICAL_VALIDATION_MODES",
     "CANONICAL_VALIDATION_STAGES",
-    "ConditionalStage",
-    "EvidencePolicy",
     "LEGACY_VALIDATION_MODE_ALIASES",
     "MODE_POLICIES",
+    "VALIDATION_MODE_CONTRACT_VERSION",
+    "ConditionalStage",
+    "EvidencePolicy",
     "ModeConditionKey",
     "ModeContext",
     "ModeOverrideName",
@@ -1114,7 +1017,6 @@ __all__ = (
     "ModePolicy",
     "ModeStageResolution",
     "ModeTargetKind",
-    "VALIDATION_MODE_CONTRACT_VERSION",
     "ValidationStageId",
     "canonical_mode_names",
     "canonical_stage_names",

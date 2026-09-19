@@ -16,10 +16,11 @@ from gf_wordbench.diagnostics.models import (
     PatternConfidence,
     PatternLifecycle,
     PatternMatch,
+    PatternMatcher,
 )
 from gf_wordbench.diagnostics.parsing.matcher import (
-    MatchStrictness,
     MatcherWarningCode,
+    MatchStrictness,
     PatternContractError,
     PatternExecutionError,
     diagnostic_match_key,
@@ -143,16 +144,18 @@ def _pattern(
     *,
     pattern_id: str = "DP-TEST-001",
     priority: int = 20,
-    matcher: object | None = None,
+    matcher: PatternMatcher | None = None,
     operations: frozenset[str] = frozenset({"compile_module"}),
     streams: frozenset[str] = frozenset({"stderr"}),
     lifecycle: PatternLifecycle = PatternLifecycle.ACTIVE,
     platforms: frozenset[str] = frozenset({"windows"}),
     versions: frozenset[str] = frozenset({"3"}),
 ) -> DiagnosticPattern:
-    selected_matcher = matcher
-    if selected_matcher is None:
-        selected_matcher = lambda evidence: _match(pattern_id=pattern_id)
+    selected_matcher: PatternMatcher = (
+        matcher
+        if matcher is not None
+        else lambda evidence: _match(pattern_id=pattern_id)
+    )
     return DiagnosticPattern(
         pattern_id=pattern_id,
         operations=operations,
@@ -200,14 +203,18 @@ def test_multiline_grouping_builds_one_complete_record() -> None:
     assert result.unclaimed_lines == ()
     assert result.warnings == ()
     assert result.consumed_line_count == 3
-    assert result.consumed_character_count == sum(
-        len(line)
-        for line in (
-            "Error: invalid expression",
-            "  in expression f x",
-            "  context: Main.gf",
+    assert (
+        result.consumed_character_count
+        == sum(
+            len(line)
+            for line in (
+                "Error: invalid expression",
+                "  in expression f x",
+                "  context: Main.gf",
+            )
         )
-    ) + 2
+        + 2
+    )
     assert result.stopped_early is False
 
 
@@ -309,9 +316,7 @@ def test_continuation_limit_marks_record_truncated() -> None:
 
 
 def test_character_limits_apply_to_start_and_continuation() -> None:
-    start_truncated = group_multiline_diagnostics(
-        (_start(1, text="abcdefgh", max_characters=4),)
-    )
+    start_truncated = group_multiline_diagnostics((_start(1, text="abcdefgh", max_characters=4),))
     assert start_truncated.blocks[0].lines == ("abcd",)
     assert start_truncated.blocks[0].close_reason is CloseReason.CHARACTER_LIMIT
     assert start_truncated.blocks[0].truncated is True
@@ -403,29 +408,41 @@ def test_pattern_order_is_stable_and_duplicate_ids_are_rejected() -> None:
     with pytest.raises(PatternContractError, match="duplicate diagnostic pattern ID"):
         prepare_pattern_order((first, replace(first, priority=99)))
     with pytest.raises(TypeError, match="iterable"):
-        prepare_pattern_order("DP-TEST-010")  # type: ignore[arg-type]
+        prepare_pattern_order("DP-TEST-010")
 
 
 def test_pattern_applicability_checks_every_declared_scope() -> None:
     pattern = _pattern()
 
     assert pattern_applicability(pattern, _evidence()).applicable is True
-    assert pattern_applicability(
-        pattern,
-        _evidence(operation="build_pgf"),
-    ).applicable is False
-    assert pattern_applicability(
-        pattern,
-        _evidence(stream=DiagnosticStream.STDOUT),
-    ).applicable is False
-    assert pattern_applicability(
-        pattern,
-        _evidence(platform="linux"),
-    ).applicable is False
-    assert pattern_applicability(
-        pattern,
-        _evidence(gf_version="4.0"),
-    ).applicable is False
+    assert (
+        pattern_applicability(
+            pattern,
+            _evidence(operation="build_pgf"),
+        ).applicable
+        is False
+    )
+    assert (
+        pattern_applicability(
+            pattern,
+            _evidence(stream=DiagnosticStream.STDOUT),
+        ).applicable
+        is False
+    )
+    assert (
+        pattern_applicability(
+            pattern,
+            _evidence(platform="linux"),
+        ).applicable
+        is False
+    )
+    assert (
+        pattern_applicability(
+            pattern,
+            _evidence(gf_version="4.0"),
+        ).applicable
+        is False
+    )
 
 
 def test_unknown_compatibility_data_skips_pattern_with_warning() -> None:
@@ -546,9 +563,7 @@ def test_matching_orders_patterns_and_deduplicates_semantic_matches() -> None:
     assert batch.matches[0] is duplicate
     assert stdout_variant in batch.matches
     assert batch.complete is True
-    assert [warning.code for warning in batch.warnings] == [
-        MatcherWarningCode.DUPLICATE_MATCH
-    ]
+    assert [warning.code for warning in batch.warnings] == [MatcherWarningCode.DUPLICATE_MATCH]
 
 
 def test_invalid_match_is_warning_in_tolerant_mode_and_error_in_strict_mode() -> None:

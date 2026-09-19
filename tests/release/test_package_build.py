@@ -26,12 +26,8 @@ _BUILD_TIMEOUT_SEC: Final[float] = 240.0
 _DISTRIBUTION_NAME: Final[str] = "gf-wordbench"
 _IMPORT_PACKAGE: Final[str] = "gf_wordbench"
 _REQUIRED_PYTHON: Final[str] = ">=3.11,<3.15"
-_CONSOLE_ENTRY_POINT: Final[str] = (
-    "gf_wordbench.entrypoints.cli.main:main"
-)
-_GUI_ENTRY_POINT: Final[str] = (
-    "gf_wordbench.entrypoints.gui.main:main"
-)
+_CONSOLE_ENTRY_POINT: Final[str] = "gf_wordbench.entrypoints.cli.main:main"
+_GUI_ENTRY_POINT: Final[str] = "gf_wordbench.entrypoints.gui.main:main"
 _COPY_EXCLUSIONS: Final[frozenset[str]] = frozenset(
     {
         ".coverage",
@@ -61,6 +57,11 @@ _PROHIBITED_PARTS: Final[frozenset[str]] = frozenset(
         "htmlcov",
     }
 )
+
+
+class _CaseSensitiveConfigParser(configparser.ConfigParser):
+    def optionxform(self, optionstr: str) -> str:
+        return optionstr
 
 
 def _repository_root() -> Path:
@@ -117,13 +118,11 @@ def _clean_build_environment() -> dict[str, str]:
 def _build_candidate(source_root: Path, tmp_path: Path) -> Path:
     if importlib.util.find_spec("build") is None:
         raise AssertionError(
-            "The release package test requires the declared dev dependency "
-            "'build'"
+            "The release package test requires the declared dev dependency 'build'"
         )
     if importlib.util.find_spec("hatchling") is None:
         raise AssertionError(
-            "The release package test requires the declared build backend "
-            "'hatchling'"
+            "The release package test requires the declared build backend 'hatchling'"
         )
 
     candidate = tmp_path / "candidate"
@@ -197,8 +196,7 @@ def _dist_info_directory(names: tuple[str, ...]) -> str:
     candidates = {
         path.parts[0]
         for name in names
-        if (path := PurePosixPath(name)).parts
-        and path.parts[0].endswith(".dist-info")
+        if (path := PurePosixPath(name)).parts and path.parts[0].endswith(".dist-info")
     }
     assert len(candidates) == 1
     return candidates.pop()
@@ -224,9 +222,7 @@ def _assert_wheel(
     source_root: Path,
     wheel_path: Path,
 ) -> None:
-    assert wheel_path.name.startswith(
-        f"{_IMPORT_PACKAGE}-{__version__}-"
-    )
+    assert wheel_path.name.startswith(f"{_IMPORT_PACKAGE}-{__version__}-")
     assert wheel_path.suffix == ".whl"
 
     with zipfile.ZipFile(wheel_path) as archive:
@@ -236,9 +232,7 @@ def _assert_wheel(
         members = set(names)
         package_prefix = f"{_IMPORT_PACKAGE}/"
         packaged_python = {
-            name
-            for name in names
-            if name.startswith(package_prefix) and name.endswith(".py")
+            name for name in names if name.startswith(package_prefix) and name.endswith(".py")
         }
         assert packaged_python == _source_python_members(source_root)
         assert f"{_IMPORT_PACKAGE}/py.typed" in members
@@ -257,14 +251,11 @@ def _assert_wheel(
         }
         assert required_metadata <= members
         assert any(
-            name.startswith(f"{dist_info}/licenses/")
-            and name.endswith("/LICENSE.md")
+            name.startswith(f"{dist_info}/licenses/") and name.endswith("/LICENSE.md")
             for name in names
         )
 
-        metadata = Parser().parsestr(
-            _wheel_text(archive, f"{dist_info}/METADATA")
-        )
+        metadata = Parser().parsestr(_wheel_text(archive, f"{dist_info}/METADATA"))
         assert metadata["Name"] == _DISTRIBUTION_NAME
         assert metadata["Version"] == __version__
         assert metadata["Requires-Python"] == _REQUIRED_PYTHON
@@ -278,46 +269,25 @@ def _assert_wheel(
             for requirement in metadata.get_all("Requires-Dist", [])
         )
 
-        entry_points = configparser.ConfigParser(
+        entry_points = _CaseSensitiveConfigParser(
             interpolation=None,
         )
-        entry_points.optionxform = str
-        entry_points.read_string(
-            _wheel_text(archive, f"{dist_info}/entry_points.txt")
-        )
-        assert (
-            entry_points["console_scripts"]["gf-wordbench"]
-            == _CONSOLE_ENTRY_POINT
-        )
-        assert (
-            entry_points["gui_scripts"]["gf-wordbench-gui"]
-            == _GUI_ENTRY_POINT
-        )
+        entry_points.read_string(_wheel_text(archive, f"{dist_info}/entry_points.txt"))
+        assert entry_points["console_scripts"]["gf-wordbench"] == _CONSOLE_ENTRY_POINT
+        assert entry_points["gui_scripts"]["gf-wordbench-gui"] == _GUI_ENTRY_POINT
 
-        wheel_metadata = Parser().parsestr(
-            _wheel_text(archive, f"{dist_info}/WHEEL")
-        )
+        wheel_metadata = Parser().parsestr(_wheel_text(archive, f"{dist_info}/WHEEL"))
         assert wheel_metadata["Wheel-Version"] == "1.0"
         assert wheel_metadata["Root-Is-Purelib"].lower() == "true"
 
-        record_rows = tuple(
-            csv.reader(
-                io.StringIO(
-                    _wheel_text(archive, f"{dist_info}/RECORD")
-                )
-            )
-        )
+        record_rows = tuple(csv.reader(io.StringIO(_wheel_text(archive, f"{dist_info}/RECORD"))))
         recorded_names = {row[0] for row in record_rows}
         assert recorded_names == members
         assert all(len(row) == 3 for row in record_rows)
 
 
 def _strip_sdist_root(names: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
-    roots = {
-        path.parts[0]
-        for name in names
-        if (path := PurePosixPath(name)).parts
-    }
+    roots = {path.parts[0] for name in names if (path := PurePosixPath(name)).parts}
     assert len(roots) == 1
     root = roots.pop()
     relative = tuple(
@@ -335,11 +305,7 @@ def _assert_sdist(
     assert sdist_path.name == f"{_IMPORT_PACKAGE}-{__version__}.tar.gz"
 
     with tarfile.open(sdist_path, mode="r:gz") as archive:
-        regular_members = tuple(
-            member.name
-            for member in archive.getmembers()
-            if member.isfile()
-        )
+        regular_members = tuple(member.name for member in archive.getmembers() if member.isfile())
         _assert_safe_archive_names(regular_members)
         root, relative_names = _strip_sdist_root(regular_members)
 
@@ -365,8 +331,7 @@ def _assert_sdist(
         packaged_python = {
             name
             for name in relative
-            if name.startswith(f"src/{_IMPORT_PACKAGE}/")
-            and name.endswith(".py")
+            if name.startswith(f"src/{_IMPORT_PACKAGE}/") and name.endswith(".py")
         }
         assert packaged_python == expected_python
 
@@ -374,14 +339,9 @@ def _assert_sdist(
             ".coverage",
             ".gf_wordbench_state.json",
         )
+        assert not any(PurePosixPath(name).name in prohibited_names for name in relative)
         assert not any(
-            PurePosixPath(name).name in prohibited_names
-            for name in relative
-        )
-        assert not any(
-            PurePosixPath(name).name.startswith(
-                ("Index(", "Pasted text(", "Pasted markdown(")
-            )
+            PurePosixPath(name).name.startswith(("Index(", "Pasted text(", "Pasted markdown("))
             for name in relative
         )
         assert not any(

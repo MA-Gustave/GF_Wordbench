@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 import hashlib
 import json
 import os
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import stat
-from collections.abc import Iterable, Mapping
-from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Final
 
 from gf_wordbench.kernel.statuses import ValidationStatus
@@ -75,19 +75,19 @@ _MEDIA_TYPES_BY_ROLE: Final[Mapping[str, frozenset[str]]] = {
 
 class _Verification:
     __slots__ = (
-        "manifest_path",
-        "run_root",
-        "policy",
-        "schema_version",
         "checked",
-        "required_checked",
-        "missing",
+        "entries",
+        "errors",
+        "failures",
+        "manifest_path",
         "mismatched",
+        "missing",
+        "policy",
+        "required_checked",
+        "run_root",
+        "schema_version",
         "unsafe",
         "warnings",
-        "failures",
-        "errors",
-        "entries",
     )
 
     def __init__(
@@ -140,18 +140,16 @@ class _Verification:
 
 
 def verify_manifest(
-    manifest_path: Path,
-    run_root: Path,
+    manifest_path: str | os.PathLike[str],
+    run_root: str | os.PathLike[str],
     policy: ManifestVerificationPolicy,
 ) -> ManifestVerificationResult:
     """Verify one manifest without modifying it or any listed artifact."""
 
-    if not isinstance(manifest_path, Path):
-        manifest_path = Path(manifest_path)
-    if not isinstance(run_root, Path):
-        run_root = Path(run_root)
+    resolved_manifest_path = Path(manifest_path)
+    resolved_run_root = Path(run_root)
 
-    state = _Verification(manifest_path, run_root, policy)
+    state = _Verification(resolved_manifest_path, resolved_run_root, policy)
     try:
         _verify(state)
     except Exception as exc:  # defensive containment at the reporting boundary
@@ -242,8 +240,10 @@ def _verify_root(state: _Verification, document: Mapping[str, Any]) -> bool:
             state.error("MANIFEST_SCHEMA_VERSION_UNSUPPORTED", f"unsupported schema {version}")
 
     producer = document.get("producer")
-    if not isinstance(producer, dict) or not _nonempty(producer.get("name")) or not _nonempty(
-        producer.get("version")
+    if (
+        not isinstance(producer, dict)
+        or not _nonempty(producer.get("name"))
+        or not _nonempty(producer.get("version"))
     ):
         state.error("MANIFEST_ARTIFACT_ENTRY_INVALID", "producer is invalid")
 
@@ -318,7 +318,14 @@ def _verify_entries(state: _Verification, entries: list[Any]) -> None:
         if type(required) is not bool or type(size_bytes) is not int or size_bytes < 0:
             state.error("MANIFEST_ARTIFACT_ENTRY_INVALID", f"invalid fields for {normalized}")
             continue
-        if not _nonempty(role) or not _nonempty(media_type) or not _nonempty(created_by):
+        if (
+            not isinstance(role, str)
+            or not isinstance(media_type, str)
+            or not isinstance(created_by, str)
+            or not _nonempty(role)
+            or not _nonempty(media_type)
+            or not _nonempty(created_by)
+        ):
             state.error("MANIFEST_ARTIFACT_ENTRY_INVALID", f"invalid metadata for {normalized}")
             continue
         if not isinstance(digest, str) or not _SHA256_PATTERN.fullmatch(digest):
@@ -330,7 +337,9 @@ def _verify_entries(state: _Verification, entries: list[Any]) -> None:
         _verify_file(state, normalized, required, size_bytes, digest, role, media_type)
 
     if state.strict and normalized_order != sorted(normalized_order):
-        state.error("MANIFEST_ARTIFACT_ENTRY_INVALID", "artifact entries are not canonically sorted")
+        state.error(
+            "MANIFEST_ARTIFACT_ENTRY_INVALID", "artifact entries are not canonically sorted"
+        )
 
 
 def _verify_strict_metadata(
@@ -378,9 +387,13 @@ def _verify_file(
     if not candidate.exists():
         state.missing.append(relative_path)
         if required:
-            state.fail("MANIFEST_ARTIFACT_MISSING", f"required artifact is missing: {relative_path}")
+            state.fail(
+                "MANIFEST_ARTIFACT_MISSING", f"required artifact is missing: {relative_path}"
+            )
         else:
-            state.warn("MANIFEST_ARTIFACT_MISSING", f"optional artifact is missing: {relative_path}")
+            state.warn(
+                "MANIFEST_ARTIFACT_MISSING", f"optional artifact is missing: {relative_path}"
+            )
         return
 
     try:
@@ -391,10 +404,14 @@ def _verify_file(
     if stat.S_ISLNK(lstat.st_mode):
         allow_symlinks = _policy_bool(state.policy, "allow_symlinks", default=not state.strict)
         if not allow_symlinks or state.release:
-            state.error("MANIFEST_ARTIFACT_SYMLINK", f"symlink artifact is prohibited: {relative_path}")
+            state.error(
+                "MANIFEST_ARTIFACT_SYMLINK", f"symlink artifact is prohibited: {relative_path}"
+            )
             return
     if not candidate.is_file():
-        state.error("MANIFEST_ARTIFACT_NOT_FILE", f"artifact is not a regular file: {relative_path}")
+        state.error(
+            "MANIFEST_ARTIFACT_NOT_FILE", f"artifact is not a regular file: {relative_path}"
+        )
         return
 
     try:
@@ -448,8 +465,12 @@ def _verify_required_declarations(state: _Verification) -> None:
                 f"required artifact is not declared required: {path}",
                 path=str(path),
             )
-    if state.release and _policy_bool(state.policy, "require_pgf", "release_requires_pgf", default=False):
-        pgf_entries = [entry for entry in state.entries if entry.get("role") == "pgf" and entry.get("required")]
+    if state.release and _policy_bool(
+        state.policy, "require_pgf", "release_requires_pgf", default=False
+    ):
+        pgf_entries = [
+            entry for entry in state.entries if entry.get("role") == "pgf" and entry.get("required")
+        ]
         if not pgf_entries:
             state.fail("MANIFEST_REQUIRED_ARTIFACT_UNDECLARED", "release requires a PGF artifact")
 
@@ -481,10 +502,18 @@ def _verify_unlisted_files(state: _Verification) -> None:
         for file_path in sorted(path for path in base.rglob("*") if path.is_file()):
             relative = file_path.relative_to(state.run_root).as_posix()
             if relative not in listed and relative != _MANIFEST_NAME:
-                if state.release or _policy_bool(state.policy, "reject_unlisted_files", default=False):
-                    state.error("MANIFEST_REQUIRED_ARTIFACT_UNDECLARED", f"unlisted finalized file: {relative}")
+                if state.release or _policy_bool(
+                    state.policy, "reject_unlisted_files", default=False
+                ):
+                    state.error(
+                        "MANIFEST_REQUIRED_ARTIFACT_UNDECLARED",
+                        f"unlisted finalized file: {relative}",
+                    )
                 else:
-                    state.warn("MANIFEST_REQUIRED_ARTIFACT_UNDECLARED", f"unlisted finalized file: {relative}")
+                    state.warn(
+                        "MANIFEST_REQUIRED_ARTIFACT_UNDECLARED",
+                        f"unlisted finalized file: {relative}",
+                    )
 
 
 def _verify_summary_consistency(state: _Verification, manifest: Mapping[str, Any]) -> None:
@@ -515,7 +544,10 @@ def _verify_summary_consistency(state: _Verification, manifest: Mapping[str, Any
     summary_run_id = _nested_value(summary, ("metadata", "run_id"), ("run_id",))
     if summary_run_id != manifest.get("run_id"):
         state.fail("MANIFEST_SUMMARY_INCONSISTENT", "summary and manifest run_id differ")
-    metadata = summary.get("metadata") if isinstance(summary.get("metadata"), dict) else summary
+    metadata_value = summary.get("metadata")
+    metadata: Mapping[str, Any] = (
+        metadata_value if isinstance(metadata_value, dict) else summary
+    )
     if state.release:
         if not _nonempty(metadata.get("project_id")) or not _nonempty(metadata.get("project_name")):
             state.fail("MANIFEST_SUMMARY_INCONSISTENT", "summary lacks active project identity")
@@ -524,7 +556,9 @@ def _verify_summary_consistency(state: _Verification, manifest: Mapping[str, Any
     if isinstance(artifact_map, dict):
         manifest_ref = artifact_map.get("manifest")
         if manifest_ref is not None and manifest_ref != _MANIFEST_NAME:
-            state.fail("MANIFEST_SUMMARY_INCONSISTENT", "summary manifest path is not manifest.json")
+            state.fail(
+                "MANIFEST_SUMMARY_INCONSISTENT", "summary manifest path is not manifest.json"
+            )
         listed = {
             _normalize_manifest_path(entry.get("path"))
             for entry in state.entries
@@ -558,7 +592,9 @@ def _verify_canonical_text(
         state.error("MANIFEST_MEDIA_TYPE_INVALID", f"invalid UTF-8 text {relative_path}: {exc}")
         return
     if media_type.startswith(("text/", "application/json")) and not raw.endswith(b"\n"):
-        state.error("MANIFEST_MEDIA_TYPE_INVALID", f"canonical text lacks final LF: {relative_path}")
+        state.error(
+            "MANIFEST_MEDIA_TYPE_INVALID", f"canonical text lacks final LF: {relative_path}"
+        )
 
 
 def _build_result(state: _Verification) -> ManifestVerificationResult:

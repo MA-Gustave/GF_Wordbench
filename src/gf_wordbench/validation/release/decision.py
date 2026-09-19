@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+import re
 from typing import Final
 
 from gf_wordbench.kernel.ids import (
@@ -24,9 +24,7 @@ from .models import (
     ReleaseGateResult,
 )
 
-_GATE_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^RG-(?P<number>[0-9]{2,})$"
-)
+_GATE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^RG-(?P<number>[0-9]{2,})$")
 _VERSION_RE: Final[re.Pattern[str]] = re.compile(
     r"^[0-9]+\.[0-9]+\.[0-9]+"
     r"(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?"
@@ -47,9 +45,7 @@ def _require_text(name: str, value: object) -> str:
 def _require_version(name: str, value: object) -> str:
     candidate = _require_text(name, value)
     if _VERSION_RE.fullmatch(candidate) is None:
-        raise ValueError(
-            f"{name} must be a semantic version without a leading prefix"
-        )
+        raise ValueError(f"{name} must be a semantic version without a leading prefix")
     return candidate
 
 
@@ -65,34 +61,24 @@ def _normalize_artifact_paths(
     paths: Iterable[Path],
 ) -> tuple[Path, ...]:
     if isinstance(paths, (str, bytes, Path)):
-        raise TypeError(
-            "release_artifact_paths must be an iterable of Path values"
-        )
+        raise TypeError("release_artifact_paths must be an iterable of Path values")
 
     try:
         normalized = tuple(paths)
     except TypeError as exc:
-        raise TypeError(
-            "release_artifact_paths must be an iterable of Path values"
-        ) from exc
+        raise TypeError("release_artifact_paths must be an iterable of Path values") from exc
 
     seen: set[str] = set()
 
     for index, path in enumerate(normalized):
         if not isinstance(path, Path):
-            raise TypeError(
-                f"release_artifact_paths[{index}] must be pathlib.Path"
-            )
+            raise TypeError(f"release_artifact_paths[{index}] must be pathlib.Path")
 
         rendered = str(path)
         if not rendered:
-            raise ValueError(
-                f"release_artifact_paths[{index}] must not be empty"
-            )
+            raise ValueError(f"release_artifact_paths[{index}] must not be empty")
         if "\x00" in rendered:
-            raise ValueError(
-                f"release_artifact_paths[{index}] must not contain NUL"
-            )
+            raise ValueError(f"release_artifact_paths[{index}] must not contain NUL")
 
         key = path.as_posix().casefold()
         if key in seen:
@@ -117,30 +103,26 @@ def _gate_sort_key(
 
 
 def _normalize_gate_results(
-    gate_results: Iterable[ReleaseGateResult],
+    gate_results: Iterable[object],
 ) -> tuple[ReleaseGateResult, ...]:
     if isinstance(gate_results, (str, bytes)):
-        raise TypeError(
-            "gate_results must be an iterable of ReleaseGateResult values"
-        )
+        raise TypeError("gate_results must be an iterable of ReleaseGateResult values")
 
     try:
-        normalized = tuple(gate_results)
+        raw_results = tuple(gate_results)
     except TypeError as exc:
-        raise TypeError(
-            "gate_results must be an iterable of ReleaseGateResult values"
-        ) from exc
+        raise TypeError("gate_results must be an iterable of ReleaseGateResult values") from exc
 
-    if not normalized:
+    if not raw_results:
         raise ValueError("release decision requires gate results")
 
+    normalized: list[ReleaseGateResult] = []
     seen: set[str] = set()
 
-    for index, result in enumerate(normalized):
+    for index, result in enumerate(raw_results):
         if not isinstance(result, ReleaseGateResult):
-            raise TypeError(
-                f"gate_results[{index}] must be a ReleaseGateResult"
-            )
+            raise TypeError(f"gate_results[{index}] must be a ReleaseGateResult")
+        normalized.append(result)
 
         gate_id = _require_text(
             f"gate_results[{index}].gate_id",
@@ -166,24 +148,16 @@ def _validate_gate_result(
         applicability,
         ReleaseGateApplicability,
     ):
-        raise TypeError(
-            f"{result.gate_id} applicability must be "
-            "a ReleaseGateApplicability"
-        )
+        raise TypeError(f"{result.gate_id} applicability must be a ReleaseGateApplicability")
 
     if not isinstance(status, ValidationStatus):
-        raise TypeError(
-            f"{result.gate_id} status must be a ValidationStatus"
-        )
+        raise TypeError(f"{result.gate_id} status must be a ValidationStatus")
 
     if (
-        applicability
-        is ReleaseGateApplicability.NOT_APPLICABLE
+        applicability is ReleaseGateApplicability.NOT_APPLICABLE
         and status is not ValidationStatus.SKIPPED
     ):
-        raise ValueError(
-            f"{result.gate_id} is not applicable and must be SKIPPED"
-        )
+        raise ValueError(f"{result.gate_id} is not applicable and must be SKIPPED")
 
     if (
         applicability
@@ -196,8 +170,7 @@ def _validate_gate_result(
         and not result.blockers
     ):
         raise ValueError(
-            f"{result.gate_id} is a skipped applicable gate "
-            "without a reason or blocker"
+            f"{result.gate_id} is a skipped applicable gate without a reason or blocker"
         )
 
 
@@ -292,39 +265,24 @@ def evaluate_release_decision(
     gate_results: Iterable[ReleaseGateResult],
 ) -> ReleaseDecision:
     if not isinstance(context, ReleaseDecisionContext):
-        raise TypeError(
-            "context must be a ReleaseDecisionContext"
-        )
+        raise TypeError("context must be a ReleaseDecisionContext")
 
     ordered_results = _normalize_gate_results(
         gate_results,
     )
-    required_results = tuple(
-        result
-        for result in ordered_results
-        if _is_required(result)
-    )
+    required_results = tuple(result for result in ordered_results if _is_required(result))
 
     if not required_results:
-        raise ValueError(
-            "release decision requires at least one "
-            "applicable required gate"
-        )
+        raise ValueError("release decision requires at least one applicable required gate")
 
     failed_gate_ids = tuple(
-        result.gate_id
-        for result in required_results
-        if result.status is ValidationStatus.FAIL
+        result.gate_id for result in required_results if result.status is ValidationStatus.FAIL
     )
     error_gate_ids = tuple(
-        result.gate_id
-        for result in required_results
-        if result.status is ValidationStatus.ERROR
+        result.gate_id for result in required_results if result.status is ValidationStatus.ERROR
     )
     skipped_required_gate_ids = tuple(
-        result.gate_id
-        for result in required_results
-        if result.status is ValidationStatus.SKIPPED
+        result.gate_id for result in required_results if result.status is ValidationStatus.SKIPPED
     )
 
     if error_gate_ids or skipped_required_gate_ids:
@@ -334,14 +292,8 @@ def evaluate_release_decision(
     else:
         decision = ReleaseDecisionStatus.READY
 
-    passed_gate_count = sum(
-        result.status is ValidationStatus.OK
-        for result in required_results
-    )
-    warning_count = sum(
-        len(result.warnings)
-        for result in ordered_results
-    )
+    passed_gate_count = sum(result.status is ValidationStatus.OK for result in required_results)
+    warning_count = sum(len(result.warnings) for result in ordered_results)
 
     return ReleaseDecision(
         decision=decision,

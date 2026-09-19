@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
-import re
 from dataclasses import dataclass
 from difflib import unified_diff
 from enum import StrEnum, unique
+import hashlib
 from pathlib import Path
+import re
 from typing import Final
 
 from gf_wordbench.infrastructure.atomic_io import atomic_write_text
@@ -25,12 +25,8 @@ _GOLD_HEADER: Final = "# GF_WORDBENCH_GOLD 1.0"
 _SCENARIO_PREFIX: Final = "# scenario_id: "
 _NORMALIZATION_PREFIX: Final = "# normalization_version: "
 _VERSION_RE: Final = re.compile(r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$")
-_BEGIN_RE: Final = re.compile(
-    r"^--- BEGIN (?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+)*) ---$"
-)
-_END_RE: Final = re.compile(
-    r"^--- END (?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+)*) ---$"
-)
+_BEGIN_RE: Final = re.compile(r"^--- BEGIN (?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+)*) ---$")
+_END_RE: Final = re.compile(r"^--- END (?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+)*) ---$")
 
 
 @unique
@@ -162,12 +158,8 @@ def parse_scenario_text(
             kind=kind,
         )
 
-    scenario_text = _header_value(
-        lines[1], _SCENARIO_PREFIX, "scenario_id", kind
-    )
-    version = _header_value(
-        lines[2], _NORMALIZATION_PREFIX, "normalization_version", kind
-    )
+    scenario_text = _header_value(lines[1], _SCENARIO_PREFIX, "scenario_id", kind)
+    version = _header_value(lines[2], _NORMALIZATION_PREFIX, "normalization_version", kind)
     try:
         scenario_id = validate_scenario_id(scenario_text, field="scenario_id")
         _require_version(version)
@@ -184,13 +176,9 @@ def parse_scenario_text(
                 f"unexpected text outside a section at line {index + 1}",
                 kind=kind,
             )
-        section_id = validate_section_id(
-            begin.group("id"), field=f"section ID at line {index + 1}"
-        )
+        section_id = validate_section_id(begin.group("id"), field=f"section ID at line {index + 1}")
         if section_id in seen:
-            raise ScenarioTextValidationError(
-                f"duplicate section ID {section_id!r}", kind=kind
-            )
+            raise ScenarioTextValidationError(f"duplicate section ID {section_id!r}", kind=kind)
 
         index += 1
         content: list[str] = []
@@ -220,9 +208,7 @@ def parse_scenario_text(
         index += 1
 
     if not sections:
-        raise ScenarioTextValidationError(
-            f"{kind.value} text contains no sections", kind=kind
-        )
+        raise ScenarioTextValidationError(f"{kind.value} text contains no sections", kind=kind)
 
     return ScenarioTextDocument(
         kind=kind,
@@ -249,9 +235,7 @@ def compare_gold_text(
     if not isinstance(allow_empty_gold, bool):
         raise TypeError("allow_empty_gold must be a boolean")
 
-    actual = parse_scenario_text(
-        normalized_output_text, kind=ScenarioTextKind.OUTPUT
-    )
+    actual = parse_scenario_text(normalized_output_text, kind=ScenarioTextKind.OUTPUT)
     expected = parse_scenario_text(gold_text, kind=ScenarioTextKind.GOLD)
     _require_identity(actual, resolved_id, normalization_version)
     _require_identity(expected, resolved_id, normalization_version)
@@ -265,11 +249,15 @@ def compare_gold_text(
     expected_projection = expected.comparison_projection()
     actual_projection = actual.comparison_projection()
     matched = expected_projection == actual_projection
-    diff = "" if matched else build_unified_gold_diff(
-        expected_projection=expected_projection,
-        actual_projection=actual_projection,
-        expected_label=expected_label,
-        actual_label=actual_label,
+    diff = (
+        ""
+        if matched
+        else build_unified_gold_diff(
+            expected_projection=expected_projection,
+            actual_projection=actual_projection,
+            expected_label=expected_label,
+            actual_label=actual_label,
+        )
     )
     return matched, diff, expected, actual
 
@@ -381,16 +369,6 @@ def compare_gold(
             kind,
         )
 
-    common = dict(
-        policy=GoldComparisonPolicy.EXACT,
-        scenario_id=resolved_id,
-        normalization_version=normalization_version,
-        normalized_output_path=actual_path,
-        gold_path=expected_path,
-        expected_sha256=expected.sha256,
-        actual_sha256=actual.sha256,
-        section_ids=actual.section_ids,
-    )
     if matched:
         return GoldComparisonResult(
             state=GoldComparisonState.MATCH,
@@ -398,7 +376,14 @@ def compare_gold(
             error_kind=ErrorKind.OK,
             message="Normalized output matches gold.",
             gold_diff_path=None,
-            **common,
+            policy=GoldComparisonPolicy.EXACT,
+            scenario_id=resolved_id,
+            normalization_version=normalization_version,
+            normalized_output_path=actual_path,
+            gold_path=expected_path,
+            expected_sha256=expected.sha256,
+            actual_sha256=actual.sha256,
+            section_ids=actual.section_ids,
         )
 
     destination = _required_path(gold_diff_path, "gold_diff_path")
@@ -419,7 +404,14 @@ def compare_gold(
             error_kind=ErrorKind.IO,
             message=f"Gold mismatch detected, but diff writing failed: {_bounded(exc)}",
             gold_diff_path=None,
-            **common,
+            policy=GoldComparisonPolicy.EXACT,
+            scenario_id=resolved_id,
+            normalization_version=normalization_version,
+            normalized_output_path=actual_path,
+            gold_path=expected_path,
+            expected_sha256=expected.sha256,
+            actual_sha256=actual.sha256,
+            section_ids=actual.section_ids,
         )
 
     return GoldComparisonResult(
@@ -428,7 +420,14 @@ def compare_gold(
         error_kind=ErrorKind.OTHER,
         message="Normalized output differs from gold.",
         gold_diff_path=written,
-        **common,
+        policy=GoldComparisonPolicy.EXACT,
+        scenario_id=resolved_id,
+        normalization_version=normalization_version,
+        normalized_output_path=actual_path,
+        gold_path=expected_path,
+        expected_sha256=expected.sha256,
+        actual_sha256=actual.sha256,
+        section_ids=actual.section_ids,
     )
 
 
@@ -444,14 +443,10 @@ def _header_value(
 ) -> str:
     value = _line(line)
     if not value.startswith(prefix):
-        raise ScenarioTextValidationError(
-            f"missing canonical {name} header", kind=kind
-        )
+        raise ScenarioTextValidationError(f"missing canonical {name} header", kind=kind)
     result = value[len(prefix) :]
     if not result or result != result.strip() or "\x00" in result:
-        raise ScenarioTextValidationError(
-            f"invalid canonical {name} header", kind=kind
-        )
+        raise ScenarioTextValidationError(f"invalid canonical {name} header", kind=kind)
     return result
 
 

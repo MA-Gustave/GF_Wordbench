@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import os
-import shutil
-import stat
-import uuid
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum, unique
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import shutil
+import stat
 from types import MappingProxyType
 from typing import Final, Protocol, TypeAlias, runtime_checkable
+import uuid
 
 from .manifest.hashing import (
     FileHash,
@@ -115,9 +115,7 @@ class PublicationEntry:
             "expected_size_bytes",
         )
         expected_sha256 = (
-            None
-            if self.expected_sha256 is None
-            else normalize_sha256(self.expected_sha256)
+            None if self.expected_sha256 is None else normalize_sha256(self.expected_sha256)
         )
         metadata = _freeze_metadata(self.metadata)
 
@@ -144,9 +142,7 @@ class PublicationRequest:
     destination: Path
     entries: tuple[PublicationEntry, ...]
     kind: PublicationKind = PublicationKind.ARTIFACT_SET
-    conflict_policy: PublicationConflictPolicy = (
-        PublicationConflictPolicy.FAIL
-    )
+    conflict_policy: PublicationConflictPolicy = PublicationConflictPolicy.FAIL
     require_finalized_run: bool = True
     require_summary: bool = True
     require_manifest: bool = True
@@ -173,9 +169,7 @@ class PublicationRequest:
             self.conflict_policy,
             PublicationConflictPolicy,
         ):
-            raise TypeError(
-                "conflict_policy must be PublicationConflictPolicy"
-            )
+            raise TypeError("conflict_policy must be PublicationConflictPolicy")
         for field_name in (
             "require_finalized_run",
             "require_summary",
@@ -186,9 +180,7 @@ class PublicationRequest:
         ):
             if type(getattr(self, field_name)) is not bool:
                 raise TypeError(f"{field_name} must be a boolean")
-        copy_chunk_size_bytes = _chunk_size(
-            self.copy_chunk_size_bytes
-        )
+        copy_chunk_size_bytes = _chunk_size(self.copy_chunk_size_bytes)
         source_manifest_sha256 = (
             None
             if self.source_manifest_sha256 is None
@@ -197,9 +189,7 @@ class PublicationRequest:
         metadata = _freeze_metadata(self.metadata)
 
         if _paths_overlap(source_root, destination):
-            raise PublicationContractError(
-                "source_root and destination must not overlap"
-            )
+            raise PublicationContractError("source_root and destination must not overlap")
         if self.require_summary and not _contains_published_path(
             entries,
             SUMMARY_FILENAME,
@@ -214,13 +204,10 @@ class PublicationRequest:
             raise PublicationContractError(
                 "required manifest.json is absent from publication entries"
             )
-        if (
-            source_manifest_sha256 is not None
-            and not _contains_source_path(entries, MANIFEST_FILENAME)
+        if source_manifest_sha256 is not None and not _contains_source_path(
+            entries, MANIFEST_FILENAME
         ):
-            raise PublicationContractError(
-                "source_manifest_sha256 requires manifest.json"
-            )
+            raise PublicationContractError("source_manifest_sha256 requires manifest.json")
 
         object.__setattr__(self, "source_root", source_root)
         object.__setattr__(self, "destination", destination)
@@ -262,41 +249,25 @@ class PublicationEntryOutcome:
         if type(self.required) is not bool:
             raise TypeError("required must be a boolean")
         if not isinstance(self.status, PublicationEntryStatus):
-            raise TypeError(
-                "status must be PublicationEntryStatus"
-            )
+            raise TypeError("status must be PublicationEntryStatus")
         size_bytes = _optional_non_negative_int(
             self.size_bytes,
             "size_bytes",
         )
-        sha256 = (
-            None
-            if self.sha256 is None
-            else normalize_sha256(self.sha256)
-        )
-        error = (
-            None
-            if self.error is None
-            else _bounded_text(self.error, "error")
-        )
+        sha256 = None if self.sha256 is None else normalize_sha256(self.sha256)
+        error = None if self.error is None else _bounded_text(self.error, "error")
 
         if self.status in {
             PublicationEntryStatus.PUBLISHED,
             PublicationEntryStatus.ALREADY_PRESENT,
         }:
             if size_bytes is None or sha256 is None:
-                raise ValueError(
-                    "successful entry outcome requires size and sha256"
-                )
+                raise ValueError("successful entry outcome requires size and sha256")
             if error is not None:
-                raise ValueError(
-                    "successful entry outcome cannot contain error"
-                )
+                raise ValueError("successful entry outcome cannot contain error")
         if self.status is PublicationEntryStatus.FAILED:
             if error is None:
-                raise ValueError(
-                    "failed entry outcome requires error"
-                )
+                raise ValueError("failed entry outcome requires error")
 
         object.__setattr__(self, "source_path", source_path)
         object.__setattr__(
@@ -343,16 +314,12 @@ class PublicationResult:
             "finished_at",
         )
         if finished_at < started_at:
-            raise ValueError(
-                "finished_at must not precede started_at"
-            )
+            raise ValueError("finished_at must not precede started_at")
         if not isinstance(self.outcomes, tuple):
             raise TypeError("outcomes must be a tuple")
         for outcome in self.outcomes:
             if not isinstance(outcome, PublicationEntryOutcome):
-                raise TypeError(
-                    "outcomes must contain PublicationEntryOutcome"
-                )
+                raise TypeError("outcomes must contain PublicationEntryOutcome")
         source_manifest_sha256 = (
             None
             if self.source_manifest_sha256 is None
@@ -363,17 +330,11 @@ class PublicationResult:
             "publication_id",
         )
         metadata = _freeze_metadata(self.metadata)
-        error = (
-            None
-            if self.error is None
-            else _bounded_text(self.error, "error")
-        )
+        error = None if self.error is None else _bounded_text(self.error, "error")
         if self.status is PublicationStatus.FAILED and error is None:
             raise ValueError("failed publication requires error")
         if self.status is not PublicationStatus.FAILED and error is not None:
-            raise ValueError(
-                "successful publication cannot contain error"
-            )
+            raise ValueError("successful publication cannot contain error")
         if self.status is PublicationStatus.PUBLISHED and any(
             outcome.status
             not in {
@@ -382,17 +343,12 @@ class PublicationResult:
             }
             for outcome in self.outcomes
         ):
-            raise ValueError(
-                "published result contains unsuccessful entries"
-            )
+            raise ValueError("published result contains unsuccessful entries")
         if self.status is PublicationStatus.ALREADY_PRESENT and any(
-            outcome.status
-            is not PublicationEntryStatus.ALREADY_PRESENT
+            outcome.status is not PublicationEntryStatus.ALREADY_PRESENT
             for outcome in self.outcomes
         ):
-            raise ValueError(
-                "already-present result contains changed entries"
-            )
+            raise ValueError("already-present result contains changed entries")
 
         object.__setattr__(self, "source_root", source_root)
         object.__setattr__(self, "destination", destination)
@@ -425,25 +381,20 @@ class PublicationResult:
         return tuple(
             outcome
             for outcome in self.outcomes
-            if outcome.required
-            and outcome.status is PublicationEntryStatus.FAILED
+            if outcome.required and outcome.status is PublicationEntryStatus.FAILED
         )
 
     @property
     def duration_ms(self) -> int:
         return max(
             0,
-            int(
-                (self.finished_at - self.started_at).total_seconds()
-                * 1000
-            ),
+            int((self.finished_at - self.started_at).total_seconds() * 1000),
         )
 
 
 @runtime_checkable
 class PublicationClock(Protocol):
-    def utc_now(self) -> datetime:
-        ...
+    def utc_now(self) -> datetime: ...
 
 
 @runtime_checkable
@@ -451,15 +402,14 @@ class ArtifactPublisher(Protocol):
     def publish(
         self,
         request: PublicationRequest,
-    ) -> PublicationResult:
-        ...
+    ) -> PublicationResult: ...
 
 
 class SystemPublicationClock:
     __slots__ = ()
 
     def utc_now(self) -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
 
 class FilesystemArtifactPublisher:
@@ -470,24 +420,16 @@ class FilesystemArtifactPublisher:
         *,
         clock: PublicationClock | None = None,
     ) -> None:
-        self._clock = (
-            SystemPublicationClock()
-            if clock is None
-            else clock
-        )
+        self._clock = SystemPublicationClock() if clock is None else clock
         if not isinstance(self._clock, PublicationClock):
-            raise TypeError(
-                "clock must satisfy PublicationClock"
-            )
+            raise TypeError("clock must satisfy PublicationClock")
 
     def publish(
         self,
         request: PublicationRequest,
     ) -> PublicationResult:
         if not isinstance(request, PublicationRequest):
-            raise TypeError(
-                "request must be PublicationRequest"
-            )
+            raise TypeError("request must be PublicationRequest")
         return _publish(request, clock=self._clock)
 
 
@@ -499,13 +441,11 @@ def publish_artifacts(
     return FilesystemArtifactPublisher(clock=clock).publish(request)
 
 
-def publish_run(
+def publish_reports(
     source_root: Path,
     destination: Path,
     *,
-    conflict_policy: PublicationConflictPolicy = (
-        PublicationConflictPolicy.FAIL
-    ),
+    conflict_policy: PublicationConflictPolicy = (PublicationConflictPolicy.FAIL),
     verify_source_stability: bool = True,
     verify_destination: bool = True,
     preserve_timestamps: bool = True,
@@ -515,6 +455,8 @@ def publish_run(
     metadata: PublicationMetadata = MappingProxyType({}),
     clock: PublicationClock | None = None,
 ) -> PublicationResult:
+    """Publish one finalized run's complete reporting artifact tree."""
+
     entries = discover_publication_entries(
         source_root,
         exclude_paths=exclude_paths,
@@ -538,6 +480,37 @@ def publish_run(
     return publish_artifacts(request, clock=clock)
 
 
+def publish_run(
+    source_root: Path,
+    destination: Path,
+    *,
+    conflict_policy: PublicationConflictPolicy = (PublicationConflictPolicy.FAIL),
+    verify_source_stability: bool = True,
+    verify_destination: bool = True,
+    preserve_timestamps: bool = True,
+    copy_chunk_size_bytes: int = DEFAULT_COPY_CHUNK_SIZE_BYTES,
+    source_manifest_sha256: str | None = None,
+    exclude_paths: Iterable[str] = (),
+    metadata: PublicationMetadata = MappingProxyType({}),
+    clock: PublicationClock | None = None,
+) -> PublicationResult:
+    """Compatibility name for :func:`publish_reports`."""
+
+    return publish_reports(
+        source_root,
+        destination,
+        conflict_policy=conflict_policy,
+        verify_source_stability=verify_source_stability,
+        verify_destination=verify_destination,
+        preserve_timestamps=preserve_timestamps,
+        copy_chunk_size_bytes=copy_chunk_size_bytes,
+        source_manifest_sha256=source_manifest_sha256,
+        exclude_paths=exclude_paths,
+        metadata=metadata,
+        clock=clock,
+    )
+
+
 def discover_publication_entries(
     source_root: Path,
     *,
@@ -547,17 +520,10 @@ def discover_publication_entries(
 ) -> tuple[PublicationEntry, ...]:
     root = _absolute_path(source_root, "source_root")
     if not root.exists():
-        raise PublicationSourceError(
-            f"source root does not exist: {root}"
-        )
+        raise PublicationSourceError(f"source root does not exist: {root}")
     if not root.is_dir():
-        raise PublicationSourceError(
-            f"source root is not a directory: {root}"
-        )
-    excluded = frozenset(
-        _relative_path_text(value, "exclude_path")
-        for value in exclude_paths
-    )
+        raise PublicationSourceError(f"source root is not a directory: {root}")
+    excluded = frozenset(_relative_path_text(value, "exclude_path") for value in exclude_paths)
     entries: list[PublicationEntry] = []
     for directory, directory_names, file_names in os.walk(
         root,
@@ -569,9 +535,7 @@ def discover_publication_entries(
             directory_names,
             key=lambda value: (value.casefold(), value),
         )
-        file_names.sort(
-            key=lambda value: (value.casefold(), value)
-        )
+        file_names.sort(key=lambda value: (value.casefold(), value))
 
         retained_directories: list[str] = []
         for name in directory_names:
@@ -582,13 +546,11 @@ def discover_publication_entries(
             identity = candidate.lstat()
             if stat.S_ISLNK(identity.st_mode):
                 raise PublicationSourceError(
-                    f"symbolic-link directory is not publishable: "
-                    f"{candidate}"
+                    f"symbolic-link directory is not publishable: {candidate}"
                 )
             if not stat.S_ISDIR(identity.st_mode):
                 raise PublicationSourceError(
-                    f"non-directory tree entry is not publishable: "
-                    f"{candidate}"
+                    f"non-directory tree entry is not publishable: {candidate}"
                 )
             retained_directories.append(name)
         directory_names[:] = retained_directories
@@ -600,15 +562,9 @@ def discover_publication_entries(
                 continue
             identity = candidate.lstat()
             if stat.S_ISLNK(identity.st_mode):
-                raise PublicationSourceError(
-                    f"symbolic-link file is not publishable: "
-                    f"{candidate}"
-                )
+                raise PublicationSourceError(f"symbolic-link file is not publishable: {candidate}")
             if not stat.S_ISREG(identity.st_mode):
-                raise PublicationSourceError(
-                    f"non-regular file is not publishable: "
-                    f"{candidate}"
-                )
+                raise PublicationSourceError(f"non-regular file is not publishable: {candidate}")
             role = (
                 _default_role(relative)
                 if role_resolver is None
@@ -627,19 +583,16 @@ def discover_publication_entries(
                     source_path=relative,
                     role=role,
                     media_type=media_type,
-                    required=relative
-                    in {SUMMARY_FILENAME, MANIFEST_FILENAME},
+                    required=relative in {SUMMARY_FILENAME, MANIFEST_FILENAME},
                 )
             )
             if len(entries) > MAX_PUBLICATION_ENTRIES:
-                raise PublicationSourceError(
-                    "publication tree exceeds entry limit"
-                )
+                raise PublicationSourceError("publication tree exceeds entry limit")
 
     entries.sort(
         key=lambda item: (
-            item.published_path.casefold(),
-            item.published_path,
+            _published_path(item).casefold(),
+            _published_path(item),
         )
     )
     return tuple(entries)
@@ -679,7 +632,7 @@ def _publish(
             )
             target = _contained_child(
                 staging,
-                entry.published_path,
+                _published_path(entry),
             )
             _copy_file(
                 source,
@@ -702,7 +655,7 @@ def _publish(
             copied_outcomes.append(
                 PublicationEntryOutcome(
                     source_path=entry.source_path,
-                    published_path=entry.published_path,
+                    published_path=_published_path(entry),
                     role=entry.role,
                     required=entry.required,
                     status=PublicationEntryStatus.PUBLISHED,
@@ -712,18 +665,11 @@ def _publish(
             )
 
         if request.destination.exists():
-            if (
-                request.conflict_policy
-                is PublicationConflictPolicy.FAIL
-            ):
+            if request.conflict_policy is PublicationConflictPolicy.FAIL:
                 raise PublicationConflictError(
-                    f"publication destination already exists: "
-                    f"{request.destination}"
+                    f"publication destination already exists: {request.destination}"
                 )
-            if (
-                request.conflict_policy
-                is PublicationConflictPolicy.REUSE_IDENTICAL
-            ):
+            if request.conflict_policy is PublicationConflictPolicy.REUSE_IDENTICAL:
                 _verify_existing_destination(
                     request,
                     source_hashes,
@@ -740,18 +686,12 @@ def _publish(
                     outcomes=tuple(
                         PublicationEntryOutcome(
                             source_path=entry.source_path,
-                            published_path=entry.published_path,
+                            published_path=_published_path(entry),
                             role=entry.role,
                             required=entry.required,
-                            status=(
-                                PublicationEntryStatus.ALREADY_PRESENT
-                            ),
-                            size_bytes=source_hashes[
-                                entry.source_path
-                            ].size_bytes,
-                            sha256=source_hashes[
-                                entry.source_path
-                            ].sha256,
+                            status=(PublicationEntryStatus.ALREADY_PRESENT),
+                            size_bytes=source_hashes[entry.source_path].size_bytes,
+                            sha256=source_hashes[entry.source_path].sha256,
                         )
                         for entry in request.entries
                     ),
@@ -834,28 +774,18 @@ def _validate_source_root(
     try:
         identity = root.lstat()
     except FileNotFoundError as exc:
-        raise PublicationSourceError(
-            f"source root does not exist: {root}"
-        ) from exc
+        raise PublicationSourceError(f"source root does not exist: {root}") from exc
     if stat.S_ISLNK(identity.st_mode):
-        raise PublicationSourceError(
-            f"source root cannot be a symbolic link: {root}"
-        )
+        raise PublicationSourceError(f"source root cannot be a symbolic link: {root}")
     if not stat.S_ISDIR(identity.st_mode):
-        raise PublicationSourceError(
-            f"source root is not a directory: {root}"
-        )
+        raise PublicationSourceError(f"source root is not a directory: {root}")
     if request.require_finalized_run:
         summary = _contained_child(root, SUMMARY_FILENAME)
         manifest = _contained_child(root, MANIFEST_FILENAME)
         if request.require_summary and not summary.is_file():
-            raise PublicationSourceError(
-                f"finalized source run lacks {SUMMARY_FILENAME}"
-            )
+            raise PublicationSourceError(f"finalized source run lacks {SUMMARY_FILENAME}")
         if request.require_manifest and not manifest.is_file():
-            raise PublicationSourceError(
-                f"finalized source run lacks {MANIFEST_FILENAME}"
-            )
+            raise PublicationSourceError(f"finalized source run lacks {MANIFEST_FILENAME}")
 
 
 def _verify_sources(
@@ -872,64 +802,39 @@ def _verify_sources(
         except FileNotFoundError as exc:
             if entry.required:
                 raise PublicationSourceError(
-                    f"required publication source is missing: "
-                    f"{source}"
+                    f"required publication source is missing: {source}"
                 ) from exc
             continue
         if stat.S_ISLNK(source_identity.st_mode):
-            raise PublicationSourceError(
-                f"symbolic-link source is not publishable: {source}"
-            )
+            raise PublicationSourceError(f"symbolic-link source is not publishable: {source}")
         if not stat.S_ISREG(source_identity.st_mode):
-            raise PublicationSourceError(
-                f"publication source is not a regular file: {source}"
-            )
+            raise PublicationSourceError(f"publication source is not a regular file: {source}")
         hashed = hash_file(
             source,
             chunk_size_bytes=request.copy_chunk_size_bytes,
             reject_symlinks=True,
             verify_reopen=request.verify_source_stability,
         )
-        if (
-            entry.expected_size_bytes is not None
-            and hashed.size_bytes != entry.expected_size_bytes
-        ):
+        if entry.expected_size_bytes is not None and hashed.size_bytes != entry.expected_size_bytes:
             raise PublicationVerificationError(
                 f"source size mismatch for {entry.source_path}: "
                 f"expected {entry.expected_size_bytes}, "
                 f"observed {hashed.size_bytes}"
             )
-        if (
-            entry.expected_sha256 is not None
-            and hashed.sha256 != entry.expected_sha256
-        ):
-            raise PublicationVerificationError(
-                f"source hash mismatch for {entry.source_path}"
-            )
+        if entry.expected_sha256 is not None and hashed.sha256 != entry.expected_sha256:
+            raise PublicationVerificationError(f"source hash mismatch for {entry.source_path}")
         hashes[entry.source_path] = hashed
 
     optional_missing = tuple(
-        entry
-        for entry in request.entries
-        if not entry.required
-        and entry.source_path not in hashes
+        entry for entry in request.entries if not entry.required and entry.source_path not in hashes
     )
     if optional_missing:
-        retained = tuple(
-            entry
-            for entry in request.entries
-            if entry.source_path in hashes
-        )
+        retained = tuple(entry for entry in request.entries if entry.source_path in hashes)
         object.__setattr__(request, "entries", retained)
 
     manifest_hash = hashes.get(MANIFEST_FILENAME)
-    if (
-        request.source_manifest_sha256 is not None
-        and (
-            manifest_hash is None
-            or manifest_hash.sha256
-            != request.source_manifest_sha256
-        )
+    if request.source_manifest_sha256 is not None and (
+        manifest_hash is None or manifest_hash.sha256 != request.source_manifest_sha256
     ):
         raise PublicationVerificationError(
             "source manifest hash does not match the approved digest"
@@ -954,14 +859,10 @@ def _verify_existing_destination(
         )
     if not stat.S_ISDIR(identity.st_mode):
         raise PublicationDestinationError(
-            f"published destination is not a directory: "
-            f"{destination}"
+            f"published destination is not a directory: {destination}"
         )
 
-    expected_paths = {
-        entry.published_path
-        for entry in request.entries
-    }
+    expected_paths = {_published_path(entry) for entry in request.entries}
     actual_paths = _regular_tree_paths(destination)
     if actual_paths != expected_paths:
         missing = sorted(
@@ -978,15 +879,14 @@ def _verify_existing_destination(
         if extra:
             detail.append("extra=" + ",".join(extra[:8]))
         raise PublicationVerificationError(
-            "published artifact set differs from requested set: "
-            + "; ".join(detail)
+            "published artifact set differs from requested set: " + "; ".join(detail)
         )
 
     for entry in request.entries:
         source_hash = source_hashes[entry.source_path]
         target = _contained_child(
             destination,
-            entry.published_path,
+            _published_path(entry),
         )
         target_hash = hash_file(
             target,
@@ -1016,13 +916,11 @@ def _regular_tree_paths(root: Path) -> set[str]:
             identity = candidate.lstat()
             if stat.S_ISLNK(identity.st_mode):
                 raise PublicationVerificationError(
-                    f"published tree contains symbolic link: "
-                    f"{candidate}"
+                    f"published tree contains symbolic link: {candidate}"
                 )
             if not stat.S_ISDIR(identity.st_mode):
                 raise PublicationVerificationError(
-                    f"published tree contains invalid directory entry: "
-                    f"{candidate}"
+                    f"published tree contains invalid directory entry: {candidate}"
                 )
             retained.append(name)
         directory_names[:] = retained
@@ -1031,13 +929,11 @@ def _regular_tree_paths(root: Path) -> set[str]:
             identity = candidate.lstat()
             if stat.S_ISLNK(identity.st_mode):
                 raise PublicationVerificationError(
-                    f"published tree contains symbolic link: "
-                    f"{candidate}"
+                    f"published tree contains symbolic link: {candidate}"
                 )
             if not stat.S_ISREG(identity.st_mode):
                 raise PublicationVerificationError(
-                    f"published tree contains non-regular file: "
-                    f"{candidate}"
+                    f"published tree contains non-regular file: {candidate}"
                 )
             paths.add(_relative_from_root(candidate, root))
     return paths
@@ -1051,9 +947,7 @@ def _copy_file(
     preserve_timestamps: bool,
 ) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(
-        f".{destination.name}.{uuid.uuid4().hex}.tmp"
-    )
+    temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
     source_descriptor = -1
     destination_descriptor = -1
     try:
@@ -1081,28 +975,27 @@ def _copy_file(
                     view,
                 )
                 if written <= 0:
-                    raise PublicationDestinationError(
-                        f"short write while publishing {destination}"
-                    )
+                    raise PublicationDestinationError(f"short write while publishing {destination}")
                 view = view[written:]
         os.fsync(destination_descriptor)
         source_stat = os.fstat(source_descriptor)
         destination_stat = os.fstat(destination_descriptor)
         if source_stat.st_size != destination_stat.st_size:
-            raise PublicationVerificationError(
-                f"copied size mismatch for {source}"
-            )
+            raise PublicationVerificationError(f"copied size mismatch for {source}")
         os.close(destination_descriptor)
         destination_descriptor = -1
         if preserve_timestamps:
-            os.utime(
-                temporary,
-                ns=(
-                    int(source_stat.st_atime_ns),
-                    int(source_stat.st_mtime_ns),
-                ),
-                follow_symlinks=False,
+            timestamps = (
+                int(source_stat.st_atime_ns),
+                int(source_stat.st_mtime_ns),
             )
+            try:
+                os.utime(temporary, ns=timestamps, follow_symlinks=False)
+            except (NotImplementedError, TypeError, OSError):
+                # Windows builds may not expose follow_symlinks for utime.
+                # The destination is a freshly-created regular temporary file,
+                # so the fallback cannot traverse a caller-controlled symlink.
+                os.utime(temporary, ns=timestamps)
         os.replace(temporary, destination)
     except Exception:
         try:
@@ -1127,15 +1020,11 @@ def _open_source(path: Path) -> int:
     try:
         descriptor = os.open(path, flags)
     except FileNotFoundError as exc:
-        raise PublicationSourceError(
-            f"publication source disappeared: {path}"
-        ) from exc
+        raise PublicationSourceError(f"publication source disappeared: {path}") from exc
     identity = os.fstat(descriptor)
     if not stat.S_ISREG(identity.st_mode):
         os.close(descriptor)
-        raise PublicationSourceError(
-            f"publication source is not a regular file: {path}"
-        )
+        raise PublicationSourceError(f"publication source is not a regular file: {path}")
     return descriptor
 
 
@@ -1147,13 +1036,9 @@ def _require_same_bytes(
     label: str,
 ) -> None:
     if source_hash.size_bytes != destination_hash.size_bytes:
-        raise PublicationVerificationError(
-            f"{label} size mismatch for {entry.published_path}"
-        )
+        raise PublicationVerificationError(f"{label} size mismatch for {entry.published_path}")
     if source_hash.sha256 != destination_hash.sha256:
-        raise PublicationVerificationError(
-            f"{label} hash mismatch for {entry.published_path}"
-        )
+        raise PublicationVerificationError(f"{label} hash mismatch for {entry.published_path}")
 
 
 def _prepare_staging(staging: Path) -> None:
@@ -1217,13 +1102,9 @@ def _validate_destination_parent(destination: Path) -> None:
     parent.mkdir(parents=True, exist_ok=True)
     identity = parent.lstat()
     if stat.S_ISLNK(identity.st_mode):
-        raise PublicationDestinationError(
-            f"destination parent cannot be a symbolic link: {parent}"
-        )
+        raise PublicationDestinationError(f"destination parent cannot be a symbolic link: {parent}")
     if not stat.S_ISDIR(identity.st_mode):
-        raise PublicationDestinationError(
-            f"destination parent is not a directory: {parent}"
-        )
+        raise PublicationDestinationError(f"destination parent is not a directory: {parent}")
 
 
 def _failure_outcomes(
@@ -1231,10 +1112,7 @@ def _failure_outcomes(
     copied_outcomes: list[PublicationEntryOutcome],
     exc: BaseException,
 ) -> tuple[PublicationEntryOutcome, ...]:
-    completed = {
-        outcome.source_path: outcome
-        for outcome in copied_outcomes
-    }
+    completed = {outcome.source_path: outcome for outcome in copied_outcomes}
     error = _exception_text(exc)
     outcomes: list[PublicationEntryOutcome] = []
     failed_assigned = False
@@ -1244,7 +1122,7 @@ def _failure_outcomes(
             outcomes.append(
                 PublicationEntryOutcome(
                     source_path=entry.source_path,
-                    published_path=entry.published_path,
+                    published_path=_published_path(entry),
                     role=entry.role,
                     required=entry.required,
                     status=PublicationEntryStatus.SKIPPED,
@@ -1256,7 +1134,7 @@ def _failure_outcomes(
             outcomes.append(
                 PublicationEntryOutcome(
                     source_path=entry.source_path,
-                    published_path=entry.published_path,
+                    published_path=_published_path(entry),
                     role=entry.role,
                     required=entry.required,
                     status=PublicationEntryStatus.FAILED,
@@ -1268,7 +1146,7 @@ def _failure_outcomes(
             outcomes.append(
                 PublicationEntryOutcome(
                     source_path=entry.source_path,
-                    published_path=entry.published_path,
+                    published_path=_published_path(entry),
                     role=entry.role,
                     required=entry.required,
                     status=PublicationEntryStatus.SKIPPED,
@@ -1304,20 +1182,13 @@ def _entries(
     prepared: list[PublicationEntry] = []
     for value in values:
         if not isinstance(value, PublicationEntry):
-            raise TypeError(
-                "entries must contain PublicationEntry"
-            )
+            raise TypeError("entries must contain PublicationEntry")
         source_key = value.source_path.casefold()
-        published_key = value.published_path.casefold()
+        published_key = _published_path(value).casefold()
         if source_key in source_paths:
-            raise ValueError(
-                f"duplicate source path: {value.source_path}"
-            )
+            raise ValueError(f"duplicate source path: {value.source_path}")
         if published_key in published_paths:
-            raise ValueError(
-                f"duplicate published path: "
-                f"{value.published_path}"
-            )
+            raise ValueError(f"duplicate published path: {_published_path(value)}")
         source_paths.add(source_key)
         published_paths.add(published_key)
         prepared.append(value)
@@ -1325,8 +1196,8 @@ def _entries(
         sorted(
             prepared,
             key=lambda item: (
-                item.published_path.casefold(),
-                item.published_path,
+                _published_path(item).casefold(),
+                _published_path(item),
             ),
         )
     )
@@ -1337,10 +1208,14 @@ def _contains_source_path(
     value: str,
 ) -> bool:
     key = value.casefold()
-    return any(
-        entry.source_path.casefold() == key
-        for entry in entries
-    )
+    return any(entry.source_path.casefold() == key for entry in entries)
+
+
+def _published_path(entry: PublicationEntry) -> str:
+    value = entry.published_path
+    if value is None:
+        raise PublicationContractError("publication entry has no normalized published path")
+    return value
 
 
 def _contains_published_path(
@@ -1348,10 +1223,7 @@ def _contains_published_path(
     value: str,
 ) -> bool:
     key = value.casefold()
-    return any(
-        entry.published_path.casefold() == key
-        for entry in entries
-    )
+    return any(_published_path(entry).casefold() == key for entry in entries)
 
 
 def _contained_child(root: Path, relative: str) -> Path:
@@ -1360,9 +1232,7 @@ def _contained_child(root: Path, relative: str) -> Path:
     try:
         normalized.relative_to(root)
     except ValueError as exc:
-        raise PublicationContractError(
-            f"path escapes publication root: {relative}"
-        ) from exc
+        raise PublicationContractError(f"path escapes publication root: {relative}") from exc
     return normalized
 
 
@@ -1370,9 +1240,7 @@ def _relative_from_root(path: Path, root: Path) -> str:
     try:
         relative = path.relative_to(root)
     except ValueError as exc:
-        raise PublicationContractError(
-            f"path is outside publication root: {path}"
-        ) from exc
+        raise PublicationContractError(f"path is outside publication root: {path}") from exc
     return _relative_path_text(
         relative.as_posix(),
         "relative path",
@@ -1383,18 +1251,14 @@ def _staging_path(
     destination: Path,
     publication_id: str,
 ) -> Path:
-    return destination.with_name(
-        f".{destination.name}.publish-{publication_id}.tmp"
-    )
+    return destination.with_name(f".{destination.name}.publish-{publication_id}.tmp")
 
 
 def _backup_path(
     destination: Path,
     publication_id: str,
 ) -> Path:
-    return destination.with_name(
-        f".{destination.name}.publish-{publication_id}.bak"
-    )
+    return destination.with_name(f".{destination.name}.publish-{publication_id}.bak")
 
 
 def _paths_overlap(left: Path, right: Path) -> bool:
@@ -1426,27 +1290,16 @@ def _relative_path_text(
 ) -> str:
     text = _required_text(value, field_name)
     if "\\" in text:
-        raise ValueError(
-            f"{field_name} must use forward slashes"
-        )
+        raise ValueError(f"{field_name} must use forward slashes")
     posix = PurePosixPath(text)
     windows = PureWindowsPath(text)
     if posix.is_absolute() or windows.is_absolute() or windows.drive:
-        raise ValueError(
-            f"{field_name} must be a relative path"
-        )
-    if text == "." or any(
-        part in {"", ".", ".."}
-        for part in posix.parts
-    ):
-        raise ValueError(
-            f"{field_name} contains an unsafe path segment"
-        )
+        raise ValueError(f"{field_name} must be a relative path")
+    if text == "." or any(part in {"", ".", ".."} for part in posix.parts):
+        raise ValueError(f"{field_name} contains an unsafe path segment")
     canonical = posix.as_posix()
     if canonical != text:
-        raise ValueError(
-            f"{field_name} is not canonical"
-        )
+        raise ValueError(f"{field_name} is not canonical")
     return canonical
 
 
@@ -1459,13 +1312,9 @@ def _required_text(
     if not value:
         raise ValueError(f"{field_name} must not be empty")
     if value != value.strip():
-        raise ValueError(
-            f"{field_name} must not have outer whitespace"
-        )
+        raise ValueError(f"{field_name} must not have outer whitespace")
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL"
-        )
+        raise ValueError(f"{field_name} must not contain NUL")
     return value
 
 
@@ -1480,23 +1329,17 @@ def _bounded_text(
 def _token(value: object, field_name: str) -> str:
     text = _required_text(value, field_name)
     if any(character.isspace() for character in text):
-        raise ValueError(
-            f"{field_name} must not contain whitespace"
-        )
+        raise ValueError(f"{field_name} must not contain whitespace")
     return text
 
 
 def _media_type(value: object) -> str:
     text = _required_text(value, "media_type").lower()
     if text.count("/") != 1:
-        raise ValueError(
-            "media_type must use type/subtype syntax"
-        )
+        raise ValueError("media_type must use type/subtype syntax")
     major, minor = text.split("/", 1)
     if not major or not minor:
-        raise ValueError(
-            "media_type must use type/subtype syntax"
-        )
+        raise ValueError("media_type must use type/subtype syntax")
     return text
 
 
@@ -1507,29 +1350,19 @@ def _optional_non_negative_int(
     if value is None:
         return None
     if type(value) is not int:
-        raise TypeError(
-            f"{field_name} must be an integer or None"
-        )
+        raise TypeError(f"{field_name} must be an integer or None")
     if value < 0:
-        raise ValueError(
-            f"{field_name} must be non-negative"
-        )
+        raise ValueError(f"{field_name} must be non-negative")
     return value
 
 
 def _chunk_size(value: object) -> int:
     if type(value) is not int:
-        raise TypeError(
-            "copy_chunk_size_bytes must be an integer"
-        )
+        raise TypeError("copy_chunk_size_bytes must be an integer")
     if value <= 0:
-        raise ValueError(
-            "copy_chunk_size_bytes must be positive"
-        )
+        raise ValueError("copy_chunk_size_bytes must be positive")
     if value > MAX_COPY_CHUNK_SIZE_BYTES:
-        raise ValueError(
-            "copy_chunk_size_bytes exceeds the supported maximum"
-        )
+        raise ValueError("copy_chunk_size_bytes exceeds the supported maximum")
     return value
 
 
@@ -1547,16 +1380,9 @@ def _freeze_metadata(
             bool,
             float,
         }:
-            raise TypeError(
-                f"unsupported metadata value for {key!r}"
-            )
-        if type(value) is float and (
-            value != value
-            or value in {float("inf"), float("-inf")}
-        ):
-            raise ValueError(
-                f"metadata value for {key!r} must be finite"
-            )
+            raise TypeError(f"unsupported metadata value for {key!r}")
+        if type(value) is float and (value != value or value in {float("inf"), float("-inf")}):
+            raise ValueError(f"metadata value for {key!r} must be finite")
         if isinstance(value, str):
             value = _required_text(
                 value,
@@ -1571,14 +1397,10 @@ def _aware_utc(
     field_name: str,
 ) -> datetime:
     if not isinstance(value, datetime):
-        raise TypeError(
-            f"{field_name} must be datetime"
-        )
+        raise TypeError(f"{field_name} must be datetime")
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(
-            f"{field_name} must be timezone-aware"
-        )
-    return value.astimezone(timezone.utc)
+        raise ValueError(f"{field_name} must be timezone-aware")
+    return value.astimezone(UTC)
 
 
 def _clock_now(clock: PublicationClock) -> datetime:
@@ -1644,12 +1466,13 @@ def _default_media_type(path: str) -> str:
 
 
 __all__ = (
-    "ArtifactPublisher",
     "DEFAULT_COPY_CHUNK_SIZE_BYTES",
-    "FilesystemArtifactPublisher",
     "MANIFEST_FILENAME",
     "MAX_COPY_CHUNK_SIZE_BYTES",
     "MAX_PUBLICATION_ENTRIES",
+    "SUMMARY_FILENAME",
+    "ArtifactPublisher",
+    "FilesystemArtifactPublisher",
     "MetadataValue",
     "PublicationClock",
     "PublicationConflictError",
@@ -1667,9 +1490,9 @@ __all__ = (
     "PublicationSourceError",
     "PublicationStatus",
     "PublicationVerificationError",
-    "SUMMARY_FILENAME",
     "SystemPublicationClock",
     "discover_publication_entries",
     "publish_artifacts",
+    "publish_reports",
     "publish_run",
 )

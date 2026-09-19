@@ -85,9 +85,7 @@ def test_safe_key_hashes_windows_reserved_name_deterministically() -> None:
 
 def test_safe_key_bounds_long_scenario_id_and_keeps_hash_suffix() -> None:
     scenario_id = "scenario-" + ("segment" * 40)
-    expected_hash = hashlib.sha256(scenario_id.encode("ascii")).hexdigest()[
-        :HASH_SUFFIX_LENGTH
-    ]
+    expected_hash = hashlib.sha256(scenario_id.encode("ascii")).hexdigest()[:HASH_SUFFIX_LENGTH]
 
     key = scenario_safe_key(scenario_id)
 
@@ -107,22 +105,15 @@ def test_resolve_paths_uses_canonical_owned_names(tmp_path: Path) -> None:
 
     assert paths.scenario_id == "parse-basic"
     assert paths.safe_key == "parse-basic"
-    assert paths.stdout_path == (
-        paths.raw_scenarios_directory / f"parse-basic{STDOUT_SUFFIX}"
-    )
-    assert paths.stderr_path == (
-        paths.raw_scenarios_directory / f"parse-basic{STDERR_SUFFIX}"
-    )
+    assert paths.stdout_path == (paths.raw_scenarios_directory / f"parse-basic{STDOUT_SUFFIX}")
+    assert paths.stderr_path == (paths.raw_scenarios_directory / f"parse-basic{STDERR_SUFFIX}")
     assert paths.normalized_output_path == (
-        paths.raw_scenarios_directory
-        / f"parse-basic{NORMALIZED_OUTPUT_SUFFIX}"
+        paths.raw_scenarios_directory / f"parse-basic{NORMALIZED_OUTPUT_SUFFIX}"
     )
     assert paths.gold_diff_path == (
         paths.raw_scenarios_directory / f"parse-basic{GOLD_DIFF_SUFFIX}"
     )
-    assert paths.run_relative(paths.stdout_path) == (
-        "raw/scenarios/parse-basic.stdout.txt"
-    )
+    assert paths.run_relative(paths.stdout_path) == ("raw/scenarios/parse-basic.stdout.txt")
 
 
 def test_resolve_paths_requires_existing_owned_directories(
@@ -241,13 +232,9 @@ def test_write_normalized_output_uses_lf_and_links_raw_source(
         normalization_version="scenario-default-v1",
     )
 
-    assert paths.normalized_output_path.read_bytes() == (
-        b"normalized\noutput\n"
-    )
+    assert paths.normalized_output_path.read_bytes() == (b"normalized\noutput\n")
     assert record.kind is ScenarioArtifactKind.NORMALIZED_OUTPUT
-    assert record.source_run_relative_path == (
-        "raw/scenarios/parse-basic.stdout.txt"
-    )
+    assert record.source_run_relative_path == ("raw/scenarios/parse-basic.stdout.txt")
     assert record.normalization_version == "scenario-default-v1"
 
 
@@ -289,9 +276,7 @@ def test_write_gold_diff_publishes_required_metadata_and_canonical_lf(
     metadata = GoldDiffMetadata(
         scenario_id=ScenarioId("parse-basic"),
         gold_path="scenarios/gold/parse-basic.gold",
-        actual_normalized_output_path=paths.run_relative(
-            paths.normalized_output_path
-        ),
+        actual_normalized_output_path=paths.run_relative(paths.normalized_output_path),
         comparison_result="mismatch",
         normalization_version="scenario-default-v1",
     )
@@ -317,9 +302,7 @@ def test_write_gold_diff_publishes_required_metadata_and_canonical_lf(
         "+new\n"
     )
     assert record.kind is ScenarioArtifactKind.GOLD_DIFF
-    assert record.source_run_relative_path == (
-        "raw/scenarios/parse-basic.out"
-    )
+    assert record.source_run_relative_path == ("raw/scenarios/parse-basic.out")
     assert record.normalization_version == "scenario-default-v1"
 
 
@@ -328,9 +311,7 @@ def test_gold_diff_rejects_foreign_metadata(tmp_path: Path) -> None:
     metadata = GoldDiffMetadata(
         scenario_id=ScenarioId("other-scenario"),
         gold_path="scenarios/gold/other-scenario.gold",
-        actual_normalized_output_path=(
-            "raw/scenarios/other-scenario.out"
-        ),
+        actual_normalized_output_path=("raw/scenarios/other-scenario.out"),
         comparison_result="mismatch",
         normalization_version="v1",
     )
@@ -352,9 +333,7 @@ def test_verify_scenario_artifact_detects_empty_required_diff(
         )
 
     assert captured.value.code == "GF-WB-SCENARIO-001"
-    assert captured.value.evidence_paths == (
-        "raw/scenarios/parse-basic.gold.diff",
-    )
+    assert captured.value.evidence_paths == ("raw/scenarios/parse-basic.gold.diff",)
 
 
 def test_verify_generated_artifact_records_exact_bytes_and_media_type(
@@ -377,9 +356,7 @@ def test_verify_generated_artifact_records_exact_bytes_and_media_type(
     assert record.size_bytes == len(payload)
     assert record.sha256 == _sha256(payload)
     assert record.media_type == "application/json"
-    assert record.source_run_relative_path == (
-        "raw/scenarios/parse-basic.out"
-    )
+    assert record.source_run_relative_path == ("raw/scenarios/parse-basic.out")
 
 
 def test_verify_generated_artifact_rejects_escape_empty_and_long_name(
@@ -418,9 +395,7 @@ def test_collect_existing_artifacts_is_complete_and_deterministic(
     metadata = GoldDiffMetadata(
         scenario_id=paths.scenario_id,
         gold_path="scenarios/gold/parse-basic.gold",
-        actual_normalized_output_path=paths.run_relative(
-            paths.normalized_output_path
-        ),
+        actual_normalized_output_path=paths.run_relative(paths.normalized_output_path),
         comparison_result="mismatch",
         normalization_version="v1",
     )
@@ -467,9 +442,7 @@ def test_collect_existing_artifacts_reports_missing_required_kind(
         )
 
     assert captured.value.operation == "collect-artifacts"
-    assert captured.value.evidence_paths == (
-        "raw/scenarios/parse-basic.stdout.txt",
-    )
+    assert captured.value.evidence_paths == ("raw/scenarios/parse-basic.stdout.txt",)
 
 
 def test_collect_rejects_generated_kind_in_required_kinds(
@@ -490,10 +463,13 @@ def test_run_relative_artifact_path_supports_future_owned_output(
     paths = _artifact_paths(tmp_path)
     future = paths.generated_output_directory / "future" / "result.bin"
 
-    assert run_relative_artifact_path(
-        future,
-        run_directory=paths.run_directory,
-    ) == "artifacts/out/future/result.bin"
+    assert (
+        run_relative_artifact_path(
+            future,
+            run_directory=paths.run_directory,
+        )
+        == "artifacts/out/future/result.bin"
+    )
 
 
 def test_run_relative_artifact_path_rejects_run_root_and_escape(

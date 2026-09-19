@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-import importlib.util
-import os
-import subprocess
-import sys
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, fields
 from enum import StrEnum
+import importlib.util
+import os
 from pathlib import Path, PurePosixPath
+import subprocess
+import sys
 from types import ModuleType
-from typing import Any
 
 import pytest
 
+from gf_wordbench.validation.scanning.masking import SourceViews
 
 _COUNT_FIELDS = (
     "single_slash_eq",
@@ -98,7 +98,7 @@ class _Rule:
 
     def scan(
         self,
-        views: object,
+        views: SourceViews,
         *,
         source_path: Path,
         project_relative_path: PurePosixPath,
@@ -123,13 +123,13 @@ def _line_scanner(
     token: str,
 ) -> RuleScanner:
     def scan(
-        views: object,
+        views: SourceViews,
         *,
         source_path: Path,
         project_relative_path: PurePosixPath,
     ) -> tuple[_Finding, ...]:
         del source_path
-        original = str(getattr(views, "original"))
+        original = str(views.original)
         findings: list[_Finding] = []
         for line_number, line in enumerate(original.splitlines(), start=1):
             if token not in line:
@@ -155,7 +155,7 @@ def _canonical_registry() -> _Registry:
         _Rule(
             rule_id=rule_id,
             count_field=count_field,
-            scanner=_line_scanner(rule_id, count_field, f"<{count_field}>")
+            scanner=_line_scanner(rule_id, count_field, f"<{count_field}>"),
         )
         for rule_id, count_field in zip(
             (
@@ -334,7 +334,7 @@ def test_scan_text_rejects_invalid_input_path_and_registry_identity(
 ) -> None:
     with pytest.raises(TypeError, match="source_text"):
         service.scan_text(
-            b"resource",  # type: ignore[arg-type]
+            b"resource",
             project_relative_path="src/Sample.gf",
         )
     for path in ("", ".", "/absolute.gf", "../escape.gf", "src/not_gf.txt"):
@@ -423,9 +423,7 @@ def test_scan_file_records_lossy_decoding_explicitly(
     diagnostic = result.diagnostics[0]
     assert diagnostic.code == "GF-WB-SCAN-ENCODING-001"
     assert "lossy" in diagnostic.message
-    assert "encoding_outcome: utf8_replacement" in request.evidence_path.read_text(
-        encoding="utf-8"
-    )
+    assert "encoding_outcome: utf8_replacement" in request.evidence_path.read_text(encoding="utf-8")
 
 
 def test_scan_file_reports_missing_non_regular_and_oversized_sources(

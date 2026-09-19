@@ -324,9 +324,10 @@ def _bounded_excerpt(line: str) -> str:
 
 
 def _coerce_lines(value: LineInput, *, field_name: str) -> tuple[str, ...]:
-    if isinstance(value, str):
-        return tuple(value.splitlines())
-    if isinstance(value, (bytes, bytearray)):
+    raw_value: object = value
+    if isinstance(raw_value, str):
+        return tuple(raw_value.splitlines())
+    if isinstance(raw_value, (bytes, bytearray)):
         raise TypeError(f"{field_name} must contain text lines")
 
     try:
@@ -373,10 +374,10 @@ def _require_aligned_views(
 __all__ = (
     "DECLARATION_RULES",
     "DOUBLE_SLASH_DASH_RULE",
+    "SINGLE_SLASH_EQ_RULE",
     "DeclarationFinding",
     "DeclarationRule",
     "DeclarationScanResult",
-    "SINGLE_SLASH_EQ_RULE",
     "count_double_slash_dash",
     "count_single_slash_eq",
     "scan_declaration_rules",

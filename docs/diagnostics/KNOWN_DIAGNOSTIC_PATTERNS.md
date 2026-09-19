@@ -1577,8 +1577,7 @@ Canonical interface:
 ```python
 def parse_diagnostics(
     evidence: DiagnosticEvidence,
-) -> DiagnosticParseResult:
-    ...
+) -> DiagnosticParseResult: ...
 ```
 
 Conceptual evidence:

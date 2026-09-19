@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
-import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+import hashlib
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
+import re
 from types import MappingProxyType
 from typing import Final, Generic, TypeVar
 
@@ -15,13 +15,9 @@ RecordT = TypeVar("RecordT")
 
 _MAX_RECORDS: Final[int] = 1_000_000
 _MAX_TEXT_LENGTH: Final[int] = 8 * 1024 * 1024
-_STREAM_ORDER: Final[Mapping[str, int]] = MappingProxyType(
-    {"stderr": 0, "stdout": 1}
-)
+_STREAM_ORDER: Final[Mapping[str, int]] = MappingProxyType({"stderr": 0, "stdout": 1})
 _HORIZONTAL_WHITESPACE_RE: Final[re.Pattern[str]] = re.compile(r"[\t\f\v ]+")
-_WINDOWS_ABSOLUTE_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?:[A-Za-z]:[\\/]|\\\\)"
-)
+_WINDOWS_ABSOLUTE_RE: Final[re.Pattern[str]] = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\)")
 _SEMANTIC_FIELDS: Final[tuple[str, ...]] = (
     "severity",
     "origin",
@@ -206,15 +202,37 @@ class DiagnosticDeduplicationResult(Generic[RecordT]):
     def __post_init__(self) -> None:
         if len(self.records) > _MAX_RECORDS:
             raise ValueError("records exceeds the supported limit")
-        flattened = tuple(
-            occurrence
-            for group in self.groups
-            for occurrence in group.occurrences
-        )
-        if flattened != self.records:
-            raise ValueError(
-                "groups must preserve every original record in original order"
-            )
+        positions_by_identity: dict[int, list[int]] = {}
+        for index, record in enumerate(self.records):
+            positions_by_identity.setdefault(id(record), []).append(index)
+
+        consumed_by_identity: dict[int, int] = {}
+        consumed_indexes: set[int] = set()
+        first_indexes: list[int] = []
+        for group in self.groups:
+            indexes: list[int] = []
+            for occurrence in group.occurrences:
+                identity = id(occurrence)
+                positions = positions_by_identity.get(identity, [])
+                offset = consumed_by_identity.get(identity, 0)
+                if offset >= len(positions):
+                    raise ValueError("groups must preserve every original record exactly once")
+                original_index = positions[offset]
+                if self.records[original_index] is not occurrence:
+                    raise ValueError("groups must preserve records by object identity")
+                consumed_by_identity[identity] = offset + 1
+                consumed_indexes.add(original_index)
+                indexes.append(original_index)
+
+            if indexes != sorted(indexes):
+                raise ValueError("group occurrences must preserve original order")
+            if indexes:
+                first_indexes.append(indexes[0])
+
+        if consumed_indexes != set(range(len(self.records))):
+            raise ValueError("groups must preserve every original record exactly once")
+        if first_indexes != sorted(first_indexes):
+            raise ValueError("groups must preserve first-occurrence order")
 
     @property
     def representatives(self) -> tuple[RecordT, ...]:
@@ -359,9 +377,7 @@ def diagnostic_occurrence(record: object) -> DiagnosticOccurrence:
         ("raw_artifact_path", "evidence_path", "stream_path"),
     )
     raw_artifact_path = (
-        None
-        if raw_artifact_value is None
-        else _path(raw_artifact_value, field="raw_artifact_path")
+        None if raw_artifact_value is None else _path(raw_artifact_value, field="raw_artifact_path")
     )
     raw_excerpt_value = _optional_attribute(record, "raw_excerpt")
     raw_excerpt = (
@@ -477,11 +493,15 @@ def _normalized_signature(record: object, normalized_source: str | None) -> str:
 
 
 def _stable_message(value: object) -> str:
-    text = _required_text(
-        value,
-        field="message",
-        max_length=_MAX_TEXT_LENGTH,
-    ).replace("\r\n", "\n").replace("\r", "\n")
+    text = (
+        _required_text(
+            value,
+            field="message",
+            max_length=_MAX_TEXT_LENGTH,
+        )
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+    )
     lines = []
     for line in text.split("\n"):
         line = _HORIZONTAL_WHITESPACE_RE.sub(" ", line.strip())
@@ -523,12 +543,16 @@ def _stable_value(value: object) -> str:
     if isinstance(value, PurePath):
         return _lexical_path(str(value))
     if isinstance(value, str):
-        return _text(
-            value,
-            field="semantic diagnostic value",
-            allow_empty=True,
-            max_length=_MAX_TEXT_LENGTH,
-        ).replace("\r\n", "\n").replace("\r", "\n")
+        return (
+            _text(
+                value,
+                field="semantic diagnostic value",
+                allow_empty=True,
+                max_length=_MAX_TEXT_LENGTH,
+            )
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+        )
     if isinstance(value, Mapping):
         parts = []
         for key in sorted(value, key=lambda item: _stable_value(item)):
@@ -538,9 +562,7 @@ def _stable_value(value: object) -> str:
         return "[" + ",".join(_stable_value(item) for item in value) + "]"
     if isinstance(value, (set, frozenset)):
         return "[" + ",".join(sorted(_stable_value(item) for item in value)) + "]"
-    raise TypeError(
-        "semantic diagnostic values must be scalar, path, mapping, or sequence"
-    )
+    raise TypeError("semantic diagnostic values must be scalar, path, mapping, or sequence")
 
 
 def _normalize_roots(
@@ -559,13 +581,11 @@ def _normalize_roots(
             text = value
         else:
             raise TypeError("known_roots must contain strings or PurePath values")
-        root = _lexical_path(
-            _required_text(text, field="known root", max_length=32_768)
-        ).rstrip("/")
+        root = _lexical_path(_required_text(text, field="known root", max_length=32_768)).rstrip(
+            "/"
+        )
         comparison = (
-            root.casefold()
-            if windows_case_insensitive and _looks_windows_path(root)
-            else root
+            root.casefold() if windows_case_insensitive and _looks_windows_path(root) else root
         )
         if comparison not in seen:
             seen.add(comparison)
@@ -646,7 +666,7 @@ def _first_present_attribute(
     names: Sequence[str],
 ) -> object | None:
     for name in names:
-        value = getattr(record, name, None)
+        value: object | None = getattr(record, name, None)
         if value is not None:
             return value
     return None
@@ -772,5 +792,4 @@ __all__ = (
     "diagnostic_duplicate_key",
     "diagnostic_occurrence",
     "duplicate_groups",
-    "normalize_source_path",
 )

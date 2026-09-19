@@ -10,6 +10,19 @@
 
 ---
 
+
+## ADR-0015 alignment — interpretation of legacy project material
+
+The current runtime starts from a user-selected GF source file or RGL language directory and constructs a `ResolvedLanguageContext`. A root `project/` directory and `project/project.toml` are not required.
+
+This document may retain `project/`, `templates/validation-profile/`, “active project” or project-owned path examples only when describing a legacy source layout, a migration fixture or a deprecated contract. Their current replacements are:
+
+- selected language sources remain in their original RGL or GF source tree;
+- optional validation policy lives in an explicitly loaded validation profile;
+- the reusable profile template lives under `templates/validation-profile/`;
+- run outputs live under the configured output root and never own or copy the source language tree.
+
+---
 ## 1. Purpose
 
 This document defines how GF Wordbench changes a supported contract without losing data, silently changing meaning, or leaving providers and consumers on incompatible versions.
@@ -65,8 +78,8 @@ project/docs/DECISION_LOG.md
 project/docs/KNOWN_ISSUES.md
 project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md
 project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md
-templates/project/project.toml
-templates/project/docs/INTERFILE_CONTRACT_LOCK.md
+templates/validation-profile/project.toml
+templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md
 ```
 
 Authority boundaries:
@@ -88,7 +101,7 @@ The conflict must be corrected through one coordinated change.
 
 ## 2.1 Product boundary
 
-One GF Wordbench workspace contains exactly one active GF language project.
+Legacy rule (superseded by ADR-0015): one physical workspace contained one selected GF language context.
 
 Wordbench migrations may transform:
 

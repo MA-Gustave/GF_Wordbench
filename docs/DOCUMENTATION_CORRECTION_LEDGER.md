@@ -9,6 +9,35 @@
 
 ---
 
+
+## ADR-0015 alignment — selected source and optional validation profile
+
+The current startup model is path-resolved:
+
+- the user selects a GF source file or an RGL language directory directly;
+- Wordbench reads that source tree in place and does not copy it into this repository;
+- `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
+- a legacy `<validation-profile-root>/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
+- run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.
+
+Unless a section is explicitly describing legacy migration input, references to an “active project” or a root `project/` directory are superseded by this model.
+
+---
+
+## 2026-08-05 — ADR-0015 source/profile terminology alignment
+
+Corrected user, validation, GF-toolchain, release, development and reference documentation so that:
+
+- Wordbench opens selected GF/RGL sources in place;
+- `ResolvedLanguageContext` owns source and identity facts;
+- `ValidationProfile` is explicit, optional and policy-only;
+- `<validation-profile-root>/project.toml` and root `project/` are legacy compatibility inputs, not startup requirements;
+- `templates/validation-profile/` is the reusable policy template;
+- run outputs are separated from selected source trees.
+
+Historical migration examples retain legacy paths only when explicitly labeled as legacy.
+
 ## 1. Rules
 
 - One row represents one repository path.
@@ -56,8 +85,8 @@ The two excluded paths are recorded explicitly in section 5. They are not consid
 | `docs/INTERFILE_CONTRACT_LOCK.md` | `CORRECTED` | Rewritten clean framework boundary and contract registry | anti-drift integration | aligned `2026-07-24` |
 | `docs/EXTERNAL_TOOL_CONTRACT_LOCK.md` | `CORRECTED` | Rewritten clean GF/process boundary and tool allowlist contract | anti-drift integration | aligned `2026-07-24` |
 | `docs/PERSISTED_SCHEMA_LOCK.md` | `CORRECTED` | Rewritten clean schema ownership, versioning and public-artifact boundary | anti-drift integration | aligned `2026-07-24` |
-| `project/docs/INTERFILE_CONTRACT_LOCK.md` | `CORRECTED` | Rewritten clean Albanian active-project contract; open release locks preserved | anti-drift integration | aligned `2026-07-24` |
-| `templates/project/docs/INTERFILE_CONTRACT_LOCK.md` | `CORRECTED` | Rewritten clean generic single-project template contract | anti-drift integration | aligned `2026-07-24` |
+| `<validation-profile-root>/docs/INTERFILE_CONTRACT_LOCK.md` | `CORRECTED` | Rewritten clean Albanian active-project contract; open release locks preserved | anti-drift integration | aligned `2026-07-24` |
+| `templates/validation-profile/docs/INTERFILE_CONTRACT_LOCK.md` | `CORRECTED` | Rewritten clean generic single-project template contract | anti-drift integration | aligned `2026-07-24` |
 
 ## 5. Repository reconciliation exclusions
 
@@ -81,7 +110,7 @@ The two excluded paths are recorded explicitly in section 5. They are not consid
 | 9 | `docs/00_START_HERE.md` | `TODO` | Documentation reconciliation | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
 | 10 | `docs/PRODUCT_OVERVIEW.md` | `TODO` | Documentation reconciliation | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
 | 11 | `docs/SCOPE_AND_NON_GOALS.md` | `TODO` | Documentation reconciliation | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
-| 12 | `docs/DOCUMENTATION_MAP.md` | `TODO` | Targeted path and inventory reconciliation | — | Replace the five stale `templates/project/docs/*__PROJECT_DOCS.md` paths with their `*__TEMPLATES_PROJECT_DOCS.md` paths; remove the stale `GF_AUDIT_CAPABILITY_MIGRATION.md` entry. |
+| 12 | `docs/DOCUMENTATION_MAP.md` | `TODO` | Targeted path and inventory reconciliation | — | Replace the five stale `templates/validation-profile/docs/*__PROJECT_DOCS.md` paths with their `*__TEMPLATES_PROJECT_DOCS.md` paths; remove the stale `GF_AUDIT_CAPABILITY_MIGRATION.md` entry. |
 | 13 | `docs/REPOSITORY_STRUCTURE.md` | `TODO` | Documentation reconciliation | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
 | 14 | `docs/GLOSSARY.md` | `TODO` | Documentation reconciliation | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
 | 15 | `docs/architecture/PRODUCT_BOUNDARIES.md` | `TODO` | Architecture merge or normative rewrite | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
@@ -158,16 +187,16 @@ The two excluded paths are recorded explicitly in section 5. They are not consid
 | 86 | `docs/development/BACKWARD_COMPATIBILITY.md` | `TODO` | Implementation-alignment rewrite | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
 | 87 | `docs/release/RELEASE_PROCESS.md` | `TODO` | Release contract review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
 | 88 | `docs/release/MIGRATION_AND_DEPRECATION.md` | `TODO` | Release contract review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
-| 89 | `project/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md` | `TODO` | Active-project source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
-| 90 | `project/docs/VALIDATION_SPEC__PROJECT_DOCS.md` | `TODO` | Active-project source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
-| 91 | `project/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` | `TODO` | Active-project source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
-| 92 | `project/docs/STATUS_LEDGER__PROJECT_DOCS.md` | `TODO` | Active-project source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
-| 93 | `project/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` | `TODO` | Active-project source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
-| 94 | `templates/project/docs/00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter active-project paths. |
-| 95 | `templates/project/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter active-project paths. |
-| 96 | `templates/project/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter active-project paths. |
-| 97 | `templates/project/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter active-project paths. |
-| 98 | `templates/project/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter active-project paths. |
+| 89 | `<validation-profile-root>/docs/00_PROJECT_START_HERE__PROJECT_DOCS.md` | `TODO` | Validation-profile source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
+| 90 | `<validation-profile-root>/docs/VALIDATION_SPEC__PROJECT_DOCS.md` | `TODO` | Validation-profile source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
+| 91 | `<validation-profile-root>/docs/TEST_COVERAGE_MATRIX__PROJECT_DOCS.md` | `TODO` | Validation-profile source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
+| 92 | `<validation-profile-root>/docs/STATUS_LEDGER__PROJECT_DOCS.md` | `TODO` | Validation-profile source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
+| 93 | `<validation-profile-root>/docs/RELEASE_CRITERIA__PROJECT_DOCS.md` | `TODO` | Validation-profile source-evidence review | — | Apply alignment lock; inspect owner ADRs and specialized locks. |
+| 94 | `templates/validation-profile/docs/00_PROJECT_START_HERE__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter legacy project paths. |
+| 95 | `templates/validation-profile/docs/VALIDATION_SPEC__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter legacy project paths. |
+| 96 | `templates/validation-profile/docs/TEST_COVERAGE_MATRIX__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter legacy project paths. |
+| 97 | `templates/validation-profile/docs/STATUS_LEDGER__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter legacy project paths. |
+| 98 | `templates/validation-profile/docs/RELEASE_CRITERIA__TEMPLATES_PROJECT_DOCS.md` | `TODO` | Targeted template-reference reconciliation | — | Replace stale template-local and repository paths ending in `__PROJECT_DOCS.md` with the corresponding `__TEMPLATES_PROJECT_DOCS.md` paths; do not alter legacy project paths. |
 
 ## 7. Per-file integration record
 

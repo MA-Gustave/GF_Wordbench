@@ -8,7 +8,8 @@ import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace
-from typing import cast
+from collections.abc import Collection
+from typing import Any, cast
 
 import pytest
 
@@ -19,7 +20,6 @@ from gf_wordbench.infrastructure.process.models import (
     ProcessOperationKind,
     ProcessRequest,
 )
-from gf_wordbench.infrastructure.process import requests as request_validation
 from gf_wordbench.infrastructure.process.requests import (
     render_command_for_display,
     validate_process_request,
@@ -68,7 +68,7 @@ def _request(tmp_path: Path, **changes: object) -> ProcessRequest:
         mutability_class="run_artifacts_only",
         network_policy="denied",
     )
-    return replace(request, **changes)
+    return cast(ProcessRequest, cast(Any, replace)(request, **changes))
 
 
 def _raw_request(request: ProcessRequest, **changes: object) -> ProcessRequest:
@@ -76,7 +76,7 @@ def _raw_request(request: ProcessRequest, **changes: object) -> ProcessRequest:
 
     values = {field.name: getattr(request, field.name) for field in fields(ProcessRequest)}
     values.update(changes)
-    return cast(ProcessRequest, SimpleNamespace(**values))
+    return cast("ProcessRequest", SimpleNamespace(**values))
 
 
 def _artifact_like(
@@ -534,9 +534,7 @@ def test_environment_key_collections_reject_scalars_and_invalid_keys(
         validate_process_request(_raw_request(request, env_removals="PATH"))
 
     with pytest.raises(ContractViolationError, match="sensitive_env_keys"):
-        validate_process_request(
-            _raw_request(request, sensitive_env_keys=frozenset({"BAD=KEY"}))
-        )
+        validate_process_request(_raw_request(request, sensitive_env_keys=frozenset({"BAD=KEY"})))
 
 
 def test_environment_keys_cannot_collide_on_case_insensitive_platforms(
@@ -544,7 +542,7 @@ def test_environment_keys_cannot_collide_on_case_insensitive_platforms(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _request(tmp_path)
-    monkeypatch.setattr(request_validation.os.path, "normcase", str.casefold)
+    monkeypatch.setattr(os.path, "normcase", str.casefold)
 
     with pytest.raises(ContractViolationError, match="collide on this platform"):
         validate_process_request(
@@ -748,7 +746,7 @@ def test_display_rendering_validates_redaction_indexes(
         render_command_for_display(
             request.executable,
             request.args,
-            sensitive_arg_indexes=cast(object, indexes),
+            sensitive_arg_indexes=cast(Collection[int], indexes),
         )
 
 

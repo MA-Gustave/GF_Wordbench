@@ -7,11 +7,11 @@ its input models.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import quote
 
@@ -40,9 +40,7 @@ MAX_REGRESSION_ENTRIES_PER_GROUP: Final[int] = 100
 _ANSI_RE: Final[re.Pattern[str]] = re.compile(
     r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))"
 )
-_CONTROL_RE: Final[re.Pattern[str]] = re.compile(
-    "[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]"
-)
+_CONTROL_RE: Final[re.Pattern[str]] = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _BACKTICK_RUN_RE: Final[re.Pattern[str]] = re.compile(r"`+")
 
 _STATUS_OK: Final[str] = "OK"
@@ -98,7 +96,7 @@ class SummaryMarkdownModelError(ValueError):
     """Raised when a run result would produce misleading Markdown."""
 
 
-def build_summary_md(run_result: "RunResult") -> str:
+def build_summary_md(run_result: RunResult) -> str:
     """Build canonical ``summary.md`` content from a structured run result."""
 
     _validate_summary_report_input(run_result)
@@ -147,7 +145,7 @@ def build_summary_md(run_result: "RunResult") -> str:
     return normalized.rstrip("\n") + "\n"
 
 
-def write_summary_md(run_result: "RunResult") -> Path:
+def write_summary_md(run_result: RunResult) -> Path:
     """Atomically write the run-owned Markdown summary and return its path."""
 
     run_paths = _required_attr(run_result, "run_paths")
@@ -157,9 +155,7 @@ def write_summary_md(run_result: "RunResult") -> Path:
         ("summary_md", "summary_md_path"),
     )
     if destination_value is None:
-        raise SummaryMarkdownModelError(
-            "run_paths must define summary_md or summary_md_path"
-        )
+        raise SummaryMarkdownModelError("run_paths must define summary_md or summary_md_path")
     destination = _as_path(destination_value, "run_paths.summary_md")
 
     return atomic_write_text(
@@ -194,16 +190,12 @@ def _validate_summary_report_input(run_result: Any) -> None:
 
     overall_status = _enum_text(_required_attr(run_result, "overall_status"))
     if overall_status not in {_STATUS_OK, _STATUS_FAIL, _STATUS_ERROR}:
-        raise SummaryMarkdownModelError(
-            f"unsupported overall status: {overall_status!r}"
-        )
+        raise SummaryMarkdownModelError(f"unsupported overall status: {overall_status!r}")
 
     totals = _required_attr(run_result, "totals")
     totals_status = _enum_text(_required_attr(totals, "overall_status"))
     if totals_status != overall_status:
-        raise SummaryMarkdownModelError(
-            "overall_status must equal totals.overall_status"
-        )
+        raise SummaryMarkdownModelError("overall_status must equal totals.overall_status")
 
     file_results = _sequence(_required_attr(run_result, "file_results"))
     scenario_results = _sequence(_required_attr(run_result, "scenario_results"))
@@ -229,13 +221,10 @@ def _validate_subject_classification(result: Any, *, subject_kind: str) -> None:
         _STATUS_SKIPPED: {_CLASS_SKIPPED, _CLASS_NOISE},
     }
     if status not in allowed:
-        raise SummaryMarkdownModelError(
-            f"unsupported {subject_kind} status: {status!r}"
-        )
+        raise SummaryMarkdownModelError(f"unsupported {subject_kind} status: {status!r}")
     if diagnostic_class not in allowed[status]:
         raise SummaryMarkdownModelError(
-            f"invalid {subject_kind} status/class combination: "
-            f"{status}/{diagnostic_class}"
+            f"invalid {subject_kind} status/class combination: {status}/{diagnostic_class}"
         )
 
     if diagnostic_class == _CLASS_DOWNSTREAM and not blockers:
@@ -252,9 +241,7 @@ def _validate_subject_classification(result: Any, *, subject_kind: str) -> None:
         if not isinstance(is_direct, bool):
             raise SummaryMarkdownModelError("is_direct must be a bool")
         if is_direct != (diagnostic_class == _CLASS_DIRECT):
-            raise SummaryMarkdownModelError(
-                "is_direct must be derived from diagnostic_class"
-            )
+            raise SummaryMarkdownModelError("is_direct must be derived from diagnostic_class")
 
 
 def _validate_count_equations(totals: Any) -> None:
@@ -265,8 +252,7 @@ def _validate_count_equations(totals: Any) -> None:
     )
     if files_included != file_sum:
         raise SummaryMarkdownModelError(
-            "files_included must equal files_ok + files_fail + "
-            "files_error + files_skipped"
+            "files_included must equal files_ok + files_fail + files_error + files_skipped"
         )
 
     scenarios_seen = _non_negative_count(totals, "scenarios_seen")
@@ -321,9 +307,7 @@ def _build_run_summary(run_result: Any) -> str:
 
     project_id = _text(_get(identity, "id", "project_id", default="Unknown"))
     project_name = _text(_get(identity, "name", "project_name", default="Unknown"))
-    language_code = _text(
-        _get(identity, "language_code", "language", default="Unknown")
-    )
+    language_code = _text(_get(identity, "language_code", "language", default="Unknown"))
     mode = _enum_text(_required_attr(config, "mode")).lower()
 
     rows: list[tuple[str, str]] = [
@@ -341,9 +325,15 @@ def _build_run_summary(run_result: Any) -> str:
     rows.extend(
         (
             ("Started", _inline_code(_format_timestamp(_required_attr(run_result, "started_at")))),
-            ("Finished", _inline_code(_format_timestamp(_required_attr(run_result, "finished_at")))),
+            (
+                "Finished",
+                _inline_code(_format_timestamp(_required_attr(run_result, "finished_at"))),
+            ),
             ("Duration", _format_duration(_required_attr(run_result, "duration_ms"))),
-            ("GF version", _inline_code(_optional_text(_get(run_result, "gf_version", default=None)))),
+            (
+                "GF version",
+                _inline_code(_optional_text(_get(run_result, "gf_version", default=None))),
+            ),
             (
                 "Run directory",
                 _inline_code(_display_path(_required_attr(paths, "run_dir"))),
@@ -404,12 +394,9 @@ def _build_outcome(run_result: Any) -> str:
 
     explanations = {
         _STATUS_OK: "All required validation checks passed.",
-        _STATUS_FAIL: (
-            "Required validation completed, but one or more checks failed."
-        ),
+        _STATUS_FAIL: ("Required validation completed, but one or more checks failed."),
         _STATUS_ERROR: (
-            "The run could not complete reliably because a required execution "
-            "stage errored."
+            "The run could not complete reliably because a required execution stage errored."
         ),
     }
 
@@ -453,9 +440,7 @@ def _build_outcome(run_result: Any) -> str:
         lines.extend(("", "### Main Blockers", ""))
         lines.extend(f"- {item}" for item in blockers[:MAX_MAIN_BLOCKERS])
         if len(blockers) > MAX_MAIN_BLOCKERS:
-            lines.append(
-                f"- Showing {MAX_MAIN_BLOCKERS} of {len(blockers)} blockers."
-            )
+            lines.append(f"- Showing {MAX_MAIN_BLOCKERS} of {len(blockers)} blockers.")
 
     return "\n".join(lines)
 
@@ -464,9 +449,7 @@ def _main_blockers(run_result: Any) -> list[str]:
     items: list[str] = []
     for result in _sorted_file_results(run_result):
         status = _enum_text(_get(result, "status", default=""))
-        diagnostic_class = _enum_text(
-            _get(result, "diagnostic_class", default="")
-        ).lower()
+        diagnostic_class = _enum_text(_get(result, "diagnostic_class", default="")).lower()
         if status not in {_STATUS_FAIL, _STATUS_ERROR}:
             continue
         if diagnostic_class not in {_CLASS_DIRECT, _CLASS_AMBIGUOUS}:
@@ -474,26 +457,18 @@ def _main_blockers(run_result: Any) -> list[str]:
         path = _project_relative_file_path(run_result, result)
         kind = _enum_text(_get(result, "error_kind", default="OTHER"))
         message = _primary_message(result)
-        items.append(
-            f"{_inline_code(path)} — {_inline_code(kind)}: "
-            f"{_inline_code(message)}"
-        )
+        items.append(f"{_inline_code(path)} — {_inline_code(kind)}: {_inline_code(message)}")
 
     for result in _sequence(_get(run_result, "scenario_results", default=())):
         status = _enum_text(_get(result, "status", default=""))
         required = _bool(_get(result, "required", default=False))
-        diagnostic_class = _enum_text(
-            _get(result, "diagnostic_class", default="")
-        ).lower()
+        diagnostic_class = _enum_text(_get(result, "diagnostic_class", default="")).lower()
         if not required or status not in {_STATUS_FAIL, _STATUS_ERROR}:
             continue
         if diagnostic_class not in {_CLASS_DIRECT, _CLASS_AMBIGUOUS}:
             continue
         scenario_id = _text(_get(result, "scenario_id", default="Unknown"))
-        items.append(
-            f"{_inline_code(scenario_id)} — "
-            f"{_inline_code(_primary_message(result))}"
-        )
+        items.append(f"{_inline_code(scenario_id)} — {_inline_code(_primary_message(result))}")
     return items
 
 
@@ -512,9 +487,7 @@ def _build_release_gates(run_result: Any) -> str | None:
 
     rows: list[tuple[str, str, str, str]] = []
     for gate in gates:
-        gate_id = _text(
-            _get(gate, "gate_id", "id", "name", default="Unknown")
-        )
+        gate_id = _text(_get(gate, "gate_id", "id", "name", default="Unknown"))
         required = _yes_no(_bool(_get(gate, "required", default=False)))
         status = _enum_text(_get(gate, "status", default="Unknown"))
         evidence = _gate_evidence(gate)
@@ -526,9 +499,7 @@ def _build_release_gates(run_result: Any) -> str | None:
                 evidence,
             )
         )
-    lines.append(
-        _table(("Gate", "Required", "Status", "Evidence"), rows, center=(1,))
-    )
+    lines.append(_table(("Gate", "Required", "Status", "Evidence"), rows, center=(1,)))
     return "\n".join(lines)
 
 
@@ -561,9 +532,7 @@ def _build_file_results(run_result: Any) -> str:
         _CLASS_NOISE: [],
     }
     for result in results:
-        diagnostic_class = _enum_text(
-            _get(result, "diagnostic_class", default="")
-        ).lower()
+        diagnostic_class = _enum_text(_get(result, "diagnostic_class", default="")).lower()
         groups.setdefault(diagnostic_class, []).append(result)
 
     if groups[_CLASS_DIRECT]:
@@ -580,8 +549,7 @@ def _build_file_results(run_result: Any) -> str:
     if groups[_CLASS_DOWNSTREAM]:
         lines.extend(("### Downstream Failures", ""))
         lines.extend(
-            _render_downstream_file(run_result, item)
-            for item in groups[_CLASS_DOWNSTREAM]
+            _render_downstream_file(run_result, item) for item in groups[_CLASS_DOWNSTREAM]
         )
 
     if groups[_CLASS_SKIPPED]:
@@ -658,9 +626,13 @@ def _render_file_failure(
     ]
     if ambiguous:
         detail = _text(_get(compile_summary, "error_detail", default=""))
-        reason = _first_line(detail) if detail else (
-            "The available evidence does not reliably distinguish a local "
-            "failure from a dependency failure."
+        reason = (
+            _first_line(detail)
+            if detail
+            else (
+                "The available evidence does not reliably distinguish a local "
+                "failure from a dependency failure."
+            )
         )
         lines.append(f"- Ambiguity: {_plain_cell(reason)}")
     lines.extend(_render_evidence_list(_file_evidence_paths(result), run_result))
@@ -720,11 +692,7 @@ def _build_scenario_results(run_result: Any) -> str:
                 _inline_code(_text(_get(result, "scenario_id", default="Unknown"))),
                 _yes_no(_bool(_get(result, "required", default=False))),
                 _inline_code(_enum_text(_get(result, "status", default="Unknown"))),
-                (
-                    _inline_code(_enum_text(execution_state))
-                    if execution_state is not None
-                    else "—"
-                ),
+                (_inline_code(_enum_text(execution_state)) if execution_state is not None else "—"),
                 _gold_label(result),
                 _format_duration(_get(result, "duration_ms", default=0)),
             )
@@ -741,8 +709,7 @@ def _build_scenario_results(run_result: Any) -> str:
     failed = [
         result
         for result in scenarios
-        if _enum_text(_get(result, "status", default=""))
-        in {_STATUS_FAIL, _STATUS_ERROR}
+        if _enum_text(_get(result, "status", default="")) in {_STATUS_FAIL, _STATUS_ERROR}
     ]
     if failed:
         lines.extend(("", "### Failed Scenarios", ""))
@@ -786,15 +753,12 @@ def _render_failed_scenario(run_result: Any, result: Any) -> str:
     failed_assertions = [
         assertion
         for assertion in _sequence(_get(result, "assertions", default=()))
-        if _enum_text(_get(assertion, "status", default="")).lower()
-        in {"failed", "error"}
+        if _enum_text(_get(assertion, "status", default="")).lower() in {"failed", "error"}
     ]
     if failed_assertions:
         lines.append("- Failed assertions:")
         for assertion in failed_assertions:
-            assertion_id = _text(
-                _get(assertion, "assertion_id", "id", default="Unknown")
-            )
+            assertion_id = _text(_get(assertion, "assertion_id", "id", default="Unknown"))
             message = _text(_get(assertion, "message", default="assertion failed"))
             lines.append(f"  - {_inline_code(assertion_id)} — {_plain_cell(message)}")
 
@@ -813,11 +777,9 @@ def _render_failed_scenario(run_result: Any, result: Any) -> str:
 
     lines.extend(_render_evidence_list(_scenario_evidence_paths(result), run_result))
 
-    if (
-        not _bool(_get(result, "required", default=False))
-        and _enum_text(_get(result, "status", default=""))
-        in {_STATUS_FAIL, _STATUS_ERROR}
-    ):
+    if not _bool(_get(result, "required", default=False)) and _enum_text(
+        _get(result, "status", default="")
+    ) in {_STATUS_FAIL, _STATUS_ERROR}:
         lines.append(
             "- Optional diagnostic failure; does not affect overall required "
             "validation unless project policy says otherwise."
@@ -976,11 +938,7 @@ def _build_regression_comparison(run_result: Any) -> str:
         if not group:
             continue
         if kind == "unchanged":
-            group = [
-                item
-                for item in group
-                if _text(_get(item, "message", default="")).strip()
-            ]
+            group = [item for item in group if _text(_get(item, "message", default="")).strip()]
             if not group:
                 continue
         lines.extend(("", f"### {headings[kind]}", ""))
@@ -988,8 +946,7 @@ def _build_regression_comparison(run_result: Any) -> str:
             lines.append(_render_diff_entry(entry, kind))
         if len(group) > MAX_REGRESSION_ENTRIES_PER_GROUP:
             lines.append(
-                f"- Showing {MAX_REGRESSION_ENTRIES_PER_GROUP} of "
-                f"{len(group)} {kind} entries."
+                f"- Showing {MAX_REGRESSION_ENTRIES_PER_GROUP} of {len(group)} {kind} entries."
             )
 
     comparison_warnings = _comparison_warnings(run_result)
@@ -1002,9 +959,7 @@ def _build_regression_comparison(run_result: Any) -> str:
 
 def _render_diff_entry(entry: Any, kind: str) -> str:
     subject_kind = _text(_get(entry, "subject_kind", default="file"))
-    subject_id = _text(
-        _get(entry, "subject_id", "file_path", default="Unknown")
-    )
+    subject_id = _text(_get(entry, "subject_id", "file_path", default="Unknown"))
     previous = _enum_text(_get(entry, "previous_status", default="—")) or "—"
     current = _enum_text(_get(entry, "current_status", default="—")) or "—"
     message = _text(_get(entry, "message", default="")).strip()
@@ -1232,9 +1187,7 @@ def _count_alias(owner: Any, *names: str) -> int:
     for name in names:
         if hasattr(owner, name) or (isinstance(owner, Mapping) and name in owner):
             return _non_negative_count(owner, name)
-    raise SummaryMarkdownModelError(
-        "missing required count field: " + " or ".join(names)
-    )
+    raise SummaryMarkdownModelError("missing required count field: " + " or ".join(names))
 
 
 def _non_negative_count(owner: Any, name: str) -> int:
@@ -1249,7 +1202,7 @@ def _format_timestamp(value: Any) -> str:
         return "Unknown"
     if value.tzinfo is None or value.utcoffset() is None:
         return "Unknown"
-    utc = value.astimezone(timezone.utc)
+    utc = value.astimezone(UTC)
     timespec = "microseconds" if utc.microsecond else "seconds"
     return utc.isoformat(timespec=timespec).replace("+00:00", "Z")
 
@@ -1275,9 +1228,7 @@ def _display_path(value: Any, *, root: Any = None) -> str:
             path = path.relative_to(root_path)
         except (TypeError, ValueError):
             try:
-                path = path.resolve(strict=False).relative_to(
-                    Path(root).resolve(strict=False)
-                )
+                path = path.resolve(strict=False).relative_to(Path(root).resolve(strict=False))
             except (OSError, RuntimeError, ValueError):
                 pass
     rendered = path.as_posix()
@@ -1315,12 +1266,7 @@ def _inline_code(value: Any) -> str:
 
 def _plain_cell(value: Any, *, limit: int = MAX_PRIMARY_MESSAGE_CHARS) -> str:
     text = _first_line(value, limit=limit)
-    text = (
-        text.replace("\\", "\\\\")
-        .replace("|", "\\|")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    text = text.replace("\\", "\\\\").replace("|", "\\|").replace("<", "&lt;").replace(">", "&gt;")
     return text or "Unknown"
 
 
@@ -1351,9 +1297,7 @@ def _table(
         cells = list(row)
         if len(cells) != len(headers):
             raise SummaryMarkdownModelError("table row width does not match headers")
-        lines.append(
-            "|" + "|".join(f" {_table_cell(value)} " for value in cells) + "|"
-        )
+        lines.append("|" + "|".join(f" {_table_cell(value)} " for value in cells) + "|")
     return "\n".join(lines)
 
 

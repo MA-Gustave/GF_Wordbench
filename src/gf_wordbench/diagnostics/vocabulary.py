@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from enum import StrEnum, unique
+import re
 from types import MappingProxyType
-from typing import Final, NewType
+from typing import Final, NewType, TypeVar
 
 from gf_wordbench.kernel.statuses import (
     DiagnosticClass,
@@ -20,9 +20,9 @@ MAX_PATTERN_ID_LENGTH: Final[int] = 64
 DiagnosticCode = NewType("DiagnosticCode", str)
 DiagnosticPatternId = NewType("DiagnosticPatternId", str)
 
-_DIAGNOSTIC_CODE_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
+_EnumT = TypeVar("_EnumT", bound=StrEnum)
+
+_DIAGNOSTIC_CODE_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 _PATTERN_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^DP-(PROC|GFINT|GFTYPE|GFSYN|GFLOAD|GFGEN|GFWARN|SCEN|ART|NORM|GOLD|FALLBACK)-[0-9]{3,}$"
 )
@@ -79,9 +79,22 @@ class PatternLifecycle(StrEnum):
 
 @unique
 class PatternConfidence(StrEnum):
+    """Canonical confidence vocabulary shared by pattern definitions and matches.
+
+    The broader set preserves both the framework-evidence confidence levels
+    (``authoritative``, ``high``, ``medium``, ``low``) and the parser matching
+    levels (``exact``, ``strong``, ``fallback``, ``unknown``).  Keeping one enum
+    avoids duplicate owners while remaining compatible with persisted pattern
+    catalogs from both generations of the diagnostics API.
+    """
+
+    AUTHORITATIVE = "authoritative"
     EXACT = "exact"
+    HIGH = "high"
     STRONG = "strong"
+    MEDIUM = "medium"
     FALLBACK = "fallback"
+    LOW = "low"
     UNKNOWN = "unknown"
 
 
@@ -158,20 +171,20 @@ _STREAM_RANK: Final[Mapping[DiagnosticStream, int]] = MappingProxyType(
     }
 )
 
-_PATTERN_CONFIDENCE_RANK: Final[Mapping[PatternConfidence, int]] = (
-    MappingProxyType(
-        {
-            PatternConfidence.EXACT: 0,
-            PatternConfidence.STRONG: 1,
-            PatternConfidence.FALLBACK: 2,
-            PatternConfidence.UNKNOWN: 3,
-        }
-    )
+_PATTERN_CONFIDENCE_RANK: Final[Mapping[PatternConfidence, int]] = MappingProxyType(
+    {
+        PatternConfidence.AUTHORITATIVE: 0,
+        PatternConfidence.EXACT: 1,
+        PatternConfidence.HIGH: 2,
+        PatternConfidence.STRONG: 3,
+        PatternConfidence.MEDIUM: 4,
+        PatternConfidence.FALLBACK: 5,
+        PatternConfidence.LOW: 6,
+        PatternConfidence.UNKNOWN: 7,
+    }
 )
 
-_DIAGNOSTIC_CODE_FAMILIES: Final[
-    Mapping[DiagnosticCodeFamily, frozenset[str]]
-] = MappingProxyType(
+_DIAGNOSTIC_CODE_FAMILIES: Final[Mapping[DiagnosticCodeFamily, frozenset[str]]] = MappingProxyType(
     {
         DiagnosticCodeFamily.PROCESS: frozenset(
             {
@@ -270,14 +283,12 @@ _DIAGNOSTIC_CODE_FAMILIES: Final[
     }
 )
 
-DIAGNOSTIC_CODE_FAMILIES: Final[
-    Mapping[DiagnosticCodeFamily, frozenset[str]]
-] = _DIAGNOSTIC_CODE_FAMILIES
+DIAGNOSTIC_CODE_FAMILIES: Final[Mapping[DiagnosticCodeFamily, frozenset[str]]] = (
+    _DIAGNOSTIC_CODE_FAMILIES
+)
 
 KNOWN_DIAGNOSTIC_CODES: Final[frozenset[str]] = frozenset(
-    code
-    for codes in DIAGNOSTIC_CODE_FAMILIES.values()
-    for code in codes
+    code for codes in DIAGNOSTIC_CODE_FAMILIES.values() for code in codes
 )
 
 DiagnosticOperation = DiagnosticOperationKind
@@ -293,10 +304,7 @@ def validate_diagnostic_code(value: str) -> DiagnosticCode:
         maximum=MAX_DIAGNOSTIC_CODE_LENGTH,
     )
     if _DIAGNOSTIC_CODE_PATTERN.fullmatch(text) is None:
-        raise ValueError(
-            "diagnostic_code must match "
-            "[a-z][a-z0-9]*(?:_[a-z0-9]+)*"
-        )
+        raise ValueError("diagnostic_code must match [a-z][a-z0-9]*(?:_[a-z0-9]+)*")
     return DiagnosticCode(text)
 
 
@@ -326,8 +334,7 @@ def validate_pattern_id(value: str) -> DiagnosticPatternId:
     )
     if _PATTERN_ID_PATTERN.fullmatch(text) is None:
         raise ValueError(
-            "pattern_id must match DP-<DOMAIN>-<NUMBER> using a canonical "
-            "diagnostic pattern domain"
+            "pattern_id must match DP-<DOMAIN>-<NUMBER> using a canonical diagnostic pattern domain"
         )
     return DiagnosticPatternId(text)
 
@@ -351,21 +358,15 @@ def make_pattern_id(
         raise TypeError("number must be an integer")
     if number < 1:
         raise ValueError("number must be positive")
-    return validate_pattern_id(
-        f"DP-{canonical_domain.value}-{number:03d}"
-    )
+    return validate_pattern_id(f"DP-{canonical_domain.value}-{number:03d}")
 
 
 def severity_rank(value: DiagnosticSeverity | str) -> int:
-    return _SEVERITY_RANK[
-        _coerce_enum(value, DiagnosticSeverity, field="severity")
-    ]
+    return _SEVERITY_RANK[_coerce_enum(value, DiagnosticSeverity, field="severity")]
 
 
 def stream_rank(value: DiagnosticStream | str) -> int:
-    return _STREAM_RANK[
-        _coerce_enum(value, DiagnosticStream, field="stream")
-    ]
+    return _STREAM_RANK[_coerce_enum(value, DiagnosticStream, field="stream")]
 
 
 def pattern_confidence_rank(
@@ -406,11 +407,10 @@ def is_release_eligible_pattern(
         PatternConfidence,
         field="confidence",
     )
-    return (
-        canonical_lifecycle is PatternLifecycle.ACTIVE
-        and canonical_confidence
-        in {PatternConfidence.EXACT, PatternConfidence.STRONG}
-    )
+    return canonical_lifecycle is PatternLifecycle.ACTIVE and canonical_confidence in {
+        PatternConfidence.EXACT,
+        PatternConfidence.STRONG,
+    }
 
 
 def coerce_diagnostic_severity(
@@ -463,13 +463,16 @@ def coerce_pattern_confidence(
     )
 
 
-def _coerce_enum(value: object, enum_type: type[StrEnum], *, field: str):
+def _coerce_enum(
+    value: object,
+    enum_type: type[_EnumT],
+    *,
+    field: str,
+) -> _EnumT:
     if isinstance(value, enum_type):
         return value
     if not isinstance(value, str):
-        raise TypeError(
-            f"{field} must be {enum_type.__name__} or string"
-        )
+        raise TypeError(f"{field} must be {enum_type.__name__} or string")
     try:
         return enum_type(value)
     except ValueError as exc:

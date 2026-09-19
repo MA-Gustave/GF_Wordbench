@@ -81,12 +81,8 @@ _MUTABLE_STATES: Final[frozenset[RunLifecycleState]] = frozenset(
     }
 )
 
-_ALLOWED_TRANSITIONS: Final[
-    dict[RunLifecycleState, frozenset[RunLifecycleState]]
-] = {
-    RunLifecycleState.ALLOCATED: frozenset(
-        {RunLifecycleState.INITIALIZED}
-    ),
+_ALLOWED_TRANSITIONS: Final[dict[RunLifecycleState, frozenset[RunLifecycleState]]] = {
+    RunLifecycleState.ALLOCATED: frozenset({RunLifecycleState.INITIALIZED}),
     RunLifecycleState.INITIALIZED: frozenset(
         {
             RunLifecycleState.EXECUTING,
@@ -128,9 +124,7 @@ _ALLOWED_TRANSITIONS: Final[
     RunLifecycleState.DELETED: frozenset(),
 }
 
-ALLOWED_LIFECYCLE_TRANSITIONS: Final = MappingProxyType(
-    _ALLOWED_TRANSITIONS
-)
+ALLOWED_LIFECYCLE_TRANSITIONS: Final = MappingProxyType(_ALLOWED_TRANSITIONS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,9 +191,7 @@ class RunLifecycle:
             field="updated_at",
         )
         if updated_at < allocated_at:
-            raise ValueError(
-                "updated_at must not precede allocated_at"
-            )
+            raise ValueError("updated_at must not precede allocated_at")
 
         object.__setattr__(self, "allocated_at", allocated_at)
         object.__setattr__(self, "updated_at", updated_at)
@@ -212,13 +204,8 @@ class RunLifecycle:
 
         if not isinstance(self.history, tuple):
             raise TypeError("history must be a tuple")
-        if any(
-            not isinstance(item, RunLifecycleTransition)
-            for item in self.history
-        ):
-            raise TypeError(
-                "history must contain RunLifecycleTransition values"
-            )
+        if any(not isinstance(item, RunLifecycleTransition) for item in self.history):
+            raise TypeError("history must contain RunLifecycleTransition values")
 
         self._validate_history()
 
@@ -263,23 +250,15 @@ class RunLifecycle:
 
     def _validate_history(self) -> None:
         if self.revision != len(self.history):
-            raise ValueError(
-                "revision must equal the number of history entries"
-            )
+            raise ValueError("revision must equal the number of history entries")
 
         if not self.history:
             if self.revision != 0:
-                raise ValueError(
-                    "a lifecycle without history must have revision zero"
-                )
+                raise ValueError("a lifecycle without history must have revision zero")
             if self.state is not RunLifecycleState.ALLOCATED:
-                raise ValueError(
-                    "a lifecycle without history must be allocated"
-                )
+                raise ValueError("a lifecycle without history must be allocated")
             if self.updated_at != self.allocated_at:
-                raise ValueError(
-                    "a newly allocated lifecycle must have matching timestamps"
-                )
+                raise ValueError("a newly allocated lifecycle must have matching timestamps")
             return
 
         expected_previous = RunLifecycleState.ALLOCATED
@@ -290,33 +269,21 @@ class RunLifecycle:
             start=1,
         ):
             if transition.run_id != self.run_id:
-                raise ValueError(
-                    "every lifecycle transition must use the same run_id"
-                )
+                raise ValueError("every lifecycle transition must use the same run_id")
             if transition.revision != expected_revision:
-                raise ValueError(
-                    "lifecycle transition revisions must be contiguous"
-                )
+                raise ValueError("lifecycle transition revisions must be contiguous")
             if transition.previous is not expected_previous:
-                raise ValueError(
-                    "lifecycle transition history is not contiguous"
-                )
+                raise ValueError("lifecycle transition history is not contiguous")
             if transition.occurred_at < previous_time:
-                raise ValueError(
-                    "lifecycle transition timestamps must be monotonic"
-                )
+                raise ValueError("lifecycle transition timestamps must be monotonic")
 
             expected_previous = transition.current
             previous_time = transition.occurred_at
 
         if self.state is not expected_previous:
-            raise ValueError(
-                "state must match the final lifecycle transition"
-            )
+            raise ValueError("state must match the final lifecycle transition")
         if self.updated_at != previous_time:
-            raise ValueError(
-                "updated_at must match the final transition timestamp"
-            )
+            raise ValueError("updated_at must match the final transition timestamp")
 
 
 def new_run_lifecycle(
@@ -349,10 +316,7 @@ def can_transition_lifecycle(
 ) -> bool:
     _require_state("current", current)
     _require_state("target", target)
-    return (
-        target is current
-        or target in ALLOWED_LIFECYCLE_TRANSITIONS[current]
-    )
+    return target is current or target in ALLOWED_LIFECYCLE_TRANSITIONS[current]
 
 
 def require_lifecycle_transition(
@@ -366,10 +330,7 @@ def require_lifecycle_transition(
         return
 
     if target not in ALLOWED_LIFECYCLE_TRANSITIONS[current]:
-        raise ValueError(
-            "prohibited run lifecycle transition: "
-            f"{current.value} -> {target.value}"
-        )
+        raise ValueError(f"prohibited run lifecycle transition: {current.value} -> {target.value}")
 
 
 def transition_lifecycle(
@@ -388,9 +349,7 @@ def transition_lifecycle(
         field="occurred_at",
     )
     if timestamp < lifecycle.updated_at:
-        raise ValueError(
-            "occurred_at must not precede the current lifecycle timestamp"
-        )
+        raise ValueError("occurred_at must not precede the current lifecycle timestamp")
 
     if target is lifecycle.state:
         return lifecycle
@@ -401,13 +360,15 @@ def transition_lifecycle(
     )
 
     normalized_reason = _normalize_reason(reason)
-    if target in {
-        RunLifecycleState.INCOMPLETE,
-        RunLifecycleState.CORRUPT,
-    } and normalized_reason is None:
-        raise ValueError(
-            f"{target.value} transitions require a reason"
-        )
+    if (
+        target
+        in {
+            RunLifecycleState.INCOMPLETE,
+            RunLifecycleState.CORRUPT,
+        }
+        and normalized_reason is None
+    ):
+        raise ValueError(f"{target.value} transitions require a reason")
 
     transition = RunLifecycleTransition(
         run_id=lifecycle.run_id,
@@ -433,9 +394,7 @@ def _require_state(
     value: object,
 ) -> RunLifecycleState:
     if not isinstance(value, RunLifecycleState):
-        raise TypeError(
-            f"{field} must be a RunLifecycleState"
-        )
+        raise TypeError(f"{field} must be a RunLifecycleState")
     return value
 
 
@@ -447,9 +406,7 @@ def _normalize_utc_timestamp(
     if not isinstance(value, datetime):
         raise TypeError(f"{field} must be a datetime")
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(
-            f"{field} must be timezone-aware"
-        )
+        raise ValueError(f"{field} must be timezone-aware")
     return value.astimezone(UTC)
 
 
@@ -466,9 +423,7 @@ def _normalize_reason(
     if not normalized:
         raise ValueError("reason must not be empty")
     if len(normalized) > 2048:
-        raise ValueError(
-            "reason must not exceed 2048 characters"
-        )
+        raise ValueError("reason must not exceed 2048 characters")
     return normalized
 
 
@@ -481,7 +436,5 @@ def _require_plain_int(
     if type(value) is not int:
         raise TypeError(f"{field} must be an int")
     if value < minimum:
-        raise ValueError(
-            f"{field} must be at least {minimum}"
-        )
+        raise ValueError(f"{field} must be at least {minimum}")
     return value

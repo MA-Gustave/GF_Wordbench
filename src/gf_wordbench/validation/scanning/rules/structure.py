@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import bisect
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
-import bisect
 import re
 from typing import Final, Protocol, runtime_checkable
 
@@ -15,12 +15,8 @@ UNTYPED_CASE_STRING_PATTERN_RULE_ID: Final[str] = "SCAN-PATTERN-001"
 UNTYPED_TABLE_STRING_PATTERN_RULE_ID: Final[str] = "SCAN-PATTERN-002"
 
 RUNTIME_STRING_MATCH_COUNT_FIELD: Final[str] = "runtime_str_match"
-UNTYPED_CASE_STRING_PATTERN_COUNT_FIELD: Final[str] = (
-    "untyped_case_str_pat"
-)
-UNTYPED_TABLE_STRING_PATTERN_COUNT_FIELD: Final[str] = (
-    "untyped_table_str_pat"
-)
+UNTYPED_CASE_STRING_PATTERN_COUNT_FIELD: Final[str] = "untyped_case_str_pat"
+UNTYPED_TABLE_STRING_PATTERN_COUNT_FIELD: Final[str] = "untyped_table_str_pat"
 
 DEFAULT_MAX_CASE_HEADER_LINES: Final[int] = 8
 DEFAULT_MAX_BLOCK_LINES: Final[int] = 20_000
@@ -45,13 +41,13 @@ _STRING_BRANCH_RE: Final[re.Pattern[str]] = re.compile(
     re.DOTALL,
 )
 _STRING_CONCAT_LEFT_RE: Final[re.Pattern[str]] = re.compile(
-    r'(?:\b[A-Za-z][A-Za-z0-9_]*\b|_)\s*\+\s*'
+    r"(?:\b[A-Za-z][A-Za-z0-9_]*\b|_)\s*\+\s*"
     r'"(?:[^"\\]|\\.|"")*"',
     re.DOTALL,
 )
 _STRING_CONCAT_RIGHT_RE: Final[re.Pattern[str]] = re.compile(
     r'"(?:[^"\\]|\\.|"")*"\s*\+\s*'
-    r'(?:\b[A-Za-z][A-Za-z0-9_]*\b|_)',
+    r"(?:\b[A-Za-z][A-Za-z0-9_]*\b|_)",
     re.DOTALL,
 )
 _EXPLICIT_STR_PATTERN_TYPE_RE: Final[re.Pattern[str]] = re.compile(
@@ -59,12 +55,12 @@ _EXPLICIT_STR_PATTERN_TYPE_RE: Final[re.Pattern[str]] = re.compile(
     re.MULTILINE,
 )
 _STRING_PATTERN_BRANCH_RE: Final[re.Pattern[str]] = re.compile(
-    r'(?P<pattern>[^;{}\n]*'
-    r'(?:(?:\b[A-Za-z][A-Za-z0-9_]*\b|_)\s*\+\s*'
+    r"(?P<pattern>[^;{}\n]*"
+    r"(?:(?:\b[A-Za-z][A-Za-z0-9_]*\b|_)\s*\+\s*"
     r'"(?:[^"\\]|\\.|"")*"|'
     r'"(?:[^"\\]|\\.|"")*"\s*\+\s*'
-    r'(?:\b[A-Za-z][A-Za-z0-9_]*\b|_))'
-    r'[^;{}]*?)\s*=>',
+    r"(?:\b[A-Za-z][A-Za-z0-9_]*\b|_))"
+    r"[^;{}]*?)\s*=>",
     re.DOTALL,
 )
 _S_PROJECTION_RE: Final[re.Pattern[str]] = re.compile(
@@ -118,9 +114,7 @@ class StructuralBlock:
             if not isinstance(value, str):
                 raise TypeError(f"{field_name} must be a string")
             if "\x00" in value:
-                raise ValueError(
-                    f"{field_name} must not contain NUL characters"
-                )
+                raise ValueError(f"{field_name} must not contain NUL characters")
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,9 +127,7 @@ class StructureDiagnostic:
 
     def __post_init__(self) -> None:
         if not isinstance(self.code, StructureDiagnosticCode):
-            raise TypeError(
-                "code must be a StructureDiagnosticCode"
-            )
+            raise TypeError("code must be a StructureDiagnosticCode")
         if not isinstance(self.kind, StructuralBlockKind):
             raise TypeError("kind must be a StructuralBlockKind")
         _positive_integer(self.start_line, field_name="start_line")
@@ -170,21 +162,15 @@ class StructureFinding:
         if not isinstance(self.excerpt, str):
             raise TypeError("excerpt must be a string")
         if "\x00" in self.excerpt:
-            raise ValueError(
-                "excerpt must not contain NUL characters"
-            )
+            raise ValueError("excerpt must not contain NUL characters")
         _required_text(self.message, field_name="message")
 
         source_path = self.source_path
         if source_path is not None:
             if not isinstance(source_path, Path):
-                raise TypeError(
-                    "source_path must be a pathlib.Path or None"
-                )
+                raise TypeError("source_path must be a pathlib.Path or None")
             if "\x00" in str(source_path):
-                raise ValueError(
-                    "source_path must not contain NUL characters"
-                )
+                raise ValueError("source_path must not contain NUL characters")
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,20 +182,10 @@ class StructureRuleResult:
         findings = tuple(self.findings)
         diagnostics = tuple(self.diagnostics)
 
-        if not all(
-            isinstance(item, StructureFinding)
-            for item in findings
-        ):
-            raise TypeError(
-                "findings must contain StructureFinding values"
-            )
-        if not all(
-            isinstance(item, StructureDiagnostic)
-            for item in diagnostics
-        ):
-            raise TypeError(
-                "diagnostics must contain StructureDiagnostic values"
-            )
+        if not all(isinstance(item, StructureFinding) for item in findings):
+            raise TypeError("findings must contain StructureFinding values")
+        if not all(isinstance(item, StructureDiagnostic) for item in diagnostics):
+            raise TypeError("diagnostics must contain StructureDiagnostic values")
 
         object.__setattr__(
             self,
@@ -233,38 +209,24 @@ class StructureRuleResult:
 
     @property
     def untyped_case_str_pat(self) -> int:
-        return self.count_for(
-            UNTYPED_CASE_STRING_PATTERN_RULE_ID
-        )
+        return self.count_for(UNTYPED_CASE_STRING_PATTERN_RULE_ID)
 
     @property
     def untyped_table_str_pat(self) -> int:
-        return self.count_for(
-            UNTYPED_TABLE_STRING_PATTERN_RULE_ID
-        )
+        return self.count_for(UNTYPED_TABLE_STRING_PATTERN_RULE_ID)
 
     def count_for(self, rule_id: str) -> int:
         rule_id = _required_text(
             rule_id,
             field_name="rule_id",
         )
-        return sum(
-            1
-            for finding in self.findings
-            if finding.rule_id == rule_id
-        )
+        return sum(1 for finding in self.findings if finding.rule_id == rule_id)
 
     def counts(self) -> dict[str, int]:
         return {
-            RUNTIME_STRING_MATCH_COUNT_FIELD: (
-                self.runtime_str_match
-            ),
-            UNTYPED_CASE_STRING_PATTERN_COUNT_FIELD: (
-                self.untyped_case_str_pat
-            ),
-            UNTYPED_TABLE_STRING_PATTERN_COUNT_FIELD: (
-                self.untyped_table_str_pat
-            ),
+            RUNTIME_STRING_MATCH_COUNT_FIELD: (self.runtime_str_match),
+            UNTYPED_CASE_STRING_PATTERN_COUNT_FIELD: (self.untyped_case_str_pat),
+            UNTYPED_TABLE_STRING_PATTERN_COUNT_FIELD: (self.untyped_table_str_pat),
         }
 
 
@@ -292,28 +254,17 @@ class StructuralBlockCollection:
         diagnostics = tuple(self.diagnostics)
 
         if not all(
-            isinstance(item, StructuralBlock)
-            and item.kind is StructuralBlockKind.CASE
+            isinstance(item, StructuralBlock) and item.kind is StructuralBlockKind.CASE
             for item in case_blocks
         ):
-            raise TypeError(
-                "case_blocks must contain case StructuralBlock values"
-            )
+            raise TypeError("case_blocks must contain case StructuralBlock values")
         if not all(
-            isinstance(item, StructuralBlock)
-            and item.kind is StructuralBlockKind.TABLE
+            isinstance(item, StructuralBlock) and item.kind is StructuralBlockKind.TABLE
             for item in table_blocks
         ):
-            raise TypeError(
-                "table_blocks must contain table StructuralBlock values"
-            )
-        if not all(
-            isinstance(item, StructureDiagnostic)
-            for item in diagnostics
-        ):
-            raise TypeError(
-                "diagnostics must contain StructureDiagnostic values"
-            )
+            raise TypeError("table_blocks must contain table StructuralBlock values")
+        if not all(isinstance(item, StructureDiagnostic) for item in diagnostics):
+            raise TypeError("diagnostics must contain StructureDiagnostic values")
 
         object.__setattr__(
             self,
@@ -360,23 +311,17 @@ class _JoinedLines:
             field_name="line_number",
         )
         if line_number > len(self.lines):
-            raise ValueError(
-                "line_number exceeds the number of source lines"
-            )
+            raise ValueError("line_number exceeds the number of source lines")
         return self.starts[line_number - 1]
 
 
 def collect_structural_blocks(
     views: SourceViews,
     *,
-    max_case_header_lines: int = (
-        DEFAULT_MAX_CASE_HEADER_LINES
-    ),
+    max_case_header_lines: int = (DEFAULT_MAX_CASE_HEADER_LINES),
     max_block_lines: int = DEFAULT_MAX_BLOCK_LINES,
 ) -> StructuralBlockCollection:
-    original_lines, comment_lines, masked_lines = (
-        _validated_views(views)
-    )
+    original_lines, comment_lines, masked_lines = _validated_views(views)
     max_case_header_lines = _positive_integer(
         max_case_header_lines,
         field_name="max_case_header_lines",
@@ -421,9 +366,7 @@ def scan_structure_rules(
     views: SourceViews,
     *,
     source_path: Path | None = None,
-    max_case_header_lines: int = (
-        DEFAULT_MAX_CASE_HEADER_LINES
-    ),
+    max_case_header_lines: int = (DEFAULT_MAX_CASE_HEADER_LINES),
     max_block_lines: int = DEFAULT_MAX_BLOCK_LINES,
     max_excerpt_lines: int = DEFAULT_MAX_EXCERPT_LINES,
     max_excerpt_chars: int = DEFAULT_MAX_EXCERPT_CHARS,
@@ -643,9 +586,7 @@ def _find_untyped_patterns(
     findings: list[StructureFinding] = []
 
     for block in normalized_blocks:
-        if not contains_string_concatenation_pattern(
-            block.source_text
-        ):
+        if not contains_string_concatenation_pattern(block.source_text):
             continue
         if contains_explicit_str_pattern_type(block.source_text):
             continue
@@ -684,9 +625,7 @@ def _collect_kind(
         max_case_header_lines=max_case_header_lines,
     )
     blocks: list[StructuralBlock] = []
-    diagnostics: list[StructureDiagnostic] = list(
-        start_diagnostics
-    )
+    diagnostics: list[StructureDiagnostic] = list(start_diagnostics)
     accepted_until = -1
 
     for start_offset, opening_brace_offset in starts:
@@ -714,15 +653,9 @@ def _collect_kind(
         assert end_offset is not None
         assert end_line is not None
 
-        header_text = masked.text[
-            start_offset : opening_brace_offset + 1
-        ]
-        structural_text = masked.text[
-            start_offset : end_offset + 1
-        ]
-        source_text = comments.text[
-            start_offset : end_offset + 1
-        ]
+        header_text = masked.text[start_offset : opening_brace_offset + 1]
+        structural_text = masked.text[start_offset : end_offset + 1]
+        source_text = comments.text[start_offset : end_offset + 1]
 
         blocks.append(
             StructuralBlock(
@@ -730,9 +663,7 @@ def _collect_kind(
                 start_line=start_line,
                 end_line=end_line,
                 start_column=masked.column_number(start_offset),
-                opening_brace_column=masked.column_number(
-                    opening_brace_offset
-                ),
+                opening_brace_column=masked.column_number(opening_brace_offset),
                 header_text=header_text,
                 structural_text=structural_text,
                 source_text=source_text,
@@ -755,8 +686,7 @@ def _candidate_starts(
     if kind is StructuralBlockKind.TABLE:
         return (
             tuple(
-                (match.start(), match.end() - 1)
-                for match in _TABLE_START_RE.finditer(masked.text)
+                (match.start(), match.end() - 1) for match in _TABLE_START_RE.finditer(masked.text)
             ),
             (),
         )
@@ -772,9 +702,7 @@ def _candidate_starts(
             start_line + max_case_header_lines - 1,
         )
         if last_header_line < len(masked.lines):
-            limit_offset = masked.offset_for_line(
-                last_header_line + 1
-            )
+            limit_offset = masked.offset_for_line(last_header_line + 1)
         else:
             limit_offset = len(masked.text)
 
@@ -784,9 +712,7 @@ def _candidate_starts(
             limit_offset,
         )
         if header_match is not None:
-            starts.append(
-                (start_offset, header_match.end() - 1)
-            )
+            starts.append((start_offset, header_match.end() - 1))
             continue
 
         next_case = _CASE_START_RE.search(
@@ -927,9 +853,7 @@ def _bounded_excerpt(
     if truncated_lines or truncated_chars:
         marker = "\n…"
         if len(excerpt) + len(marker) > max_chars:
-            excerpt = excerpt[
-                : max(0, max_chars - len(marker))
-            ].rstrip()
+            excerpt = excerpt[: max(0, max_chars - len(marker))].rstrip()
         excerpt += marker
 
     return excerpt
@@ -944,8 +868,7 @@ def _validated_views(
 ]:
     if not isinstance(views, SourceViews):
         raise TypeError(
-            "views must expose original_lines, "
-            "comment_stripped_lines, and string_masked_lines"
+            "views must expose original_lines, comment_stripped_lines, and string_masked_lines"
         )
 
     original = _line_tuple(
@@ -961,12 +884,8 @@ def _validated_views(
         field_name="string_masked_lines",
     )
 
-    if not (
-        len(original) == len(comments) == len(masked)
-    ):
-        raise ValueError(
-            "all source views must contain the same number of lines"
-        )
+    if not (len(original) == len(comments) == len(masked)):
+        raise ValueError("all source views must contain the same number of lines")
 
     for index, (
         original_line,
@@ -978,13 +897,11 @@ def _validated_views(
     ):
         if len(original_line) != len(comment_line):
             raise ValueError(
-                "comment-stripped view must preserve character "
-                f"alignment on line {index}"
+                f"comment-stripped view must preserve character alignment on line {index}"
             )
         if len(original_line) != len(masked_line):
             raise ValueError(
-                "string-masked view must preserve character "
-                f"alignment on line {index}"
+                f"string-masked view must preserve character alignment on line {index}"
             )
 
     return original, comments, masked
@@ -1013,24 +930,16 @@ def _line_tuple(
     field_name: str,
 ) -> tuple[str, ...]:
     if isinstance(values, (str, bytes)):
-        raise TypeError(
-            f"{field_name} must be a sequence of source lines"
-        )
+        raise TypeError(f"{field_name} must be a sequence of source lines")
 
     result = tuple(values)
     for index, value in enumerate(result, start=1):
         if not isinstance(value, str):
-            raise TypeError(
-                f"{field_name}[{index}] must be a string"
-            )
+            raise TypeError(f"{field_name}[{index}] must be a string")
         if "\n" in value or "\r" in value:
-            raise ValueError(
-                f"{field_name}[{index}] must not contain newline characters"
-            )
+            raise ValueError(f"{field_name}[{index}] must not contain newline characters")
         if "\x00" in value:
-            raise ValueError(
-                f"{field_name}[{index}] must not contain NUL characters"
-            )
+            raise ValueError(f"{field_name}[{index}] must not contain NUL characters")
 
     return result
 
@@ -1040,21 +949,13 @@ def _block_tuple(
     *,
     expected_kind: StructuralBlockKind,
 ) -> tuple[StructuralBlock, ...]:
-    if isinstance(values, (str, bytes)):
-        raise TypeError(
-            "blocks must be an iterable of StructuralBlock values"
-        )
+    raw_values: object = values
+    if isinstance(raw_values, (str, bytes)):
+        raise TypeError("blocks must be an iterable of StructuralBlock values")
 
     result = tuple(values)
-    if not all(
-        isinstance(item, StructuralBlock)
-        and item.kind is expected_kind
-        for item in result
-    ):
-        raise TypeError(
-            f"blocks must contain {expected_kind.value} "
-            "StructuralBlock values"
-        )
+    if not all(isinstance(item, StructuralBlock) and item.kind is expected_kind for item in result):
+        raise TypeError(f"blocks must contain {expected_kind.value} StructuralBlock values")
 
     return tuple(sorted(result, key=_block_sort_key))
 
@@ -1067,13 +968,9 @@ def _optional_path(
     if value is None:
         return None
     if not isinstance(value, Path):
-        raise TypeError(
-            f"{field_name} must be a pathlib.Path or None"
-        )
+        raise TypeError(f"{field_name} must be a pathlib.Path or None")
     if "\x00" in str(value):
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     return value
 
 
@@ -1085,9 +982,7 @@ def _text(
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a string")
     if "\x00" in value:
-        raise ValueError(
-            f"{field_name} must not contain NUL characters"
-        )
+        raise ValueError(f"{field_name} must not contain NUL characters")
     return value
 
 
@@ -1100,9 +995,7 @@ def _required_text(
     if not text.strip():
         raise ValueError(f"{field_name} must not be empty")
     if text != text.strip():
-        raise ValueError(
-            f"{field_name} must not have outer whitespace"
-        )
+        raise ValueError(f"{field_name} must not have outer whitespace")
     return text
 
 
@@ -1112,13 +1005,9 @@ def _positive_integer(
     field_name: str,
 ) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(
-            f"{field_name} must be an integer"
-        )
+        raise TypeError(f"{field_name} must be an integer")
     if value <= 0:
-        raise ValueError(
-            f"{field_name} must be positive"
-        )
+        raise ValueError(f"{field_name} must be positive")
     return value
 
 
@@ -1168,6 +1057,10 @@ __all__ = (
     "DEFAULT_MAX_EXCERPT_LINES",
     "RUNTIME_STRING_MATCH_COUNT_FIELD",
     "RUNTIME_STRING_MATCH_RULE_ID",
+    "UNTYPED_CASE_STRING_PATTERN_COUNT_FIELD",
+    "UNTYPED_CASE_STRING_PATTERN_RULE_ID",
+    "UNTYPED_TABLE_STRING_PATTERN_COUNT_FIELD",
+    "UNTYPED_TABLE_STRING_PATTERN_RULE_ID",
     "SourceViews",
     "StructuralBlock",
     "StructuralBlockCollection",
@@ -1176,10 +1069,6 @@ __all__ = (
     "StructureDiagnosticCode",
     "StructureFinding",
     "StructureRuleResult",
-    "UNTYPED_CASE_STRING_PATTERN_COUNT_FIELD",
-    "UNTYPED_CASE_STRING_PATTERN_RULE_ID",
-    "UNTYPED_TABLE_STRING_PATTERN_COUNT_FIELD",
-    "UNTYPED_TABLE_STRING_PATTERN_RULE_ID",
     "collect_structural_blocks",
     "contains_explicit_str_pattern_type",
     "contains_string_concatenation_pattern",

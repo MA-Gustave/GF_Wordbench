@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+import json
 from pathlib import Path
 
 import pytest
@@ -89,9 +89,7 @@ class _PartialRunOperations:
         finished_at: datetime,
     ) -> PreparedResult[_RunSnapshot]:
         self.calls.append("prepare_result")
-        terminal_code = (
-            None if request.terminal_error is None else request.terminal_error.code
-        )
+        terminal_code = None if request.terminal_error is None else request.terminal_error.code
         failure_codes = tuple(failure.error.code for failure in failures)
         prepared = replace(
             current,
@@ -113,9 +111,7 @@ class _PartialRunOperations:
                 {
                     "completion_state": "partial",
                     "terminal_error_code": result.terminal_error_code,
-                    "finalization_error_codes": list(
-                        result.finalization_error_codes
-                    ),
+                    "finalization_error_codes": list(result.finalization_error_codes),
                 },
                 ensure_ascii=False,
                 sort_keys=True,
@@ -184,9 +180,7 @@ class _PartialRunOperations:
                         outcome.path.relative_to(request.run_root).as_posix()
                         for outcome in publications.successful
                     ],
-                    "finalization_error_codes": list(
-                        result.finalization_error_codes
-                    ),
+                    "finalization_error_codes": list(result.finalization_error_codes),
                 },
                 ensure_ascii=False,
                 sort_keys=True,
@@ -341,8 +335,7 @@ def test_manifest_verification_failure_keeps_partial_run_incomplete(
     assert (run_root / "summary.json").is_file()
     assert (run_root / ".incomplete").is_file()
     assert any(
-        failure.step is FinalizationStep.VERIFY_MANIFEST
-        and failure.required
+        failure.step is FinalizationStep.VERIFY_MANIFEST and failure.required
         for failure in outcome.failures
     )
     assert operations.state_update == _StateUpdate(
@@ -368,9 +361,7 @@ def test_state_update_failure_does_not_discard_partial_evidence(
     assert (run_root / "manifest.json").is_file()
     assert (run_root / ".incomplete").is_file()
     state_failures = [
-        failure
-        for failure in outcome.failures
-        if failure.step is FinalizationStep.UPDATE_LAST_RUN
+        failure for failure in outcome.failures if failure.step is FinalizationStep.UPDATE_LAST_RUN
     ]
     assert len(state_failures) == 1
     assert not state_failures[0].required

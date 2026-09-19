@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+import re
 from typing import Final, TypeAlias
 
 LineSpan: TypeAlias = tuple[int, int]
@@ -28,9 +28,7 @@ _CASE_START_RE: Final[re.Pattern[str]] = re.compile(r"\bcase\b")
 _CASE_OPEN_RE: Final[re.Pattern[str]] = re.compile(r"\bof\s*\{")
 _TABLE_OPEN_RE: Final[re.Pattern[str]] = re.compile(r"\btable\s*\{")
 _DOT_S_RE: Final[re.Pattern[str]] = re.compile(r"\.\s*s\b")
-_EXPLICIT_STR_TYPE_RE: Final[re.Pattern[str]] = re.compile(
-    r":\s*Str\s*>"
-)
+_EXPLICIT_STR_TYPE_RE: Final[re.Pattern[str]] = re.compile(r":\s*Str\s*>")
 _GF_STRING_PATTERN: Final[str] = r'"(?:(?:"")|(?:\\.)|[^"\\])*"'
 _LITERAL_BRANCH_RE: Final[re.Pattern[str]] = re.compile(
     rf"{_GF_STRING_PATTERN}\s*=>",
@@ -41,12 +39,8 @@ _STRING_CONCAT_RE: Final[re.Pattern[str]] = re.compile(
     rf"{_GF_STRING_PATTERN}\s*\+\s*_)",
     re.DOTALL,
 )
-_EXACT_SINGLE_BACKSLASH_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?<!\\)\\(?!\\)"
-)
-_EXACT_DOUBLE_BACKSLASH_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?<!\\)\\\\(?!\\)"
-)
+_EXACT_SINGLE_BACKSLASH_RE: Final[re.Pattern[str]] = re.compile(r"(?<!\\)\\(?!\\)")
+_EXACT_DOUBLE_BACKSLASH_RE: Final[re.Pattern[str]] = re.compile(r"(?<!\\)\\\\(?!\\)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,13 +65,9 @@ def _require_lines(
     normalized = tuple(lines)
     for index, line in enumerate(normalized):
         if not isinstance(line, str):
-            raise TypeError(
-                f"{field_name}[{index}] must be a string"
-            )
+            raise TypeError(f"{field_name}[{index}] must be a string")
         if "\x00" in line:
-            raise ValueError(
-                f"{field_name}[{index}] must not contain NUL"
-            )
+            raise ValueError(f"{field_name}[{index}] must not contain NUL")
     return normalized
 
 
@@ -94,9 +84,7 @@ def _require_aligned(
         field_name="content_lines",
     )
     if len(structural) != len(content):
-        raise ValueError(
-            "structural_lines and content_lines must be line-aligned"
-        )
+        raise ValueError("structural_lines and content_lines must be line-aligned")
     return structural, content
 
 
@@ -200,9 +188,7 @@ def find_runtime_string_matches(
     for block in _iter_case_blocks(structural):
         if _DOT_S_RE.search(block.header) is None:
             continue
-        block_text = "".join(
-            content[block.start_index : block.end_index + 1]
-        )
+        block_text = "".join(content[block.start_index : block.end_index + 1])
         if _LITERAL_BRANCH_RE.search(block_text) is not None:
             matches.append(block.span)
 
@@ -262,9 +248,7 @@ def _find_untyped_string_patterns(
     matches: list[LineSpan] = []
 
     for block in blocks:
-        block_text = "".join(
-            content_lines[block.start_index : block.end_index + 1]
-        )
+        block_text = "".join(content_lines[block.start_index : block.end_index + 1])
         if _STRING_CONCAT_RE.search(block_text) is None:
             continue
         if _EXPLICIT_STR_TYPE_RE.search(block_text) is not None:
@@ -377,14 +361,9 @@ def _locate_block_start(
             line_offset = before_open.count("\n")
             open_index = index + line_offset
             if line_offset == 0:
-                open_column = (
-                    case_match.start()
-                    + len(before_open.rsplit("\n", 1)[-1])
-                )
+                open_column = case_match.start() + len(before_open.rsplit("\n", 1)[-1])
             else:
-                open_column = len(
-                    before_open.rsplit("\n", 1)[-1]
-                )
+                open_column = len(before_open.rsplit("\n", 1)[-1])
             return (
                 index,
                 open_index,
@@ -422,7 +401,6 @@ def _find_balanced_end(
 
 __all__ = (
     "DOUBLE_SLASH_DASH_FIELD",
-    "LineSpan",
     "RUNTIME_STR_MATCH_FIELD",
     "SCAN_NOTATION_001",
     "SCAN_NOTATION_002",
@@ -434,6 +412,7 @@ __all__ = (
     "TRAILING_SPACES_FIELD",
     "UNTYPED_CASE_STR_PAT_FIELD",
     "UNTYPED_TABLE_STR_PAT_FIELD",
+    "LineSpan",
     "find_double_slash_dash",
     "find_runtime_string_matches",
     "find_single_slash_eq",

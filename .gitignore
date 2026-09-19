@@ -13,6 +13,7 @@ ENV/
 
 # Test, lint, type-check, and tool caches
 .pytest_cache/
+/.pytest-work/
 .mypy_cache/
 .ruff_cache/
 .pytype/
@@ -31,10 +32,19 @@ junit.xml
 # GF Wordbench local state and generated run evidence
 .gf_wordbench_state.json
 .gf_wordbench_state.json.*
+/.wordbench-runs/
+/.wordbench-diagnostics/
 /runs/
 /run_*/
 /_gf_wordbench/
 /_gf_wordbench_backups/
+
+# Local package/download cache
+/pip/cache/
+
+# Local organizer recovery/log output
+/_organizer_archive/
+/_organizer_logs/
 
 # Generated GF compiler artifacts
 *.gfo
@@ -42,6 +52,7 @@ junit.xml
 
 # Temporary, backup, and editor swap files
 *.tmp
+*.tmp*
 *.temp
 *.bak
 *.swp
@@ -54,6 +65,7 @@ junit.xml
 .DS_Store
 Thumbs.db
 desktop.ini
+*.lnk
 
 # Project-owned scenarios, inputs, gold files, sources, and documentation
 # are intentionally not ignored.

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 import math
 import time
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Final, Protocol, TypeAlias, cast, runtime_checkable
+from typing import Final, Protocol, TypeAlias, runtime_checkable
 
 from gf_wordbench.kernel.errors import (
     CancellationRequested,
@@ -57,7 +57,7 @@ class StageResultLike(Protocol):
 class StageInvocation:
     stage: PlannedStage
     timeout_seconds: float | None
-    prior_records: Mapping[StageId, "StageExecutionRecord"]
+    prior_records: Mapping[StageId, StageExecutionRecord]
     finalizing: bool
 
     def __post_init__(self) -> None:
@@ -68,9 +68,7 @@ class StageInvocation:
                 self.timeout_seconds,
                 (int, float),
             ):
-                raise TypeError(
-                    "timeout_seconds must be a number or None"
-                )
+                raise TypeError("timeout_seconds must be a number or None")
             if not math.isfinite(float(self.timeout_seconds)):
                 raise ValueError("timeout_seconds must be finite")
             if self.timeout_seconds <= 0:
@@ -131,35 +129,23 @@ class StageExecutionRecord:
             if type(getattr(self, field_name)) is not bool:
                 raise TypeError(f"{field_name} must be a bool")
 
-        if (
-            self.status is ValidationStatus.OK
-            and self.error_kind is not ErrorKind.OK
-        ):
+        if self.status is ValidationStatus.OK and self.error_kind is not ErrorKind.OK:
             raise ValueError("OK stage status requires error_kind OK")
-        if (
-            self.status is ValidationStatus.SKIPPED
-            and self.error_kind is not ErrorKind.OK
-        ):
+        if self.status is ValidationStatus.SKIPPED and self.error_kind is not ErrorKind.OK:
             raise ValueError("SKIPPED stage status requires error_kind OK")
         if (
-            self.status in {
+            self.status
+            in {
                 ValidationStatus.FAIL,
                 ValidationStatus.ERROR,
             }
             and self.error_kind is ErrorKind.OK
         ):
-            raise ValueError(
-                "FAIL and ERROR stage statuses require a non-OK error kind"
-            )
-        if (
-            self.status is ValidationStatus.ERROR
-            and not self.blocks_dependents
-        ):
+            raise ValueError("FAIL and ERROR stage statuses require a non-OK error kind")
+        if self.status is ValidationStatus.ERROR and not self.blocks_dependents:
             raise ValueError("ERROR stage records must block dependents")
         if not self.evidence_trustworthy and not self.blocks_dependents:
-            raise ValueError(
-                "untrustworthy stage evidence must block dependents"
-            )
+            raise ValueError("untrustworthy stage evidence must block dependents")
         if self.abort_run and not self.blocks_dependents:
             raise ValueError("abort_run requires blocks_dependents")
 
@@ -178,7 +164,8 @@ class StageExecutionRecord:
     @property
     def prerequisite_available(self) -> bool:
         return (
-            self.status not in {
+            self.status
+            not in {
                 ValidationStatus.ERROR,
                 ValidationStatus.SKIPPED,
             }
@@ -197,13 +184,8 @@ class StageExecutionReport:
     def __post_init__(self) -> None:
         if not isinstance(self.records, tuple):
             raise TypeError("records must be a tuple")
-        if any(
-            not isinstance(record, StageExecutionRecord)
-            for record in self.records
-        ):
-            raise TypeError(
-                "records must contain StageExecutionRecord values"
-            )
+        if any(not isinstance(record, StageExecutionRecord) for record in self.records):
+            raise TypeError("records must contain StageExecutionRecord values")
         stage_ids = tuple(record.stage_id for record in self.records)
         if len(set(stage_ids)) != len(stage_ids):
             raise ValueError("records must contain unique stage IDs")
@@ -216,9 +198,7 @@ class StageExecutionReport:
                 required=True,
             )
         elif self.abort_reason is not None:
-            raise ValueError(
-                "abort_reason must be None when execution was not aborted"
-            )
+            raise ValueError("abort_reason must be None when execution was not aborted")
         if self.fatal_stage is not None and not isinstance(
             self.fatal_stage,
             StageId,
@@ -229,17 +209,11 @@ class StageExecutionReport:
 
     @property
     def by_stage(self) -> Mapping[StageId, StageExecutionRecord]:
-        return MappingProxyType(
-            {record.stage_id: record for record in self.records}
-        )
+        return MappingProxyType({record.stage_id: record for record in self.records})
 
     @property
     def required_status(self) -> ValidationStatus:
-        required = tuple(
-            record.status
-            for record in self.records
-            if record.required
-        )
+        required = tuple(record.status for record in self.records if record.required)
         if not required:
             return ValidationStatus.OK
         return max(required, key=_STATUS_RANK.__getitem__)
@@ -249,8 +223,7 @@ class StageExecutionReport:
         return tuple(
             record.stage_id
             for record in self.records
-            if record.required
-            and record.status is ValidationStatus.SKIPPED
+            if record.required and record.status is ValidationStatus.SKIPPED
         )
 
     def record(self, stage_id: StageId) -> StageExecutionRecord:
@@ -376,8 +349,7 @@ def execute_plan(
             if _call_cancellation_check(cancel_check):
                 aborted = True
                 abort_reason = (
-                    _call_cancellation_reason(reason_provider)
-                    or "cancellation was requested"
+                    _call_cancellation_reason(reason_provider) or "cancellation was requested"
                 )
                 record = _skipped_record(planned, abort_reason)
                 _append_record(
@@ -409,9 +381,8 @@ def execute_plan(
             ignore_failures=finalizing,
         )
         if blockers:
-            reason = (
-                "blocked by unavailable prerequisites: "
-                + ", ".join(stage_id.value for stage_id in blockers)
+            reason = "blocked by unavailable prerequisites: " + ", ".join(
+                stage_id.value for stage_id in blockers
             )
             record = _skipped_record(planned, reason)
             _append_record(
@@ -424,9 +395,7 @@ def execute_plan(
 
         handler = normalized_handlers.get(planned.stage_id)
         if handler is None:
-            cause = LookupError(
-                f"no handler registered for stage {planned.stage_id.value}"
-            )
+            cause = LookupError(f"no handler registered for stage {planned.stage_id.value}")
             record = _internal_error_record(
                 planned,
                 duration_ms=0,
@@ -440,9 +409,7 @@ def execute_plan(
                 sink=record_sink,
             )
             aborted = True
-            abort_reason = (
-                f"stage {planned.stage_id.value} has no registered handler"
-            )
+            abort_reason = f"stage {planned.stage_id.value} has no registered handler"
             fatal_stage = planned.stage_id
             fatal_cause = cause
             continue
@@ -495,9 +462,7 @@ def execute_plan(
                 detail=_bounded_exception(exc),
             )
             aborted = True
-            abort_reason = (
-                f"unexpected failure in stage {planned.stage_id.value}"
-            )
+            abort_reason = f"unexpected failure in stage {planned.stage_id.value}"
             fatal_stage = planned.stage_id
             fatal_cause = exc
 
@@ -511,8 +476,7 @@ def execute_plan(
         if record.abort_run or not record.evidence_trustworthy:
             aborted = True
             abort_reason = (
-                record.primary_message
-                or f"stage {record.stage_id.value} requires run abort"
+                record.primary_message or f"stage {record.stage_id.value} requires run abort"
             )
         elif (
             fail_fast
@@ -524,10 +488,7 @@ def execute_plan(
             }
         ):
             aborted = True
-            abort_reason = (
-                f"fail-fast stopped execution after "
-                f"{record.stage_id.value}"
-            )
+            abort_reason = f"fail-fast stopped execution after {record.stage_id.value}"
 
     report = StageExecutionReport(
         records=tuple(records),
@@ -618,21 +579,15 @@ def _normalize_stage_result(
     abort_run = getattr(result, "abort_run", False)
 
     if not isinstance(status, ValidationStatus):
-        raise TypeError(
-            "stage result status must be a ValidationStatus"
-        )
+        raise TypeError("stage result status must be a ValidationStatus")
     if not isinstance(error_kind, ErrorKind):
         raise TypeError("stage result error_kind must be an ErrorKind")
     if isinstance(duration_ms, bool) or not isinstance(duration_ms, int):
         raise TypeError("stage result duration_ms must be an integer")
     if duration_ms < 0:
-        raise ValueError(
-            "stage result duration_ms must be non-negative"
-        )
+        raise ValueError("stage result duration_ms must be non-negative")
     if not isinstance(primary_message, str):
-        raise TypeError(
-            "stage result primary_message must be a string"
-        )
+        raise TypeError("stage result primary_message must be a string")
     if not isinstance(error_detail, str):
         raise TypeError("stage result error_detail must be a string")
     normalized_evidence = _validate_evidence_paths(evidence_paths)
@@ -705,11 +660,7 @@ def _default_timeout_resolver(
     finalizing: bool,
 ) -> float | None:
     del finalizing
-    return (
-        None
-        if planned.timeout_sec is None
-        else float(planned.timeout_sec)
-    )
+    return None if planned.timeout_sec is None else float(planned.timeout_sec)
 
 
 def _skipped_record(
@@ -785,9 +736,7 @@ def _append_record(
     sink: StageRecordSink | None,
 ) -> None:
     if record.stage_id in records_by_stage:
-        raise ValueError(
-            f"duplicate stage record: {record.stage_id.value}"
-        )
+        raise ValueError(f"duplicate stage record: {record.stage_id.value}")
     records.append(record)
     records_by_stage[record.stage_id] = record
     if sink is not None:
@@ -804,9 +753,7 @@ def _validate_handlers(
         if not isinstance(stage_id, StageId):
             raise TypeError("handler keys must be StageId values")
         if not callable(handler):
-            raise TypeError(
-                f"handler for {stage_id.value} must be callable"
-            )
+            raise TypeError(f"handler for {stage_id.value} must be callable")
         normalized[stage_id] = handler
     return normalized
 
@@ -818,24 +765,18 @@ def _remaining_seconds(
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(
-            "remaining_execution_seconds must return a number or None"
-        )
+        raise TypeError("remaining_execution_seconds must return a number or None")
     numeric = float(value)
     if not math.isfinite(numeric):
-        raise ValueError(
-            "remaining execution budget must be finite"
-        )
+        raise ValueError("remaining execution budget must be finite")
     return max(0.0, numeric)
 
 
 def _call_cancellation_check(check: CancellationCheck) -> bool:
     value = check()
     if type(value) is not bool:
-        raise TypeError(
-            "cancellation_requested must return a bool"
-        )
-    return cast(bool, value)
+        raise TypeError("cancellation_requested must return a bool")
+    return value
 
 
 def _call_cancellation_reason(
@@ -884,15 +825,10 @@ def _elapsed_ms(start_ns: int, finish_ns: int) -> int:
 
 def _validate_evidence_paths(value: object) -> tuple[str, ...]:
     if isinstance(value, (str, bytes)):
-        raise TypeError(
-            "evidence_paths must be an iterable of path strings"
-        )
-    try:
-        paths = tuple(value)
-    except TypeError as exc:
-        raise TypeError(
-            "evidence_paths must be an iterable of path strings"
-        ) from exc
+        raise TypeError("evidence_paths must be an iterable of path strings")
+    if not isinstance(value, Iterable):
+        raise TypeError("evidence_paths must be an iterable of path strings")
+    paths: tuple[object, ...] = tuple(value)
     for index, path in enumerate(paths):
         _validate_text(
             path,
@@ -922,7 +858,7 @@ def _validate_text(
 def _strict_bool(value: object, *, field: str) -> bool:
     if type(value) is not bool:
         raise TypeError(f"{field} must be a bool")
-    return cast(bool, value)
+    return value
 
 
 def _bounded_exception(

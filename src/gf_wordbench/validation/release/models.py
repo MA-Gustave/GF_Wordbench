@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum, unique
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Final
+import re
+from typing import Final, TypeVar
 
 from gf_wordbench.kernel.ids import (
     ProjectId,
@@ -29,14 +29,14 @@ __all__ = (
 
 RELEASE_GATE_POLICY_VERSION: Final[str] = "1.1.0"
 
-_GATE_ID_RE: Final[re.Pattern[str]] = re.compile(
-    r"^RG-(?P<order>[0-9]{2})$"
-)
+_GATE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^RG-(?P<order>[0-9]{2})$")
 _MAX_GATE_RESULTS: Final[int] = 256
 _MAX_TEXT_ITEMS: Final[int] = 1024
 _MAX_TEXT_LENGTH: Final[int] = 4096
 _MAX_SUMMARY_LENGTH: Final[int] = 16384
 _MAX_PATHS: Final[int] = 4096
+
+_EnumT = TypeVar("_EnumT", bound=StrEnum)
 
 
 @unique
@@ -51,6 +51,11 @@ class ReleaseDecisionValue(StrEnum):
     READY = "READY"
     NOT_READY = "NOT_READY"
     ERROR = "ERROR"
+
+
+# Historical internal name retained for release decision services that still
+# import the pre-canonical symbol.  It intentionally remains outside __all__.
+ReleaseDecisionStatus = ReleaseDecisionValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,9 +91,7 @@ class ReleaseGate:
 
         canonical_order = _gate_order(gate_id)
         if order != canonical_order:
-            raise ValueError(
-                "order must match the numeric component of gate_id"
-            )
+            raise ValueError("order must match the numeric component of gate_id")
 
         object.__setattr__(self, "gate_id", gate_id)
         object.__setattr__(self, "name", name)
@@ -148,9 +151,7 @@ class ReleaseGateResult:
             minimum=0,
         )
         if criteria_passed > criteria_total:
-            raise ValueError(
-                "criteria_passed must not exceed criteria_total"
-            )
+            raise ValueError("criteria_passed must not exceed criteria_total")
 
         blockers = _normalize_unique_texts(
             self.blockers,
@@ -175,54 +176,34 @@ class ReleaseGateResult:
         )
 
         if gate_id in blocked_by:
-            raise ValueError(
-                "a release gate cannot be blocked by itself"
-            )
+            raise ValueError("a release gate cannot be blocked by itself")
 
         if applicability is ReleaseGateApplicability.NOT_APPLICABLE:
             if status is not ValidationStatus.SKIPPED:
-                raise ValueError(
-                    "a not_applicable gate must use SKIPPED status"
-                )
+                raise ValueError("a not_applicable gate must use SKIPPED status")
 
         if status is ValidationStatus.OK:
             if criteria_passed != criteria_total:
-                raise ValueError(
-                    "an OK gate must pass every criterion"
-                )
+                raise ValueError("an OK gate must pass every criterion")
             if blockers:
-                raise ValueError(
-                    "an OK gate must not contain blockers"
-                )
+                raise ValueError("an OK gate must not contain blockers")
             if blocked_by:
-                raise ValueError(
-                    "an OK gate must not be blocked"
-                )
+                raise ValueError("an OK gate must not be blocked")
 
         if status is ValidationStatus.FAIL:
             if not blockers:
-                raise ValueError(
-                    "a FAIL gate must identify at least one blocker"
-                )
+                raise ValueError("a FAIL gate must identify at least one blocker")
             if criteria_total == 0:
-                raise ValueError(
-                    "a FAIL gate must evaluate at least one criterion"
-                )
+                raise ValueError("a FAIL gate must evaluate at least one criterion")
 
         if status is ValidationStatus.ERROR and not blockers:
-            raise ValueError(
-                "an ERROR gate must identify at least one blocker"
-            )
+            raise ValueError("an ERROR gate must identify at least one blocker")
 
         if status is ValidationStatus.SKIPPED:
             if criteria_passed != 0:
-                raise ValueError(
-                    "a SKIPPED gate must not report passed criteria"
-                )
+                raise ValueError("a SKIPPED gate must not report passed criteria")
         elif blocked_by:
-            raise ValueError(
-                "blocked_by is valid only for a SKIPPED gate"
-            )
+            raise ValueError("blocked_by is valid only for a SKIPPED gate")
 
         object.__setattr__(self, "gate_id", gate_id)
         object.__setattr__(self, "name", name)
@@ -267,17 +248,11 @@ class ReleaseGateResult:
 
     @property
     def is_required(self) -> bool:
-        return (
-            self.applicability
-            is ReleaseGateApplicability.REQUIRED
-        )
+        return self.applicability is ReleaseGateApplicability.REQUIRED
 
     @property
     def is_not_applicable(self) -> bool:
-        return (
-            self.applicability
-            is ReleaseGateApplicability.NOT_APPLICABLE
-        )
+        return self.applicability is ReleaseGateApplicability.NOT_APPLICABLE
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,29 +346,18 @@ class ReleaseDecision:
         )
 
         if required_gate_count > len(gate_results):
-            raise ValueError(
-                "required_gate_count must not exceed gate result count"
-            )
+            raise ValueError("required_gate_count must not exceed gate result count")
         if passed_gate_count > required_gate_count:
-            raise ValueError(
-                "passed_gate_count must not exceed required_gate_count"
-            )
+            raise ValueError("passed_gate_count must not exceed required_gate_count")
 
-        blocking_count = (
-            len(failed_gate_ids)
-            + len(error_gate_ids)
-            + len(skipped_required_gate_ids)
-        )
+        blocking_count = len(failed_gate_ids) + len(error_gate_ids) + len(skipped_required_gate_ids)
         if passed_gate_count + blocking_count != required_gate_count:
             raise ValueError(
                 "required gate counts must equal passed, failed, "
                 "error, and skipped-required gate counts"
             )
 
-        gate_index = {
-            result.gate_id: result
-            for result in gate_results
-        }
+        gate_index = {result.gate_id: result for result in gate_results}
         _require_gate_statuses(
             failed_gate_ids,
             gate_index,
@@ -414,24 +378,14 @@ class ReleaseDecision:
         )
 
         listed_blockers = (
-            set(failed_gate_ids)
-            | set(error_gate_ids)
-            | set(skipped_required_gate_ids)
+            set(failed_gate_ids) | set(error_gate_ids) | set(skipped_required_gate_ids)
         )
         if len(listed_blockers) != blocking_count:
-            raise ValueError(
-                "failed, error, and skipped-required gate IDs "
-                "must be disjoint"
-            )
+            raise ValueError("failed, error, and skipped-required gate IDs must be disjoint")
 
-        calculated_warning_count = sum(
-            result.warning_count
-            for result in gate_results
-        )
+        calculated_warning_count = sum(result.warning_count for result in gate_results)
         if warning_count != calculated_warning_count:
-            raise ValueError(
-                "warning_count must equal the total gate warning count"
-            )
+            raise ValueError("warning_count must equal the total gate warning count")
 
         expected_decision = _expected_decision(
             failed_gate_ids=failed_gate_ids,
@@ -439,20 +393,15 @@ class ReleaseDecision:
             skipped_required_gate_ids=skipped_required_gate_ids,
         )
         if decision is not expected_decision:
-            raise ValueError(
-                "decision does not match canonical release precedence"
-            )
+            raise ValueError("decision does not match canonical release precedence")
 
         if decision is ReleaseDecisionValue.READY:
             for result in gate_results:
                 if (
-                    result.applicability
-                    is ReleaseGateApplicability.REQUIRED
+                    result.applicability is ReleaseGateApplicability.REQUIRED
                     and result.status is not ValidationStatus.OK
                 ):
-                    raise ValueError(
-                        "READY requires every required gate to be OK"
-                    )
+                    raise ValueError("READY requires every required gate to be OK")
 
         object.__setattr__(self, "decision", decision)
         object.__setattr__(
@@ -525,10 +474,7 @@ class ReleaseDecision:
             return "GF Wordbench release gates passed."
         if self.decision is ReleaseDecisionValue.NOT_READY:
             return "GF Wordbench release gates did not pass."
-        return (
-            "GF Wordbench could not complete the release "
-            "decision reliably."
-        )
+        return "GF Wordbench could not complete the release decision reliably."
 
 
 def validate_release_gate_id(
@@ -539,9 +485,7 @@ def validate_release_gate_id(
     if not isinstance(value, str):
         raise TypeError(f"{field} must be a string")
     if _GATE_ID_RE.fullmatch(value) is None:
-        raise ValueError(
-            f"{field} must match RG-NN, got {value!r}"
-        )
+        raise ValueError(f"{field} must match RG-NN, got {value!r}")
     return value
 
 
@@ -553,9 +497,7 @@ def _normalize_gate_results(
     if not values:
         raise ValueError("gate_results must not be empty")
     if len(values) > _MAX_GATE_RESULTS:
-        raise ValueError(
-            "gate_results exceeds the bounded result limit"
-        )
+        raise ValueError("gate_results exceeds the bounded result limit")
 
     seen: set[str] = set()
     previous_order = -1
@@ -563,19 +505,11 @@ def _normalize_gate_results(
 
     for index, result in enumerate(values):
         if not isinstance(result, ReleaseGateResult):
-            raise TypeError(
-                f"gate_results[{index}] must be a "
-                "ReleaseGateResult"
-            )
+            raise TypeError(f"gate_results[{index}] must be a ReleaseGateResult")
         if result.gate_id in seen:
-            raise ValueError(
-                "gate_results must not contain duplicate gate IDs"
-            )
+            raise ValueError("gate_results must not contain duplicate gate IDs")
         if result.order <= previous_order:
-            raise ValueError(
-                "gate_results must use strictly increasing "
-                "canonical gate order"
-            )
+            raise ValueError("gate_results must use strictly increasing canonical gate order")
 
         seen.add(result.gate_id)
         previous_order = result.order
@@ -592,9 +526,7 @@ def _normalize_gate_ids(
     if not isinstance(values, tuple):
         raise TypeError(f"{field} must be a tuple")
     if len(values) > _MAX_GATE_RESULTS:
-        raise ValueError(
-            f"{field} exceeds the bounded gate limit"
-        )
+        raise ValueError(f"{field} exceeds the bounded gate limit")
 
     seen: set[str] = set()
     normalized: list[str] = []
@@ -607,13 +539,9 @@ def _normalize_gate_ids(
         )
         order = _gate_order(gate_id)
         if gate_id in seen:
-            raise ValueError(
-                f"{field} must not contain duplicate gate IDs"
-            )
+            raise ValueError(f"{field} must not contain duplicate gate IDs")
         if order <= previous_order:
-            raise ValueError(
-                f"{field} must use canonical gate order"
-            )
+            raise ValueError(f"{field} must use canonical gate order")
         seen.add(gate_id)
         previous_order = order
         normalized.append(gate_id)
@@ -631,9 +559,7 @@ def _require_gate_statuses(
     for gate_id in gate_ids:
         result = gate_index.get(gate_id)
         if result is None:
-            raise ValueError(
-                f"{field} references unknown gate {gate_id!r}"
-            )
+            raise ValueError(f"{field} references unknown gate {gate_id!r}")
         if result.status is not expected:
             raise ValueError(
                 f"{field} contains {gate_id!r}, but its status "
@@ -662,9 +588,7 @@ def _normalize_unique_texts(
     if not isinstance(values, tuple):
         raise TypeError(f"{field} must be a tuple")
     if len(values) > _MAX_TEXT_ITEMS:
-        raise ValueError(
-            f"{field} exceeds the bounded item limit"
-        )
+        raise ValueError(f"{field} exceeds the bounded item limit")
 
     seen: set[str] = set()
     normalized: list[str] = []
@@ -676,9 +600,7 @@ def _normalize_unique_texts(
             maximum=_MAX_TEXT_LENGTH,
         )
         if text in seen:
-            raise ValueError(
-                f"{field} must not contain duplicate values"
-            )
+            raise ValueError(f"{field} must not contain duplicate values")
         seen.add(text)
         normalized.append(text)
 
@@ -693,9 +615,7 @@ def _normalize_unique_paths(
     if not isinstance(values, tuple):
         raise TypeError(f"{field} must be a tuple")
     if len(values) > _MAX_PATHS:
-        raise ValueError(
-            f"{field} exceeds the bounded path limit"
-        )
+        raise ValueError(f"{field} exceeds the bounded path limit")
 
     seen: set[str] = set()
     normalized: list[Path] = []
@@ -707,9 +627,7 @@ def _normalize_unique_paths(
         )
         key = path.as_posix()
         if key in seen:
-            raise ValueError(
-                f"{field} must not contain duplicate paths"
-            )
+            raise ValueError(f"{field} must not contain duplicate paths")
         seen.add(key)
         normalized.append(path)
 
@@ -730,33 +648,20 @@ def _normalize_run_relative_path(
     if "\x00" in rendered:
         raise ValueError(f"{field} must not contain NUL")
     if value.is_absolute():
-        raise ValueError(
-            f"{field} must be run-relative"
-        )
+        raise ValueError(f"{field} must be run-relative")
 
     if PureWindowsPath(rendered).is_absolute():
-        raise ValueError(
-            f"{field} must not use an absolute Windows path"
-        )
+        raise ValueError(f"{field} must not use an absolute Windows path")
 
     portable = PurePosixPath(rendered)
     if portable == PurePosixPath("."):
-        raise ValueError(
-            f"{field} must identify an artifact"
-        )
-    if any(
-        part in {"", ".", ".."}
-        for part in portable.parts
-    ):
-        raise ValueError(
-            f"{field} must be normalized and must not traverse"
-        )
+        raise ValueError(f"{field} must identify an artifact")
+    if any(part in {"", ".", ".."} for part in portable.parts):
+        raise ValueError(f"{field} must be normalized and must not traverse")
 
     normalized = Path(*portable.parts)
     if normalized.as_posix() != rendered:
-        raise ValueError(
-            f"{field} must use canonical forward-slash form"
-        )
+        raise ValueError(f"{field} must use canonical forward-slash form")
 
     return normalized
 
@@ -776,9 +681,7 @@ def _normalize_text(
     if not normalized:
         raise ValueError(f"{field} must not be empty")
     if len(normalized) > maximum:
-        raise ValueError(
-            f"{field} must not exceed {maximum} characters"
-        )
+        raise ValueError(f"{field} must not exceed {maximum} characters")
     return normalized
 
 
@@ -793,9 +696,7 @@ def _normalize_version(
         maximum=256,
     )
     if any(character.isspace() for character in normalized):
-        raise ValueError(
-            f"{field} must not contain whitespace"
-        )
+        raise ValueError(f"{field} must not contain whitespace")
     return normalized
 
 
@@ -807,30 +708,25 @@ def _normalize_utc_datetime(
     if not isinstance(value, datetime):
         raise TypeError(f"{field} must be a datetime")
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(
-            f"{field} must be timezone-aware"
-        )
+        raise ValueError(f"{field} must be timezone-aware")
     return value.astimezone(UTC)
 
 
 def _require_enum(
     value: object,
-    enum_type: type[StrEnum],
+    enum_type: type[_EnumT],
     *,
     field: str,
-):
+) -> _EnumT:
     if isinstance(value, enum_type):
         return value
+    allowed = ", ".join(member.value for member in enum_type)
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be one of: {allowed}")
     try:
         return enum_type(value)
-    except (TypeError, ValueError) as exc:
-        allowed = ", ".join(
-            member.value
-            for member in enum_type
-        )
-        raise ValueError(
-            f"{field} must be one of: {allowed}"
-        ) from exc
+    except ValueError as exc:
+        raise ValueError(f"{field} must be one of: {allowed}") from exc
 
 
 def _require_plain_int(
@@ -842,16 +738,12 @@ def _require_plain_int(
     if type(value) is not int:
         raise TypeError(f"{field} must be an integer")
     if value < minimum:
-        raise ValueError(
-            f"{field} must be at least {minimum}"
-        )
+        raise ValueError(f"{field} must be at least {minimum}")
     return value
 
 
 def _gate_order(gate_id: str) -> int:
     match = _GATE_ID_RE.fullmatch(gate_id)
     if match is None:
-        raise ValueError(
-            f"invalid release gate ID: {gate_id!r}"
-        )
+        raise ValueError(f"invalid release gate ID: {gate_id!r}")
     return int(match.group("order"))

@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath
+import re
 from typing import Final, Never, TypedDict, cast
 
 from gf_wordbench.kernel.errors import SchemaValidationError, UnsupportedVersionError
+from gf_wordbench.kernel.ids import (
+    validate_project_id,
+    validate_scenario_id,
+    validate_schema_id,
+)
 
 from .models import (
-    GFProjectConfig,
-    ModuleTargets,
     PROJECT_CONFIG_FILENAME,
     PROJECT_SCHEMA_ID,
     PROJECT_SCHEMA_VERSION,
+    GFProjectConfig,
+    ModuleTargets,
     ProjectConfig,
     ProjectIdentity,
     SourceConfig,
@@ -24,9 +29,7 @@ from .models import (
 )
 from .paths import ProjectPaths, resolve_source_root
 
-_SCHEMA_VERSION_PATTERN: Final = re.compile(
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
-)
+_SCHEMA_VERSION_PATTERN: Final = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _CURRENT_SCHEMA_MAJOR: Final = 1
 _CURRENT_SCHEMA_MINOR: Final = 0
 
@@ -37,9 +40,7 @@ _ENVIRONMENT_REFERENCE_PATTERNS: Final = (
     re.compile(r"(?<!\$)\$[A-Za-z_][A-Za-z0-9_]*"),
 )
 _WINDOWS_DRIVE_PATTERN: Final = re.compile(r"^[A-Za-z]:")
-_SCENARIO_ID_PATTERN: Final = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9_-]*$"
-)
+_SCENARIO_ID_PATTERN: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 _ROOT_FIELDS: Final = frozenset(
     {
@@ -52,18 +53,10 @@ _ROOT_FIELDS: Final = frozenset(
         "validation",
     }
 )
-_PROJECT_FIELDS: Final = frozenset(
-    {"id", "name", "language_code", "root"}
-)
-_SOURCE_FIELDS: Final = frozenset(
-    {"directory", "glob", "include_regex", "exclude_regex"}
-)
-_GF_FIELDS: Final = frozenset(
-    {"path_parts", "minimum_version"}
-)
-_MODULE_FIELDS: Final = frozenset(
-    {"entrypoints", "checkpoints"}
-)
+_PROJECT_FIELDS: Final = frozenset({"id", "name", "language_code", "root"})
+_SOURCE_FIELDS: Final = frozenset({"directory", "glob", "include_regex", "exclude_regex"})
+_GF_FIELDS: Final = frozenset({"path_parts", "minimum_version"})
+_MODULE_FIELDS: Final = frozenset({"entrypoints", "checkpoints"})
 _VALIDATION_FIELDS: Final = frozenset(
     {
         "required_scenarios",
@@ -126,24 +119,18 @@ class _ValidationContext:
 
     def fail(self, field: str, message: str) -> Never:
         location = f"{self.source}: " if self.source is not None else ""
-        raise SchemaValidationError(
-            f"{location}{field}: {message}"
-        )
+        raise SchemaValidationError(f"{location}{field}: {message}")
 
     def unsupported(self, field: str, message: str) -> Never:
         location = f"{self.source}: " if self.source is not None else ""
-        raise UnsupportedVersionError(
-            f"{location}{field}: {message}"
-        )
+        raise UnsupportedVersionError(f"{location}{field}: {message}")
 
 
 def validate_project_schema(
     document: Mapping[str, object],
     *,
     source: Path | None = None,
-    compatibility: ProjectSchemaCompatibility = (
-        ProjectSchemaCompatibility.STRICT
-    ),
+    compatibility: ProjectSchemaCompatibility = (ProjectSchemaCompatibility.STRICT),
     allow_placeholders: bool = False,
 ) -> ProjectDocument:
     """Validate and copy one canonical project document.
@@ -153,9 +140,7 @@ def validate_project_schema(
     """
 
     if not isinstance(compatibility, ProjectSchemaCompatibility):
-        raise TypeError(
-            "compatibility must be a ProjectSchemaCompatibility"
-        )
+        raise TypeError("compatibility must be a ProjectSchemaCompatibility")
     if not isinstance(allow_placeholders, bool):
         raise TypeError("allow_placeholders must be a boolean")
 
@@ -427,14 +412,11 @@ def validate_project_schema(
         allow_placeholders,
     )
 
-    overlap = set(required_scenarios).intersection(
-        optional_scenarios
-    )
+    overlap = set(required_scenarios).intersection(optional_scenarios)
     if overlap:
         context.fail(
             "$.validation",
-            "required_scenarios and optional_scenarios overlap: "
-            + ", ".join(sorted(overlap)),
+            "required_scenarios and optional_scenarios overlap: " + ", ".join(sorted(overlap)),
         )
 
     return ProjectDocument(
@@ -479,9 +461,7 @@ def parse_project_document(
     canonical ``project.toml`` path. This operation performs no filesystem I/O.
     """
 
-    project_file, project_root = _resolve_project_file(
-        source_file
-    )
+    project_file, project_root = _resolve_project_file(source_file)
     validated = validate_project_schema(
         document,
         source=project_file,
@@ -494,7 +474,7 @@ def parse_project_document(
     validation_table = validated["validation"]
 
     identity = ProjectIdentity(
-        id=project_table["id"],
+        id=validate_project_id(project_table["id"]),
         name=project_table["name"],
         language_code=project_table["language_code"],
         root=Path(project_table["root"]),
@@ -510,29 +490,23 @@ def parse_project_document(
         minimum_version=gf_table["minimum_version"],
     )
     modules = ModuleTargets(
-        entrypoints=tuple(
-            Path(value)
-            for value in modules_table["entrypoints"]
-        ),
-        checkpoints=tuple(
-            Path(value)
-            for value in modules_table["checkpoints"]
-        ),
+        entrypoints=tuple(Path(value) for value in modules_table["entrypoints"]),
+        checkpoints=tuple(Path(value) for value in modules_table["checkpoints"]),
     )
     validation = ValidationPolicy(
         required_scenarios=tuple(
-            validation_table["required_scenarios"]
+            validate_scenario_id(value)
+            for value in validation_table["required_scenarios"]
         ),
         optional_scenarios=tuple(
-            validation_table["optional_scenarios"]
+            validate_scenario_id(value)
+            for value in validation_table["optional_scenarios"]
         ),
-        release_requires_pgf=(
-            validation_table["release_requires_pgf"]
-        ),
+        release_requires_pgf=(validation_table["release_requires_pgf"]),
     )
 
     return ProjectConfig(
-        schema_id=validated["schema_id"],
+        schema_id=validate_schema_id(validated["schema_id"]),
         schema_version=validated["schema_version"],
         identity=identity,
         sources=sources,
@@ -554,17 +528,10 @@ def _resolve_project_file(
     if not isinstance(source_file, Path):
         raise TypeError("source_file must be pathlib.Path")
     if not source_file.is_absolute():
-        raise SchemaValidationError(
-            "source_file must be an explicit absolute "
-            "project.toml path"
-        )
+        raise SchemaValidationError("source_file must be an explicit absolute project.toml path")
 
-    project_paths = ProjectPaths.from_root(
-        source_file.parent
-    )
-    project_file = (
-        project_paths.root / PROJECT_CONFIG_FILENAME
-    )
+    project_paths = ProjectPaths.from_root(source_file.parent)
+    project_file = project_paths.root / PROJECT_CONFIG_FILENAME
 
     if source_file != project_file:
         raise SchemaValidationError(
@@ -608,21 +575,18 @@ def _validate_schema_version(
     if major != _CURRENT_SCHEMA_MAJOR:
         context.unsupported(
             "$.schema_version",
-            f"unsupported major version {major}; supported "
-            f"major is {_CURRENT_SCHEMA_MAJOR}",
+            f"unsupported major version {major}; supported major is {_CURRENT_SCHEMA_MAJOR}",
         )
 
     if minor != _CURRENT_SCHEMA_MINOR:
         forward_compatible = (
-            compatibility
-            is ProjectSchemaCompatibility.FORWARD_MINOR
+            compatibility is ProjectSchemaCompatibility.FORWARD_MINOR
             and minor > _CURRENT_SCHEMA_MINOR
         )
         if not forward_compatible:
             context.unsupported(
                 "$.schema_version",
-                f"unsupported version {value!r}; current "
-                f"version is {PROJECT_SCHEMA_VERSION!r}",
+                f"unsupported version {value!r}; current version is {PROJECT_SCHEMA_VERSION!r}",
             )
 
     return major, minor
@@ -643,7 +607,7 @@ def _require_mapping(
                 "contains a non-string key",
             )
 
-    return cast(Mapping[str, object], value)
+    return cast("Mapping[str, object]", value)
 
 
 def _require_table(
@@ -678,16 +642,14 @@ def _validate_fields(
     if missing:
         context.fail(
             field,
-            "missing required fields: "
-            + ", ".join(sorted(missing)),
+            "missing required fields: " + ", ".join(sorted(missing)),
         )
 
     unknown = keys - required
     if unknown and not allow_unknown:
         context.fail(
             field,
-            "contains unknown fields: "
-            + ", ".join(sorted(unknown)),
+            "contains unknown fields: " + ", ".join(sorted(unknown)),
         )
 
 
@@ -828,8 +790,7 @@ def _validate_glob(
     if path.is_absolute() or ".." in path.parts:
         context.fail(
             field,
-            "must be a project-relative glob without "
-            "parent traversal",
+            "must be a project-relative glob without parent traversal",
         )
 
 
@@ -924,10 +885,7 @@ def _validate_scenario_ids(
             context,
         )
 
-        if (
-            allow_placeholders
-            and _contains_placeholder(value)
-        ):
+        if allow_placeholders and _contains_placeholder(value):
             continue
 
         _reject_placeholder(
@@ -939,8 +897,7 @@ def _validate_scenario_ids(
         if _SCENARIO_ID_PATTERN.fullmatch(value) is None:
             context.fail(
                 item_field,
-                "must use letters, digits, '_' or '-', "
-                "beginning with a letter or digit",
+                "must use letters, digits, '_' or '-', beginning with a letter or digit",
             )
 
         if value in seen:
@@ -1021,10 +978,7 @@ def _reject_nonportable_path_text(
             "must not contain a drive letter",
         )
 
-    if any(
-        pattern.search(value)
-        for pattern in _ENVIRONMENT_REFERENCE_PATTERNS
-    ):
+    if any(pattern.search(value) for pattern in _ENVIRONMENT_REFERENCE_PATTERNS):
         context.fail(
             field,
             "must not contain an environment-variable reference",
@@ -1060,10 +1014,7 @@ def _validate_text(
     if not allow_empty and not value:
         context.fail(field, "must not be empty")
 
-    if any(
-        ord(character) < 32 or ord(character) == 127
-        for character in value
-    ):
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
         context.fail(
             field,
             "must not contain control characters",

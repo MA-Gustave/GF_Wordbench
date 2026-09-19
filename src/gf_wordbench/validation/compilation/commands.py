@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
+import os
 from pathlib import Path, PurePosixPath
 from typing import Final, TypeAlias
 
@@ -229,8 +229,7 @@ def build_module_compile_arguments(
     ):
         if profile.cpu_stats_flag is None:
             raise ValueError(
-                f"GF command profile {profile.profile_id!r} "
-                "does not support CPU statistics"
+                f"GF command profile {profile.profile_id!r} does not support CPU statistics"
             )
         arguments.append(profile.cpu_stats_flag)
 
@@ -338,8 +337,7 @@ def build_pgf_arguments(
     ):
         if profile.cpu_stats_flag is None:
             raise ValueError(
-                f"GF command profile {profile.profile_id!r} "
-                "does not support CPU statistics"
+                f"GF command profile {profile.profile_id!r} does not support CPU statistics"
             )
         arguments.append(profile.cpu_stats_flag)
 
@@ -397,8 +395,7 @@ def _optional_path_option(
         return ()
     if option is None:
         raise ValueError(
-            f"GF command profile {profile.profile_id!r} "
-            f"does not support a {role} option"
+            f"GF command profile {profile.profile_id!r} does not support a {role} option"
         )
     path = _coerce_path(value, field_name=role)
     return profile.value_option(option, os.fspath(path))
@@ -472,9 +469,7 @@ def _coerce_path(
     try:
         text = os.fspath(value)
     except TypeError as exc:
-        raise TypeError(
-            f"{field_name} must be a string or path-like value"
-        ) from exc
+        raise TypeError(f"{field_name} must be a string or path-like value") from exc
     if not isinstance(text, str):
         raise TypeError(f"{field_name} must resolve to text")
     _validate_argument(
@@ -499,9 +494,7 @@ def _normalize_arguments(
         for index, value in enumerate(values)
     )
     if len(normalized) > _MAX_ARGUMENTS:
-        raise ValueError(
-            f"arguments exceed the maximum of {_MAX_ARGUMENTS}"
-        )
+        raise ValueError(f"arguments exceed the maximum of {_MAX_ARGUMENTS}")
     return normalized
 
 
@@ -516,13 +509,9 @@ def _validate_argument(
     if not allow_empty and not value:
         raise ValueError(f"{field_name} must not be empty")
     if len(value) > _MAX_ARGUMENT_LENGTH:
-        raise ValueError(
-            f"{field_name} exceeds {_MAX_ARGUMENT_LENGTH} characters"
-        )
+        raise ValueError(f"{field_name} exceeds {_MAX_ARGUMENT_LENGTH} characters")
     if any(ord(character) < 32 for character in value):
-        raise ValueError(
-            f"{field_name} must not contain control characters"
-        )
+        raise ValueError(f"{field_name} must not contain control characters")
     return value
 
 
@@ -544,9 +533,7 @@ def _validate_option_name(
     if not value.startswith("-"):
         raise ValueError(f"{field_name} must begin with '-'")
     if "=" in value or any(character.isspace() for character in value):
-        raise ValueError(
-            f"{field_name} must be an option name without a value"
-        )
+        raise ValueError(f"{field_name} must be an option name without a value")
 
 
 def _validate_identifier(
@@ -559,13 +546,8 @@ def _validate_identifier(
         field_name=field_name,
         allow_empty=False,
     )
-    if not all(
-        character.isalnum() or character in {"_", "-", "."}
-        for character in value
-    ):
-        raise ValueError(
-            f"{field_name} contains unsupported characters"
-        )
+    if not all(character.isalnum() or character in {"_", "-", "."} for character in value):
+        raise ValueError(f"{field_name} contains unsupported characters")
 
 
 def _validate_separator(value: str) -> None:
