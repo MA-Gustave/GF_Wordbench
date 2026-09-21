@@ -896,6 +896,18 @@ class ValidationPanel(QWidget):
         self.target_row.setVisible(target_visible)
         self.target_combo.setEnabled(enabled and target_visible)
         self.target_browse_button.setEnabled(enabled and target_visible)
+        self.target_label.setText(
+            "Target (optional; empty = Global Scan)"
+            if mode is ValidationMode.DIAGNOSTIC
+            else "Target file or module"
+        )
+        line_edit = self.target_combo.lineEdit()
+        if line_edit is not None:
+            line_edit.setPlaceholderText(
+                "All GF sources (Global Scan)"
+                if mode is ValidationMode.DIAGNOSTIC
+                else "Select a GF source file or module"
+            )
 
         self.checkpoint_label.setVisible(checkpoint_visible)
         self.checkpoint_combo.setVisible(checkpoint_visible)
@@ -1035,9 +1047,17 @@ class ValidationPanel(QWidget):
             self.mode_combo.setToolTip("Evaluate every declared release criterion.")
             self.scenario_hint.setText("The required release scenario set is read-only.")
         else:
-            self.mode_combo.setToolTip("Collect broad evidence for difficult failures.")
+            self.mode_combo.setToolTip(
+                "Collect broad evidence. Leave Target empty to run a Global Scan over "
+                "the complete resolved GF source inventory and continue after failures."
+            )
+            self.target_combo.setToolTip(
+                "Optional in Diagnostic mode. Leave empty for Global Scan; choose a source "
+                "to focus the diagnostic run."
+            )
             self.scenario_hint.setText(
-                "Select optional scenarios or leave the filter empty for resolved defaults."
+                "Global Scan inventories GF sources first. Optional configured scenarios "
+                "remain a separate diagnostic scope."
             )
 
         self.scan_only_checkbox.setToolTip(

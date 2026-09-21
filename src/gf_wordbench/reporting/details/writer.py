@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+import csv
 from dataclasses import dataclass
 from enum import Enum
 import hashlib
+from io import StringIO
 import os
 from pathlib import Path
 import re
@@ -13,11 +15,17 @@ from typing import TYPE_CHECKING, Final
 from urllib.parse import quote
 
 from gf_wordbench.infrastructure.atomic_io import atomic_write_text
-from gf_wordbench.kernel.statuses import ValidationStatus
+from gf_wordbench.infrastructure.json_io import JsonObject, JsonValue, write_json
+from gf_wordbench.kernel.statuses import (
+    DiagnosticClass,
+    ErrorKind,
+    ValidationStatus,
+)
 
 if TYPE_CHECKING:
     from gf_wordbench.runs.models.results import FileResult, RunResult
     from gf_wordbench.validation.scenarios.models import ScenarioResult
+
 _MAX_ROWS: Final = 1_000
 _MAX_TEXT: Final = 32_000
 _UNSAFE_KEY: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9._-]+")
@@ -25,6 +33,25 @@ _RESERVED: Final[frozenset[str]] = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
     | {f"COM{i}" for i in range(1, 10)}
     | {f"LPT{i}" for i in range(1, 10)}
+)
+
+
+_GLOBAL_SCAN_CSV: Final[str] = "global_scan.csv"
+_GLOBAL_SCAN_JSON: Final[str] = "global_scan.json"
+_GLOBAL_SIGNATURE_RULES: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
+    ("GENERATE_PMCFG", re.compile(r"generate\s*pmcfg|pmcfg", re.IGNORECASE)),
+    ("MISSING_LIN", re.compile(r"missing\s+linearization|no\s+linearization", re.IGNORECASE)),
+    ("DUPLICATE_DEFINITION", re.compile(r"duplicate|already\s+defined", re.IGNORECASE)),
+    ("LOCK_FIELD", re.compile(r"lock\s*field|lock_", re.IGNORECASE)),
+    ("MODULE_NOT_FOUND", re.compile(r"module.+not\s+found|unknown\s+module", re.IGNORECASE)),
+    (
+        "UNKNOWN_SYMBOL",
+        re.compile(r"unknown\s+(?:identifier|symbol|constant|function)", re.IGNORECASE),
+    ),
+    (
+        "TYPE_MISMATCH",
+        re.compile(r"type\s+mismatch|cannot\s+unify|expected.+found", re.IGNORECASE),
+    ),
 )
 
 
@@ -705,16 +732,185 @@ def _required(value: object, field: str) -> str:
     return value
 
 
+def failure_signature(result: FileResult) -> str:
+    """Return a stable coarse failure signature for inventory grouping."""
+
+    if result.status is ValidationStatus.OK:
+        return "OK"
+    if result.status is ValidationStatus.SKIPPED:
+        return "SKIPPED"
+
+    summary = result.compile_summary
+    if summary.timed_out or summary.error_kind is ErrorKind.TIMEOUT:
+        return "TIMEOUT"
+    text = "\n".join((summary.first_error, summary.error_detail))
+    for signature, pattern in _GLOBAL_SIGNATURE_RULES:
+        if pattern.search(text):
+            return signature
+    if summary.error_kind is ErrorKind.SYNTAX:
+        return "SYNTAX_ERROR"
+    if summary.error_kind is ErrorKind.TYPE:
+        return "TYPE_ERROR"
+    if summary.error_kind is ErrorKind.TOOL:
+        return "GF_TOOL_ERROR"
+    if summary.error_kind is ErrorKind.IO:
+        return "IO_ERROR"
+    if summary.error_kind is ErrorKind.INTERNAL:
+        return "GF_INTERNAL_ERROR"
+    return "OTHER"
+
+
+def write_global_scan_reports(run_result: RunResult) -> tuple[Path, Path]:
+    """Write deterministic JSON and CSV views of one Diagnostic inventory run."""
+
+    if run_result.run_config.mode.value != "diagnostic":
+        raise ValueError("global scan reports require diagnostic mode")
+
+    details_root = run_result.run_paths.details_dir
+    details_root.mkdir(parents=True, exist_ok=True)
+    rows = [
+        _global_scan_row(result, run_root=run_result.run_paths.run_dir)
+        for result in run_result.file_results
+    ]
+
+    json_path = details_root / _GLOBAL_SCAN_JSON
+    document: JsonObject = {
+        "schema": "gf-wordbench-global-scan-v1",
+        "run_id": str(run_result.run_paths.run_id),
+        "mode": run_result.run_config.mode.value,
+        "gf_version": run_result.gf_version,
+        "overall_status": run_result.overall_status.value,
+        "totals": {
+            "files_seen": run_result.totals.files_seen,
+            "files_included": run_result.totals.files_included,
+            "files_excluded": run_result.totals.files_excluded,
+            "files_ok": run_result.totals.files_ok,
+            "files_fail": run_result.totals.files_fail,
+            "files_error": run_result.totals.files_error,
+            "files_skipped": run_result.totals.files_skipped,
+            "direct_fail": run_result.totals.direct_fail,
+            "downstream_fail": run_result.totals.downstream_fail,
+            "ambiguous_fail": run_result.totals.ambiguous_fail,
+        },
+        "failure_signatures": _global_signature_counts(run_result.file_results),
+        "files": rows,
+    }
+    write_json(json_path, document)
+
+    csv_path = details_root / _GLOBAL_SCAN_CSV
+    stream = StringIO(newline="")
+    fieldnames = (
+        "status",
+        "diagnostic_class",
+        "module",
+        "source",
+        "exit_code",
+        "error_kind",
+        "failure_signature",
+        "duration_ms",
+        "gfo_produced",
+        "blocked_by",
+        "first_error",
+        "stdout",
+        "stderr",
+        "scan_log",
+    )
+    csv_writer = csv.DictWriter(stream, fieldnames=fieldnames, lineterminator="\n")
+    csv_writer.writeheader()
+    for row in rows:
+        csv_writer.writerow({key: _global_csv_value(row.get(key)) for key in fieldnames})
+    atomic_write_text(
+        csv_path,
+        stream.getvalue(),
+        encoding="utf-8",
+        newline="\n",
+        create_parents=True,
+        root=details_root,
+        role="global scan CSV report",
+    )
+    return json_path, csv_path
+
+
+def _global_scan_row(result: FileResult, *, run_root: Path) -> dict[str, JsonValue]:
+    summary = result.compile_summary
+    return {
+        "status": _global_display_status(result),
+        "validation_status": result.status.value,
+        "diagnostic_class": result.diagnostic_class.value,
+        "module": result.module_name,
+        "source": result.file_path.as_posix(),
+        "exit_code": summary.exit_code,
+        "error_kind": summary.error_kind.value,
+        "failure_signature": failure_signature(result),
+        "duration_ms": summary.duration_ms,
+        "gfo_produced": bool(summary.produced_artifacts),
+        "blocked_by": list(result.blocked_by),
+        "first_error": summary.first_error,
+        "stdout": _global_relative(summary.stdout_path, run_root),
+        "stderr": _global_relative(summary.stderr_path, run_root),
+        "scan_log": _global_relative(result.scan_log_path, run_root),
+    }
+
+
+def _global_display_status(result: FileResult) -> str:
+    if result.status is ValidationStatus.OK:
+        return "PASS"
+    if result.diagnostic_class is DiagnosticClass.DOWNSTREAM:
+        return "BLOCKED"
+    if result.compile_summary.timed_out:
+        return "TIMEOUT"
+    if result.status is ValidationStatus.FAIL:
+        return "FAIL"
+    if result.status is ValidationStatus.SKIPPED:
+        return "SKIPPED"
+    return "ERROR"
+
+
+def _global_signature_counts(results: list[FileResult]) -> dict[str, JsonValue]:
+    counts: dict[str, int] = {}
+    for result in results:
+        signature = failure_signature(result)
+        if signature in {"OK", "SKIPPED"}:
+            continue
+        counts[signature] = counts.get(signature, 0) + 1
+    return {key: counts[key] for key in sorted(counts)}
+
+
+def _global_relative(path: Path | None, root: Path) -> str | None:
+    if path is None:
+        return None
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _global_csv_value(value: JsonValue | None) -> str | int:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, (int, str)):
+        return value
+    if isinstance(value, list):
+        return ";".join(str(item) for item in value)
+    if isinstance(value, dict):
+        return ";".join(f"{key}={item}" for key, item in sorted(value.items()))
+    return str(value)
+
+
 __all__ = (
     "DetailArtifact",
     "DetailWriteFailure",
     "DetailWritePolicy",
     "DetailWriteResult",
+    "failure_signature",
     "file_detail_key",
     "render_file_detail",
     "render_scenario_detail",
     "scenario_detail_key",
     "write_detail_reports",
     "write_file_detail",
+    "write_global_scan_reports",
     "write_scenario_detail",
 )

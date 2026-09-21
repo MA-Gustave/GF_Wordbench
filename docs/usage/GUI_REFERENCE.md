@@ -978,6 +978,38 @@ scan only
 language-resolution evidence
 ```
 
+### Global Scan from the GUI
+
+For source-ready path-resolved sessions, Diagnostic mode has an explicit global
+source-inventory behavior:
+
+```text
+Mode = Diagnostic
+Target = empty
+Run action = Run Global Scan
+```
+
+Leaving `Target` empty selects the complete resolved GF source inventory. The
+run performs a static scan and an independent GF compilation for each selected
+`.gf` source, continues after independent file failures, and preserves one raw
+compile log pair per source. `Maximum files` bounds the inventory when a smaller
+diagnostic sample is required.
+
+Selecting a target keeps Diagnostic mode focused on that source instead of the
+complete inventory. `Scan only` remains an evidence-only Diagnostic subprofile.
+
+A completed Global Scan writes the normal human summary plus:
+
+```text
+details/global_scan.json
+details/global_scan.csv
+```
+
+These expanded inventory artifacts distinguish direct, downstream (`BLOCKED`),
+ambiguous, timeout and process-error outcomes and include a coarse failure
+signature for grouping repeated compiler symptoms. They are diagnostic evidence,
+not release evidence.
+
 Diagnostic mode still enforces:
 
 - finite timeouts;

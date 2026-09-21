@@ -329,6 +329,31 @@ def test_scan_text_runs_all_rules_and_orders_findings_deterministically(
     assert diagnostics == ()
 
 
+def test_canonical_scan_text_bounds_long_pattern_evidence() -> None:
+    from gf_wordbench.validation.scanning.service import scan_text
+
+    source = (
+        "lin x = case y of {\n"
+        + '  "a" + _ => "'
+        + ("z" * 3_000)
+        + '" ;\n}\n'
+    )
+
+    counts, findings, diagnostics = scan_text(
+        source,
+        project_relative_path="LongPattern.gf",
+    )
+
+    pattern_findings = tuple(
+        finding for finding in findings if finding.rule_id == "SCAN-PATTERN-001"
+    )
+    assert counts.untyped_case_str_pat == 1
+    assert len(pattern_findings) == 1
+    assert len(pattern_findings[0].excerpt) == 240
+    assert pattern_findings[0].excerpt.endswith("…")
+    assert diagnostics == ()
+
+
 def test_scan_text_rejects_invalid_input_path_and_registry_identity(
     service: ModuleType,
 ) -> None:

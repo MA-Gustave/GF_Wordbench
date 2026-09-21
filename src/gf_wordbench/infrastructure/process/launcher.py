@@ -17,6 +17,7 @@ ProcessHandle: TypeAlias = subprocess.Popen[bytes]
 StandardInput: TypeAlias = BinaryIO | int | None
 
 _WINDOWS_NEW_PROCESS_GROUP: Final[int] = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+_WINDOWS_NO_WINDOW: Final[int] = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
 def launch_without_shell(
@@ -79,6 +80,13 @@ def _launch_windows(
     if _WINDOWS_NEW_PROCESS_GROUP == 0:
         raise RuntimeError("Windows process-group creation is unavailable")
 
+    # ``CREATE_NEW_PROCESS_GROUP`` preserves Wordbench's owned-process
+    # cancellation semantics. ``CREATE_NO_WINDOW`` suppresses transient
+    # console windows for GF and diagnostic child processes when Wordbench is
+    # running as a desktop GUI.  The latter is optional only for interpreter
+    # compatibility; supported Windows Python builds expose it.
+    creation_flags = _WINDOWS_NEW_PROCESS_GROUP | _WINDOWS_NO_WINDOW
+
     return subprocess.Popen(
         command,
         cwd=os.fspath(cwd),
@@ -90,7 +98,7 @@ def _launch_windows(
         close_fds=True,
         bufsize=0,
         text=False,
-        creationflags=_WINDOWS_NEW_PROCESS_GROUP,
+        creationflags=creation_flags,
     )
 
 

@@ -1021,6 +1021,22 @@ When no explicit target is provided, diagnostic mode may select the complete pro
 
 This behavior must be visible before execution.
 
+### 12.3.1 Path-resolved GUI Global Scan
+
+The desktop GUI maps `Diagnostic` with no explicit source target to **Global
+Scan**. This is a Diagnostic scope form, not a fifth validation mode. It selects
+the complete resolved source inventory (subject to `max_files`) and executes
+independent per-source scan/compile work without fail-fast behavior.
+
+The inventory records every selected source even when earlier sources fail.
+Causal classification may mark a failed source as `downstream` when compiler
+evidence identifies another failed module as its blocker; otherwise the failure
+remains `direct` or `ambiguous` according to available evidence.
+
+Global Scan writes expanded machine-readable inventory views under `details/`
+while preserving the canonical raw scan and compile streams. A validation FAIL
+does not mean that the scan execution itself aborted.
+
 ## 12.4 Required stages
 
 A standard diagnostic run requires:

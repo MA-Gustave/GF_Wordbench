@@ -25,7 +25,7 @@ from gf_wordbench.entrypoints.gui.dialogs import DialogService, error_presentati
 from gf_wordbench.kernel.events import ProgressEvent
 from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
 from gf_wordbench.projects.languages.models import ResolvedLanguageContext
-from gf_wordbench.runs.application import execute_quick_run
+from gf_wordbench.runs.application import execute_diagnostic_run, execute_quick_run
 from gf_wordbench.runs.identity import iter_run_id_candidates
 
 from .panels.project import LanguageContextPanel
@@ -45,10 +45,11 @@ __all__ = (
 )
 
 _QUICK_READY_STATUS: Final[str] = (
-    "Language source ready. Select a Quick target and run GF validation."
+    "Language source ready. Use Quick for one target or Diagnostic with an empty target "
+    "for a global scan."
 )
-_RUNNING_STATUS: Final[str] = "Quick validation is running…"
-_CANCELLING_STATUS: Final[str] = "Cancelling Quick validation…"
+_RUNNING_STATUS: Final[str] = "GF validation is running…"
+_CANCELLING_STATUS: Final[str] = "Cancelling GF validation…"
 _SHUTDOWN_WAIT_MS: Final[int] = 5_000
 _GF_FILE_NAMES: Final[frozenset[str]] = frozenset({"gf", "gf.exe"})
 
@@ -182,7 +183,7 @@ class PathResolvedMainGuiRuntime:
         )
 
     def _connect_run_intents(self) -> None:
-        self._window.run_requested.connect(self._start_quick_run)
+        self._window.run_requested.connect(self._start_validation_run)
         self._window.cancel_requested.connect(self._cancel_run)
         self._window.settings_requested.connect(self._configure_gf_executable)
         self._window.test_environment_requested.connect(self._test_environment)
@@ -198,15 +199,16 @@ class PathResolvedMainGuiRuntime:
             return
         values = self._require_validation_panel().values()
         local = self._require_validation_panel().local_validation()
-        available = (
-            values.mode is ValidationMode.QUICK
-            and values.target_file is not None
-            and not values.no_compile
-            and not local.has_errors
+        supported = values.mode in {ValidationMode.QUICK, ValidationMode.DIAGNOSTIC}
+        quick_ready = values.mode is not ValidationMode.QUICK or values.target_file is not None
+        is_global = values.mode is ValidationMode.DIAGNOSTIC and values.target_file is None
+        self._window.set_run_action_label(
+            "Run Global Scan" if is_global else "Run Validation"
         )
+        available = supported and quick_ready and not local.has_errors
         self._window.set_run_available(available)
 
-    def _start_quick_run(self) -> None:
+    def _start_validation_run(self) -> None:
         if self._worker is not None and self._worker.is_running():
             return
         panel = self._require_validation_panel()
@@ -215,20 +217,20 @@ class PathResolvedMainGuiRuntime:
             panel.focus_first_error()
             return
         values = panel.values()
-        if values.mode is not ValidationMode.QUICK:
+        if values.mode not in {ValidationMode.QUICK, ValidationMode.DIAGNOSTIC}:
             self._dialogs.information(
-                "Quick execution runtime",
-                "This path-resolved runtime currently executes Quick validation. "
-                "Checkpoint, Diagnostic and Release remain profile-driven stages.",
+                "Path-resolved execution runtime",
+                "This runtime executes Quick and Diagnostic validation. "
+                "Checkpoint and Release remain profile-driven stages.",
             )
             return
-        if values.no_compile:
+        if values.mode is ValidationMode.QUICK and values.no_compile:
             self._dialogs.information(
                 "Quick execution runtime",
-                "Scan-only Quick execution is not part of fix09. Clear Scan only to run GF.",
+                "Scan-only Quick execution is not available. Clear Scan only to run GF.",
             )
             return
-        if values.target_file is None:
+        if values.mode is ValidationMode.QUICK and values.target_file is None:
             panel.focus_first_error()
             return
 
@@ -240,24 +242,43 @@ class PathResolvedMainGuiRuntime:
             run_config = self._build_run_config(values, executable=executable)
             run_id = self._next_run_id()
         except Exception as exc:
-            self._show_exception("Quick validation could not be configured.", exc)
+            self._show_exception("Validation could not be configured.", exc)
             return
 
         def execute(config, event_sink, cancellation_check):
-            return execute_quick_run(
+            runner = (
+                execute_diagnostic_run
+                if config.mode is ValidationMode.DIAGNOSTIC
+                else execute_quick_run
+            )
+            return runner(
                 config,
                 event_sink,
                 cancellation_check,
                 run_id=run_id,
             )
 
+        is_global = values.mode is ValidationMode.DIAGNOSTIC and values.target_file is None
+        subject = "all GF sources" if is_global else values.target_file
+        if values.mode is ValidationMode.DIAGNOSTIC:
+            source_count = len(self._context.source_inventory) if is_global else 1
+            if is_global and values.max_files is not None:
+                source_count = min(source_count, values.max_files)
+            total = 2 + (2 * source_count)
+        else:
+            total = 3
+        mode_label = (
+            "Global Diagnostic scan"
+            if is_global
+            else f"{values.mode.value.title()} validation"
+        )
         self._window.panels.results.clear_result()
         self._window.panels.progress.begin_run(
             run_id,
-            status_text="Starting Quick validation…",
-            total=3,
+            status_text=f"Starting {mode_label}…",
+            total=total,
             stage="prepare",
-            subject=values.target_file,
+            subject=subject,
         )
         panel.set_running(True)
         self._window.set_run_available(False)
@@ -286,28 +307,37 @@ class PathResolvedMainGuiRuntime:
             self._window.panels.progress.mark_failed("Worker startup failed")
             self._window.set_run_state(WindowRunState.READY)
             self._refresh_run_available()
-            self._show_exception("Quick validation worker could not start.", exc)
+            self._show_exception("Validation worker could not start.", exc)
             return
 
     def _build_run_config(self, values: ValidationPanelValues, *, executable: Path):
-        if values.target_file is None:
+        if values.mode is ValidationMode.QUICK and values.target_file is None:
             raise ValueError("Quick target is required")
+        if values.mode not in {ValidationMode.QUICK, ValidationMode.DIAGNOSTIC}:
+            raise ValueError("Path-resolved execution supports Quick and Diagnostic")
         # Import lazily to avoid a bootstrap -> startup -> runtime -> bootstrap
         # import cycle while startup is still composing the main runtime.
         from gf_wordbench.bootstrap import build_framework_defaults
+
+        if values.mode is ValidationMode.DIAGNOSTIC and values.target_file is None:
+            target = ValidationTarget(TargetKind.PROJECT, None)
+        elif values.target_file is not None:
+            target = ValidationTarget(TargetKind.FILE, values.target_file)
+        else:
+            target = None
 
         gui_values: dict[str, object] = {
             "gf_executable": executable,
             "rgl_root": self._context.rgl_root,
             "output_root": self._output_root,
-            "mode": ValidationMode.QUICK,
-            "target": ValidationTarget(TargetKind.FILE, values.target_file),
+            "mode": values.mode,
+            "target": target,
             "timeout_sec": values.timeout_override or 60,
-            "max_files": 0,
+            "max_files": values.max_files or 0,
             "keep_ok_details": values.keep_ok_details,
             "diff_previous": values.diff_previous,
             "skip_version_probe": values.skip_version_probe,
-            "no_compile": False,
+            "no_compile": values.no_compile if values.mode is ValidationMode.DIAGNOSTIC else False,
             "emit_cpu_stats": values.emit_cpu_stats,
         }
         resolution = resolve_configuration(
@@ -420,8 +450,17 @@ class PathResolvedMainGuiRuntime:
         try:
             self._window.panels.results.set_result(result)
             failures = result.totals.files_fail + result.totals.files_error
+            label = (
+                "Global Diagnostic scan"
+                if result.run_config.mode is ValidationMode.DIAGNOSTIC
+                and (
+                    result.run_config.target is None
+                    or result.run_config.target.kind is TargetKind.PROJECT
+                )
+                else f"{result.run_config.mode.value.title()} validation"
+            )
             self._window.panels.progress.finish_run(
-                f"Quick validation {result.overall_status.value}",
+                f"{label} {result.overall_status.value}",
                 warning_count=len(result.run_config.compatibility_warnings),
                 failure_count=failures,
             )
@@ -432,19 +471,20 @@ class PathResolvedMainGuiRuntime:
             )
         except Exception as exc:
             self._window.panels.progress.mark_failed(
-                "Quick validation completed, but the result UI could not be rendered"
+                "Validation completed, but the result UI could not be rendered"
             )
             self._finish_worker_ui(
-                "Quick validation completed; result rendering failed"
+                "Validation completed; result rendering failed"
             )
             self._show_exception(
-                "Quick validation completed, but the result view failed.",
+                "Validation completed, but the result view failed.",
                 exc,
             )
             return
 
         self._finish_worker_ui(
-            f"Quick validation complete: {result.overall_status.value}"
+            f"{result.run_config.mode.value.title()} validation complete: "
+            f"{result.overall_status.value}"
         )
 
     def _on_run_cancelled(self, outcome: object) -> None:
@@ -464,11 +504,11 @@ class PathResolvedMainGuiRuntime:
             message = str(failure) or type(failure).__name__
             exc = failure
         else:
-            message = "Quick validation failed"
+            message = "Validation failed"
             exc = RuntimeError(repr(failure))
         self._window.panels.progress.mark_failed(message)
-        self._finish_worker_ui("Quick validation failed")
-        self._show_exception("Quick validation failed.", exc)
+        self._finish_worker_ui("Validation failed")
+        self._show_exception("Validation failed.", exc)
 
     def _finish_worker_ui(self, status_message: str) -> None:
         self._require_validation_panel().set_running(False)

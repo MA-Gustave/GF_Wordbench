@@ -748,7 +748,18 @@ def _view_lines(views: object, name: str) -> tuple[str, ...]:
 
 
 def _source_excerpt(lines: tuple[str, ...], start_line: int, end_line: int) -> str:
-    return "".join(lines[start_line - 1 : end_line]).rstrip("\r\n")
+    """Return bounded source evidence suitable for ``ScanFinding``.
+
+    Pattern detectors may legitimately span very large ``case``/``table``
+    blocks.  ``ScanFinding`` intentionally bounds inline evidence, so the
+    service must truncate before constructing the domain model rather than
+    turning an otherwise valid finding into a fatal static-scan error.
+    """
+
+    excerpt = "".join(lines[start_line - 1 : end_line]).rstrip("\r\n")
+    if len(excerpt) <= _MAX_EXCERPT_CHARACTERS:
+        return excerpt
+    return excerpt[: _MAX_EXCERPT_CHARACTERS - 1] + "…"
 
 
 def _normalize_project_relative_path(

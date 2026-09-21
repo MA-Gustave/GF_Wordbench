@@ -146,6 +146,29 @@ def test_quick_target_selection_enables_run_action(
     runtime.shutdown()
 
 
+def test_diagnostic_empty_target_enables_global_scan_action(
+    tmp_path: Path,
+    qapplication: QApplication,
+) -> None:
+    runtime = build_main_runtime(qapplication, _external_context(tmp_path))
+    validation = runtime.window.panels.validation
+
+    validation.set_values(
+        ValidationPanelValues(
+            mode=ValidationMode.DIAGNOSTIC,
+            target_file=None,
+            max_files=None,
+        )
+    )
+    qapplication.processEvents()
+
+    assert validation.values().target_file is None
+    assert "Global Scan" in validation.target_label.text()
+    assert runtime.window.run_button.text() == "Run Global Scan"
+    assert runtime.window.run_button.isEnabled() is True
+    runtime.shutdown()
+
+
 def test_focused_file_is_preserved_as_quick_target(
     tmp_path: Path,
     qapplication: QApplication,

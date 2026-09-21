@@ -1,14 +1,14 @@
-"""Production application service for bounded path-resolved Quick runs.
+"""Production application service for path-resolved Quick and Diagnostic runs.
 
-The service consumes an already-resolved :class:`RunConfig`.  It does not
-rediscover the language, RGL checkout, GF search path, or validation target.
-For ADR-0015 source-ready sessions it provides the first executable validation
-capability: one explicit Quick target is statically scanned and compiled by GF,
-with raw process evidence kept in the canonical run directory.
+The service consumes an already-resolved :class:`RunConfig`. It never
+rediscovers language or RGL facts. Quick validates one explicit target;
+Diagnostic can inventory every resolved GF source while continuing after
+independent failures and preserving per-file evidence.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 import hashlib
 from pathlib import Path
@@ -16,7 +16,10 @@ import time
 from typing import Final, Protocol
 
 from gf_wordbench.diagnostics.models import ArtifactObservation as DiagnosticArtifactObservation
-from gf_wordbench.diagnostics.models import DiagnosticEvidence
+from gf_wordbench.diagnostics.models import (
+    DiagnosticEvidence,
+    DiagnosticRecord,
+)
 from gf_wordbench.diagnostics.parsing.service import parse_diagnostics
 from gf_wordbench.infrastructure.process.termination import CancellationToken
 from gf_wordbench.kernel.errors import CancellationRequested, ConfigurationError
@@ -30,13 +33,18 @@ from gf_wordbench.kernel.statuses import (
     ValidationMode,
     ValidationStatus,
 )
+from gf_wordbench.reporting.details.writer import write_global_scan_reports
 from gf_wordbench.reporting.summary.markdown_writer import write_summary_md
 from gf_wordbench.runs.identity import iter_run_id_candidates
 from gf_wordbench.runs.paths import allocate_run_paths
 from gf_wordbench.runs.public import RunConfig, RunResult
 from gf_wordbench.runs.result_builder import build_file_result, build_run_result
 from gf_wordbench.validation.compilation.gf_adapter import GfProcessAdapter
-from gf_wordbench.validation.compilation.models import CompileSummary, CompileTargetKind, SourceFingerprint
+from gf_wordbench.validation.compilation.models import (
+    CompileSummary,
+    CompileTargetKind,
+    SourceFingerprint,
+)
 from gf_wordbench.validation.compilation.version_probe import (
     GFVersionPolicy,
     GFVersionProbeOutcome,
@@ -50,9 +58,10 @@ from gf_wordbench.validation.ports import (
     GfOperationRequest,
     ModuleCompilePayload,
 )
+from gf_wordbench.validation.scanning.models import ScanCounts
 from gf_wordbench.validation.scanning.service import scan_text
 
-__all__ = ("execute_quick_run", "run_validation")
+__all__ = ("execute_diagnostic_run", "execute_quick_run", "run_validation")
 
 _OUTPUT_LIMIT_BYTES: Final[int] = 16 * 1024 * 1024
 _MAX_SCAN_LOG_CHARS: Final[int] = 512 * 1024
@@ -64,6 +73,22 @@ class _EventSink(Protocol):
 
 class _CancellationCheck(Protocol):
     def __call__(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _CompileEvidence:
+    summary: CompileSummary
+    primary_record: DiagnosticRecord | None
+
+
+@dataclass(frozen=True, slots=True)
+class _DiagnosticWorkItem:
+    source_path: Path
+    relative: Path
+    scan_counts: ScanCounts
+    scan_log: Path
+    fingerprint: SourceFingerprint
+    compile_evidence: _CompileEvidence
 
 
 class _CheckCancellationToken:
@@ -283,6 +308,415 @@ def execute_quick_run(
     return result
 
 
+
+def execute_diagnostic_run(
+    run_config: RunConfig,
+    event_sink: _EventSink,
+    cancellation_check: _CancellationCheck,
+    *,
+    run_id: str | None = None,
+) -> RunResult:
+    """Inventory one or all resolved GF sources without fail-fast behavior."""
+
+    if not isinstance(run_config, RunConfig):
+        raise TypeError("run_config must be RunConfig")
+    if run_config.mode is not ValidationMode.DIAGNOSTIC:
+        raise ConfigurationError(
+            "Diagnostic inventory requires mode=diagnostic.",
+            code="GF-WB-CONFIG-916",
+            stage="run",
+            operation="diagnostic-validation",
+            subject=run_config.mode.value,
+        )
+    context = run_config.language_context
+    if context is None:
+        raise ConfigurationError(
+            "Diagnostic inventory requires a resolved language context.",
+            code="GF-WB-CONFIG-917",
+            stage="run",
+            operation="diagnostic-validation",
+            subject="language_context",
+        )
+
+    source_root = context.language_directory.resolve(strict=True)
+    inventory = tuple(
+        sorted(
+            (path.resolve(strict=True) for path in context.source_inventory),
+            key=str,
+        )
+    )
+    selected = _diagnostic_sources(run_config, inventory=inventory, source_root=source_root)
+    is_global = run_config.target is None or run_config.target.kind is TargetKind.PROJECT
+    files_seen = len(selected)
+    if run_config.max_files > 0:
+        selected = selected[: run_config.max_files]
+    files_excluded = files_seen - len(selected)
+    if not selected:
+        raise ConfigurationError(
+            "Diagnostic inventory has no GF source files to validate.",
+            code="GF-WB-CONFIG-918",
+            stage="selection",
+            operation="diagnostic-validation",
+            subject=str(source_root),
+        )
+
+    cancellation_check()
+    started_at = datetime.now(UTC)
+    started_clock = time.monotonic()
+    output_root = run_config.environment.output_root
+    output_root.mkdir(parents=True, exist_ok=True)
+    run_paths = _allocate_paths(output_root, started_at, requested_run_id=run_id)
+    resolved_run_id = str(run_paths.run_id)
+    token: CancellationToken = _CheckCancellationToken(cancellation_check)
+    total_steps = 2 + (2 * len(selected))
+
+    _progress(
+        event_sink,
+        run_id=resolved_run_id,
+        message=f"Diagnostic {'global scan' if is_global else 'validation'} started ({len(selected)} files)",
+        stage="prepare",
+        subject=(
+            "all GF sources" if is_global else str(run_config.target.value)
+        ),
+        completed=0,
+        total=total_steps,
+    )
+    gf_version = _probe_version(
+        run_config,
+        run_paths=run_paths,
+        run_id=resolved_run_id,
+        token=token,
+        event_sink=event_sink,
+        progress_total=total_steps,
+    )
+    work_items: list[_DiagnosticWorkItem] = []
+    completed = 1
+
+    for source_path in selected:
+        cancellation_check()
+        relative = source_path.relative_to(source_root)
+        _progress(
+            event_sink,
+            run_id=resolved_run_id,
+            message="Static scan",
+            stage="scan",
+            subject=relative.as_posix(),
+            completed=completed,
+            total=total_steps,
+        )
+        source_text = source_path.read_text(encoding="utf-8")
+        scan_counts, scan_findings, scan_diagnostics = scan_text(
+            source_text,
+            project_relative_path=relative.as_posix(),
+        )
+        scan_log = run_paths.raw_scan_dir / f"{_safe_stem(relative)}.scan.txt"
+        _write_scan_log(
+            scan_log,
+            source_path=source_path,
+            counts=scan_counts,
+            findings=scan_findings,
+            diagnostics=scan_diagnostics,
+        )
+        completed += 1
+        cancellation_check()
+
+        if run_config.no_compile:
+            compile_evidence = _CompileEvidence(
+                summary=_skipped_compile_summary(
+                    source_path=source_path,
+                    relative=relative,
+                    working_directory=source_root,
+                    reason="Diagnostic scan-only run",
+                ),
+                primary_record=None,
+            )
+        else:
+            _progress(
+                event_sink,
+                run_id=resolved_run_id,
+                message="GF compilation",
+                stage="compile",
+                subject=relative.as_posix(),
+                completed=completed,
+                total=total_steps,
+            )
+            module_output = run_paths.gfo_dir / _safe_stem(relative)
+            try:
+                compile_evidence = _compile_target_evidence(
+                    run_config,
+                    source_path=source_path,
+                    relative=relative,
+                    run_paths=run_paths,
+                    run_id=resolved_run_id,
+                    gf_version=gf_version,
+                    token=token,
+                    output_directory=module_output,
+                )
+            except CancellationRequested:
+                raise
+            except Exception as exc:
+                compile_evidence = _compile_exception_evidence(
+                    source_path=source_path,
+                    relative=relative,
+                    run_paths=run_paths,
+                    working_directory=source_root,
+                    output_directory=module_output,
+                    error=exc,
+                )
+                _progress(
+                    event_sink,
+                    run_id=resolved_run_id,
+                    message=(
+                        "Compilation raised an internal file-level exception; "
+                        "continuing Global Scan"
+                    ),
+                    severity=EventLevel.WARN,
+                    stage="compile",
+                    subject=relative.as_posix(),
+                    completed=completed,
+                    total=total_steps,
+                )
+        completed += 1
+        work_items.append(
+            _DiagnosticWorkItem(
+                source_path=source_path,
+                relative=relative,
+                scan_counts=scan_counts,
+                scan_log=scan_log,
+                fingerprint=_fingerprint(source_path),
+                compile_evidence=compile_evidence,
+            )
+        )
+
+    file_results = _diagnostic_file_results(work_items)
+    finished_at = datetime.now(UTC)
+    duration_ms = max(0, int((time.monotonic() - started_clock) * 1000))
+    result = build_run_result(
+        run_config=run_config,
+        run_paths=run_paths,
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=duration_ms,
+        gf_version=gf_version,
+        file_results=file_results,
+        files_seen=files_seen,
+        files_excluded=files_excluded,
+    )
+
+    report_errors: list[str] = []
+    for writer in (write_summary_md, write_global_scan_reports):
+        try:
+            writer(result)
+        except Exception as exc:
+            report_errors.append(f"{getattr(writer, '__name__', type(writer).__name__)}: {exc}")
+    if report_errors:
+        _progress(
+            event_sink,
+            run_id=resolved_run_id,
+            message="Some diagnostic reports were not written: " + " | ".join(report_errors),
+            severity=EventLevel.WARN,
+            stage="report",
+            subject="diagnostic inventory",
+            completed=total_steps,
+            total=total_steps,
+        )
+    else:
+        _progress(
+            event_sink,
+            run_id=resolved_run_id,
+            message="Diagnostic global scan completed" if is_global else "Diagnostic validation completed",
+            stage="complete",
+            subject="diagnostic inventory",
+            completed=total_steps,
+            total=total_steps,
+        )
+    return result
+
+
+def _diagnostic_sources(
+    run_config: RunConfig,
+    *,
+    inventory: tuple[Path, ...],
+    source_root: Path,
+) -> tuple[Path, ...]:
+    target = run_config.target
+    if target is None or target.kind is TargetKind.PROJECT:
+        return inventory
+    if target.kind not in {TargetKind.FILE, TargetKind.MODULE}:
+        raise ConfigurationError(
+            "Path-resolved Diagnostic supports project, file, or module source scope.",
+            code="GF-WB-CONFIG-919",
+            stage="selection",
+            operation="diagnostic-validation",
+            subject=target.kind.value,
+        )
+    assert target.value is not None
+    value = target.value
+    by_relative = {path.relative_to(source_root).as_posix(): path for path in inventory}
+    by_module = {path.stem: path for path in inventory}
+    selected = by_relative.get(value) or by_module.get(value) or by_module.get(Path(value).stem)
+    if selected is None:
+        raise ConfigurationError(
+            "Diagnostic target is not present in the resolved source inventory.",
+            code="GF-WB-PATH-272",
+            stage="selection",
+            operation="diagnostic-validation",
+            subject=value,
+        )
+    return (selected,)
+
+
+def _diagnostic_file_results(items: list[_DiagnosticWorkItem]):
+    failed_modules = {
+        item.source_path.stem
+        for item in items
+        if item.compile_evidence.summary.status in {ValidationStatus.FAIL, ValidationStatus.ERROR}
+    }
+    results = []
+    for item in items:
+        summary = item.compile_evidence.summary
+        diagnostic_class, blocked_by = _classify_diagnostic_item(
+            item,
+            failed_modules=failed_modules,
+        )
+        results.append(
+            build_file_result(
+                file_path=item.source_path,
+                module_name=item.source_path.stem,
+                status=summary.status,
+                diagnostic_class=diagnostic_class,
+                blocked_by=blocked_by,
+                scan_counts=item.scan_counts,
+                fingerprint=item.fingerprint,
+                compile_summary=summary,
+                scan_log_path=item.scan_log,
+                artifacts=summary.produced_artifacts,
+            )
+        )
+    return tuple(results)
+
+
+def _classify_diagnostic_item(
+    item: _DiagnosticWorkItem,
+    *,
+    failed_modules: set[str],
+) -> tuple[DiagnosticClass, tuple[str, ...]]:
+    summary = item.compile_evidence.summary
+    if summary.status is ValidationStatus.OK:
+        return DiagnosticClass.OK, ()
+    if summary.status is ValidationStatus.SKIPPED:
+        return DiagnosticClass.SKIPPED, ()
+    if summary.error_kind in {ErrorKind.TIMEOUT, ErrorKind.TOOL, ErrorKind.IO, ErrorKind.INTERNAL}:
+        return DiagnosticClass.DIRECT, ()
+
+    target_module = item.source_path.stem
+    record = item.compile_evidence.primary_record
+    if record is not None:
+        if record.source_module == target_module:
+            return DiagnosticClass.DIRECT, ()
+        if record.source_path is not None and record.source_path.stem == target_module:
+            return DiagnosticClass.DIRECT, ()
+        candidates = {reference for reference in record.references if reference in failed_modules}
+        if record.source_module in failed_modules:
+            candidates.add(record.source_module)
+        if record.source_path is not None and record.source_path.stem in failed_modules:
+            candidates.add(record.source_path.stem)
+        candidates.discard(target_module)
+        if candidates:
+            return DiagnosticClass.DOWNSTREAM, tuple(sorted(candidates))
+
+    text = f"{summary.first_error}\n{summary.error_detail}"
+    candidates = tuple(
+        sorted(
+            module
+            for module in failed_modules
+            if module != target_module and module in text
+        )
+    )
+    if candidates:
+        return DiagnosticClass.DOWNSTREAM, candidates
+    return DiagnosticClass.AMBIGUOUS, ()
+
+
+def _skipped_compile_summary(
+    *,
+    source_path: Path,
+    relative: Path,
+    working_directory: Path,
+    reason: str,
+) -> CompileSummary:
+    return CompileSummary(
+        target_id=relative.as_posix(),
+        target_kind=CompileTargetKind.SOURCE,
+        status=ValidationStatus.SKIPPED,
+        command=(),
+        working_directory=working_directory,
+        exit_code=None,
+        launched=False,
+        timed_out=False,
+        cancelled=False,
+        duration_ms=0,
+        error_kind=ErrorKind.OTHER,
+        first_error=reason,
+        error_detail="",
+        stdout_path=None,
+        stderr_path=None,
+        expected_artifacts=(),
+        produced_artifacts=(),
+        artifact_checks_passed=False,
+        skipped_reason=reason,
+    )
+
+
+def _compile_exception_evidence(
+    *,
+    source_path: Path,
+    relative: Path,
+    run_paths,
+    working_directory: Path,
+    output_directory: Path,
+    error: Exception,
+) -> _CompileEvidence:
+    """Preserve a file-level framework exception without aborting the inventory."""
+
+    key = _safe_stem(relative)
+    stdout_path = run_paths.raw_compile_dir / f"{key}.out.txt"
+    stderr_path = run_paths.raw_compile_dir / f"{key}.err.txt"
+    if not stdout_path.exists():
+        stdout_path.write_text("", encoding="utf-8", newline="\n")
+    existing = _read_text(stderr_path).rstrip()
+    message = f"{type(error).__name__}: {error}"
+    detail = "GF Wordbench file-level compile exception: " + message
+    stderr_text = f"{existing}\n{detail}\n" if existing else f"{detail}\n"
+    stderr_path.write_text(stderr_text, encoding="utf-8", newline="\n")
+
+    output_directory.mkdir(parents=True, exist_ok=True)
+    expected_object = output_directory / f"{source_path.stem}.gfo"
+    produced = (expected_object,) if expected_object.is_file() else ()
+    error_kind = ErrorKind.IO if isinstance(error, OSError) else ErrorKind.INTERNAL
+    summary = CompileSummary(
+        target_id=relative.as_posix(),
+        target_kind=CompileTargetKind.SOURCE,
+        status=ValidationStatus.ERROR,
+        command=(),
+        working_directory=working_directory,
+        exit_code=None,
+        launched=False,
+        timed_out=False,
+        cancelled=False,
+        duration_ms=0,
+        error_kind=error_kind,
+        first_error=detail,
+        error_detail=message,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
+        expected_artifacts=(expected_object,),
+        produced_artifacts=produced,
+        artifact_checks_passed=False,
+    )
+    return _CompileEvidence(summary=summary, primary_record=None)
+
+
 def run_validation(
     request: object,
     *,
@@ -304,10 +738,18 @@ def run_validation(
             operation="run-validation",
             subject=type(request).__name__,
         )
-    return execute_quick_run(
-        request,
-        event_sink or (lambda _event: None),
-        cancellation_check or (lambda: None),
+    sink = event_sink or (lambda _event: None)
+    check = cancellation_check or (lambda: None)
+    if request.mode is ValidationMode.QUICK:
+        return execute_quick_run(request, sink, check)
+    if request.mode is ValidationMode.DIAGNOSTIC:
+        return execute_diagnostic_run(request, sink, check)
+    raise ConfigurationError(
+        "The path-resolved runtime executes Quick and Diagnostic validation.",
+        code="GF-WB-CONFIG-915",
+        stage="run",
+        operation="run-validation",
+        subject=request.mode.value,
     )
 
 
@@ -336,12 +778,13 @@ def _probe_version(
     run_id: str,
     token: CancellationToken,
     event_sink: _EventSink,
+    progress_total: int = 3,
 ) -> str:
     executable = run_config.environment.gf_executable
     if run_config.skip_version_probe:
         result = skipped_gf_version_result(
             executable=executable,
-            reason="GF version probing was skipped by the Quick selection.",
+            reason="GF version probing was skipped by the selected validation profile.",
         )
         return result.normalized_version or "UNKNOWN"
 
@@ -386,7 +829,7 @@ def _probe_version(
         stage="version_probe",
         subject=str(executable),
         completed=1,
-        total=3,
+        total=progress_total,
     )
     return version
 
@@ -400,12 +843,38 @@ def _compile_target(
     run_id: str,
     gf_version: str,
     token: CancellationToken,
+    output_directory: Path | None = None,
 ) -> CompileSummary:
+    return _compile_target_evidence(
+        run_config,
+        source_path=source_path,
+        relative=relative,
+        run_paths=run_paths,
+        run_id=run_id,
+        gf_version=gf_version,
+        token=token,
+        output_directory=output_directory,
+    ).summary
+
+
+def _compile_target_evidence(
+    run_config: RunConfig,
+    *,
+    source_path: Path,
+    relative: Path,
+    run_paths,
+    run_id: str,
+    gf_version: str,
+    token: CancellationToken,
+    output_directory: Path | None = None,
+) -> _CompileEvidence:
     module_name = source_path.stem
     key = _safe_stem(relative)
     stdout_path = run_paths.raw_compile_dir / f"{key}.out.txt"
     stderr_path = run_paths.raw_compile_dir / f"{key}.err.txt"
-    expected_object = run_paths.gfo_dir / f"{module_name}.gfo"
+    artifact_root = output_directory or run_paths.gfo_dir
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    expected_object = artifact_root / f"{module_name}.gfo"
     request = GfOperationRequest(
         operation_id=f"compile-{key}",
         project_id=validate_project_id(run_config.language_key),
@@ -420,7 +889,7 @@ def _compile_target(
         payload=ModuleCompilePayload(
             source_path=source_path,
             module_name=module_name,
-            output_directory=run_paths.gfo_dir,
+            output_directory=artifact_root,
             expected_object_path=expected_object,
         ),
         expected_artifacts=(
@@ -503,7 +972,7 @@ def _compile_target(
         first_error = "GF compilation ended in an unknown execution state"
         error_detail = str(state)
 
-    return CompileSummary(
+    summary = CompileSummary(
         target_id=relative.as_posix(),
         target_kind=CompileTargetKind.SOURCE,
         status=status,
@@ -523,6 +992,11 @@ def _compile_target(
         produced_artifacts=produced,
         artifact_checks_passed=artifacts_ok,
     )
+    primary_record = next(
+        (record for record in parse.records if record.record_id == parse.primary_record_id),
+        None,
+    )
+    return _CompileEvidence(summary=summary, primary_record=primary_record)
 
 
 def _fingerprint(path: Path) -> SourceFingerprint:
@@ -538,7 +1012,7 @@ def _fingerprint(path: Path) -> SourceFingerprint:
 
 def _write_scan_log(path: Path, *, source_path: Path, counts, findings, diagnostics) -> None:
     lines = [
-        "GF Wordbench Quick Static Scan",
+        "GF Wordbench Static Scan",
         f"source_path: {source_path}",
         "",
         "Counts",

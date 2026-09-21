@@ -504,6 +504,14 @@ class MainWindow(QMainWindow):
             f"Current GF Wordbench status: {self._status_label.text()}"
         )
 
+    def set_run_action_label(self, label: str) -> None:
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError("label must be non-empty")
+        text = label.strip()
+        self.run_action.setText(text)
+        self.run_button.setText(text)
+        self.run_button.setAccessibleName(text)
+
     def set_run_available(self, available: bool) -> None:
         if type(available) is not bool:
             raise TypeError("available must be bool")

@@ -248,6 +248,7 @@ def test_windows_launch_uses_shell_free_owned_process_group(
         return expected_handle
 
     monkeypatch.setattr(process_launcher, "_WINDOWS_NEW_PROCESS_GROUP", 512)
+    monkeypatch.setattr(process_launcher, "_WINDOWS_NO_WINDOW", 134_217_728)
     monkeypatch.setattr(subprocess, "Popen", fake_popen)
 
     result = process_launcher._launch_windows(
@@ -272,7 +273,7 @@ def test_windows_launch_uses_shell_free_owned_process_group(
             "close_fds": True,
             "bufsize": 0,
             "text": False,
-            "creationflags": 512,
+            "creationflags": 134_218_240,
         }
     ]
 
