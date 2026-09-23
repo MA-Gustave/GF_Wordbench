@@ -23,11 +23,11 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QSplitter,
     QStatusBar,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -49,10 +49,10 @@ _APP_NAME: Final[str] = "GF Wordbench"
 _READY_LABEL: Final[str] = "Ready"
 _RUNNING_LABEL: Final[str] = "Running"
 _CANCELLING_LABEL: Final[str] = "Cancelling"
-_MINIMUM_WIDTH: Final[int] = 960
-_MINIMUM_HEIGHT: Final[int] = 620
-_DEFAULT_WIDTH: Final[int] = 1220
-_DEFAULT_HEIGHT: Final[int] = 780
+_MINIMUM_WIDTH: Final[int] = 860
+_MINIMUM_HEIGHT: Final[int] = 560
+_DEFAULT_WIDTH: Final[int] = 1180
+_DEFAULT_HEIGHT: Final[int] = 760
 
 
 @unique
@@ -188,7 +188,7 @@ class MainWindow(QMainWindow):
             object_name="openProjectAction",
         )
         self.run_action = self._new_action(
-            "Run Validation",
+            "Run Scan",
             shortcut=QKeySequence("Ctrl+R"),
             object_name="runValidationAction",
         )
@@ -266,12 +266,12 @@ class MainWindow(QMainWindow):
         self._splitter.setChildrenCollapsible(False)
         self._splitter.addWidget(self._build_configuration_area())
         self._splitter.addWidget(self._build_results_area())
-        # Keep validation controls visible on ordinary laptop/desktop heights.
-        # The lower results workspace gets the larger share and the user can
-        # still resize both areas interactively.
-        self._splitter.setStretchFactor(0, 2)
-        self._splitter.setStretchFactor(1, 3)
-        self._splitter.setSizes([390, 450])
+        # The main page is a compact scan launcher above a large result area.
+        # Advanced controls may expand the upper pane, but the default layout
+        # deliberately preserves most vertical space for output.
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setSizes([250, 560])
         root.addWidget(self._splitter, 1)
 
         self.setCentralWidget(central)
@@ -331,28 +331,21 @@ class MainWindow(QMainWindow):
 
     def _build_configuration_area(self) -> QWidget:
         container = QWidget(self._splitter)
+        container.setObjectName("configurationArea")
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        scroll = QScrollArea(container)
-        scroll.setObjectName("configurationScrollArea")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-
-        content = QWidget(scroll)
-        content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(0, 0, 4, 0)
-        content_layout.setSpacing(6)
-
-        # Validation is the primary task surface.  Language context is
-        # secondary/reference information and is compact by default.
-        content_layout.addWidget(self._panels.validation)
-        content_layout.addWidget(self._panels.project)
-        content_layout.addStretch(1)
-        scroll.setWidget(content)
-        layout.addWidget(scroll, 1)
+        # Language selection and scan scope are primary workflow controls, not
+        # scrollable document content.  Keeping them directly in the splitter
+        # pane prevents native/overlay scrollbars from crossing group borders
+        # or occluding right-aligned controls on Windows and high-DPI displays.
+        # When either panel expands, the vertical splitter is the user-facing
+        # mechanism for granting the configuration pane more space.
+        layout.addWidget(self._panels.project)
+        layout.addWidget(self._panels.validation)
         layout.addWidget(self._build_action_bar())
+        layout.addStretch(1)
         return container
 
     def _build_action_bar(self) -> QWidget:
@@ -362,10 +355,10 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        self.run_button = QPushButton("Run Validation", bar)
+        self.run_button = QPushButton("Run Scan", bar)
         self.run_button.setObjectName("runValidationButton")
         self.run_button.setDefault(True)
-        self.run_button.setAccessibleName("Run validation")
+        self.run_button.setAccessibleName("Run scan")
 
         self.cancel_button = QPushButton("Cancel", bar)
         self.cancel_button.setObjectName("cancelRunButton")
@@ -380,21 +373,65 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.run_button)
         layout.addWidget(self.cancel_button)
         layout.addStretch(1)
-        layout.addWidget(self.open_last_run_button)
-        layout.addWidget(self.open_reports_button)
+
+        # Keep legacy controls alive for controller compatibility, but remove
+        # them from the primary workflow.  They remain available from View and
+        # from the advanced result/artifact surfaces.
+        self.open_last_run_button.setVisible(False)
+        self.open_reports_button.setVisible(False)
         return bar
 
     def _build_results_area(self) -> QWidget:
-        self._results_tabs = QTabWidget(self._splitter)
+        container = QWidget(self._splitter)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.addStretch(1)
+        self._advanced_views_toggle = QToolButton(container)
+        self._advanced_views_toggle.setObjectName("advancedViewsToggle")
+        self._advanced_views_toggle.setText("Advanced views")
+        self._advanced_views_toggle.setCheckable(True)
+        self._advanced_views_toggle.setChecked(False)
+        self._advanced_views_toggle.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        self._advanced_views_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self._advanced_views_toggle.toggled.connect(self._set_advanced_views_visible)
+        header.addWidget(self._advanced_views_toggle)
+        layout.addLayout(header)
+
+        self._results_tabs = QTabWidget(container)
         self._results_tabs.setObjectName("resultsTabs")
         self._results_tabs.setDocumentMode(True)
-        self._results_tabs.addTab(self._panels.progress, "Progress")
+        self._results_tabs.setTabBarAutoHide(True)
         self._results_tabs.addTab(self._panels.results, "Results")
+        self._results_tabs.addTab(self._panels.progress, "Activity")
         self._results_tabs.addTab(self._panels.diagnostics, "Diagnostics")
         self._results_tabs.addTab(self._panels.artifacts, "Artifacts")
         self._results_tabs.setCurrentWidget(self._panels.results)
-        self._results_tabs.setAccessibleName("Progress, results and artifacts")
-        return self._results_tabs
+        self._results_tabs.setAccessibleName("Results and advanced run details")
+        layout.addWidget(self._results_tabs, 1)
+        self._set_advanced_views_visible(False)
+        return container
+
+    def _set_advanced_views_visible(self, visible: bool) -> None:
+        advanced_visible = bool(visible)
+        running = self._run_state is not WindowRunState.READY
+        for panel in (self._panels.diagnostics, self._panels.artifacts):
+            index = self._results_tabs.indexOf(panel)
+            if index >= 0:
+                self._results_tabs.setTabVisible(index, advanced_visible)
+
+        progress_index = self._results_tabs.indexOf(self._panels.progress)
+        if progress_index >= 0:
+            self._results_tabs.setTabVisible(progress_index, advanced_visible or running)
+
+        self._advanced_views_toggle.setArrowType(
+            Qt.ArrowType.DownArrow if advanced_visible else Qt.ArrowType.RightArrow
+        )
 
     @staticmethod
     def _section(title: str, widget: QWidget) -> QGroupBox:
@@ -486,11 +523,13 @@ class MainWindow(QMainWindow):
 
         self.run_button.setEnabled(not running and self._run_available)
         self.cancel_button.setEnabled(running and not cancelling)
+        self.cancel_button.setVisible(running)
         self.cancel_button.setText("Cancelling…" if cancelling else "Cancel")
 
         self._panels.project.setEnabled(not running)
         self._panels.validation.setEnabled(not running)
 
+        self._set_advanced_views_visible(self._advanced_views_toggle.isChecked())
         if self._run_state is WindowRunState.RUNNING:
             self._results_tabs.setCurrentWidget(self._panels.progress)
 
@@ -546,6 +585,7 @@ class MainWindow(QMainWindow):
 
         self.set_run_state(WindowRunState.READY)
         self._results_tabs.setCurrentWidget(self._panels.results)
+        self._set_advanced_views_visible(self._advanced_views_toggle.isChecked())
         if self._close_after_run:
             self._allow_close = True
             self.close()

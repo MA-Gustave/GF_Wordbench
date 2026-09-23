@@ -994,8 +994,10 @@ def _first_attr(
     required: bool = True,
 ) -> object | None:
     for name in names:
-        if hasattr(value, name):
-            return object.__getattribute__(value, name)
+        try:
+            return getattr(value, name)
+        except AttributeError:
+            continue
     if required:
         raise SummaryProjectionError("required projection field is missing: " + " or ".join(names))
     return None

@@ -62,6 +62,22 @@ Release readiness is a compound decision.
 
 The release run must prove the state of the current project, current toolchain, current scenarios, current expectations, and current generated artifacts.
 
+### 1.1 Compendium evidence interpretation
+
+GF Wordbench treats compilation and linguistic validation as different evidence
+classes. A clean complete RGL census proves structural consistency of the
+selected source lock; it does **not** by itself prove linguistic correctness.
+
+Diagnostic Global Scan records a source-lock SHA-256 and a TEST_RGL evidence
+matrix. A compile-clean source lock may establish an evidence-derived state
+floor such as `S02_BASELINE_ESTABLISHED`, but linguistic certification remains
+`not_established` until the applicable morphology, constructor, interaction,
+parse/linearize, regression, and reviewed-golden evidence has actually run and
+passed. Unexecuted levels are `not_assessed`, never implicitly green.
+
+A release policy may consume this evidence, but MUST still require the explicit
+scenario/golden gates appropriate to the language.
+
 ---
 
 ## 2. Release decision
@@ -1912,3 +1928,13 @@ A release is not ready because a PGF file exists.
 A release is not ready because a maintainer intends to fix a known problem later.
 
 > GF Wordbench may declare `READY` only when every applicable required release gate is `OK` in the same current, traceable, evidence-complete release run.
+
+---
+
+## Reviewed linguistic evidence and release policy
+
+A release policy may consume hash-bound linguistic-review evidence produced by the backend described in `LINGUISTIC_REVIEW.md`. Such evidence must match the current source lock and exact normalized scenario-output hashes.
+
+AI-reviewed evidence may satisfy project-defined linguistic review gates when the project explicitly allows it. Reports must preserve the reviewer kind/name/model and must describe the result as AI-reviewed when the reviewer is an AI system. `questionable`, `invalid`, missing, or below-threshold reviews are not release-passing linguistic evidence and are never silently promoted to goldens.
+
+Gold promotion remains a separate explicit reviewed operation. Linguistic review does not set `confirmed` or `diff_reviewed` on behalf of the operator.

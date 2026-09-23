@@ -485,6 +485,51 @@ def validate_scenario_markers(
     )
 
 
+def evaluate_scenario_markers(spec: object, stdout_text: str) -> object:
+    """Adapt canonical marker validation to the scenario-service stage contract."""
+
+    from types import SimpleNamespace
+
+    expected = tuple(str(value) for value in getattr(spec, "expected_sections", ()))
+    evaluated = validate_scenario_markers(stdout_text, expected)
+    source_lines = stdout_text.splitlines(keepends=True)
+    sections = []
+    for section in evaluated.sections:
+        begin_line = getattr(section, "begin_line", None)
+        end_line = getattr(section, "end_line", None)
+        text = ""
+        if isinstance(begin_line, int) and isinstance(end_line, int) and end_line > begin_line:
+            text = "".join(source_lines[begin_line : end_line - 1])
+        sections.append(
+            SimpleNamespace(
+                section_id=str(section.id),
+                text=text,
+                source_evidence=(
+                    f"stdout lines {begin_line + 1}-{end_line - 1}"
+                    if isinstance(begin_line, int)
+                    and isinstance(end_line, int)
+                    and end_line > begin_line + 1
+                    else "stdout marked section"
+                ),
+                completed=bool(section.completed),
+                message=str(section.message),
+                begin_line=begin_line,
+                end_line=end_line,
+            )
+        )
+    failures = tuple(evaluated.failures)
+    message = (
+        failures[0].message
+        if failures
+        else "All required scenario markers completed."
+    )
+    return SimpleNamespace(
+        complete=bool(evaluated.complete and evaluated.valid),
+        sections=tuple(sections),
+        message=message,
+    )
+
+
 def _normalize_expected_sections(
     section_ids: Iterable[str],
 ) -> tuple[SectionId, ...]:
@@ -588,4 +633,5 @@ __all__ = (
     "parse_marker_events",
     "validate_marker_events",
     "validate_scenario_markers",
+    "evaluate_scenario_markers",
 )

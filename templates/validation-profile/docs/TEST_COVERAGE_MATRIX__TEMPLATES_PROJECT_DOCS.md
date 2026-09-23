@@ -11,6 +11,28 @@ It does not define language identity or source location.
 - `NORMAL`: standard development validation;
 - `RELEASE`: required release evidence.
 
+## Compendium TEST_RGL mapping
+
+Profiles intended for language certification should map their executable checks
+to the Compendium evidence ladder. Compilation alone does not satisfy the
+linguistic levels. Use `not_assessed` when the run did not execute the required
+evidence.
+
+| TEST_RGL level | Evidence class | Typical Wordbench evidence |
+|---|---|---|
+| `T0` | environment/source integrity | GF version, source lock, resolved paths |
+| `T1` | resource/prelude layer | targeted resource compile/scenario |
+| `T2` | morphology | morphology scenarios + reviewed goldens |
+| `T3` | paradigms | paradigm scenarios + reviewed goldens |
+| `T4` | basic constructors | constructor scenarios |
+| `T5` | feature interactions | cross-feature scenarios |
+| `T6` | questions/relatives | dedicated syntax scenarios |
+| `T7` | module composition | checkpoint/entrypoint compilation |
+| `T8` | aggregate language compile | complete RGL census compile |
+| `T9` | parse/linearize behavior | parse, linearize, round-trip scenarios |
+| `T10` | regression | reviewed regression treebank/goldens |
+| `T11` | release evidence | all applicable release gates and limitations |
+
 ## Matrix template
 
 | Coverage ID | Level | Requirement | Owner | Check | Expected evidence | Required |

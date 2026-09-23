@@ -16,6 +16,7 @@ from gf_wordbench.kernel.statuses import (
     ValidationStatus,
 )
 from gf_wordbench.reporting.details import writer
+from gf_wordbench.validation.compilation.models import CompileWarning, CompileWarningKind
 from gf_wordbench.reporting.details.writer import (
     DetailWritePolicy,
     file_detail_key,
@@ -88,6 +89,16 @@ class _Assertion:
 
 
 @dataclass(slots=True)
+class _Diagnostic:
+    kind: str
+    source: str
+    message: str
+    marker: str
+    line_number: int | None = None
+    is_failure: bool = True
+
+
+@dataclass(slots=True)
 class _ScenarioResult:
     scenario_id: str
     script_path: Path = Path("project/tests/scenarios/demo.gfs")
@@ -112,6 +123,7 @@ class _ScenarioResult:
     gold_match: bool | None = None
     gold_diff_path: Path | None = None
     artifacts: tuple[_Artifact, ...] = ()
+    diagnostics: tuple[_Diagnostic, ...] = ()
 
 
 @dataclass(slots=True)
@@ -304,6 +316,15 @@ def test_render_scenario_detail_records_markers_assertions_and_gold(
                 evidence_path=assertion_evidence,
             ),
         ),
+        diagnostics=(
+            _Diagnostic(
+                kind="gf_shell_error",
+                source="stderr",
+                line_number=7,
+                marker="constant not found:",
+                message="constant not found: C0351",
+            ),
+        ),
     )
 
     rendered = render_scenario_detail(
@@ -320,6 +341,11 @@ def test_render_scenario_detail_records_markers_assertions_and_gold(
     assert "| result | No | Yes | missing marker |" in rendered
     assert "Expected \\| value" in rendered
     assert "../../raw/scenarios/assertion.txt" in rendered
+    assert "## Observed Diagnostics" in rendered
+    assert (
+        r"| gf\_shell\_error | stderr | 7 | Yes | constant not found: | "
+        "constant not found: C0351 |"
+    ) in rendered
     assert "- State: `Mismatch`" in rendered
     assert "[gold](../../gold/parse.txt)" in rendered
     assert "parse%20output.txt" in rendered
@@ -516,3 +542,38 @@ def test_write_detail_reports_rejects_non_boolean_configuration(
 
     with pytest.raises(TypeError, match="RunConfig.keep_ok_details"):
         write_detail_reports(run_result)  # type: ignore[arg-type]
+
+
+def test_compiler_warning_summary_groups_structural_sites() -> None:
+    warnings = (
+        CompileWarning(
+            CompileWarningKind.STRUCTURAL_LOCK,
+            "missing lock field lock_VP",
+            source_path="ExtendSqi.gf",
+            source_line=10,
+            operation="demo",
+        ),
+        CompileWarning(
+            CompileWarningKind.STRUCTURAL_LOCK,
+            "missing lock field lock_VP",
+            source_path="ExtendSqi.gf",
+            source_line=10,
+            operation="demo",
+        ),
+        CompileWarning(
+            CompileWarningKind.NAMESPACE_CONFLICT,
+            "atomic term Prep",
+        ),
+    )
+    run_result = SimpleNamespace(
+        file_results=(SimpleNamespace(compile_summary=SimpleNamespace(compiler_warnings=warnings)),)
+    )
+
+    summary = writer._compiler_warning_summary(run_result)
+
+    assert summary["total"] == 3
+    assert summary["structural_lock"] == 2
+    assert summary["namespace_conflict"] == 1
+    assert summary["other"] == 0
+    assert summary["unique_structural_lock_sites"] == 1
+    assert summary["structural_lock_sites"][0]["occurrences"] == 2

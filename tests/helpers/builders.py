@@ -83,6 +83,7 @@ if TYPE_CHECKING:
     from gf_wordbench.validation.compilation.models import CompileSummary
     from gf_wordbench.validation.scenarios.models import (
         ScenarioAssertionResult,
+        ScenarioDiagnosticObservation,
         ScenarioResult,
         ScenarioSectionResult,
     )
@@ -658,6 +659,7 @@ def make_scenario_result(
     sections: Iterable[ScenarioSectionResult] = (),
     assertions: Iterable[ScenarioAssertionResult] = (),
     artifacts: Iterable[ArtifactObservation] = (),
+    diagnostics: Iterable[ScenarioDiagnosticObservation] = (),
     blocked_by: Iterable[str] = (),
 ) -> ScenarioResult:
     """Build one valid production scenario result."""
@@ -714,6 +716,7 @@ def make_scenario_result(
         "sections": tuple(sections),
         "assertions": tuple(assertions),
         "artifacts": tuple(artifacts),
+        "diagnostics": tuple(diagnostics),
         "blocked_by": blockers,
     }
     return cast("ScenarioResult", _construct_supported(model, candidates))

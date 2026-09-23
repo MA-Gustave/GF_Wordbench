@@ -700,6 +700,22 @@ def evaluate_assertions(
     return ScenarioAssertionEvaluator().evaluate_many(specs, context)
 
 
+def evaluate_scenario_assertions(
+    spec: object,
+    normalized_sections: tuple[object, ...],
+    *,
+    run_paths: object,
+) -> tuple[object, ...]:
+    """Adapt ScenarioSpec 1.0 to the assertion stage contract.
+
+    ScenarioSpec 1.0 does not carry assertion specifications; process, marker,
+    artifact and gold checks therefore remain the complete native contract.
+    """
+
+    del spec, normalized_sections, run_paths
+    return ()
+
+
 def aggregate_assertion_results(
     specs: Sequence[ScenarioAssertionSpec],
     results: Sequence[ScenarioAssertionResult],
@@ -1736,4 +1752,5 @@ __all__ = (
     "evaluate_assertion",
     "evaluate_assertion_results",
     "evaluate_assertions",
+    "evaluate_scenario_assertions",
 )

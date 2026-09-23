@@ -27,7 +27,7 @@ from gf_wordbench.kernel.errors import (
     EvidenceIOError,
     PathSecurityError,
 )
-from gf_wordbench.kernel.ids import ScenarioId, validate_scenario_id
+from gf_wordbench.kernel.ids import ScenarioId, validate_scenario_id, validate_section_id
 
 PathInput: TypeAlias = str | os.PathLike[str]
 
@@ -422,10 +422,20 @@ def write_normalized_scenario_output(
     destination = resolve_for_output(
         raw_directory / f"{scenario_safe_key(scenario_id)}{NORMALIZED_OUTPUT_SUFFIX}"
     )
-    require_within(destination, run_directory, role="normalized scenario output")
+    require_within(destination, run_directory, role="normalized scenario output", for_output=True)
 
-    lines: list[str] = []
+    scenario_id = validate_scenario_id(spec.scenario_id)
+    normalization_version = str(getattr(spec, "normalization_version", "1.0"))
+    payload_parts: list[str] = [
+        "# GF_WORDBENCH_OUTPUT 1.0\n",
+        f"# scenario_id: {scenario_id}\n",
+        f"# normalization_version: {normalization_version}\n",
+    ]
     for index, section in enumerate(normalized_sections):
+        section_id = getattr(section, "section_id", None)
+        if not isinstance(section_id, str):
+            section_id = str(section_id) if section_id is not None else ""
+        section_id = str(validate_section_id(section_id))
         text = getattr(
             section,
             "normalized_text",
@@ -435,11 +445,14 @@ def write_normalized_scenario_output(
             raise TypeError(f"normalized_sections[{index}] must expose normalized_text or text")
         if "\x00" in text:
             raise ValueError("normalized scenario output must not contain NUL")
-        lines.append(text.replace("\r\n", "\n").replace("\r", "\n"))
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        payload_parts.append(f"--- BEGIN {section_id} ---\n")
+        payload_parts.append(text)
+        if text and not text.endswith("\n"):
+            payload_parts.append("\n")
+        payload_parts.append(f"--- END {section_id} ---\n")
 
-    payload = "\n".join(lines)
-    if payload and not payload.endswith("\n"):
-        payload += "\n"
+    payload = "".join(payload_parts)
     atomic_write_text(
         destination,
         payload,

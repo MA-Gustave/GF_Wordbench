@@ -23,7 +23,9 @@ from gf_wordbench.kernel.statuses import (
 from gf_wordbench.runs.models.paths import RunPaths
 from gf_wordbench.validation.scenarios.models import (
     ScenarioAssertionResult,
+    ScenarioDiagnosticObservation,
     ScenarioResult,
+    ScenarioSectionResult,
     ScenarioSpec,
 )
 import gf_wordbench.validation.scenarios.service as service
@@ -131,12 +133,17 @@ class _ScenarioSectionRecord(_Record):
     pass
 
 
+class _ScenarioDiagnosticRecord(_Record):
+    pass
+
+
 class _ScenarioResultRecord(_Record):
     pass
 
 
 _FAKE_MODELS = SimpleNamespace(
     ScenarioSectionResult=_ScenarioSectionRecord,
+    ScenarioDiagnosticObservation=_ScenarioDiagnosticRecord,
     ScenarioResult=_ScenarioResultRecord,
 )
 
@@ -871,6 +878,176 @@ def test_completed_execution_honors_declared_exit_codes(
         assert result.error_kind is ErrorKind.SCRIPT
 
 
+def test_zero_exit_gf_shell_failure_is_structured_observable_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec, run_config, run_paths, harness, _, normalization = _ready_harness(
+        tmp_path,
+        monkeypatch,
+    )
+    harness.execution = replace(
+        harness.execution,
+        exit_code=0,
+        stderr_text="GF shell\nconstant not found: C0351\n",
+        stdout_text=(
+            "GF_WORDBENCH_BEGIN parse-basic\n"
+            "parse result\n"
+            "GF_WORDBENCH_END parse-basic\n"
+            "unknown qualified constant Demo.C9999\n"
+        ),
+    )
+    harness.assertions = ()
+    harness.gold = _Gold(None, None)
+    harness.artifacts = _Artifacts()
+    production_models = SimpleNamespace(
+        ScenarioSectionResult=ScenarioSectionResult,
+        ScenarioDiagnosticObservation=ScenarioDiagnosticObservation,
+        ScenarioResult=ScenarioResult,
+    )
+    _install_harness(
+        monkeypatch,
+        harness,
+        normalization,
+        models=production_models,
+    )
+
+    result = _call_run_scenario(spec, run_config, run_paths)
+
+    assert result.status is ValidationStatus.FAIL
+    assert result.execution_state is ExecutionState.COMPLETED
+    assert result.exit_code == 0
+    assert result.diagnostic_class is DiagnosticClass.DIRECT
+    assert result.error_kind is ErrorKind.SCRIPT
+    assert result.primary_message == (
+        "GF shell reported an execution error: constant not found: C0351"
+    )
+    assert normalization.calls == []
+    assert harness.calls == ["execute", "markers", "artifacts"]
+    assert result.diagnostics == (
+        ScenarioDiagnosticObservation(
+            kind="gf_shell_error",
+            source="stderr",
+            message="constant not found: C0351",
+            marker="constant not found:",
+            line_number=2,
+        ),
+        ScenarioDiagnosticObservation(
+            kind="gf_shell_error",
+            source="stdout",
+            message="unknown qualified constant Demo.C9999",
+            marker="unknown qualified constant",
+            line_number=4,
+        ),
+    )
+
+
+def _scenario_result_with_diagnostics(
+    tmp_path: Path,
+    *,
+    status: ValidationStatus,
+    exit_code: int | None,
+    diagnostics: tuple[ScenarioDiagnosticObservation, ...] = (),
+) -> ScenarioResult:
+    return ScenarioResult(
+        scenario_id="diagnostic-evidence",
+        script_path=Path("validation/scenarios/diagnostic-evidence.gfs"),
+        script_sha256="a" * 64,
+        required=True,
+        status=status,
+        execution_state=ExecutionState.COMPLETED,
+        command=("gf", "-run"),
+        working_directory=tmp_path.resolve(),
+        exit_code=exit_code,
+        timed_out=False,
+        cancelled=False,
+        duration_ms=1,
+        stdout_path=Path("raw/scenarios/diagnostic-evidence.stdout.txt"),
+        stderr_path=Path("raw/scenarios/diagnostic-evidence.stderr.txt"),
+        normalized_output_path=None,
+        gold_path=None,
+        gold_match=None,
+        gold_diff_path=None,
+        diagnostic_class=(
+            DiagnosticClass.OK if status is ValidationStatus.OK else DiagnosticClass.DIRECT
+        ),
+        error_kind=(ErrorKind.OK if status is ValidationStatus.OK else ErrorKind.SCRIPT),
+        primary_message=(
+            "Scenario completed successfully."
+            if status is ValidationStatus.OK
+            else "GF shell reported an execution error."
+        ),
+        sections=(),
+        assertions=(),
+        artifacts=(),
+        diagnostics=diagnostics,
+    )
+
+
+def _shell_failure_observation() -> ScenarioDiagnosticObservation:
+    return ScenarioDiagnosticObservation(
+        kind="gf_shell_error",
+        source="stderr",
+        message="constant not found: C0351",
+        marker="constant not found:",
+        line_number=2,
+    )
+
+
+def test_failure_diagnostic_is_valid_observable_failure_with_zero_exit(
+    tmp_path: Path,
+) -> None:
+    result = _scenario_result_with_diagnostics(
+        tmp_path,
+        status=ValidationStatus.FAIL,
+        exit_code=0,
+        diagnostics=(_shell_failure_observation(),),
+    )
+
+    assert result.exit_code == 0
+    assert result.status is ValidationStatus.FAIL
+    assert result.diagnostics[0].is_failure is True
+
+
+def test_fail_without_any_observable_failure_is_still_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="observable validation failure"):
+        _scenario_result_with_diagnostics(
+            tmp_path,
+            status=ValidationStatus.FAIL,
+            exit_code=0,
+        )
+
+
+def test_ok_result_rejects_failure_diagnostic(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="cannot contain failure diagnostics"):
+        _scenario_result_with_diagnostics(
+            tmp_path,
+            status=ValidationStatus.OK,
+            exit_code=0,
+            diagnostics=(_shell_failure_observation(),),
+        )
+
+
+def test_diagnostic_observation_normalizes_and_validates_source() -> None:
+    observation = ScenarioDiagnosticObservation(
+        kind="gf_shell_error",
+        source=" STDERR ",
+        message="constant not found: C0351",
+        marker="constant not found:",
+        line_number=4,
+    )
+
+    assert observation.source == "stderr"
+
+    with pytest.raises(ValueError, match="source must be stdout or stderr"):
+        ScenarioDiagnosticObservation(
+            kind="gf_shell_error",
+            source="log",
+            message="bad",
+            marker="bad",
+        )
+
+
 @pytest.mark.parametrize(
     ("assertion", "status", "diagnostic_class"),
     [
@@ -1231,6 +1408,7 @@ def test_result_construction_failure_preserves_subject_and_evidence(
 
     models = SimpleNamespace(
         ScenarioSectionResult=_ScenarioSectionRecord,
+        ScenarioDiagnosticObservation=_ScenarioDiagnosticRecord,
         ScenarioResult=BrokenResult,
     )
     _install_harness(

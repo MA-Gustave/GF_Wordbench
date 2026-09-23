@@ -29,7 +29,11 @@ from gf_wordbench.projects.languages.models import (
     SelectedPathKind,
 )
 from gf_wordbench.runs import application
-from gf_wordbench.validation.compilation.models import CompileSummary, CompileTargetKind
+from gf_wordbench.validation.compilation.models import (
+    CompileSummary,
+    CompileTargetKind,
+    CompileWarningKind,
+)
 
 
 def _context(tmp_path: Path) -> ResolvedLanguageContext:
@@ -440,6 +444,13 @@ def test_diagnostic_global_scan_continues_after_failures_and_writes_inventory(
     assert csv_path.is_file()
     inventory = json.loads(json_path.read_text(encoding="utf-8"))
     assert inventory["schema"] == "gf-wordbench-global-scan-v1"
+    assert inventory["source_lock"]["file_count"] == 3
+    assert len(inventory["source_lock"]["aggregate_sha256"]) == 64
+    assert inventory["compendium_certification"]["protocol"] == "TEST_RGL"
+    assert inventory["compendium_certification"]["linguistic_certification"] == "not_established"
+    assert (result.run_paths.details_dir / "source_lock.json").is_file()
+    assert (result.run_paths.details_dir / "rgl_coverage.json").is_file()
+    assert (result.run_paths.details_dir / "compendium_matrix.json").is_file()
     rows = {row["module"]: row for row in inventory["files"]}
     assert rows["AlphaSqi"]["status"] == "FAIL"
     assert rows["BetaSqi"]["status"] == "BLOCKED"
@@ -547,3 +558,257 @@ def test_diagnostic_global_scan_converts_file_compile_exception_and_continues(
     assert result.totals.files_error == 1
     assert result.totals.files_ok == 2
 
+
+
+def test_diagnostic_global_scan_expands_same_suffix_rgl_facades(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rgl_root = tmp_path / "gf-rgl"
+    rgl_source_root = rgl_root / "src"
+    language_directory = rgl_source_root / "albanian"
+    language_directory.mkdir(parents=True)
+    for name in ("abstract", "common", "prelude", "api"):
+        (rgl_source_root / name).mkdir(parents=True, exist_ok=True)
+
+    language_sources = []
+    for module in ("AlphaSqi", "BetaSqi"):
+        source = language_directory / f"{module}.gf"
+        source.write_text(f"abstract {module} = {{ cat S ; }}\n", encoding="utf-8")
+        language_sources.append(source)
+    facade_names = ("ConstructorsSqi", "SymbolicSqi", "SyntaxSqi", "TrySqi")
+    for module in facade_names:
+        (rgl_source_root / f"{module}.gf").write_text(
+            f"abstract {module} = {{ cat S ; }}\n",
+            encoding="utf-8",
+        )
+    # A different suffix at the RGL root must never leak into the census.
+    (rgl_source_root / "SyntaxEng.gf").write_text(
+        "abstract SyntaxEng = { cat S ; }\n",
+        encoding="utf-8",
+    )
+
+    context = ResolvedLanguageContext(
+        language_key="albanian",
+        selected_path=language_directory,
+        selected_path_kind=SelectedPathKind.DIRECTORY,
+        language_directory=language_directory,
+        rgl_source_root=rgl_source_root,
+        rgl_root=rgl_root,
+        focused_target=None,
+        module_suffix="Sqi",
+        available_entrypoints=(),
+        source_inventory=tuple(language_sources),
+        gf_path_requirements=(
+            language_directory,
+            rgl_source_root,
+            rgl_source_root / "abstract",
+            rgl_source_root / "common",
+            rgl_source_root / "prelude",
+            rgl_source_root / "api",
+        ),
+        capability_statuses=(
+            LanguageCapabilityStatus(
+                LanguageCapability.SOURCE_READY,
+                CapabilityAvailability.AVAILABLE,
+            ),
+            LanguageCapabilityStatus(
+                LanguageCapability.SCAN_READY,
+                CapabilityAvailability.AVAILABLE,
+            ),
+        ),
+    )
+    executable = tmp_path / "bin" / "gf.exe"
+    executable.parent.mkdir()
+    executable.write_bytes(b"fixture")
+    executable.chmod(0o755)
+    run_config = resolve_configuration(
+        ConfigurationResolutionRequest(
+            defaults=build_framework_defaults(),
+            language_context=context,
+            source_values={
+                ConfigurationSource.GUI: {
+                    "gf_executable": executable,
+                    "rgl_root": context.rgl_root,
+                    "output_root": tmp_path / "runs",
+                    "mode": ValidationMode.DIAGNOSTIC,
+                    "target": ValidationTarget(TargetKind.PROJECT, None),
+                    "timeout_sec": 60,
+                    "max_files": 0,
+                    "keep_ok_details": True,
+                    "diff_previous": False,
+                    "skip_version_probe": False,
+                    "no_compile": False,
+                    "emit_cpu_stats": False,
+                }
+            },
+        )
+    ).require()
+    monkeypatch.setattr(application, "_probe_version", lambda *args, **kwargs: "3.12")
+    compiled: list[str] = []
+
+    def compile_target(
+        run_config,
+        *,
+        source_path,
+        relative,
+        run_paths,
+        run_id,
+        gf_version,
+        token,
+        output_directory=None,
+    ):
+        del run_config, relative, run_id, gf_version, token
+        assert output_directory is not None
+        compiled.append(source_path.stem)
+        return application._CompileEvidence(
+            summary=_diagnostic_summary(
+                source_path=source_path,
+                run_paths=run_paths,
+                output_directory=output_directory,
+                status=ValidationStatus.OK,
+            ),
+            primary_record=None,
+        )
+
+    monkeypatch.setattr(application, "_compile_target_evidence", compile_target)
+    result = application.execute_diagnostic_run(
+        run_config,
+        lambda _event: None,
+        lambda: None,
+        run_id="20260921_140003",
+    )
+
+    assert len(compiled) == 6
+    assert set(compiled) == {"AlphaSqi", "BetaSqi", *facade_names}
+    assert result.totals.files_seen == 6
+    inventory = json.loads(
+        (result.run_paths.details_dir / "global_scan.json").read_text(encoding="utf-8")
+    )
+    assert inventory["rgl_census"]["scope"] == "rgl_language_plus_api_facades"
+    assert inventory["rgl_census"]["language_files"] == 2
+    assert inventory["rgl_census"]["api_facade_files"] == 4
+    assert inventory["rgl_census"]["total_files"] == 6
+    assert inventory["rgl_census"]["api_facade_modules"] == sorted(facade_names)
+    assert inventory["compendium_certification"]["structural_compile_gate"] == "pass"
+    assert inventory["compendium_certification"]["state_floor"] == "S02_BASELINE_ESTABLISHED"
+
+
+def test_external_global_scan_expands_five_standard_api_facades(tmp_path: Path) -> None:
+    context = _diagnostic_context(tmp_path)
+    facade_root = context.language_directory.parent
+    facade_names = (
+        "CombinatorsSqi",
+        "ConstructorsSqi",
+        "SymbolicSqi",
+        "SyntaxSqi",
+        "TrySqi",
+    )
+    for module in facade_names:
+        (facade_root / f"{module}.gf").write_text(
+            f"abstract {module} = {{ cat S ; }}\n",
+            encoding="utf-8",
+        )
+
+    inventory, census_root = application._expand_rgl_global_census(
+        context,
+        inventory=tuple(context.source_inventory),
+        language_root=context.language_directory,
+    )
+
+    assert census_root == facade_root.resolve(strict=True)
+    assert len(inventory) == len(context.source_inventory) + 5
+    assert {path.stem for path in inventory}.issuperset(facade_names)
+
+
+def test_gf_warning_parser_classifies_lock_and_namespace_warning() -> None:
+    stderr = """\
+VerbSqi.gf:
+  VerbSqi.gf:106:
+    Happened in operation ComplSlash
+     Warning: missing lock field lock_NP
+
+Warning: atomic term Prep
+         conflict ResSqi.Prep, CatSqi.Prep
+         given something
+"""
+
+    warnings = application._extract_gf_compiler_warnings(stderr)
+
+    assert len(warnings) == 2
+    structural, namespace = warnings
+    assert structural.kind is CompileWarningKind.STRUCTURAL_LOCK
+    assert structural.message == "missing lock field lock_NP"
+    assert structural.source_path == "VerbSqi.gf"
+    assert structural.source_line == 106
+    assert structural.operation == "ComplSlash"
+    assert namespace.kind is CompileWarningKind.NAMESPACE_CONFLICT
+    assert namespace.message == "atomic term Prep"
+
+
+def test_external_global_scan_reports_complete_five_facade_census(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_config = _diagnostic_run_config(tmp_path)
+    context = run_config.language_context
+    assert context is not None
+    facade_root = context.language_directory.parent
+    facade_names = (
+        "CombinatorsSqi",
+        "ConstructorsSqi",
+        "SymbolicSqi",
+        "SyntaxSqi",
+        "TrySqi",
+    )
+    for module in facade_names:
+        (facade_root / f"{module}.gf").write_text(
+            f"abstract {module} = {{ cat S ; }}\n",
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(application, "_probe_version", lambda *args, **kwargs: "3.12")
+
+    def compile_target(
+        run_config,
+        *,
+        source_path,
+        relative,
+        run_paths,
+        run_id,
+        gf_version,
+        token,
+        output_directory=None,
+    ):
+        del run_config, relative, run_id, gf_version, token
+        assert output_directory is not None
+        return application._CompileEvidence(
+            summary=_diagnostic_summary(
+                source_path=source_path,
+                run_paths=run_paths,
+                output_directory=output_directory,
+                status=ValidationStatus.OK,
+            ),
+            primary_record=None,
+        )
+
+    monkeypatch.setattr(application, "_compile_target_evidence", compile_target)
+    result = application.execute_diagnostic_run(
+        run_config,
+        lambda _event: None,
+        lambda: None,
+        run_id="20260922_180000",
+    )
+
+    assert result.totals.files_included == 8
+    inventory = json.loads(
+        (result.run_paths.details_dir / "global_scan.json").read_text(encoding="utf-8")
+    )
+    census = inventory["rgl_census"]
+    assert census["language_files"] == 3
+    assert census["api_facade_files"] == 5
+    assert census["expected_api_facade_files"] == 5
+    assert census["complete_compile_census"] is True
+    assert census["api_facade_modules"] == sorted(facade_names)
+    assert inventory["compendium_test_matrix"]["highest_evidenced_level"] == "T8"
+    assert inventory["compendium_certification"]["structural_compile_gate"] == "pass"

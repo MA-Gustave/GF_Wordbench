@@ -21,6 +21,7 @@ from gf_wordbench.kernel.statuses import (
     ErrorKind,
     ValidationStatus,
 )
+from gf_wordbench.validation.compilation.models import CompileWarningKind
 
 if TYPE_CHECKING:
     from gf_wordbench.runs.models.results import FileResult, RunResult
@@ -38,6 +39,10 @@ _RESERVED: Final[frozenset[str]] = frozenset(
 
 _GLOBAL_SCAN_CSV: Final[str] = "global_scan.csv"
 _GLOBAL_SCAN_JSON: Final[str] = "global_scan.json"
+_STANDARD_API_FACADE_PREFIXES: Final[tuple[str, ...]] = ("Combinators", "Constructors", "Symbolic", "Syntax", "Try")
+_SOURCE_LOCK_JSON: Final[str] = "source_lock.json"
+_RGL_COVERAGE_JSON: Final[str] = "rgl_coverage.json"
+_COMPENDIUM_MATRIX_JSON: Final[str] = "compendium_matrix.json"
 _GLOBAL_SIGNATURE_RULES: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     ("GENERATE_PMCFG", re.compile(r"generate\s*pmcfg|pmcfg", re.IGNORECASE)),
     ("MISSING_LIN", re.compile(r"missing\s+linearization|no\s+linearization", re.IGNORECASE)),
@@ -311,6 +316,10 @@ def render_scenario_detail(
     lines += _blockers(getattr(scenario_result, "blocked_by", ()))
     lines += _sections(getattr(scenario_result, "sections", ()), effective)
     lines += _assertions(getattr(scenario_result, "assertions", ()), report, root, effective)
+    lines += _scenario_diagnostics(
+        getattr(scenario_result, "diagnostics", ()),
+        effective,
+    )
     lines += _gold_section(scenario_result, report, root)
     lines += _evidence_section(
         (
@@ -437,6 +446,50 @@ def _assertions(
                         or "—"
                     ),
                     _path_ref("evidence", _attr(item, "evidence_path", default=None), report, root),
+                )
+            )
+            + " |"
+        )
+    return lines + [""] + _notice(len(shown), len(values))
+
+
+def _scenario_diagnostics(
+    items: Iterable[object],
+    policy: DetailWritePolicy,
+) -> list[str]:
+    values = tuple(items)
+    if not values:
+        return ["## Observed Diagnostics", "", "None.", ""]
+    shown = values[: policy.max_rows]
+    lines = [
+        "## Observed Diagnostics",
+        "",
+        "| Kind | Source | Line | Failure | Marker | Message |",
+        "|---|---|---:|:---:|---|---|",
+    ]
+    for item in shown:
+        lines.append(
+            "| "
+            + " | ".join(
+                (
+                    _cell(_text(_attr(item, "kind", default="")) or "—"),
+                    _cell(_text(_attr(item, "source", default="")) or "—"),
+                    _cell(_text(_attr(item, "line_number", default=None)) or "—"),
+                    _cell(_yes_no(bool(_attr(item, "is_failure", default=False)))),
+                    _cell(
+                        _bounded(
+                            _text(_attr(item, "marker", default="")),
+                            policy.max_text_characters,
+                        )
+                        or "—"
+                    ),
+                    _cell(
+                        _bounded(
+                            _text(_attr(item, "message", default="")),
+                            policy.max_text_characters,
+                        )
+                        or "—"
+                    ),
                 )
             )
             + " |"
@@ -774,12 +827,37 @@ def write_global_scan_reports(run_result: RunResult) -> tuple[Path, Path]:
     ]
 
     json_path = details_root / _GLOBAL_SCAN_JSON
+    census = _rgl_census_summary(run_result)
+    source_lock = _source_lock_document(run_result)
+    coverage = _rgl_coverage_document(run_result, census=census)
+    warning_summary = _compiler_warning_summary(run_result)
+    test_matrix = _compendium_test_matrix_document(run_result, census=census)
+    certification = _compendium_certification_summary(
+        run_result, source_lock=source_lock, census=census
+    )
     document: JsonObject = {
         "schema": "gf-wordbench-global-scan-v1",
         "run_id": str(run_result.run_paths.run_id),
         "mode": run_result.run_config.mode.value,
         "gf_version": run_result.gf_version,
         "overall_status": run_result.overall_status.value,
+        "rgl_census": census,
+        "source_lock": {
+            "schema": source_lock["schema"],
+            "aggregate_sha256": source_lock["aggregate_sha256"],
+            "file_count": source_lock["file_count"],
+        },
+        "rgl_coverage": {
+            "schema": coverage["schema"],
+            "status": coverage["status"],
+            "function_coverage": coverage["function_coverage"],
+        },
+        "compendium_test_matrix": {
+            "schema": test_matrix["schema"],
+            "highest_evidenced_level": test_matrix["highest_evidenced_level"],
+        },
+        "compendium_certification": certification,
+        "compiler_warnings": warning_summary,
         "totals": {
             "files_seen": run_result.totals.files_seen,
             "files_included": run_result.totals.files_included,
@@ -796,6 +874,9 @@ def write_global_scan_reports(run_result: RunResult) -> tuple[Path, Path]:
         "files": rows,
     }
     write_json(json_path, document)
+    write_json(details_root / _SOURCE_LOCK_JSON, source_lock)
+    write_json(details_root / _RGL_COVERAGE_JSON, coverage)
+    write_json(details_root / _COMPENDIUM_MATRIX_JSON, test_matrix)
 
     csv_path = details_root / _GLOBAL_SCAN_CSV
     stream = StringIO(newline="")
@@ -811,6 +892,10 @@ def write_global_scan_reports(run_result: RunResult) -> tuple[Path, Path]:
         "gfo_produced",
         "blocked_by",
         "first_error",
+        "compiler_warnings",
+        "structural_lock_warnings",
+        "namespace_conflict_warnings",
+        "other_warnings",
         "stdout",
         "stderr",
         "scan_log",
@@ -831,8 +916,299 @@ def write_global_scan_reports(run_result: RunResult) -> tuple[Path, Path]:
     return json_path, csv_path
 
 
+
+def _rgl_census_summary(run_result: RunResult) -> JsonObject:
+    context = run_result.run_config.language_context
+    if context is None:
+        return {
+            "scope": "unavailable",
+            "module_suffix": None,
+            "language_files": run_result.totals.files_included,
+            "api_facade_files": 0,
+            "api_facade_modules": [],
+            "total_files": run_result.totals.files_included,
+            "complete_compile_census": False,
+        }
+
+    language_root = context.language_directory.resolve(strict=False)
+    rgl_source_root = context.rgl_source_root.resolve(strict=False)
+    facade_root = (
+        rgl_source_root
+        if language_root.parent == rgl_source_root
+        else language_root.parent
+    )
+    suffix = context.module_suffix or ""
+    expected_facade_names = {
+        f"{prefix}{suffix}.gf"
+        for prefix in _STANDARD_API_FACADE_PREFIXES
+        if suffix and (facade_root / f"{prefix}{suffix}.gf").is_file()
+    }
+    language_files = 0
+    facade_files = 0
+    facade_modules: list[str] = []
+    for result in run_result.file_results:
+        path = result.file_path.resolve(strict=False)
+        if _path_is_within(path, language_root):
+            language_files += 1
+        elif path.parent == facade_root and path.name in expected_facade_names:
+            facade_files += 1
+            facade_modules.append(result.module_name)
+
+    expanded = facade_files > 0
+    return {
+        "scope": "rgl_language_plus_api_facades" if expanded else "language_directory",
+        "module_suffix": context.module_suffix,
+        "language_files": language_files,
+        "api_facade_files": facade_files,
+        "api_facade_modules": sorted(facade_modules),
+        "expected_api_facade_files": len(expected_facade_names),
+        "expected_api_facade_modules": sorted(Path(name).stem for name in expected_facade_names),
+        "total_files": run_result.totals.files_included,
+        "complete_compile_census": (
+            run_result.totals.files_included > 0
+            and run_result.totals.files_fail == 0
+            and run_result.totals.files_error == 0
+            and run_result.totals.files_skipped == 0
+            and facade_files == len(expected_facade_names)
+        ),
+    }
+
+
+def _compiler_warning_summary(run_result: RunResult) -> JsonObject:
+    total = 0
+    structural = 0
+    namespace = 0
+    other = 0
+    sites: dict[tuple[str, int | None, str, str], int] = {}
+    for result in run_result.file_results:
+        warnings = tuple(getattr(result.compile_summary, "compiler_warnings", ()))
+        for warning in warnings:
+            total += 1
+            if warning.kind is CompileWarningKind.STRUCTURAL_LOCK:
+                structural += 1
+                key = (
+                    warning.source_path,
+                    warning.source_line,
+                    warning.operation,
+                    warning.message,
+                )
+                sites[key] = sites.get(key, 0) + 1
+            elif warning.kind is CompileWarningKind.NAMESPACE_CONFLICT:
+                namespace += 1
+            else:
+                other += 1
+
+    unique_sites: list[JsonObject] = []
+    for (source_path, source_line, operation, message), occurrences in sorted(
+        sites.items(),
+        key=lambda item: (item[0][0].casefold(), item[0][1] or 0, item[0][2].casefold(), item[0][3]),
+    ):
+        unique_sites.append(
+            {
+                "source": source_path,
+                "line": source_line,
+                "operation": operation,
+                "message": message,
+                "occurrences": occurrences,
+            }
+        )
+    return {
+        "total": total,
+        "structural_lock": structural,
+        "namespace_conflict": namespace,
+        "other": other,
+        "unique_structural_lock_sites": len(unique_sites),
+        "structural_lock_sites": unique_sites,
+    }
+
+
+def _source_lock_document(run_result: RunResult) -> JsonObject:
+    entries: list[JsonObject] = []
+    aggregate = hashlib.sha256()
+    aggregate.update(b"gf-wordbench-source-lock-v1\0")
+    for result in sorted(
+        run_result.file_results,
+        key=lambda item: item.file_path.as_posix().casefold(),
+    ):
+        source = _portable_source_path(run_result, result.file_path)
+        digest = result.fingerprint.hash
+        size = result.fingerprint.size_bytes
+        aggregate.update(source.encode("utf-8"))
+        aggregate.update(b"\0")
+        aggregate.update(digest.encode("ascii"))
+        aggregate.update(b"\0")
+        aggregate.update(str(size).encode("ascii"))
+        aggregate.update(b"\n")
+        entries.append(
+            {
+                "source": source,
+                "sha256": digest,
+                "size_bytes": size,
+            }
+        )
+    return {
+        "schema": "gf-wordbench-source-lock-v1",
+        "algorithm": "sha256",
+        "aggregate_sha256": aggregate.hexdigest(),
+        "file_count": len(entries),
+        "gf_version": run_result.gf_version,
+        "files": entries,
+    }
+
+
+
+def _rgl_coverage_document(
+    run_result: RunResult,
+    *,
+    census: JsonObject,
+) -> JsonObject:
+    modules = sorted(result.module_name for result in run_result.file_results)
+    entrypoints = [
+        name for name in modules if name.startswith(("Lang", "Grammar", "All"))
+    ]
+    resources = [
+        name for name in modules if name.startswith(("Res", "Morpho", "Paradigms"))
+    ]
+    extensions = [
+        name for name in modules if name.startswith(("Extend", "Extra"))
+    ]
+    scan_findings = sum(result.scan_counts.total for result in run_result.file_results)
+    compile_complete = bool(census.get("complete_compile_census", False))
+    return {
+        "schema": "gf-wordbench-rgl-coverage-v1",
+        "status": "structural_complete" if compile_complete else "structural_incomplete",
+        "scope": "module_level",
+        "module_suffix": census.get("module_suffix"),
+        "modules_seen": modules,
+        "entrypoint_modules": entrypoints,
+        "resource_modules": resources,
+        "extension_modules": extensions,
+        "api_facade_modules": census.get("api_facade_modules", []),
+        "compile_coverage": {
+            "included": run_result.totals.files_included,
+            "passed": run_result.totals.files_ok,
+            "failed": run_result.totals.files_fail,
+            "errored": run_result.totals.files_error,
+            "skipped": run_result.totals.files_skipped,
+        },
+        "static_findings": scan_findings,
+        "compiler_warnings": _compiler_warning_summary(run_result),
+        "function_coverage": {
+            "status": "not_assessed",
+            "reason": (
+                "Authoritative local/inherited/missing function coverage requires GF "
+                "abstract/concrete introspection; static filename matching is not used "
+                "as a substitute."
+            ),
+        },
+    }
+
+
+def _compendium_test_matrix_document(
+    run_result: RunResult,
+    *,
+    census: JsonObject,
+) -> JsonObject:
+    totals = run_result.totals
+    compile_pass = (
+        bool(census.get("complete_compile_census", False))
+        and totals.files_included > 0
+        and totals.files_fail == 0
+        and totals.files_error == 0
+        and totals.files_skipped == 0
+    )
+    t0 = "pass" if run_result.gf_version and totals.files_included > 0 else "blocked"
+    t8 = "pass" if compile_pass else "fail"
+    levels: list[JsonObject] = [
+        {"level": "T0", "name": "environment_and_source_integrity", "status": t0},
+        {"level": "T1", "name": "resource_and_parameter_tests", "status": "not_assessed"},
+        {"level": "T2", "name": "morphology_tests", "status": "not_assessed"},
+        {"level": "T3", "name": "public_paradigm_tests", "status": "not_assessed"},
+        {"level": "T4", "name": "category_construction", "status": "not_assessed"},
+        {"level": "T5", "name": "abstract_constructor_tests", "status": "not_assessed"},
+        {"level": "T6", "name": "feature_interactions", "status": "not_assessed"},
+        {"level": "T7", "name": "syntax_module_tests", "status": "not_assessed"},
+        {"level": "T8", "name": "aggregate_language_compile", "status": t8},
+        {"level": "T9", "name": "parse_and_generation_behavior", "status": "not_assessed"},
+        {"level": "T10", "name": "regression_validation", "status": "not_assessed"},
+        {"level": "T11", "name": "family_and_release_checks", "status": "not_assessed"},
+    ]
+    highest = "T8" if compile_pass else ("T0" if t0 == "pass" else "none")
+    return {
+        "schema": "gf-wordbench-compendium-test-matrix-v1",
+        "protocol": "TEST_RGL",
+        "highest_evidenced_level": highest,
+        "levels": levels,
+        "note": (
+            "Levels are evidence-derived. A passing aggregate compile does not mark "
+            "unexecuted morphology, interaction, parse, generation, or regression levels as passed."
+        ),
+    }
+
+def _compendium_certification_summary(
+    run_result: RunResult,
+    *,
+    source_lock: JsonObject,
+    census: JsonObject,
+) -> JsonObject:
+    totals = run_result.totals
+    compile_gate = (
+        bool(census.get("complete_compile_census", False))
+        and totals.files_included > 0
+        and totals.files_fail == 0
+        and totals.files_error == 0
+        and totals.files_skipped == 0
+    )
+    scenarios_present = totals.scenarios_seen > 0
+    source_locked = bool(source_lock.get("aggregate_sha256"))
+
+    if compile_gate and source_locked:
+        state_floor = "S02_BASELINE_ESTABLISHED"
+    elif source_locked:
+        state_floor = "S01_SOURCE_LOCKED"
+    else:
+        state_floor = "S00_UNASSESSED"
+
+    return {
+        "protocol": "TEST_RGL",
+        "state_floor": state_floor,
+        "source_lock": "pass" if source_locked else "not_established",
+        "structural_compile_gate": "pass" if compile_gate else "fail",
+        "linguistic_test_gate": "assessed" if scenarios_present else "not_assessed",
+        "linguistic_certification": "not_established",
+        "note": (
+            "Compilation proves structural consistency only; linguistic correctness "
+            "requires reviewed scenario/golden evidence."
+        ),
+    }
+
+
+def _portable_source_path(run_result: RunResult, path: Path) -> str:
+    context = run_result.run_config.language_context
+    resolved = path.resolve(strict=False)
+    if context is not None:
+        roots = (context.rgl_source_root, context.language_directory.parent, context.language_directory)
+        for root in roots:
+            try:
+                return resolved.relative_to(root.resolve(strict=False)).as_posix()
+            except ValueError:
+                pass
+    return resolved.as_posix()
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
 def _global_scan_row(result: FileResult, *, run_root: Path) -> dict[str, JsonValue]:
     summary = result.compile_summary
+    warnings = tuple(getattr(summary, "compiler_warnings", ()))
+    structural = sum(1 for item in warnings if item.kind is CompileWarningKind.STRUCTURAL_LOCK)
+    namespace = sum(1 for item in warnings if item.kind is CompileWarningKind.NAMESPACE_CONFLICT)
+    other = len(warnings) - structural - namespace
     return {
         "status": _global_display_status(result),
         "validation_status": result.status.value,
@@ -846,6 +1222,10 @@ def _global_scan_row(result: FileResult, *, run_root: Path) -> dict[str, JsonVal
         "gfo_produced": bool(summary.produced_artifacts),
         "blocked_by": list(result.blocked_by),
         "first_error": summary.first_error,
+        "compiler_warnings": len(warnings),
+        "structural_lock_warnings": structural,
+        "namespace_conflict_warnings": namespace,
+        "other_warnings": other,
         "stdout": _global_relative(summary.stdout_path, run_root),
         "stderr": _global_relative(summary.stderr_path, run_root),
         "scan_log": _global_relative(result.scan_log_path, run_root),

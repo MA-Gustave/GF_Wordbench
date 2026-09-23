@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QRadioButton,
     QSizePolicy,
     QSpinBox,
     QToolButton,
@@ -540,6 +541,8 @@ class ValidationPanel(QWidget):
             field="target_file",
         )
         self._set_editable_combo_text(self.target_combo, checked)
+        if self.mode() is ValidationMode.DIAGNOSTIC:
+            self._apply_mode(ValidationMode.DIAGNOSTIC)
         self._on_values_changed()
 
     def set_checkpoint_id(self, checkpoint_id: str | None) -> None:
@@ -617,24 +620,33 @@ class ValidationPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(6)
 
-        form_group = QGroupBox("Validation", self)
-        form_group.setObjectName("validationSelectionGroup")
-        form_layout = QFormLayout(form_group)
-        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        # The everyday workflow is intentionally small: choose the scan scope,
+        # choose a target only when needed, and run.  Validation modes and all
+        # policy-heavy controls remain available behind Advanced.
+        scan_group = QGroupBox("Scan", self)
+        scan_group.setObjectName("validationSelectionGroup")
+        scan_layout = QFormLayout(scan_group)
+        scan_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        scan_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        self.mode_combo = QComboBox(form_group)
-        self.mode_combo.setObjectName("validationModeCombo")
-        self.mode_combo.setAccessibleName("Validation mode")
-        for mode in ValidationMode:
-            self.mode_combo.addItem(
-                _MODE_LABELS[mode],
-                mode.value,
-            )
-        form_layout.addRow("Mode", self.mode_combo)
+        scope_row = QWidget(scan_group)
+        scope_layout = QHBoxLayout(scope_row)
+        scope_layout.setContentsMargins(0, 0, 0, 0)
+        scope_layout.setSpacing(16)
+        self.scope_all_radio = QRadioButton("Entire language", scope_row)
+        self.scope_all_radio.setObjectName("validationScopeAllRadio")
+        self.scope_all_radio.setAccessibleName("Scan entire language")
+        self.scope_target_radio = QRadioButton("File / module", scope_row)
+        self.scope_target_radio.setObjectName("validationScopeTargetRadio")
+        self.scope_target_radio.setAccessibleName("Scan one file or module")
+        scope_layout.addWidget(self.scope_all_radio)
+        scope_layout.addWidget(self.scope_target_radio)
+        scope_layout.addStretch(1)
+        self.scope_row = scope_row
+        scan_layout.addRow("Scope", scope_row)
 
-        self.target_label = QLabel("Target file or module", form_group)
-        self.target_combo = QComboBox(form_group)
+        self.target_label = QLabel("Target", scan_group)
+        self.target_combo = QComboBox(scan_group)
         self.target_combo.setObjectName("validationTargetCombo")
         self.target_combo.setAccessibleName("Target file or module")
         self.target_combo.setEditable(True)
@@ -643,30 +655,63 @@ class ValidationPanel(QWidget):
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Fixed,
         )
-        self.target_browse_button = QPushButton("Browse…", form_group)
+        self.target_browse_button = QPushButton("Browse…", scan_group)
         self.target_browse_button.setObjectName("validationTargetBrowseButton")
         self.target_browse_button.setAccessibleName("Browse for target file")
-        target_row = QWidget(form_group)
+        target_row = QWidget(scan_group)
         target_layout = QHBoxLayout(target_row)
         target_layout.setContentsMargins(0, 0, 0, 0)
         target_layout.setSpacing(6)
         target_layout.addWidget(self.target_combo, 1)
         target_layout.addWidget(self.target_browse_button)
         self.target_row = target_row
-        form_layout.addRow(self.target_label, target_row)
+        scan_layout.addRow(self.target_label, target_row)
 
-        self.checkpoint_label = QLabel("Checkpoint", form_group)
-        self.checkpoint_combo = QComboBox(form_group)
+        self.scope_hint = QLabel(
+            "Scan the complete resolved language, or focus the run on one GF source.",
+            scan_group,
+        )
+        self.scope_hint.setObjectName("validationScopeHint")
+        self.scope_hint.setWordWrap(True)
+        scan_layout.addRow("", self.scope_hint)
+        root.addWidget(scan_group)
+
+        self.advanced_toggle = QToolButton(self)
+        self.advanced_toggle.setObjectName("validationAdvancedToggle")
+        self.advanced_toggle.setText("Advanced")
+        self.advanced_toggle.setCheckable(True)
+        self.advanced_toggle.setChecked(False)
+        self.advanced_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.advanced_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        root.addWidget(self.advanced_toggle, 0, Qt.AlignmentFlag.AlignLeft)
+
+        self.advanced_frame = QFrame(self)
+        self.advanced_frame.setObjectName("validationAdvancedFrame")
+        advanced_layout = QVBoxLayout(self.advanced_frame)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.setSpacing(6)
+
+        mode_group = QGroupBox("Validation mode", self.advanced_frame)
+        mode_form = QFormLayout(mode_group)
+        mode_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.mode_combo = QComboBox(mode_group)
+        self.mode_combo.setObjectName("validationModeCombo")
+        self.mode_combo.setAccessibleName("Validation mode")
+        for mode in ValidationMode:
+            self.mode_combo.addItem(_MODE_LABELS[mode], mode.value)
+        mode_form.addRow("Mode", self.mode_combo)
+
+        self.checkpoint_label = QLabel("Checkpoint", mode_group)
+        self.checkpoint_combo = QComboBox(mode_group)
         self.checkpoint_combo.setObjectName("validationCheckpointCombo")
         self.checkpoint_combo.setAccessibleName("Checkpoint")
         self.checkpoint_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
-        form_layout.addRow(self.checkpoint_label, self.checkpoint_combo)
+        mode_form.addRow(self.checkpoint_label, self.checkpoint_combo)
+        advanced_layout.addWidget(mode_group)
 
-        root.addWidget(form_group)
-
-        scenario_group = QGroupBox("Scenario scope", self)
+        scenario_group = QGroupBox("Scenario scope", self.advanced_frame)
         scenario_group.setObjectName("validationScenarioGroup")
         scenario_layout = QVBoxLayout(scenario_group)
         self.scenario_hint = QLabel(
@@ -684,9 +729,9 @@ class ValidationPanel(QWidget):
         self.scenario_list.setMinimumHeight(72)
         self.scenario_list.setMaximumHeight(120)
         scenario_layout.addWidget(self.scenario_list)
-        root.addWidget(scenario_group)
+        advanced_layout.addWidget(scenario_group)
 
-        option_group = QGroupBox("Main options", self)
+        option_group = QGroupBox("Run options", self.advanced_frame)
         option_group.setObjectName("validationOptionsGroup")
         option_layout = QGridLayout(option_group)
 
@@ -699,67 +744,51 @@ class ValidationPanel(QWidget):
             option_group,
         )
         self.diff_previous_checkbox.setObjectName("validationDiffPreviousCheck")
-        self.cpu_stats_checkbox = QCheckBox(
-            "Emit GF CPU statistics",
-            option_group,
-        )
+        self.cpu_stats_checkbox = QCheckBox("Emit GF CPU statistics", option_group)
         self.cpu_stats_checkbox.setObjectName("validationCpuStatsCheck")
 
         option_layout.addWidget(self.scan_only_checkbox, 0, 0)
         option_layout.addWidget(self.keep_ok_checkbox, 0, 1)
         option_layout.addWidget(self.diff_previous_checkbox, 1, 0)
         option_layout.addWidget(self.cpu_stats_checkbox, 1, 1)
-        root.addWidget(option_group)
+        advanced_layout.addWidget(option_group)
 
-        self.advanced_toggle = QToolButton(self)
-        self.advanced_toggle.setObjectName("validationAdvancedToggle")
-        self.advanced_toggle.setText("Advanced Options")
-        self.advanced_toggle.setCheckable(True)
-        self.advanced_toggle.setChecked(False)
-        self.advanced_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.advanced_toggle.setArrowType(Qt.ArrowType.RightArrow)
-        root.addWidget(self.advanced_toggle, 0, Qt.AlignmentFlag.AlignLeft)
+        override_group = QGroupBox("Advanced options", self.advanced_frame)
+        override_form = QFormLayout(override_group)
+        override_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
-        self.advanced_frame = QFrame(self)
-        self.advanced_frame.setObjectName("validationAdvancedFrame")
-        advanced_form = QFormLayout(self.advanced_frame)
-        advanced_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-
-        self.timeout_spin = QSpinBox(self.advanced_frame)
+        self.timeout_spin = QSpinBox(override_group)
         self.timeout_spin.setObjectName("validationTimeoutSpin")
         self.timeout_spin.setAccessibleName("Timeout override")
         self.timeout_spin.setRange(0, _MAX_TIMEOUT_SECONDS)
         self.timeout_spin.setSpecialValueText("Project default")
         self.timeout_spin.setSuffix(" s")
-        advanced_form.addRow("Timeout override", self.timeout_spin)
+        override_form.addRow("Timeout override", self.timeout_spin)
 
-        self.max_files_spin = QSpinBox(self.advanced_frame)
+        self.max_files_spin = QSpinBox(override_group)
         self.max_files_spin.setObjectName("validationMaxFilesSpin")
         self.max_files_spin.setAccessibleName("Maximum files")
         self.max_files_spin.setRange(0, _MAX_FILES)
         self.max_files_spin.setSpecialValueText("Unlimited")
-        advanced_form.addRow("Maximum files", self.max_files_spin)
+        override_form.addRow("Maximum files", self.max_files_spin)
 
-        self.skip_version_probe_checkbox = QCheckBox(
-            "Skip GF version probe",
-            self.advanced_frame,
-        )
+        self.skip_version_probe_checkbox = QCheckBox("Skip GF version probe", override_group)
         self.skip_version_probe_checkbox.setObjectName("validationSkipVersionProbeCheck")
-        advanced_form.addRow("", self.skip_version_probe_checkbox)
+        override_form.addRow("", self.skip_version_probe_checkbox)
 
-        self.verbose_output_checkbox = QCheckBox(
-            "Verbose GF output",
-            self.advanced_frame,
-        )
+        self.verbose_output_checkbox = QCheckBox("Verbose GF output", override_group)
         self.verbose_output_checkbox.setObjectName("validationVerboseOutputCheck")
-        advanced_form.addRow("", self.verbose_output_checkbox)
+        override_form.addRow("", self.verbose_output_checkbox)
 
-        self.strict_checkbox = QCheckBox(
-            "Strict mode",
-            self.advanced_frame,
-        )
+        self.strict_checkbox = QCheckBox("Strict mode", override_group)
         self.strict_checkbox.setObjectName("validationStrictCheck")
-        advanced_form.addRow("", self.strict_checkbox)
+        override_form.addRow("", self.strict_checkbox)
+        advanced_layout.addWidget(override_group)
+
+        self.preview_button = QPushButton("Refresh Resolved Plan", self.advanced_frame)
+        self.preview_button.setObjectName("validationPreviewButton")
+        self.preview_button.setAccessibleName("Refresh resolved plan")
+        advanced_layout.addWidget(self.preview_button, 0, Qt.AlignmentFlag.AlignRight)
 
         self.advanced_frame.setVisible(False)
         root.addWidget(self.advanced_frame)
@@ -780,17 +809,9 @@ class ValidationPanel(QWidget):
         self.validation_summary.setWordWrap(True)
         self.validation_summary.setVisible(False)
         root.addWidget(self.validation_summary)
-
-        self.preview_button = QPushButton("Refresh Resolved Plan", self)
-        self.preview_button.setObjectName("validationPreviewButton")
-        self.preview_button.setAccessibleName("Refresh resolved plan")
-        root.addWidget(
-            self.preview_button,
-            0,
-            Qt.AlignmentFlag.AlignRight,
-        )
-
     def _connect_signals(self) -> None:
+        self.scope_all_radio.toggled.connect(self._on_scope_changed)
+        self.scope_target_radio.toggled.connect(self._on_scope_changed)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         self.target_combo.currentTextChanged.connect(self._on_values_changed)
         self.target_browse_button.clicked.connect(self.browse_target_requested.emit)
@@ -813,6 +834,31 @@ class ValidationPanel(QWidget):
         self.scan_only_checkbox.toggled.connect(self._update_scan_only_notice)
         self.advanced_toggle.toggled.connect(self._toggle_advanced)
         self.preview_button.clicked.connect(self.preview_requested.emit)
+
+    @Slot(bool)
+    def _on_scope_changed(self, checked: bool) -> None:
+        if self._loading or not checked:
+            return
+
+        previous_mode = self._active_mode
+        self._scenario_selection_by_mode[previous_mode] = set(self.selected_scenarios())
+        target_scope = self.scope_target_radio.isChecked()
+        next_mode = ValidationMode.QUICK if target_scope else ValidationMode.DIAGNOSTIC
+
+        self._loading = True
+        try:
+            with self._block_widget_signals(self.mode_combo, self.target_combo):
+                self._set_combo_data(self.mode_combo, next_mode.value)
+                if not target_scope:
+                    self._set_editable_combo_text(self.target_combo, None)
+                self._active_mode = next_mode
+                self._apply_mode(next_mode)
+        finally:
+            self._loading = False
+
+        self._external_issues = ()
+        self.mode_changed.emit(next_mode.value)
+        self._refresh_validation(emit_values=True)
 
     def _populate_targets(self) -> None:
         self.target_combo.clear()
@@ -882,10 +928,26 @@ class ValidationPanel(QWidget):
     def _apply_mode(self, mode: ValidationMode) -> None:
         enabled = not self._running
 
-        target_visible = mode in {
-            ValidationMode.QUICK,
-            ValidationMode.DIAGNOSTIC,
-        }
+        basic_mode = mode in {ValidationMode.QUICK, ValidationMode.DIAGNOSTIC}
+        with self._block_widget_signals(self.scope_all_radio, self.scope_target_radio):
+            if mode is ValidationMode.QUICK:
+                self.scope_target_radio.setChecked(True)
+                self.scope_all_radio.setChecked(False)
+            elif mode is ValidationMode.DIAGNOSTIC:
+                target_present = self._normalized_combo_text(self.target_combo) is not None
+                self.scope_target_radio.setChecked(target_present)
+                self.scope_all_radio.setChecked(not target_present)
+        self.scope_all_radio.setEnabled(enabled and basic_mode)
+        self.scope_target_radio.setEnabled(enabled and basic_mode)
+        self.scope_hint.setText(
+            "Scan the complete resolved language, or focus the run on one GF source."
+            if basic_mode
+            else f"{_MODE_LABELS[mode]} is an advanced profile-driven validation mode."
+        )
+
+        target_visible = mode is ValidationMode.QUICK or (
+            mode is ValidationMode.DIAGNOSTIC and self.scope_target_radio.isChecked()
+        )
         checkpoint_visible = mode in {
             ValidationMode.CHECKPOINT,
             ValidationMode.RELEASE,
@@ -899,15 +961,11 @@ class ValidationPanel(QWidget):
         self.target_label.setText(
             "Target (optional; empty = Global Scan)"
             if mode is ValidationMode.DIAGNOSTIC
-            else "Target file or module"
+            else "Target"
         )
         line_edit = self.target_combo.lineEdit()
         if line_edit is not None:
-            line_edit.setPlaceholderText(
-                "All GF sources (Global Scan)"
-                if mode is ValidationMode.DIAGNOSTIC
-                else "Select a GF source file or module"
-            )
+            line_edit.setPlaceholderText("Select a GF source file or module")
 
         self.checkpoint_label.setVisible(checkpoint_visible)
         self.checkpoint_combo.setVisible(checkpoint_visible)
@@ -1049,15 +1107,16 @@ class ValidationPanel(QWidget):
         else:
             self.mode_combo.setToolTip(
                 "Collect broad evidence. Leave Target empty to run a Global Scan over "
-                "the complete resolved GF source inventory and continue after failures."
+                "the complete RGL compile census. In a standard RGL layout this also "
+                "includes same-suffix API facade modules beside the language directory."
             )
             self.target_combo.setToolTip(
                 "Optional in Diagnostic mode. Leave empty for Global Scan; choose a source "
                 "to focus the diagnostic run."
             )
             self.scenario_hint.setText(
-                "Global Scan inventories GF sources first. Optional configured scenarios "
-                "remain a separate diagnostic scope."
+                "Global Scan records a source lock and Compendium certification status. "
+                "Optional configured scenarios remain a separate linguistic-test scope."
             )
 
         self.scan_only_checkbox.setToolTip(
@@ -1153,6 +1212,8 @@ class ValidationPanel(QWidget):
 
     def _input_widgets(self) -> tuple[QWidget, ...]:
         return (
+            self.scope_all_radio,
+            self.scope_target_radio,
             self.mode_combo,
             self.target_combo,
             self.checkpoint_combo,

@@ -188,6 +188,13 @@ class LanguageContextPanel(QGroupBox):
         status_text_layout.addWidget(self._status_title)
         status_text_layout.addWidget(self._status_message)
         status_layout.addLayout(status_text_layout, 1)
+        # Language selection is part of the everyday workflow, so keep it
+        # visible even while technical language details stay collapsed.
+        status_layout.addWidget(
+            self._select_button,
+            0,
+            Qt.AlignmentFlag.AlignTop,
+        )
 
         self._details_frame = QFrame(self)
         self._details_frame.setObjectName("languageContextDetailsFrame")
@@ -216,7 +223,6 @@ class LanguageContextPanel(QGroupBox):
 
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
-        actions.addWidget(self._select_button)
         actions.addWidget(self._recheck_button)
         actions.addWidget(self._open_profile_button)
         actions.addStretch(1)

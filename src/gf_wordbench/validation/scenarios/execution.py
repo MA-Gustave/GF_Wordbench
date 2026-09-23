@@ -523,3 +523,113 @@ __all__ = (
     "execute_scenario_process",
     "prepare_and_execute_scenario",
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioExecutionEvidence:
+    """High-level evidence adapter consumed by the scenario service."""
+
+    command: tuple[str, ...]
+    working_directory: Path
+    exit_code: int | None
+    execution_state: object
+    timed_out: bool
+    duration_ms: int
+    stdout_path: Path
+    stderr_path: Path
+    stdout_text: str
+    stderr_text: str
+    script_sha256: str
+    cancelled: bool
+
+
+def execute_scenario_spec(
+    spec: object,
+    run_config: object,
+    run_paths: object,
+    *,
+    cancellation_token: CancellationToken | None = None,
+) -> ScenarioExecutionEvidence:
+    """Execute a ScenarioSpec through the native GF process boundary."""
+
+    profile = getattr(run_config, "validation_profile", None)
+    if profile is None:
+        raise ValueError("scenario execution requires a validation profile")
+    environment = getattr(run_config, "environment", None)
+    if environment is None:
+        raise ValueError("scenario execution requires a resolved environment")
+    executable = getattr(environment, "gf_executable", None)
+    if executable is None:
+        raise ValueError("scenario execution requires a GF executable")
+
+    project_root = Path(profile.project_root).resolve(strict=True)
+    script_relative = Path(getattr(spec, "script_path"))
+    script_path = (project_root / script_relative).resolve(strict=True)
+    if not script_path.is_file() or script_path.suffix.casefold() != ".gfs":
+        raise ValueError(f"invalid scenario script: {script_path}")
+    if script_path == project_root or not script_path.is_relative_to(project_root):
+        raise ValueError("scenario script escapes validation profile root")
+
+    raw = script_path.read_bytes()
+    script = ScenarioScriptInput.from_bytes(
+        scenario_id=getattr(spec, "scenario_id"),
+        script_path=script_relative,
+        content=raw,
+    )
+
+    inputs_dir = (project_root / "validation" / "inputs").resolve(strict=True)
+    raw_gf_path = (inputs_dir, *tuple(getattr(environment, "gf_path", ())))
+    gf_path: list[Path] = []
+    seen: set[str] = set()
+    for item in raw_gf_path:
+        candidate = Path(item).resolve(strict=True)
+        key = str(candidate).casefold()
+        if key not in seen:
+            seen.add(key)
+            gf_path.append(candidate)
+
+    # GF 3.12 splits --path values on both ':' and ';'. On Windows this
+    # corrupts absolute drive-letter paths (for example C:\\...). Repeated
+    # -i arguments preserve each directory as one opaque argument.
+    args = tuple(
+        part
+        for item in gf_path
+        for part in ("-i", str(item))
+    ) + ("--run",)
+    scenario_id = str(getattr(spec, "scenario_id"))
+    stdout_path = Path(run_paths.raw_scenarios_dir) / f"{scenario_id}.stdout.txt"
+    stderr_path = Path(run_paths.raw_scenarios_dir) / f"{scenario_id}.stderr.txt"
+
+    process = prepare_and_execute_scenario(
+        script,
+        executable=Path(executable),
+        args=args,
+        working_directory=Path(getattr(spec, "working_directory")),
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
+        timeout_sec=float(getattr(spec, "timeout_sec")),
+        output_limit_bytes=int(getattr(spec, "output_limit_bytes")),
+        approved_read_roots=(project_root, Path(executable).parent, *gf_path),
+        approved_write_roots=(Path(run_paths.run_dir),),
+        expected_artifacts=tuple(getattr(spec, "expected_artifacts", ())),
+        request_id=f"scenario-{scenario_id}",
+        operation_id=f"scenario-{scenario_id}",
+        cancellation_token=cancellation_token,
+    )
+
+    stdout_text = process.stdout_path.read_text(encoding="utf-8", errors="replace")
+    stderr_text = process.stderr_path.read_text(encoding="utf-8", errors="replace")
+    return ScenarioExecutionEvidence(
+        command=process.command,
+        working_directory=process.working_directory,
+        exit_code=process.exit_code,
+        execution_state=process.execution_state,
+        timed_out=process.timed_out,
+        duration_ms=process.duration_ms,
+        stdout_path=process.stdout_path,
+        stderr_path=process.stderr_path,
+        stdout_text=stdout_text,
+        stderr_text=stderr_text,
+        script_sha256=script.sha256,
+        cancelled=process.cancelled,
+    )

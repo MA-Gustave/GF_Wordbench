@@ -326,6 +326,36 @@ def test_build_scenario_result_forwards_canonical_values(
     assert result.artifacts == ("artifact",)
 
 
+def test_build_scenario_result_forwards_diagnostics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        result_builder,
+        "ScenarioResult",
+        _ScenarioResultRecord,
+    )
+    diagnostic = object()
+
+    result = result_builder.build_scenario_result(
+        scenario_id="diagnostic",
+        script_path=tmp_path / "validation" / "diagnostic.gfs",
+        script_sha256="0" * 64,
+        required=True,
+        status=ValidationStatus.FAIL,
+        diagnostic_class=DiagnosticClass.DIRECT,
+        error_kind=ErrorKind.SCRIPT,
+        primary_message="GF shell failure",
+        working_directory=tmp_path,
+        exit_code=1,
+        execution_state=ExecutionState.COMPLETED,
+        duration_ms=1,
+        diagnostics=(diagnostic,),
+    )
+
+    assert result.diagnostics == (diagnostic,)
+
+
 @pytest.mark.parametrize(
     ("overrides", "match"),
     [

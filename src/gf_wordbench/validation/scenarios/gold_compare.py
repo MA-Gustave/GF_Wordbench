@@ -24,7 +24,7 @@ _OUTPUT_HEADER: Final = "# GF_WORDBENCH_OUTPUT 1.0"
 _GOLD_HEADER: Final = "# GF_WORDBENCH_GOLD 1.0"
 _SCENARIO_PREFIX: Final = "# scenario_id: "
 _NORMALIZATION_PREFIX: Final = "# normalization_version: "
-_VERSION_RE: Final = re.compile(r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$")
+_VERSION_RE: Final = re.compile(r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))?$")
 _BEGIN_RE: Final = re.compile(r"^--- BEGIN (?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+)*) ---$")
 _END_RE: Final = re.compile(r"^--- END (?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+)*) ---$")
 
@@ -450,6 +450,52 @@ def _header_value(
     return result
 
 
+def compare_scenario_gold(
+    spec: object,
+    normalized_sections: tuple[object, ...],
+    *,
+    run_paths: object,
+) -> object:
+    """Adapt canonical gold comparison to the scenario-service stage contract."""
+
+    from types import SimpleNamespace
+    from .artifacts import NORMALIZED_OUTPUT_SUFFIX, scenario_safe_key
+
+    del normalized_sections
+    scenario_id = str(getattr(spec, "scenario_id"))
+    policy = getattr(spec, "comparison_policy")
+    policy_value = str(getattr(policy, "value", policy))
+    normalization_version = str(getattr(spec, "normalization_version"))
+    gold_relative = getattr(spec, "gold_path", None)
+
+    normalized_output_path = None
+    gold_path = None
+    gold_diff_path = None
+    if policy_value != "none":
+        raw_scenarios_dir = Path(getattr(run_paths, "raw_scenarios_dir"))
+        safe_key = scenario_safe_key(scenario_id)
+        normalized_output_path = raw_scenarios_dir / f"{safe_key}{NORMALIZED_OUTPUT_SUFFIX}"
+        if gold_relative is not None:
+            gold_path = Path(getattr(spec, "working_directory")) / Path(gold_relative)
+        gold_diff_path = raw_scenarios_dir / f"{safe_key}.gold.diff"
+
+    result = compare_gold(
+        policy=policy_value,
+        scenario_id=scenario_id,
+        normalization_version=normalization_version,
+        normalized_output_path=normalized_output_path,
+        gold_path=gold_path,
+        gold_diff_path=gold_diff_path,
+        diff_root=Path(getattr(run_paths, "run_dir")),
+    )
+    return SimpleNamespace(
+        match=result.gold_match,
+        gold_path=result.gold_path,
+        message=result.message,
+        diff_path=result.gold_diff_path,
+    )
+
+
 def _require_identity(
     document: ScenarioTextDocument,
     scenario_id: ScenarioId,
@@ -471,7 +517,7 @@ def _require_version(value: str) -> None:
     if not isinstance(value, str):
         raise TypeError("normalization_version must be a string")
     if _VERSION_RE.fullmatch(value) is None:
-        raise ValueError("normalization_version must use canonical major.minor form")
+        raise ValueError("normalization_version must use canonical major.minor or major.minor.patch form")
 
 
 def _policy(value: GoldComparisonPolicy | str) -> GoldComparisonPolicy:
@@ -552,6 +598,7 @@ __all__ = (
     "ScenarioTextValidationError",
     "build_unified_gold_diff",
     "compare_gold",
+    "compare_scenario_gold",
     "compare_gold_text",
     "parse_scenario_text",
 )

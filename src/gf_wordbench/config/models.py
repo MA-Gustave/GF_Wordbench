@@ -1087,6 +1087,7 @@ class RunConfig:
     evidence_level: EvidenceLevel
     compatibility_warnings: tuple[str, ...] = ()
     language_context: ResolvedLanguageContext | None = None
+    strict: bool = False
 
     def __init__(
         self,
@@ -1111,6 +1112,7 @@ class RunConfig:
         language_context: ResolvedLanguageContext | None = None,
         project: ProjectConfig | None = None,
         effective_capabilities: tuple[object, ...] = (),
+        strict: bool = False,
     ) -> None:
         profile = _coalesce_validation_profile(
             validation_profile,
@@ -1164,6 +1166,7 @@ class RunConfig:
             compatibility_warnings,
         )
         object.__setattr__(self, "language_context", language_context)
+        object.__setattr__(self, "strict", strict)
         self.__post_init__()
 
     def __post_init__(self) -> None:
@@ -1221,6 +1224,7 @@ class RunConfig:
             "release_requires_pgf",
             self.release_requires_pgf,
         )
+        _require_bool("strict", self.strict)
         _require_evidence_level(self.evidence_level)
 
         _require_unique_paths(

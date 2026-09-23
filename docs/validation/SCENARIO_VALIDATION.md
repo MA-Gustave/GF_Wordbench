@@ -1847,6 +1847,7 @@ class ScenarioResult:
     sections: tuple[ScenarioSectionResult, ...]
     assertions: tuple[ScenarioAssertionResult, ...]
     artifacts: tuple[ArtifactRecord, ...]
+    diagnostics: tuple[ScenarioDiagnosticObservation, ...]
     blocked_by: tuple[str, ...]
 ```
 
@@ -1873,6 +1874,9 @@ Persisted field changes are governed by the schema lock.
 - a gold diff exists only for a performed mismatch or configured diagnostic output.
 - section IDs are unique.
 - assertion IDs are unique.
+- observed diagnostics retain their source stream and raw-output line number when known.
+- a `FAIL` may be justified by a failure diagnostic even when the GF process exit code is zero.
+- an `OK` result must not contain a diagnostic observation that blocks success.
 - artifact paths are owned and contained.
 - `blocked_by` uses stable prerequisite identities.
 

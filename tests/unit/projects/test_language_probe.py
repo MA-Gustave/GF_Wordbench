@@ -502,3 +502,69 @@ def test_resolved_context_is_immutable(tmp_path: Path) -> None:
 
     with pytest.raises(FrozenInstanceError):
         result.context.language_key = "french"  # type: ignore[misc]
+
+
+def test_unique_standard_role_support_resolves_helper_suffixes_without_user_choice(
+    tmp_path: Path,
+) -> None:
+    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(
+        tmp_path,
+        modules=(
+            "LangSqi.gf",
+            "GrammarSqi.gf",
+            "AllSqi.gf",
+            "LexiconSqi.gf",
+            "ParadigmsSqi.gf",
+            "MorphoSqi.gf",
+            "CatSqi.gf",
+            "NounSqi.gf",
+            "VerbSqi.gf",
+            "StructuralSqi.gf",
+            "AllSqiAbs.gf",
+            "StructuralSqiRes.gf",
+            "StructuralSqiClause.gf",
+            "StructuralSqiNominal.gf",
+            "StructuralSqiVerbal.gf",
+        ),
+    )
+
+    result = probe_language_path(language_directory)
+
+    assert result.status is LanguageProbeStatus.RESOLVED
+    assert result.context is not None
+    assert result.context.module_suffix == "Sqi"
+    assert tuple(path.name for path in result.context.entrypoint_paths) == (
+        "LangSqi.gf",
+        "GrammarSqi.gf",
+        "AllSqi.gf",
+    )
+    assert _diagnostic_codes(result) == ("GF-WB-CONFIG-257",)
+    assert result.diagnostics[0].severity is LanguageProbeSeverity.INFO
+    assert "SqiAbs" in result.context.module_suffix_candidates
+    assert "SqiRes" in result.context.module_suffix_candidates
+
+
+def test_unique_standard_role_support_resolves_when_unambiguous_suffix_is_required(
+    tmp_path: Path,
+) -> None:
+    _rgl_root, _source_root, language_directory, _files = _make_rgl_language(
+        tmp_path,
+        modules=(
+            "LangSqi.gf",
+            "GrammarSqi.gf",
+            "AllSqi.gf",
+            "AllSqiAbs.gf",
+            "StructuralSqiRes.gf",
+        ),
+    )
+
+    result = probe_language_path(
+        language_directory,
+        require_unambiguous_suffix=True,
+    )
+
+    assert result.status is LanguageProbeStatus.RESOLVED
+    assert result.context is not None
+    assert result.context.module_suffix == "Sqi"
+    assert result.choices == ()
+    assert _diagnostic_codes(result) == ("GF-WB-CONFIG-257",)

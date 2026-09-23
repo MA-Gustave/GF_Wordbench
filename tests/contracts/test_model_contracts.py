@@ -175,6 +175,7 @@ _REQUIRED_PUBLIC_SYMBOLS: Final[Mapping[str, frozenset[str]]] = {
             "ScenarioSpec",
             "ScenarioSectionResult",
             "ScenarioAssertionResult",
+            "ScenarioDiagnosticObservation",
             "ScenarioResult",
         }
     ),

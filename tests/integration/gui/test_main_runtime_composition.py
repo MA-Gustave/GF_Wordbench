@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QEventLoop, QThread, QTimer
+from PySide6.QtCore import QEventLoop, QThread, QTimer, Qt
 from PySide6.QtWidgets import QApplication, QWidget
 
 from gf_wordbench.entrypoints.gui.panels.validation import ValidationPanelValues
@@ -109,10 +109,11 @@ def test_external_language_context_composes_source_ready_main_window(
     assert runtime.window.panels.project.language_directory == context.language_directory
     assert runtime.window.panels.project.selected_path == context.selected_path
     assert "albanian" in runtime.window.windowTitle().casefold()
-    assert runtime.window.run_button.isEnabled() is False
-
     validation = runtime.window.panels.validation
-    assert validation.mode() is ValidationMode.QUICK
+    assert validation.mode() is ValidationMode.DIAGNOSTIC
+    assert validation.scope_all_radio.isChecked() is True
+    assert runtime.window.run_button.text() == "Run Scan"
+    assert runtime.window.run_button.isEnabled() is True
     assert tuple(choice.identifier for choice in validation.catalog.targets) == (
         "GrammarSqi.gf",
         "LangSqi.gf",
@@ -163,8 +164,9 @@ def test_diagnostic_empty_target_enables_global_scan_action(
     qapplication.processEvents()
 
     assert validation.values().target_file is None
+    assert validation.scope_all_radio.isChecked() is True
     assert "Global Scan" in validation.target_label.text()
-    assert runtime.window.run_button.text() == "Run Global Scan"
+    assert runtime.window.run_button.text() == "Run Scan"
     assert runtime.window.run_button.isEnabled() is True
     runtime.shutdown()
 
@@ -223,6 +225,13 @@ def test_main_window_uses_compact_vertical_workspace(
     assert activity is not None
     assert details.isHidden() is True
     assert activity.isHidden() is True
+    assert window.panels.validation.advanced_frame.isHidden() is True
+    assert window._results_tabs.isTabVisible(
+        window._results_tabs.indexOf(window.panels.diagnostics)
+    ) is False
+    assert window._results_tabs.isTabVisible(
+        window._results_tabs.indexOf(window.panels.artifacts)
+    ) is False
 
     # Results are the useful idle default.  During a run the lower workspace
     # automatically becomes the Progress tab and returns to Results at finish.
@@ -231,6 +240,26 @@ def test_main_window_uses_compact_vertical_workspace(
     assert window._results_tabs.currentWidget() is window.panels.progress
     window.notify_run_finished()
     assert window._results_tabs.currentWidget() is window.panels.results
+
+    runtime.shutdown()
+
+
+def test_primary_configuration_workflow_is_not_wrapped_in_a_scroll_area(
+    tmp_path: Path,
+    qapplication: QApplication,
+) -> None:
+    runtime = build_main_runtime(qapplication, _external_context(tmp_path))
+    window = runtime.window
+
+    configuration = window.findChild(QWidget, "configurationArea")
+    assert configuration is not None
+    assert window.panels.project.parentWidget() is configuration
+    assert window.panels.validation.parentWidget() is configuration
+
+    # The primary Language + Scan workflow must remain native/fixed inside the
+    # splitter pane.  A QScrollArea here reintroduces overlay-scrollbar
+    # occlusion on Windows and high-DPI displays.
+    assert window.findChild(QWidget, "configurationScrollArea") is None
 
     runtime.shutdown()
 

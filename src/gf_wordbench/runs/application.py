@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import hashlib
 from pathlib import Path
+import re
 import time
 from typing import Final, Protocol
 
@@ -43,6 +44,8 @@ from gf_wordbench.validation.compilation.gf_adapter import GfProcessAdapter
 from gf_wordbench.validation.compilation.models import (
     CompileSummary,
     CompileTargetKind,
+    CompileWarning,
+    CompileWarningKind,
     SourceFingerprint,
 )
 from gf_wordbench.validation.compilation.version_probe import (
@@ -60,11 +63,29 @@ from gf_wordbench.validation.ports import (
 )
 from gf_wordbench.validation.scanning.models import ScanCounts
 from gf_wordbench.validation.scanning.service import scan_text
+from gf_wordbench.validation.linguistic_review.service import write_linguistic_review_request
+from gf_wordbench.validation.scenarios.discovery import discover_scenarios
+from gf_wordbench.validation.scenarios.profile_catalog import build_profile_scenario_catalog
+from gf_wordbench.validation.scenarios.service import run_scenario
 
 __all__ = ("execute_diagnostic_run", "execute_quick_run", "run_validation")
 
 _OUTPUT_LIMIT_BYTES: Final[int] = 16 * 1024 * 1024
 _MAX_SCAN_LOG_CHARS: Final[int] = 512 * 1024
+_WARNING_RE: Final[re.Pattern[str]] = re.compile(r"^\s*Warning:\s*(?P<message>.+?)\s*$")
+_WARNING_LOCATION_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?P<path>[^\s:]+\.gf):(?P<line>\d+)(?:-\d+)?(?:[:\-]\d+)?"
+)
+_WARNING_OPERATION_RE: Final[re.Pattern[str]] = re.compile(
+    r"Happened in operation\s+(?P<operation>[^\s]+)"
+)
+_STANDARD_API_FACADE_PREFIXES: Final[tuple[str, ...]] = (
+    "Combinators",
+    "Constructors",
+    "Symbolic",
+    "Syntax",
+    "Try",
+)
 
 
 class _EventSink(Protocol):
@@ -338,15 +359,26 @@ def execute_diagnostic_run(
             subject="language_context",
         )
 
-    source_root = context.language_directory.resolve(strict=True)
+    language_root = context.language_directory.resolve(strict=True)
     inventory = tuple(
         sorted(
             (path.resolve(strict=True) for path in context.source_inventory),
             key=str,
         )
     )
-    selected = _diagnostic_sources(run_config, inventory=inventory, source_root=source_root)
     is_global = run_config.target is None or run_config.target.kind is TargetKind.PROJECT
+    census_root = language_root
+    if is_global:
+        inventory, census_root = _expand_rgl_global_census(
+            context,
+            inventory=inventory,
+            language_root=language_root,
+        )
+    selected = _diagnostic_sources(
+        run_config,
+        inventory=inventory,
+        source_root=census_root if is_global else language_root,
+    )
     files_seen = len(selected)
     if run_config.max_files > 0:
         selected = selected[: run_config.max_files]
@@ -357,7 +389,7 @@ def execute_diagnostic_run(
             code="GF-WB-CONFIG-918",
             stage="selection",
             operation="diagnostic-validation",
-            subject=str(source_root),
+            subject=str(census_root if is_global else language_root),
         )
 
     cancellation_check()
@@ -368,7 +400,18 @@ def execute_diagnostic_run(
     run_paths = _allocate_paths(output_root, started_at, requested_run_id=run_id)
     resolved_run_id = str(run_paths.run_id)
     token: CancellationToken = _CheckCancellationToken(cancellation_check)
-    total_steps = 2 + (2 * len(selected))
+    scenario_specs = ()
+    if run_config.validation_profile is not None:
+        scenario_catalog = build_profile_scenario_catalog(
+            run_config.validation_profile,
+            timeout_sec=run_config.timeout_sec,
+        )
+        scenario_specs = discover_scenarios(
+            run_config,
+            scenario_catalog,
+            explicit_scenario_ids=run_config.selected_scenarios,
+        )
+    total_steps = 2 + (2 * len(selected)) + len(scenario_specs)
 
     _progress(
         event_sink,
@@ -394,7 +437,7 @@ def execute_diagnostic_run(
 
     for source_path in selected:
         cancellation_check()
-        relative = source_path.relative_to(source_root)
+        relative = source_path.relative_to(census_root if is_global else language_root)
         _progress(
             event_sink,
             run_id=resolved_run_id,
@@ -425,7 +468,7 @@ def execute_diagnostic_run(
                 summary=_skipped_compile_summary(
                     source_path=source_path,
                     relative=relative,
-                    working_directory=source_root,
+                    working_directory=run_config.source_root,
                     reason="Diagnostic scan-only run",
                 ),
                 primary_record=None,
@@ -459,7 +502,7 @@ def execute_diagnostic_run(
                     source_path=source_path,
                     relative=relative,
                     run_paths=run_paths,
-                    working_directory=source_root,
+                    working_directory=run_config.source_root,
                     output_directory=module_output,
                     error=exc,
                 )
@@ -489,6 +532,28 @@ def execute_diagnostic_run(
         )
 
     file_results = _diagnostic_file_results(work_items)
+    scenario_results = []
+    for scenario_spec in scenario_specs:
+        cancellation_check()
+        _progress(
+            event_sink,
+            run_id=resolved_run_id,
+            message="Linguistic scenario",
+            stage="scenario",
+            subject=str(scenario_spec.scenario_id),
+            completed=completed,
+            total=total_steps,
+        )
+        scenario_results.append(
+            run_scenario(
+                scenario_spec,
+                run_config,
+                run_paths,
+                cancellation_token=token,
+            )
+        )
+        completed += 1
+
     finished_at = datetime.now(UTC)
     duration_ms = max(0, int((time.monotonic() - started_clock) * 1000))
     result = build_run_result(
@@ -499,6 +564,7 @@ def execute_diagnostic_run(
         duration_ms=duration_ms,
         gf_version=gf_version,
         file_results=file_results,
+        scenario_results=scenario_results,
         files_seen=files_seen,
         files_excluded=files_excluded,
     )
@@ -509,6 +575,15 @@ def execute_diagnostic_run(
             writer(result)
         except Exception as exc:
             report_errors.append(f"{getattr(writer, '__name__', type(writer).__name__)}: {exc}")
+    if scenario_results:
+        try:
+            write_linguistic_review_request(
+                result,
+                language_variety="Standard Albanian",
+            )
+        except Exception as exc:
+            report_errors.append(f"linguistic_review_request: {exc}")
+
     if report_errors:
         _progress(
             event_sink,
@@ -531,6 +606,55 @@ def execute_diagnostic_run(
             total=total_steps,
         )
     return result
+
+
+
+def _expand_rgl_global_census(
+    context,
+    *,
+    inventory: tuple[Path, ...],
+    language_root: Path,
+) -> tuple[tuple[Path, ...], Path]:
+    """Expand a language inventory with same-suffix public API facades.
+
+    Standard in-tree RGL languages keep their facades directly under the RGL
+    source root. External language projects commonly mirror the same layout in
+    their own ``src`` directory while depending on a separate upstream RGL.
+    Global Scan treats both layouts as one compile census without changing the
+    ownership boundary of the resolved language context.
+    """
+
+    rgl_source_root = context.rgl_source_root.resolve(strict=True)
+    suffix = context.module_suffix
+    if not isinstance(suffix, str) or not suffix:
+        return inventory, language_root
+
+    in_tree = language_root.parent == rgl_source_root
+    facade_root = rgl_source_root if in_tree else language_root.parent.resolve(strict=True)
+    if not facade_root.is_dir():
+        return inventory, language_root
+
+    seen = {path.resolve(strict=True) for path in inventory}
+    if in_tree:
+        candidates = tuple(facade_root.glob(f"*{suffix}.gf"))
+    else:
+        candidates = tuple(
+            facade_root / f"{prefix}{suffix}.gf"
+            for prefix in _STANDARD_API_FACADE_PREFIXES
+        )
+
+    facades: list[Path] = []
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        resolved = candidate.resolve(strict=True)
+        if resolved in seen:
+            continue
+        facades.append(resolved)
+        seen.add(resolved)
+
+    combined = tuple(sorted((*inventory, *facades), key=str))
+    return combined, facade_root if facades else language_root
 
 
 def _diagnostic_sources(
@@ -593,7 +717,7 @@ def _diagnostic_file_results(items: list[_DiagnosticWorkItem]):
                 artifacts=summary.produced_artifacts,
             )
         )
-    return tuple(results)
+    return tuple(sorted(results, key=lambda result: result.file_path.as_posix()))
 
 
 def _classify_diagnostic_item(
@@ -875,13 +999,22 @@ def _compile_target_evidence(
     artifact_root = output_directory or run_paths.gfo_dir
     artifact_root.mkdir(parents=True, exist_ok=True)
     expected_object = artifact_root / f"{module_name}.gfo"
+    compile_root = run_config.source_root
+    compile_gf_path = run_config.environment.gf_path
+    source_parent = source_path.parent.resolve(strict=False)
+    if source_parent != compile_root.resolve(strict=False):
+        compile_root = source_parent
+        compile_gf_path = tuple(
+            dict.fromkeys((source_parent, *run_config.environment.gf_path))
+        )
+
     request = GfOperationRequest(
         operation_id=f"compile-{key}",
         project_id=validate_project_id(run_config.language_key),
         run_id=run_paths.run_id,
         executable=run_config.environment.gf_executable,
-        working_directory=run_config.source_root,
-        gf_path=run_config.environment.gf_path,
+        working_directory=compile_root,
+        gf_path=compile_gf_path,
         stdout_path=stdout_path,
         stderr_path=stderr_path,
         timeout_sec=float(run_config.timeout_sec),
@@ -909,6 +1042,12 @@ def _compile_target_evidence(
     process = operation.process
     stdout_text = _read_text(stdout_path)
     stderr_text = _read_text(stderr_path)
+    compiler_warnings = _extract_gf_compiler_warnings(stderr_text)
+    structural_warnings = tuple(
+        warning
+        for warning in compiler_warnings
+        if warning.kind is CompileWarningKind.STRUCTURAL_LOCK
+    )
     parse = parse_diagnostics(
         DiagnosticEvidence(
             operation_kind="compile",
@@ -941,10 +1080,20 @@ def _compile_target_evidence(
     state = process.execution_state
     exit_code = process.exit_code
     if state is ExecutionState.COMPLETED and exit_code == 0 and artifacts_ok:
-        status = ValidationStatus.OK
-        error_kind = ErrorKind.OK
-        first_error = ""
-        error_detail = ""
+        if run_config.strict and structural_warnings:
+            status = ValidationStatus.FAIL
+            error_kind = ErrorKind.TYPE
+            first = structural_warnings[0]
+            first_error = f"GF structural warning rejected by strict mode: {first.message}"
+            error_detail = (
+                f"structural_warning_count={len(structural_warnings)}; "
+                "see compile stderr for warning provenance"
+            )
+        else:
+            status = ValidationStatus.OK
+            error_kind = ErrorKind.OK
+            first_error = ""
+            error_detail = ""
     elif state is ExecutionState.COMPLETED:
         status = ValidationStatus.FAIL if exit_code not in (None, 0) else ValidationStatus.ERROR
         error_kind = parse.primary_error_kind or (
@@ -991,12 +1140,56 @@ def _compile_target_evidence(
         expected_artifacts=(expected_object,),
         produced_artifacts=produced,
         artifact_checks_passed=artifacts_ok,
+        compiler_warnings=compiler_warnings,
     )
     primary_record = next(
         (record for record in parse.records if record.record_id == parse.primary_record_id),
         None,
     )
     return _CompileEvidence(summary=summary, primary_record=primary_record)
+
+
+def _extract_gf_compiler_warnings(stderr_text: str) -> tuple[CompileWarning, ...]:
+    lines = stderr_text.splitlines()
+    warnings: list[CompileWarning] = []
+    for index, line in enumerate(lines):
+        match = _WARNING_RE.match(line)
+        if match is None:
+            continue
+        message = match.group("message").strip()
+        lowered = message.casefold()
+        if lowered.startswith("missing lock field"):
+            kind = CompileWarningKind.STRUCTURAL_LOCK
+        elif lowered.startswith("atomic term"):
+            kind = CompileWarningKind.NAMESPACE_CONFLICT
+        else:
+            kind = CompileWarningKind.OTHER
+
+        before = lines[max(0, index - 8) : index]
+        source_path = ""
+        source_line: int | None = None
+        operation = ""
+        for candidate in reversed(before):
+            location = _WARNING_LOCATION_RE.search(candidate)
+            if location is not None:
+                source_path = location.group("path")
+                source_line = int(location.group("line"))
+                break
+        for candidate in reversed(before):
+            operation_match = _WARNING_OPERATION_RE.search(candidate)
+            if operation_match is not None:
+                operation = operation_match.group("operation")
+                break
+        warnings.append(
+            CompileWarning(
+                kind=kind,
+                message=message,
+                source_path=source_path,
+                source_line=source_line,
+                operation=operation,
+            )
+        )
+    return tuple(warnings)
 
 
 def _fingerprint(path: Path) -> SourceFingerprint:

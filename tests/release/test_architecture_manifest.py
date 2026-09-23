@@ -12,16 +12,17 @@ import hashlib
 import importlib.util
 from pathlib import Path
 import re
+import sys
 from types import ModuleType
 from typing import Final
 
-EXPECTED_TOTAL: Final = 404
-EXPECTED_MANIFEST_SHA256: Final = "50ae962a49493cc64258b5dfdec14f95a0401e4f64908373558bddf404c59559"
+EXPECTED_TOTAL: Final = 409
+EXPECTED_MANIFEST_SHA256: Final = "d9013a3afb724391b729da9aa17c9210daeede24a371b5a6095a511263c74a1a"
 
 EXPECTED_CATEGORY_COUNTS: Final = {
-    "runtime": 229,
-    "support": 14,
-    "tests": 161,
+    "runtime": 231,
+    "support": 15,
+    "tests": 163,
 }
 
 EXPECTED_RUNTIME_COUNTS: Final = {
@@ -30,22 +31,22 @@ EXPECTED_RUNTIME_COUNTS: Final = {
     "kernel": 7,
     "state": 5,
     "projects": 19,
-    "runs": 21,
+    "runs": 22,
     "validation": 54,
     "diagnostics": 32,
     "reporting": 38,
     "infrastructure": 15,
-    "entrypoints": 27,
+    "entrypoints": 28,
 }
 
 EXPECTED_TEST_COUNTS: Final = {
     "test_root": 1,
     "helpers": 4,
-    "unit": 92,
+    "unit": 93,
     "components": 8,
     "contracts": 14,
     "schemas": 7,
-    "integration": 26,
+    "integration": 27,
     "migrations": 4,
     "release": 5,
 }
@@ -58,6 +59,7 @@ _MANIFEST_TEXT: Final = """\
 .github/workflows/release.yml
 .github/workflows/tests.yml
 .gitignore
+GF_Wordbench_output_mode_toggle.pyw
 launch_cli.bat
 launch_gui.bat
 pyproject.toml
@@ -123,6 +125,7 @@ src/gf_wordbench/entrypoints/gui/__init__.py
 src/gf_wordbench/entrypoints/gui/controller.py
 src/gf_wordbench/entrypoints/gui/dialogs.py
 src/gf_wordbench/entrypoints/gui/main.py
+src/gf_wordbench/entrypoints/gui/runtime.py
 src/gf_wordbench/entrypoints/gui/panels/__init__.py
 src/gf_wordbench/entrypoints/gui/panels/artifacts.py
 src/gf_wordbench/entrypoints/gui/panels/diagnostics.py
@@ -216,6 +219,7 @@ src/gf_wordbench/reporting/summary/json_writer.py
 src/gf_wordbench/reporting/summary/markdown_writer.py
 src/gf_wordbench/reporting/summary/projection.py
 src/gf_wordbench/runs/__init__.py
+src/gf_wordbench/runs/application.py
 src/gf_wordbench/runs/budgets.py
 src/gf_wordbench/runs/cancellation.py
 src/gf_wordbench/runs/continuation.py
@@ -341,6 +345,7 @@ tests/integration/gf/test_scenario_execution.py
 tests/integration/gf/test_unicode.py
 tests/integration/gf/test_version_probe.py
 tests/integration/gui/test_language_switching.py
+tests/integration/gui/test_main_runtime_composition.py
 tests/integration/gui/test_run_and_cancel.py
 tests/integration/gui/test_startup.py
 tests/integration/process/test_arguments.py
@@ -415,6 +420,7 @@ tests/unit/reporting/test_schema_compatibility.py
 tests/unit/reporting/test_schema_registry.py
 tests/unit/reporting/test_summary_projection.py
 tests/unit/reporting/test_summary_writers.py
+tests/unit/runs/test_application_quick.py
 tests/unit/runs/test_budgets.py
 tests/unit/runs/test_cancellation.py
 tests/unit/runs/test_continuation.py
@@ -531,7 +537,7 @@ def _parse_document_manifest(text: str) -> frozenset[str]:
     if section is None:
         raise AssertionError("Canonical architecture document has no Section 3 text tree")
 
-    lines = section.group("tree").splitlines()
+    lines = section.group("tree").lstrip("\r\n").splitlines()
     if not lines or lines[0].strip() != "GF_Wordbench/":
         raise AssertionError("Canonical architecture tree must start with GF_Wordbench/")
 
@@ -662,7 +668,11 @@ def _load_verifier(root: Path) -> ModuleType:
         raise AssertionError(f"Could not load architecture verifier: {script}")
 
     module = importlib.util.module_from_spec(specification)
-    specification.loader.exec_module(module)
+    sys.modules[specification.name] = module
+    try:
+        specification.loader.exec_module(module)
+    finally:
+        sys.modules.pop(specification.name, None)
     return module
 
 

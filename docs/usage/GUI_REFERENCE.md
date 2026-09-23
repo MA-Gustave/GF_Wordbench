@@ -4,8 +4,8 @@
 **Status:** Normative user-interface and interaction reference  
 **Applies to:** GF Wordbench desktop GUI, shared language-probe and validation services, application state, optional validation profiles and generated run artifacts  
 **Owner:** GF Wordbench maintainers  
-**Document version:** `3.0.0`  
-**Last reviewed:** 2026-08-05  
+**Document version:** `3.1.0`  
+**Last reviewed:** 2026-09-22  
 **Primary platform:** Windows  
 **GUI toolkit:** PySide6 / Qt Widgets  
 **Alignment authority:** `docs/DOCUMENTATION_ALIGNMENT_LOCK.md`  
@@ -450,57 +450,72 @@ When cancellation is requested, the GUI:
 
 ## 10. Main-window goals
 
-The main window lets the user:
+The main window optimizes the ordinary editing workflow before exposing the
+full validation surface.  The primary path is deliberately short:
 
-1. identify the active resolved language;
-2. inspect the selected source context;
-3. understand available capabilities;
-4. validate the local GF environment;
-5. optionally load or inspect a validation profile;
-6. choose a validation mode;
-7. set mode-relevant options;
-8. inspect the resolved plan;
-9. start or cancel a run;
-10. observe structured progress;
-11. understand the run outcome;
-12. open generated artifacts;
-13. inspect recent compatible runs;
-14. replace the active language when no run is active.
+```text
+choose/change language
+        ↓
+choose scan scope
+  Entire language
+  or File / module
+        ↓
+Run Scan
+        ↓
+read/copy result or copy logs
+```
 
-Advanced controls remain collapsed or placed in a dedicated dialog.
+The default page therefore lets the user:
+
+1. identify or replace the active resolved language;
+2. choose whether to scan the complete language or one file/module;
+3. choose the target only when a focused scan is requested;
+4. start or cancel the scan;
+5. understand the terminal outcome;
+6. copy the human result summary;
+7. copy bounded owned run logs for troubleshooting or sharing.
+
+Validation modes, scenarios, policy overrides, resolved-plan inspection,
+artifact navigation and specialized diagnostics remain available through
+**Advanced** disclosures or advanced result views.  They must not dominate the
+ordinary scan workflow.
+
+When the session was opened from a language directory, the default scope is
+`Entire language`.  When it was opened from a `.gf` file, the focused file is
+preserved and the default scope is `File / module`.
 
 ---
 
 ## 11. Main-window information architecture
 
+The default collapsed layout is compact enough to keep results visible on an
+ordinary landscape display:
+
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ GF Wordbench — <Language>                                  <App Version>    │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Language                                                                  │
-│ Key | Source directory | Focused file | Profile | Resolution status       │
+│ Language                                           [Change Language…]       │
+│ ✓ Ready · <language> · <source count> sources                              │
+│ ▸ Show language details                                                    │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Capabilities                                                              │
-│ Source | Scan | Compile | Scenario | Release                              │
+│ Scan                                                                       │
+│ Scope       (●) Entire language      ( ) File / module                     │
+│ Target      [shown only when a focused target is required] [Browse…]       │
+│ ▸ Advanced                                                                │
+│ [Run Scan]                                                                │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ Environment                                                               │
-│ GF executable | GF version | RGL source root | Output root                │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Validation                                                                │
-│ Mode | Target/checkpoint | Scenario scope | Main options                  │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Resolved Plan                                                             │
-│ Files | Entrypoints | GF path | Scenarios | PGF | Previous comparison     │
-├────────────────────────────────────────────────────────────────────────────┤
-│ [Run Validation] [Cancel] [Change Language] [Open Last Run] [Reports]      │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Progress                                                                  │
-│ Status | Stage | Subject | Progress | Elapsed time                        │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Results / Activity                                                        │
-│ Summary, diagnostics, warnings and bounded activity                       │
+│ Results                                                   [Advanced views] │
+│ <terminal status>                                                        │
+│ [Copy Results] [Copy Logs]                                                 │
+│ concise run summary, counts and normalized diagnostics                     │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
+
+`Advanced` reveals validation mode, checkpoint/scenario policy and run
+overrides.  `Advanced views` reveals activity, specialized diagnostics and
+artifact navigation.  During an active run, Activity is shown automatically
+even when advanced views are otherwise collapsed.
 
 Visual arrangement may evolve.
 
@@ -791,7 +806,15 @@ Changing or removing a profile:
 
 ## 16. Validation modes
 
-The GUI exposes exactly:
+The everyday page presents **scope**, not validation-mode jargon.  The simple
+controls map to canonical modes as follows:
+
+| Primary control | Canonical request |
+|---|---|
+| `Entire language` | `Diagnostic` with an empty target (Global Scan) |
+| `File / module` | `Quick` with the selected target |
+
+Advanced users may expose the canonical mode selector.  The GUI exposes exactly:
 
 ```text
 quick
@@ -984,16 +1007,21 @@ For source-ready path-resolved sessions, Diagnostic mode has an explicit global
 source-inventory behavior:
 
 ```text
-Mode = Diagnostic
+Scope = Entire language
+Canonical mode = Diagnostic
 Target = empty
-Run action = Run Global Scan
+Run action = Run Scan
 ```
 
-Leaving `Target` empty selects the complete resolved GF source inventory. The
-run performs a static scan and an independent GF compilation for each selected
-`.gf` source, continues after independent file failures, and preserves one raw
-compile log pair per source. `Maximum files` bounds the inventory when a smaller
-diagnostic sample is required.
+Leaving `Target` empty selects the complete resolved GF source inventory. For
+a standard RGL layout, Wordbench also includes direct root-level API facades
+with the same module suffix as the selected language (for example
+`SyntaxSqi.gf`, `ConstructorsSqi.gf`, `SymbolicSqi.gf`, and `TrySqi.gf` for an
+`Sqi` language when those files exist). The run performs a static scan and an
+independent GF compilation for each selected `.gf` source, continues after
+independent file failures, and preserves one raw compile log pair per source.
+`Maximum files` bounds the inventory when a smaller diagnostic sample is
+required.
 
 Selecting a target keeps Diagnostic mode focused on that source instead of the
 complete inventory. `Scan only` remains an evidence-only Diagnostic subprofile.
@@ -1003,7 +1031,15 @@ A completed Global Scan writes the normal human summary plus:
 ```text
 details/global_scan.json
 details/global_scan.csv
+details/source_lock.json
+details/rgl_coverage.json
+details/compendium_matrix.json
 ```
+
+The summary includes a **RGL Certification (Compendium)** section. It reports
+structural compile evidence separately from linguistic scenario/golden
+evidence; a clean compile census never promotes unexecuted linguistic tests to
+PASS.
 
 These expanded inventory artifacts distinguish direct, downstream (`BLOCKED`),
 ambiguous, timeout and process-error outcomes and include a coarse failure
@@ -1345,6 +1381,19 @@ Release gates
 Regression summary
 Run directory
 ```
+
+The primary result actions are:
+
+```text
+Copy Results
+Copy Logs
+```
+
+`Copy Results` copies the owned human Markdown summary when available and falls
+back to a structured concise summary. `Copy Logs` copies available owned
+aggregate scan, operation and master logs with clear file separators. Clipboard
+log payloads are bounded to protect GUI responsiveness; truncation is stated in
+the copied text.
 
 Completion wording:
 
@@ -2612,11 +2661,12 @@ Language
 Capabilities
 Environment
 Validation Profile
-Validation
-Resolved Plan
+Scan
 Results
 Activity
-Run Validation
+Run Scan
+Copy Results
+Copy Logs
 Cancel
 Change Language
 Open Run Directory
@@ -2627,7 +2677,8 @@ Open Master Log
 Open Manifest
 Test Environment
 Settings
-Advanced Options
+Advanced
+Advanced views
 ```
 
 Capability labels:
@@ -2716,3 +2767,38 @@ Internal identifiers remain stable tokens.
 The GUI may simplify interaction.
 
 It must not simplify away explicit language intent, path containment, ambiguity, capability limits, required evidence, required stages, diagnostic uncertainty, security constraints or release policy.
+
+---
+
+## Wordbench 1.2.1 structural-gate behavior
+
+For **Entire language** Diagnostic runs, the language header/progress census
+includes standard same-suffix API facades found in the external language
+project's parent `src` directory. A project containing 49 language modules and
+five standard facades is therefore presented/scanned as 54 GF sources.
+
+The Results **Warnings** tab shows both configuration warnings and parsed GF
+compiler warnings, including structural-lock site provenance. When **Strict
+mode** is selected, any `missing lock field` compiler warning turns that source
+compile into a FAIL even when GF exits 0 and writes a `.gfo`. Namespace-conflict
+warnings remain visible and non-blocking.
+
+
+---
+
+## Wordbench 1.2.2 directory suffix resolution
+
+When the user opens a language **directory**, Wordbench now distinguishes a real
+language suffix from helper-module tails by comparing support across standard RGL
+module roles. A suffix with uniquely stronger standard-role evidence is selected
+automatically; equal support remains an explicit ambiguity.
+
+This means a directory containing, for example,
+`LangSqi.gf`, `GrammarSqi.gf`, `AllSqi.gf`, `AllSqiAbs.gf`,
+`StructuralSqiRes.gf`, and other helper modules resolves to `Sqi` without
+requiring the user to focus `LangSqi.gf` manually. The helper tails remain part
+of the source inventory but do not become competing language identities.
+
+For an external Albanian layout where the five public API facades live beside
+the language directory, **Entire language** can therefore expand the 49 language
+sources to the complete 54-file compile census automatically.

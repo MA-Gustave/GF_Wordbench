@@ -1,0 +1,26 @@
+{
+  "schema": "gf-wordbench-linguistic-review-response-v1",
+  "request_id": "LR-0123456789abcdef01234567",
+  "source_lock_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "reviewer": {
+    "kind": "ai",
+    "name": "ChatGPT",
+    "model": "GPT-5.6 Sol"
+  },
+  "language_variety": "Standard Albanian",
+  "reviews": [
+    {
+      "scenario_id": "linearize-basic",
+      "output_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "verdict": "valid",
+      "confidence": "high",
+      "rationale": "The generated sentence is grammatical and natural in the declared variety.",
+      "issues": [],
+      "alternatives": [],
+      "compendium_levels": ["T9"]
+    }
+  ],
+  "notes": [
+    "AI-reviewed linguistic evidence; not independent human certification."
+  ]
+}

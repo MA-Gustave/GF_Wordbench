@@ -8,6 +8,7 @@ runs through the runs application service on the existing Qt worker boundary.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ from typing import Final
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 
+from gf_wordbench.bootstrap import load_active_project
 from gf_wordbench.config.environment import GF_EXECUTABLE_ENV, OUTPUT_ROOT_ENV
 from gf_wordbench.config.models import ConfigurationResolutionRequest, ValidationTarget
 from gf_wordbench.config.precedence import ConfigurationSource
@@ -25,6 +27,7 @@ from gf_wordbench.entrypoints.gui.dialogs import DialogService, error_presentati
 from gf_wordbench.kernel.events import ProgressEvent
 from gf_wordbench.kernel.statuses import TargetKind, ValidationMode
 from gf_wordbench.projects.languages.models import ResolvedLanguageContext
+from gf_wordbench.projects.models import ProjectConfig
 from gf_wordbench.runs.application import execute_diagnostic_run, execute_quick_run
 from gf_wordbench.runs.identity import iter_run_id_candidates
 
@@ -45,11 +48,10 @@ __all__ = (
 )
 
 _QUICK_READY_STATUS: Final[str] = (
-    "Language source ready. Use Quick for one target or Diagnostic with an empty target "
-    "for a global scan."
+    "Ready. Choose Entire language or File / module, then Run Scan."
 )
-_RUNNING_STATUS: Final[str] = "GF validation is running…"
-_CANCELLING_STATUS: Final[str] = "Cancelling GF validation…"
+_RUNNING_STATUS: Final[str] = "GF scan is running…"
+_CANCELLING_STATUS: Final[str] = "Cancelling GF scan…"
 _SHUTDOWN_WAIT_MS: Final[int] = 5_000
 _GF_FILE_NAMES: Final[frozenset[str]] = frozenset({"gf", "gf.exe"})
 
@@ -66,6 +68,7 @@ class PathResolvedMainGuiRuntime:
         "_gf_executable",
         "_last_run_dir",
         "_output_root",
+        "_validation_profile",
         "_window",
         "_worker",
     )
@@ -93,6 +96,7 @@ class PathResolvedMainGuiRuntime:
         self._last_run_dir: Path | None = None
         self._gf_executable = _initial_gf_executable()
         self._output_root = _initial_output_root()
+        self._validation_profile = _discover_validation_profile(context)
 
         self._render_language_context()
         self._configure_validation_surface()
@@ -151,8 +155,11 @@ class PathResolvedMainGuiRuntime:
             module_suffix=view.module_suffix,
             focused_target=view.focused_target,
             entrypoints=view.available_entrypoints,
-            source_count=len(view.source_inventory),
+            source_count=_global_census_size(self._context),
             capabilities=view.capability_statuses,
+            validation_profile=(
+                None if self._validation_profile is None else self._validation_profile.project_file
+            ),
             resolution_message=_resolution_message(view),
         )
         self._window.set_project_identity(
@@ -166,20 +173,77 @@ class PathResolvedMainGuiRuntime:
             _target_choice(path, language_directory=self._context.language_directory)
             for path in self._context.source_inventory
         )
-        panel.set_catalog(ValidationPanelCatalog(targets=target_choices))
-        panel.set_values(
-            ValidationPanelValues(
-                mode=ValidationMode.QUICK,
-                target_file=_focused_target_identifier(self._context),
+        profile = self._validation_profile
+        if profile is None:
+            panel.set_catalog(ValidationPanelCatalog(targets=target_choices))
+        else:
+            checkpoints = tuple(
+                ValidationChoice(
+                    identifier=path.as_posix(),
+                    label=path.name,
+                    description="Validation-profile checkpoint",
+                )
+                for path in profile.modules.checkpoints
             )
-        )
+            required = tuple(str(value) for value in profile.validation.required_scenarios)
+            optional = tuple(str(value) for value in profile.validation.optional_scenarios)
+            scenarios = tuple(
+                ValidationChoice(
+                    identifier=scenario_id,
+                    label=(f"[required] {scenario_id}" if scenario_id in required else scenario_id),
+                    description="Albanian linguistic campaign scenario",
+                )
+                for scenario_id in (*required, *optional)
+            )
+            panel.set_catalog(
+                ValidationPanelCatalog(
+                    targets=target_choices,
+                    checkpoints=checkpoints,
+                    scenarios=scenarios,
+                    release_scenarios=required,
+                    release_checkpoint_count=len(checkpoints),
+                )
+            )
+        focused_target = _focused_target_identifier(self._context)
+        if profile is not None:
+            panel.set_values(
+                ValidationPanelValues(
+                    mode=ValidationMode.DIAGNOSTIC,
+                    target_file=None,
+                    scenario_filter=tuple(str(value) for value in profile.validation.required_scenarios),
+                    timeout_override=300,
+                    keep_ok_details=True,
+                    diff_previous=True,
+                    emit_cpu_stats=True,
+                    strict=True,
+                    verbose_gf_output=True,
+                )
+            )
+        else:
+            panel.set_values(
+                ValidationPanelValues(
+                    # Directory selections open on the simplest useful action:
+                    # scan the whole resolved language.  Selecting a .gf file at
+                    # startup keeps the focused Quick target.
+                    mode=(
+                        ValidationMode.QUICK
+                        if focused_target is not None
+                        else ValidationMode.DIAGNOSTIC
+                    ),
+                    target_file=focused_target,
+                )
+            )
 
     def _connect_language_switch_intents(self) -> None:
         self._window.open_project_requested.connect(
             self._window.language_switch_requested.emit
         )
-        self._require_project_panel().select_language_requested.connect(
+        project_panel = self._require_project_panel()
+        project_panel.select_language_requested.connect(
             self._window.language_switch_requested.emit
+        )
+        project_panel.open_validation_profile_requested.connect(
+            self._open_validation_profile
         )
 
     def _connect_run_intents(self) -> None:
@@ -189,8 +253,55 @@ class PathResolvedMainGuiRuntime:
         self._window.test_environment_requested.connect(self._test_environment)
         self._window.open_last_run_requested.connect(self._open_last_run)
         self._window.open_reports_requested.connect(self._open_reports)
-        self._require_validation_panel().values_changed.connect(
-            lambda _values: self._refresh_run_available()
+        panel = self._require_validation_panel()
+        panel.values_changed.connect(lambda _values: self._refresh_run_available())
+        panel.browse_target_requested.connect(self._browse_target)
+
+    def _open_validation_profile(self, profile_path: object) -> None:
+        path = Path(profile_path)
+        if path.is_file():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def _browse_target(self) -> None:
+        panel = self._require_validation_panel()
+        current_identifier = panel.values().target_file
+        current = (
+            self._context.language_directory / current_identifier
+            if current_identifier
+            else self._context.language_directory
+        )
+        allowed: set[Path] = set()
+        for source in self._context.source_inventory:
+            try:
+                allowed.add(source.resolve(strict=False))
+            except OSError:
+                continue
+
+        def is_allowed(path: Path) -> bool:
+            try:
+                return path.suffix.casefold() == ".gf" and path.resolve(strict=False) in allowed
+            except OSError:
+                return False
+
+        selection = self._dialogs.select_file(
+            title="Select GF scan target",
+            purpose="validation_target",
+            current=current,
+            base_root=self._context.language_directory,
+            file_filter="Grammatical Framework source (*.gf);;All files (*)",
+            validator=is_allowed,
+            rejection_message=(
+                "Select a resolved GF source from the active language. "
+                "Recheck the language first if a new source was added."
+            ),
+        )
+        if selection.cancelled or selection.value is None:
+            return
+        panel.set_target_file(
+            _relative_target(
+                selection.value,
+                language_directory=self._context.language_directory,
+            )
         )
 
     def _refresh_run_available(self) -> None:
@@ -201,10 +312,9 @@ class PathResolvedMainGuiRuntime:
         local = self._require_validation_panel().local_validation()
         supported = values.mode in {ValidationMode.QUICK, ValidationMode.DIAGNOSTIC}
         quick_ready = values.mode is not ValidationMode.QUICK or values.target_file is not None
-        is_global = values.mode is ValidationMode.DIAGNOSTIC and values.target_file is None
-        self._window.set_run_action_label(
-            "Run Global Scan" if is_global else "Run Validation"
-        )
+        # The primary UI presents one operation: scan the selected scope.
+        # Internal validation modes remain an Advanced concern.
+        self._window.set_run_action_label("Run Scan")
         available = supported and quick_ready and not local.has_errors
         self._window.set_run_available(available)
 
@@ -261,10 +371,15 @@ class PathResolvedMainGuiRuntime:
         is_global = values.mode is ValidationMode.DIAGNOSTIC and values.target_file is None
         subject = "all GF sources" if is_global else values.target_file
         if values.mode is ValidationMode.DIAGNOSTIC:
-            source_count = len(self._context.source_inventory) if is_global else 1
+            source_count = _global_census_size(self._context) if is_global else 1
             if is_global and values.max_files is not None:
                 source_count = min(source_count, values.max_files)
-            total = 2 + (2 * source_count)
+            scenario_count = 0
+            if self._validation_profile is not None:
+                required_ids = {str(value) for value in self._validation_profile.validation.required_scenarios}
+                optional_ids = set(values.scenario_filter).difference(required_ids)
+                scenario_count = len(required_ids) + len(optional_ids)
+            total = 2 + (2 * source_count) + scenario_count
         else:
             total = 3
         mode_label = (
@@ -315,9 +430,7 @@ class PathResolvedMainGuiRuntime:
             raise ValueError("Quick target is required")
         if values.mode not in {ValidationMode.QUICK, ValidationMode.DIAGNOSTIC}:
             raise ValueError("Path-resolved execution supports Quick and Diagnostic")
-        # Import lazily to avoid a bootstrap -> startup -> runtime -> bootstrap
-        # import cycle while startup is still composing the main runtime.
-        from gf_wordbench.bootstrap import build_framework_defaults
+        from gf_wordbench.config.defaults import build_framework_defaults
 
         if values.mode is ValidationMode.DIAGNOSTIC and values.target_file is None:
             target = ValidationTarget(TargetKind.PROJECT, None)
@@ -344,10 +457,14 @@ class PathResolvedMainGuiRuntime:
             ConfigurationResolutionRequest(
                 defaults=build_framework_defaults(),
                 language_context=self._context,
+                validation_profile=self._validation_profile,
                 source_values={ConfigurationSource.GUI: gui_values},
             )
         )
-        return resolution.require()
+        config = resolution.require()
+        if self._validation_profile is not None:
+            config = replace(config, selected_scenarios=values.scenario_filter)
+        return replace(config, strict=values.strict)
 
     def _next_run_id(self) -> str:
         now = datetime.now(UTC)
@@ -483,8 +600,7 @@ class PathResolvedMainGuiRuntime:
             return
 
         self._finish_worker_ui(
-            f"{result.run_config.mode.value.title()} validation complete: "
-            f"{result.overall_status.value}"
+            f"Scan complete: {result.overall_status.value}"
         )
 
     def _on_run_cancelled(self, outcome: object) -> None:
@@ -552,6 +668,38 @@ class PathResolvedMainGuiRuntime:
         return panel
 
 
+
+_STANDARD_API_FACADE_PREFIXES: tuple[str, ...] = (
+    "Combinators", "Constructors", "Symbolic", "Syntax", "Try"
+)
+
+
+def _global_census_size(context: ResolvedLanguageContext) -> int:
+    """Return the same conservative source count used by Diagnostic Global Scan."""
+
+    base = len(context.source_inventory)
+    language_root = context.language_directory.resolve(strict=False)
+    rgl_source_root = context.rgl_source_root.resolve(strict=False)
+    suffix = context.module_suffix
+    if not suffix:
+        return base
+
+    owned = {path.resolve(strict=False) for path in context.source_inventory}
+    if language_root.parent == rgl_source_root:
+        candidates = tuple(rgl_source_root.glob(f"*{suffix}.gf"))
+    else:
+        facade_root = language_root.parent
+        candidates = tuple(
+            facade_root / f"{prefix}{suffix}.gf"
+            for prefix in _STANDARD_API_FACADE_PREFIXES
+        )
+    facades = sum(
+        1
+        for candidate in candidates
+        if candidate.is_file() and candidate.resolve(strict=False) not in owned
+    )
+    return base + facades
+
 def build_main_runtime(
     application: object,
     context: ResolvedLanguageContext,
@@ -559,6 +707,31 @@ def build_main_runtime(
     """Compose the canonical executable main runtime for one language."""
 
     return PathResolvedMainGuiRuntime(application, context)
+
+
+def _discover_validation_profile(context: ResolvedLanguageContext) -> ProjectConfig | None:
+    """Find the nearest compatible project.toml without changing language authority."""
+
+    language_directory = context.language_directory.resolve(strict=True)
+    candidates = (language_directory, *language_directory.parents)
+    for root in candidates[:10]:
+        candidate = root / "project.toml"
+        if not candidate.is_file():
+            continue
+        try:
+            profile = load_active_project(candidate.resolve(strict=True), strict=False)
+        except Exception:
+            continue
+        try:
+            source_root = profile.source_root.resolve(strict=True)
+        except OSError:
+            continue
+        if source_root != language_directory:
+            continue
+        if profile.identity.language_code.casefold() != context.language_key.casefold():
+            continue
+        return profile
+    return None
 
 
 def _initial_gf_executable() -> Path | None:

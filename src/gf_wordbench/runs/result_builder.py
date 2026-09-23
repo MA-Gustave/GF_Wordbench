@@ -107,6 +107,7 @@ def build_scenario_result(
     sections: Iterable[Any] = (),
     assertions: Iterable[Any] = (),
     artifacts: Iterable[Any] = (),
+    diagnostics: Iterable[Any] = (),
 ) -> ScenarioResult:
     if not isinstance(required, bool):
         raise TypeError("required must be a boolean")
@@ -152,6 +153,7 @@ def build_scenario_result(
         sections=tuple(sections),
         assertions=tuple(assertions),
         artifacts=tuple(artifacts),
+        diagnostics=tuple(diagnostics),
         blocked_by=tuple(blocked_by),
     )
 

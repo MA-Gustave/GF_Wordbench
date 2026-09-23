@@ -53,6 +53,7 @@ from gf_wordbench.config.defaults import (
     SUPPORTED_ARTIFACT_MANIFEST_SCHEMA_MAJOR,
     SUPPORTED_PROJECT_SCHEMA_MAJOR,
     SUPPORTED_RUN_SUMMARY_SCHEMA_MAJOR,
+    build_framework_defaults as _build_framework_defaults_from_config,
 )
 from gf_wordbench.config.environment import read_environment
 from gf_wordbench.config.models import (
@@ -1810,40 +1811,9 @@ def _unconfigured_gold_update_workflow(
 
 
 def build_framework_defaults() -> AppConfig:
-    """Build the language-neutral framework default configuration."""
+    """Compatibility facade for the configuration-owned defaults factory."""
 
-    return AppConfig(
-        producer=ProducerInfo(
-            name=_APPLICATION_NAME,
-            version=__version__,
-        ),
-        selection_defaults=SelectionDefaults(
-            mode=DEFAULT_VALIDATION_MODE,
-            timeout_sec=DEFAULT_TIMEOUT_SECONDS,
-            max_files=DEFAULT_MAX_FILES,
-            keep_ok_details=DEFAULT_KEEP_OK_DETAILS,
-            diff_previous=DEFAULT_DIFF_PREVIOUS,
-            skip_version_probe=DEFAULT_SKIP_VERSION_PROBE,
-            no_compile=DEFAULT_NO_COMPILE,
-            emit_cpu_stats=DEFAULT_EMIT_CPU_STATS,
-        ),
-        output_defaults=OutputDefaults(
-            evidence_level=_coerce_evidence_level(
-                DEFAULT_EVIDENCE_LEVEL,
-                field_name="DEFAULT_EVIDENCE_LEVEL",
-            ),
-            generate_manifest=DEFAULT_GENERATE_MANIFEST,
-            generate_ai_ready=DEFAULT_GENERATE_AI_READY,
-            aggregate_logs=DEFAULT_AGGREGATE_LOGS,
-        ),
-        schema_support=SchemaSupport(
-            project_major=SUPPORTED_PROJECT_SCHEMA_MAJOR,
-            app_state_major=SUPPORTED_APP_STATE_SCHEMA_MAJOR,
-            run_summary_major=SUPPORTED_RUN_SUMMARY_SCHEMA_MAJOR,
-            artifact_manifest_major=(SUPPORTED_ARTIFACT_MANIFEST_SCHEMA_MAJOR),
-        ),
-        state_filename=DEFAULT_STATE_FILENAME,
-    )
+    return _build_framework_defaults_from_config()
 
 
 def preview_run(

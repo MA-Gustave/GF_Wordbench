@@ -40,13 +40,13 @@ Existing documentation, project-language content, templates, test fixture payloa
 | `kernel` | 7 |
 | `state` | 5 |
 | `projects` | 19 |
-| `runs` | 21 |
+| `runs` | 22 |
 | `validation` | 54 |
 | `diagnostics` | 32 |
 | `reporting` | 38 |
 | `infrastructure` | 15 |
-| `entrypoints` | 27 |
-| **Runtime package total** | **229** |
+| `entrypoints` | 28 |
+| **Runtime package total** | **231** |
 
 ### Test distribution
 
@@ -54,14 +54,14 @@ Existing documentation, project-language content, templates, test fixture payloa
 |---|---:|
 | `Test root` | 1 |
 | `helpers` | 4 |
-| `unit` | 92 |
+| `unit` | 93 |
 | `components` | 8 |
 | `contracts` | 14 |
 | `schemas` | 7 |
-| `integration` | 26 |
+| `integration` | 27 |
 | `migrations` | 4 |
 | `release` | 5 |
-| **Test total** | **161** |
+| **Test total** | **163** |
 
 ---
 
@@ -152,6 +152,7 @@ GF_Wordbench/
 │       │   │   ├── controller.py
 │       │   │   ├── dialogs.py
 │       │   │   ├── main.py
+│       │   │   ├── runtime.py
 │       │   │   ├── startup.py
 │       │   │   ├── view_model.py
 │       │   │   ├── widgets.py
@@ -257,6 +258,7 @@ GF_Wordbench/
 │       │   │   ├── paths.py
 │       │   │   └── results.py
 │       │   ├── __init__.py
+│       │   ├── application.py
 │       │   ├── budgets.py
 │       │   ├── cancellation.py
 │       │   ├── continuation.py
@@ -399,6 +401,7 @@ GF_Wordbench/
 │   │   │   └── test_version_probe.py
 │   │   ├── gui/
 │   │   │   ├── test_language_switching.py
+│   │   │   ├── test_main_runtime_composition.py
 │   │   │   ├── test_run_and_cancel.py
 │   │   │   └── test_startup.py
 │   │   └── process/
@@ -486,6 +489,7 @@ GF_Wordbench/
 │   │   │   ├── test_summary_projection.py
 │   │   │   └── test_summary_writers.py
 │   │   ├── runs/
+│   │   │   ├── test_application_quick.py
 │   │   │   ├── test_budgets.py
 │   │   │   ├── test_cancellation.py
 │   │   │   ├── test_continuation.py
@@ -535,6 +539,7 @@ GF_Wordbench/
 │   │       ├── test_regression.py
 │   │       └── test_release_gates.py
 │   └── conftest.py
+├── GF_Wordbench_output_mode_toggle.pyw
 ├── .gitignore
 ├── launch_cli.bat
 ├── launch_gui.bat

@@ -5,8 +5,8 @@
 **Applies to:** First local installation, first active-project validation, CLI and GUI startup  
 **Owner:** GF Wordbench maintainers  
 **Canonical path:** `docs/usage/QUICK_START.md`  
-**Guide version:** `1.0.0`  
-**Last reviewed:** 2026-08-05
+**Guide version:** `1.1.0`  
+**Last reviewed:** 2026-09-22
 
 ---
 
@@ -645,21 +645,24 @@ When GUI dependencies are installed:
 gf-wordbench gui
 ```
 
-The GUI resolves the same inputs as the CLI:
+The GUI keeps the first run intentionally simple:
 
 ```text
-workspace root
-GF executable
-RGL root
-output root
-mode
-target
-allowed run options
+choose or change the active language
+→ choose Entire language or File / module
+→ Run Scan
+→ Copy Results or Copy Logs
 ```
 
-Equivalent GUI and CLI inputs produce equivalent resolved run configuration.
+A directory selection defaults to `Entire language` (the canonical Diagnostic
+Global Scan request).  A `.gf` selection preserves that source as the focused
+`File / module` target (the canonical Quick request).  Canonical validation
+modes and policy-heavy controls remain available under **Advanced**.
 
-The GUI does not define separate validation behavior.
+The GUI still resolves the same GF executable, RGL root, output root, mode,
+target and allowed run options as the CLI.  Equivalent GUI and CLI inputs
+produce equivalent resolved run configuration; the simplified page does not
+define separate validation behavior.
 
 ---
 

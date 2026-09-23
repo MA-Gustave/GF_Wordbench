@@ -24,6 +24,13 @@ if TYPE_CHECKING:
     from .models import ScenarioResult, ScenarioSpec
 
 _MAX_BATCH_SIZE: Final[int] = 10_000
+_MAX_SCENARIO_DIAGNOSTICS: Final[int] = 4096
+_GF_SHELL_FAILURE_MARKERS: Final[tuple[str, ...]] = (
+    "Unable to find:",
+    "empty grammar, no abstract",
+    "unknown qualified constant",
+    "constant not found:",
+)
 _T = TypeVar("_T")
 
 
@@ -44,6 +51,10 @@ class _MarkerSection(Protocol):
     section_id: object
     text: str
     source_evidence: str
+    completed: bool
+    begin_line: int | None
+    end_line: int | None
+    message: str
 
 
 class _MarkerEvaluation(Protocol):
@@ -70,6 +81,16 @@ class _ArtifactEvaluation(Protocol):
     missing_required: Sequence[object]
     message: str
     error: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _DetectedScenarioDiagnostic:
+    kind: str
+    source: str
+    message: str
+    marker: str
+    line_number: int
+    is_failure: bool = True
 
 
 class _NormalizationRegistry(Protocol):
@@ -104,6 +125,7 @@ class _ScenarioInterpretation:
     diagnostic_class: DiagnosticClass
     error_kind: ErrorKind
     primary_message: str
+    diagnostics: tuple[_DetectedScenarioDiagnostic, ...] = ()
 
 
 def run_scenario(
@@ -133,6 +155,7 @@ def run_scenario(
         ),
     )
     _validate_execution_evidence(execution, run_paths=run_paths)
+    observed_diagnostics = _gf_shell_failures(execution)
 
     marker_evaluation = cast(
         "_MarkerEvaluation",
@@ -147,7 +170,11 @@ def run_scenario(
     normalized_output_path: Path | None = None
     normalization_error: str | None = None
 
-    if execution.execution_state is ExecutionState.COMPLETED and marker_evaluation.complete:
+    if (
+        execution.execution_state is ExecutionState.COMPLETED
+        and marker_evaluation.complete
+        and not _has_failure_diagnostic(observed_diagnostics)
+    ):
         try:
             registry = _normalization_registry(
                 run_config,
@@ -202,6 +229,7 @@ def run_scenario(
     if (
         execution.execution_state is ExecutionState.COMPLETED
         and marker_evaluation.complete
+        and not _has_failure_diagnostic(observed_diagnostics)
         and normalization_error is None
     ):
         try:
@@ -223,6 +251,7 @@ def run_scenario(
     if (
         execution.execution_state is ExecutionState.COMPLETED
         and marker_evaluation.complete
+        and not _has_failure_diagnostic(observed_diagnostics)
         and normalization_error is None
         and assertion_error is None
     ):
@@ -269,10 +298,23 @@ def run_scenario(
         assertions=assertion_evaluations,
         gold=gold_evaluation,
         artifacts=artifact_evaluation,
+        diagnostics=observed_diagnostics,
         normalization_error=normalization_error,
         assertion_error=assertion_error,
         gold_error=gold_error,
         artifact_error=artifact_error,
+    )
+
+    diagnostic_results = tuple(
+        models.ScenarioDiagnosticObservation(
+            kind=observation.kind,
+            source=observation.source,
+            message=observation.message,
+            marker=observation.marker,
+            line_number=observation.line_number,
+            is_failure=observation.is_failure,
+        )
+        for observation in interpretation.diagnostics
     )
 
     section_results = _build_section_results(
@@ -305,12 +347,12 @@ def run_scenario(
         "timed_out": execution.timed_out,
         "duration_ms": execution.duration_ms,
         "stdout_path": (
-            run_paths.relative_path(execution.stdout_path, role="stdout path")
+            Path(run_paths.relative_path(execution.stdout_path, role="stdout path").as_posix())
             if execution.stdout_path is not None
             else None
         ),
         "stderr_path": (
-            run_paths.relative_path(execution.stderr_path, role="stderr path")
+            Path(run_paths.relative_path(execution.stderr_path, role="stderr path").as_posix())
             if execution.stderr_path is not None
             else None
         ),
@@ -324,19 +366,24 @@ def run_scenario(
             if execution.stderr_path is not None
             else None
         ),
-        "normalized_output_path": normalized_output_path,
-        "gold_path": (
-            gold_evaluation.gold_path
-            if gold_evaluation is not None
-            else _optional_path(spec, "gold_path")
+        "normalized_output_path": (
+            Path(run_paths.relative_path(normalized_output_path, role="normalized scenario output").as_posix())
+            if normalized_output_path is not None
+            else None
         ),
+        "gold_path": _optional_path(spec, "gold_path"),
         "gold_match": (gold_evaluation.match if gold_evaluation is not None else None),
         "sections": section_results,
         "assertions": assertion_evaluations,
         "artifacts": (
             tuple(artifact_evaluation.records) if artifact_evaluation is not None else ()
         ),
-        "gold_diff_path": (gold_evaluation.diff_path if gold_evaluation is not None else None),
+        "diagnostics": diagnostic_results,
+        "gold_diff_path": (
+            Path(run_paths.relative_path(gold_evaluation.diff_path, role="scenario gold diff").as_posix())
+            if gold_evaluation is not None and gold_evaluation.diff_path is not None
+            else None
+        ),
         "normalization_profile_id": _required_attribute(
             spec,
             "normalization_profile_id",
@@ -377,6 +424,7 @@ def run_scenario(
                 "gold_match",
                 "sections",
                 "artifacts",
+                "diagnostics",
             ),
         )
     except Exception as exc:
@@ -445,6 +493,7 @@ def _interpret_scenario(
     assertions: Sequence[_AssertionEvaluation],
     gold: _GoldEvaluation | None,
     artifacts: _ArtifactEvaluation | None,
+    diagnostics: tuple[_DetectedScenarioDiagnostic, ...],
     normalization_error: str | None,
     assertion_error: str | None,
     gold_error: str | None,
@@ -459,6 +508,7 @@ def _interpret_scenario(
                 execution,
                 "Process timed out.",
             ),
+            diagnostics=diagnostics,
         )
 
     if execution.execution_state is ExecutionState.CANCELLED:
@@ -470,6 +520,7 @@ def _interpret_scenario(
                 execution,
                 "Execution was cancelled.",
             ),
+            diagnostics=diagnostics,
         )
 
     if execution.execution_state is ExecutionState.LAUNCH_FAILED:
@@ -484,6 +535,18 @@ def _interpret_scenario(
                 execution,
                 "Failed to launch GF executable.",
             ),
+            diagnostics=diagnostics,
+        )
+
+    if _has_failure_diagnostic(diagnostics):
+        return _ScenarioInterpretation(
+            status=ValidationStatus.FAIL,
+            diagnostic_class=DiagnosticClass.DIRECT,
+            error_kind=ErrorKind.SCRIPT,
+            primary_message=_bounded_message(
+                f"GF shell reported an execution error: {diagnostics[0].message}"
+            ),
+            diagnostics=diagnostics,
         )
 
     if not markers.complete:
@@ -582,16 +645,60 @@ def _interpret_scenario(
         primary_message="Scenario completed successfully.",
     )
 
+def _gf_shell_failures(
+    execution: _ExecutionEvidence,
+) -> tuple[_DetectedScenarioDiagnostic, ...]:
+    """Return structured GF shell command failures observed in raw output.
+
+    GF run/interactive mode can exit with status 0 after command-level errors.
+    Scenario success therefore cannot rely on the OS exit code alone.
+    """
+    observations: list[_DetectedScenarioDiagnostic] = []
+    for source, text in (
+        ("stderr", execution.stderr_text),
+        ("stdout", execution.stdout_text),
+    ):
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            stripped = line.strip()
+            marker = next(
+                (
+                    candidate
+                    for candidate in _GF_SHELL_FAILURE_MARKERS
+                    if candidate.casefold() in stripped.casefold()
+                ),
+                None,
+            )
+            if marker is None:
+                continue
+            observations.append(
+                _DetectedScenarioDiagnostic(
+                    kind="gf_shell_error",
+                    source=source,
+                    message=_bounded_message(stripped),
+                    marker=marker,
+                    line_number=line_number,
+                )
+            )
+            if len(observations) >= _MAX_SCENARIO_DIAGNOSTICS:
+                return tuple(observations)
+    return tuple(observations)
+
+
+def _has_failure_diagnostic(
+    diagnostics: Sequence[_DetectedScenarioDiagnostic],
+) -> bool:
+    return any(observation.is_failure for observation in diagnostics)
+
 
 def _load_stage_functions() -> ScenarioStageFunctions:
     from .artifacts import (
         verify_scenario_artifacts,
         write_normalized_scenario_output,
     )
-    from .assertions import evaluate_assertions as evaluate_scenario_assertions
-    from .execution import prepare_and_execute_scenario as execute_scenario
-    from .gold_compare import compare_gold as compare_scenario_gold
-    from .markers import validate_scenario_markers as evaluate_scenario_markers
+    from .assertions import evaluate_scenario_assertions
+    from .execution import execute_scenario_spec as execute_scenario
+    from .gold_compare import compare_scenario_gold
+    from .markers import evaluate_scenario_markers
 
     return ScenarioStageFunctions(
         execute=execute_scenario,
@@ -644,15 +751,30 @@ def _build_section_results(
     for marker_section in marker_sections:
         section_id = str(marker_section.section_id)
         normalized = normalized_by_id.get(section_id)
+        begin_line = getattr(marker_section, "begin_line", None)
+        end_line = getattr(marker_section, "end_line", None)
+        completed = bool(
+            getattr(
+                marker_section,
+                "completed",
+                end_line is not None,
+            )
+        )
+        if completed and end_line is None:
+            # A section cannot be complete without an observed end marker.
+            # Preserve evidence as incomplete instead of violating the
+            # ScenarioSectionResult invariant and aborting the whole run.
+            completed = False
+
         values = {
             "id": section_id,
-            "completed": True,
-            "message": "",
-            "begin_line": getattr(marker_section, "begin_line", None),
-            "end_line": getattr(marker_section, "end_line", None),
+            "completed": completed,
+            "message": str(getattr(marker_section, "message", "")),
+            "begin_line": begin_line,
+            "end_line": end_line if completed else None,
             # Compatibility fields retained for older result models.
             "section_id": marker_section.section_id,
-            "complete": True,
+            "complete": completed,
             "raw_text": marker_section.text,
             "source_evidence": marker_section.source_evidence,
             "normalized_text": (

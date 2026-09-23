@@ -398,7 +398,7 @@ class RunResult:
         file_keys = [_path_key(result.file_path) for result in self.file_results]
         if len(file_keys) != len(set(file_keys)):
             raise ValueError("file_results contain duplicate file paths")
-        if file_keys != sorted(file_keys):
+        if file_keys != sorted(file_keys, key=lambda value: (value.casefold(), value)):
             raise ValueError("file_results must be ordered by normalized file_path")
 
         scenario_ids = [

@@ -31,6 +31,7 @@ __all__ = (
     "ScenarioAssertionResult",
     "ScenarioAssertionStatus",
     "ScenarioComparisonPolicy",
+    "ScenarioDiagnosticObservation",
     "ScenarioResult",
     "ScenarioSectionResult",
     "ScenarioSpec",
@@ -50,6 +51,7 @@ _MAX_TEXT_LENGTH: Final[int] = 4096
 _MAX_MESSAGE_LENGTH: Final[int] = 16384
 _MAX_SECTIONS: Final[int] = 4096
 _MAX_ASSERTIONS: Final[int] = 16384
+_MAX_DIAGNOSTICS: Final[int] = 4096
 _MAX_ARTIFACTS: Final[int] = 4096
 _MAX_INPUT_PATHS: Final[int] = 4096
 _MAX_TAGS: Final[int] = 256
@@ -71,6 +73,11 @@ class ScenarioAssertionStatus(StrEnum):
     FAILED = "failed"
     ERROR = "error"
     SKIPPED = "skipped"
+
+
+_SCENARIO_DIAGNOSTIC_SOURCES: Final[frozenset[str]] = frozenset(
+    {"stdout", "stderr"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,6 +400,65 @@ class ScenarioAssertionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ScenarioDiagnosticObservation:
+    """One structured diagnostic observed in raw scenario process output.
+
+    The observation is evidence, not a replacement for the raw stdout/stderr
+    artifacts.  ``source`` and ``line_number`` point back into those artifacts,
+    while ``marker`` records the canonical matcher that recognized the line.
+    """
+
+    kind: str
+    source: str
+    message: str
+    marker: str
+    line_number: int | None = None
+    is_failure: bool = True
+
+    def __post_init__(self) -> None:
+        kind = _normalize_identifier(
+            self.kind,
+            field="kind",
+            pattern=_ASSERTION_KIND_RE,
+        )
+        source = _normalize_evidence_text(
+            self.source,
+            field="source",
+            maximum=16,
+            allow_empty=False,
+        ).strip().casefold()
+        if source not in _SCENARIO_DIAGNOSTIC_SOURCES:
+            raise ValueError("source must be stdout or stderr")
+        message = _normalize_evidence_text(
+            self.message,
+            field="message",
+            maximum=_MAX_MESSAGE_LENGTH,
+            allow_empty=False,
+        )
+        marker = _normalize_evidence_text(
+            self.marker,
+            field="marker",
+            maximum=_MAX_TEXT_LENGTH,
+            allow_empty=False,
+        )
+        line_number = _normalize_optional_positive_int(
+            self.line_number,
+            field="line_number",
+        )
+        is_failure = _require_bool(
+            self.is_failure,
+            field="is_failure",
+        )
+
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "source", source)
+        object.__setattr__(self, "message", message)
+        object.__setattr__(self, "marker", marker)
+        object.__setattr__(self, "line_number", line_number)
+        object.__setattr__(self, "is_failure", is_failure)
+
+
+@dataclass(frozen=True, slots=True)
 class ScenarioResult:
     scenario_id: ScenarioId
     script_path: Path
@@ -419,6 +485,7 @@ class ScenarioResult:
     assertions: tuple[ScenarioAssertionResult, ...]
     artifacts: tuple[ArtifactObservation, ...]
     blocked_by: tuple[str, ...] = ()
+    diagnostics: tuple[ScenarioDiagnosticObservation, ...] = ()
 
     def __post_init__(self) -> None:
         scenario_id = validate_scenario_id(
@@ -523,6 +590,7 @@ class ScenarioResult:
             sections=sections,
         )
         artifacts = _normalize_artifact_observations(self.artifacts)
+        diagnostics = _normalize_diagnostics(self.diagnostics)
         blocked_by = _normalize_unique_identifiers(
             self.blocked_by,
             field="blocked_by",
@@ -557,6 +625,7 @@ class ScenarioResult:
             gold_match=gold_match,
             gold_diff_path=gold_diff_path,
             artifacts=artifacts,
+            diagnostics=diagnostics,
         )
 
         object.__setattr__(
@@ -643,6 +712,7 @@ class ScenarioResult:
             assertions,
         )
         object.__setattr__(self, "artifacts", artifacts)
+        object.__setattr__(self, "diagnostics", diagnostics)
         object.__setattr__(
             self,
             "blocked_by",
@@ -771,6 +841,7 @@ def _validate_scenario_evidence(
     gold_match: bool | None,
     gold_diff_path: Path | None,
     artifacts: tuple[ArtifactObservation, ...],
+    diagnostics: tuple[ScenarioDiagnosticObservation, ...],
 ) -> None:
     if gold_match is not None:
         if gold_path is None:
@@ -801,6 +872,8 @@ def _validate_scenario_evidence(
             for observation in artifacts
         ):
             raise ValueError("OK scenario requires all required artifacts")
+        if any(observation.is_failure for observation in diagnostics):
+            raise ValueError("OK scenario cannot contain failure diagnostics")
 
     if status is ValidationStatus.FAIL:
         if execution_state is not ExecutionState.COMPLETED:
@@ -817,11 +890,12 @@ def _validate_scenario_evidence(
                 for observation in artifacts
             )
             or exit_code not in {None, 0}
+            or any(observation.is_failure for observation in diagnostics)
         ):
             raise ValueError("FAIL scenario requires observable validation failure")
 
     if status is ValidationStatus.SKIPPED:
-        if sections or assertions or artifacts:
+        if sections or assertions or artifacts or diagnostics:
             raise ValueError("SKIPPED scenario must not contain evaluated results")
         if normalized_output_path is not None:
             raise ValueError("SKIPPED scenario must not claim normalized output")
@@ -914,6 +988,29 @@ def _normalize_artifact_observations(
         key = _path_key(value.path)
         if key in seen:
             raise ValueError("artifact observation paths must be unique")
+        seen.add(key)
+        normalized.append(value)
+    return tuple(normalized)
+
+
+def _normalize_diagnostics(
+    values: tuple[ScenarioDiagnosticObservation, ...],
+) -> tuple[ScenarioDiagnosticObservation, ...]:
+    if not isinstance(values, tuple):
+        raise TypeError("diagnostics must be a tuple")
+    if len(values) > _MAX_DIAGNOSTICS:
+        raise ValueError("diagnostics exceeds the supported bound")
+
+    normalized: list[ScenarioDiagnosticObservation] = []
+    seen: set[tuple[str, str, int | None, str]] = set()
+    for index, value in enumerate(values):
+        if not isinstance(value, ScenarioDiagnosticObservation):
+            raise TypeError(
+                f"diagnostics[{index}] must be a ScenarioDiagnosticObservation"
+            )
+        key = (value.kind, value.source, value.line_number, value.message)
+        if key in seen:
+            raise ValueError("diagnostic observations must be unique")
         seen.add(key)
         normalized.append(value)
     return tuple(normalized)

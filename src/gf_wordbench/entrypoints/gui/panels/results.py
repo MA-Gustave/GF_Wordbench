@@ -21,6 +21,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QFormLayout,
     QGridLayout,
     QGroupBox,
@@ -50,6 +51,7 @@ __all__ = ("ResultsPanel",)
 
 _MAX_DISPLAY_TEXT: Final[int] = 16_384
 _MAX_ROWS: Final[int] = 100_000
+_MAX_CLIPBOARD_BYTES: Final[int] = 8 * 1024 * 1024
 
 
 @unique
@@ -340,6 +342,7 @@ class ResultsPanel(QWidget):
     unavailable_path_requested = Signal(str, object)
     result_rendered = Signal(object)
     result_cleared = Signal()
+    copy_completed = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -363,7 +366,7 @@ class ResultsPanel(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(8)
+        root.setSpacing(6)
 
         self._status_label = QLabel(self)
         self._status_label.setObjectName("results_status_label")
@@ -375,6 +378,26 @@ class ResultsPanel(QWidget):
         self._status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         root.addWidget(self._status_label)
 
+        # Copying a concise result or the run logs is part of the primary
+        # workflow.  These actions stay visible while deep artifact navigation
+        # remains in the advanced tabs/menu surfaces.
+        copy_bar = QHBoxLayout()
+        copy_bar.setContentsMargins(0, 0, 0, 0)
+        copy_bar.setSpacing(6)
+        self._copy_results_button = QPushButton("Copy Results", self)
+        self._copy_results_button.setObjectName("copyResultsButton")
+        self._copy_results_button.setAccessibleName("Copy validation results")
+        self._copy_logs_button = QPushButton("Copy Logs", self)
+        self._copy_logs_button.setObjectName("copyLogsButton")
+        self._copy_logs_button.setAccessibleName("Copy validation logs")
+        self._copy_feedback = QLabel(self)
+        self._copy_feedback.setObjectName("resultsCopyFeedback")
+        self._copy_feedback.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        copy_bar.addWidget(self._copy_results_button)
+        copy_bar.addWidget(self._copy_logs_button)
+        copy_bar.addWidget(self._copy_feedback, 1)
+        root.addLayout(copy_bar)
+
         splitter = QSplitter(Qt.Orientation.Vertical, self)
         splitter.setObjectName("results_splitter")
         splitter.setChildrenCollapsible(False)
@@ -384,11 +407,14 @@ class ResultsPanel(QWidget):
         summary_layout = QHBoxLayout(summary_container)
         summary_layout.setContentsMargins(0, 0, 0, 0)
         summary_layout.setSpacing(8)
-
         summary_layout.addWidget(self._build_run_summary_group(), 1)
         summary_layout.addWidget(self._build_counts_group(), 1)
-        summary_layout.addWidget(self._build_artifacts_group(), 1)
         splitter.addWidget(summary_container)
+
+        # Preserve the existing artifact-button implementation for compatibility
+        # without occupying the everyday result view.
+        self._artifact_group = self._build_artifacts_group()
+        self._artifact_group.hide()
 
         self._tabs = QTabWidget(splitter)
         self._tabs.setObjectName("results_tabs")
@@ -399,6 +425,10 @@ class ResultsPanel(QWidget):
         splitter.addWidget(self._tabs)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        splitter.setSizes([170, 460])
+
+        self._copy_results_button.clicked.connect(self.copy_results_to_clipboard)
+        self._copy_logs_button.clicked.connect(self.copy_logs_to_clipboard)
 
     def _build_run_summary_group(self) -> QGroupBox:
         group = QGroupBox("Run Summary", self)
@@ -560,6 +590,9 @@ class ResultsPanel(QWidget):
         self._render_top_errors(result)
         self._render_warnings(result)
         self.refresh_artifact_availability()
+        self._copy_results_button.setEnabled(True)
+        self._copy_logs_button.setEnabled(bool(self._available_log_paths()))
+        self._copy_feedback.clear()
         self.result_rendered.emit(result)
 
     @Slot()
@@ -578,6 +611,9 @@ class ResultsPanel(QWidget):
         self._artifact_status.setText("No run artifacts are available.")
         for button in self._artifact_buttons.values():
             button.setEnabled(False)
+        self._copy_results_button.setEnabled(False)
+        self._copy_logs_button.setEnabled(False)
+        self._copy_feedback.clear()
         self._open_selected_evidence_button.setEnabled(False)
         self.result_cleared.emit()
 
@@ -860,15 +896,171 @@ class ResultsPanel(QWidget):
 
     def _render_warnings(self, result: RunResult) -> None:
         config = result.run_config
-        warnings = tuple(
+        compatibility = tuple(
             _safe_text(value, fallback="")
             for value in getattr(config, "compatibility_warnings", ())
         )
-        warnings = tuple(value for value in warnings if value)
-        if warnings:
-            self._warnings_label.setText("\n".join(f"• {warning}" for warning in warnings))
+        compatibility = tuple(value for value in compatibility if value)
+
+        compiler = []
+        for file_result in result.file_results:
+            summary = getattr(file_result, "compile_summary", None)
+            compiler.extend(tuple(getattr(summary, "compiler_warnings", ())))
+
+        by_kind = Counter(_enum_text(getattr(item, "kind", "other")) for item in compiler)
+        structural = [
+            item for item in compiler
+            if _enum_text(getattr(item, "kind", "")) == "structural_lock"
+        ]
+        unique_sites: dict[tuple[str, int | None, str, str], int] = {}
+        for item in structural:
+            key = (
+                _safe_text(getattr(item, "source_path", ""), fallback=""),
+                getattr(item, "source_line", None),
+                _safe_text(getattr(item, "operation", ""), fallback=""),
+                _safe_text(getattr(item, "message", ""), fallback="Compiler warning"),
+            )
+            unique_sites[key] = unique_sites.get(key, 0) + 1
+
+        lines: list[str] = []
+        if compatibility:
+            lines.append(f"Configuration warnings: {len(compatibility)}")
+            lines.extend(f"• {warning}" for warning in compatibility)
+
+        if compiler:
+            if lines:
+                lines.append("")
+            lines.extend(
+                (
+                    f"Compiler warnings: {len(compiler)}",
+                    f"• Structural lock: {by_kind.get('structural_lock', 0)} "
+                    f"({len(unique_sites)} unique sites)",
+                    f"• Namespace conflict: {by_kind.get('namespace_conflict', 0)}",
+                    f"• Other: {by_kind.get('other', 0)}",
+                )
+            )
+            if unique_sites:
+                lines.append("")
+                lines.append("Structural lock sites:")
+                for (source, line, operation, message), count in sorted(
+                    unique_sites.items(),
+                    key=lambda item: (item[0][0].casefold(), item[0][1] or 0, item[0][2].casefold()),
+                )[:50]:
+                    location = source or "unknown source"
+                    if line is not None:
+                        location += f":{line}"
+                    op = f" [{operation}]" if operation else ""
+                    repeat = f" ×{count}" if count > 1 else ""
+                    lines.append(f"• {location}{op}: {message}{repeat}")
+                if len(unique_sites) > 50:
+                    lines.append(f"• … {len(unique_sites) - 50} additional structural sites in reports")
+
+        self._warnings_label.setText("\n".join(lines) if lines else "No warnings")
+
+    @Slot()
+    def copy_results_to_clipboard(self) -> None:
+        result = self._result
+        if result is None:
+            return
+
+        summary_path = self._safe_existing_owned_path(
+            getattr(result.run_paths, "summary_md", None),
+            _EvidenceKind.FILE,
+        )
+        if summary_path is not None:
+            text, _used, truncated = _read_bounded_text_with_size(
+                summary_path,
+                _MAX_CLIPBOARD_BYTES,
+            )
+            if truncated:
+                text = text.rstrip() + (
+                    "\n\n[GF Wordbench: clipboard result copy truncated to 8 MiB]"
+                )
         else:
-            self._warnings_label.setText("No warnings")
+            text = ""
+        if not text:
+            text = self._render_clipboard_summary(result)
+        QApplication.clipboard().setText(text)
+        self._copy_feedback.setText("Results copied to clipboard.")
+        self.copy_completed.emit("results")
+
+    @Slot()
+    def copy_logs_to_clipboard(self) -> None:
+        paths = self._available_log_paths()
+        if not paths:
+            self._copy_feedback.setText("No run logs are available to copy.")
+            return
+
+        remaining = _MAX_CLIPBOARD_BYTES
+        chunks: list[str] = []
+        truncated = False
+        for label, path in paths:
+            if remaining <= 0:
+                truncated = True
+                break
+            text, used, was_truncated = _read_bounded_text_with_size(path, remaining)
+            if not text:
+                continue
+            chunks.append(f"===== {label}: {path.name} =====\n{text.rstrip()}\n")
+            remaining -= used
+            truncated |= was_truncated
+
+        payload = "\n".join(chunks).rstrip()
+        if truncated:
+            payload += "\n\n[GF Wordbench: clipboard log copy truncated to 8 MiB]"
+        if not payload:
+            self._copy_feedback.setText("Run logs could not be read.")
+            return
+        QApplication.clipboard().setText(payload)
+        self._copy_feedback.setText("Logs copied to clipboard.")
+        self.copy_completed.emit("logs")
+
+    def _available_log_paths(self) -> tuple[tuple[str, Path], ...]:
+        result = self._result
+        if result is None:
+            return ()
+        candidates = (
+            ("Aggregate scan log", getattr(result.run_paths, "all_scan_logs", None)),
+            ("Aggregate operation log", getattr(result.run_paths, "all_logs", None)),
+            ("Master log", getattr(result.run_paths, "master_log", None)),
+        )
+        available: list[tuple[str, Path]] = []
+        seen: set[Path] = set()
+        for label, raw in candidates:
+            path = raw if isinstance(raw, Path) else None
+            safe = self._safe_existing_owned_path(path, _EvidenceKind.FILE)
+            if safe is None or safe in seen:
+                continue
+            seen.add(safe)
+            available.append((label, safe))
+        return tuple(available)
+
+    def _render_clipboard_summary(self, result: RunResult) -> str:
+        totals = result.totals
+        lines = [
+            self._status_label.text(),
+            f"Mode: {self._summary_labels['mode'].text()}",
+            f"Language: {self._summary_labels['project'].text()}",
+            f"Run ID: {self._summary_labels['run_id'].text()}",
+            f"GF version: {self._summary_labels['gf_version'].text()}",
+            f"Duration: {self._summary_labels['duration'].text()}",
+            (
+                "Files: "
+                f"OK={_non_negative_count(totals.files_ok)}, "
+                f"FAIL={_non_negative_count(totals.files_fail)}, "
+                f"ERROR={_non_negative_count(totals.files_error)}, "
+                f"SKIPPED={_non_negative_count(totals.files_skipped)}"
+            ),
+            (
+                "Scenarios: "
+                f"OK={_non_negative_count(totals.scenarios_ok)}, "
+                f"FAIL={_non_negative_count(totals.scenarios_fail)}, "
+                f"ERROR={_non_negative_count(totals.scenarios_error)}, "
+                f"SKIPPED={_non_negative_count(totals.scenarios_skipped)}"
+            ),
+            f"Run directory: {result.run_paths.run_dir}",
+        ]
+        return "\n".join(lines)
 
     @Slot(str)
     def _request_artifact(self, key: str) -> None:
@@ -963,6 +1155,19 @@ class ResultsPanel(QWidget):
             raise TypeError(
                 "result does not satisfy the RunResult contract; missing: " + ", ".join(missing)
             )
+
+
+def _read_bounded_text_with_size(path: Path, limit: int) -> tuple[str, int, bool]:
+    if limit <= 0:
+        return "", 0, True
+    try:
+        with path.open("rb") as handle:
+            payload = handle.read(limit + 1)
+    except OSError:
+        return "", 0, False
+    truncated = len(payload) > limit
+    bounded = payload[:limit]
+    return bounded.decode("utf-8", errors="replace"), len(bounded), truncated
 
 
 def _safe_existing_path(

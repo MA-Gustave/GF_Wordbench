@@ -23,6 +23,18 @@ _TYPE_EXPECTED_RE: Final = re.compile(r"^\s*expected:\s*(.*)$")
 _TYPE_INFERRED_RE: Final = re.compile(r"^\s*inferred:\s*(.*)$")
 _TYPE_CONTEXT_RE: Final = re.compile(r"Happened in[^\r\n]*")
 _SYNTAX_RE: Final = re.compile(r"^(?P<message>.*(?:Syntax error|Parse error|Unexpected token).*)$")
+_CIRCULAR_DEFINITION_RE: Final = re.compile(
+    r"^\s*(?P<message>circular definitions?:\s*.+?)\s*$",
+    re.IGNORECASE,
+)
+_UNIFY_INFORMATION_RE: Final = re.compile(
+    r"^\s*(?P<message>cannot unify the information)\s*$",
+    re.IGNORECASE,
+)
+_CONSTANT_NOT_FOUND_RE: Final = re.compile(
+    r"^\s*(?P<message>(?:constant not found:\s*.+?|unknown qualified constant\s+.+?))\s*$",
+    re.IGNORECASE,
+)
 _MAX_EXCERPT_LINES: Final = 7
 _MAX_EXCERPT_CHARS: Final = 4096
 
@@ -226,6 +238,84 @@ def _match_type(
     )
 
 
+def _match_unify_information(
+    evidence: DiagnosticEvidence,
+) -> PatternMatch | None:
+    if _operation_value(evidence) not in _COMPILE_OPERATIONS:
+        return None
+    ordered = _ordered_lines(evidence)
+    for stream in (DiagnosticStream.STDERR, DiagnosticStream.STDOUT):
+        stream_lines = _stream_lines(ordered, stream)
+        for index, line in enumerate(stream_lines):
+            match = _UNIFY_INFORMATION_RE.match(line.text)
+            if match is None:
+                continue
+            return _build_match(
+                pattern_id="DP-GFUNIFY-001",
+                source_stream=stream,
+                line_number=line.line_number,
+                severity=DiagnosticSeverity.ERROR,
+                error_kind=ErrorKind.TYPE,
+                confidence=PatternConfidence.HIGH,
+                message=match.group("message").strip(),
+                detail="GF could not merge two declarations/overloads with incompatible information",
+                raw_excerpt=_bounded_excerpt(stream_lines, (index,)),
+            )
+    return None
+
+
+def _match_constant_not_found(
+    evidence: DiagnosticEvidence,
+) -> PatternMatch | None:
+    if _operation_value(evidence) not in _COMPILE_OPERATIONS:
+        return None
+    ordered = _ordered_lines(evidence)
+    for stream in (DiagnosticStream.STDERR, DiagnosticStream.STDOUT):
+        stream_lines = _stream_lines(ordered, stream)
+        for index, line in enumerate(stream_lines):
+            match = _CONSTANT_NOT_FOUND_RE.match(line.text)
+            if match is None:
+                continue
+            return _build_match(
+                pattern_id="DP-GFCONST-001",
+                source_stream=stream,
+                line_number=line.line_number,
+                severity=DiagnosticSeverity.ERROR,
+                error_kind=ErrorKind.TYPE,
+                confidence=PatternConfidence.HIGH,
+                message=match.group("message").strip(),
+                detail="GF could not resolve a referenced constant/type in the active module scope",
+                raw_excerpt=_bounded_excerpt(stream_lines, (index,)),
+            )
+    return None
+
+
+def _match_circular_definition(
+    evidence: DiagnosticEvidence,
+) -> PatternMatch | None:
+    if _operation_value(evidence) not in _COMPILE_OPERATIONS:
+        return None
+    ordered = _ordered_lines(evidence)
+    for stream in (DiagnosticStream.STDERR, DiagnosticStream.STDOUT):
+        stream_lines = _stream_lines(ordered, stream)
+        for index, line in enumerate(stream_lines):
+            match = _CIRCULAR_DEFINITION_RE.match(line.text)
+            if match is None:
+                continue
+            return _build_match(
+                pattern_id="DP-GFCIRC-001",
+                source_stream=stream,
+                line_number=line.line_number,
+                severity=DiagnosticSeverity.ERROR,
+                error_kind=ErrorKind.TYPE,
+                confidence=PatternConfidence.HIGH,
+                message=match.group("message").strip(),
+                detail="GF rejected a circular definition group",
+                raw_excerpt=_bounded_excerpt(stream_lines, (index,)),
+            )
+    return None
+
+
 def _match_syntax(
     evidence: DiagnosticEvidence,
 ) -> PatternMatch | None:
@@ -274,6 +364,39 @@ GF_TYPE_PATTERN: Final = DiagnosticPattern(
     matcher=_match_type,
 )
 
+GF_UNIFY_INFORMATION_PATTERN: Final = DiagnosticPattern(
+    pattern_id="DP-GFUNIFY-001",
+    operations=_COMPILE_OPERATIONS,
+    streams=_TEXT_STREAMS,
+    priority=460,
+    confidence=PatternConfidence.HIGH,
+    error_kind=ErrorKind.TYPE,
+    severity=DiagnosticSeverity.ERROR,
+    matcher=_match_unify_information,
+)
+
+GF_CONSTANT_NOT_FOUND_PATTERN: Final = DiagnosticPattern(
+    pattern_id="DP-GFCONST-001",
+    operations=_COMPILE_OPERATIONS,
+    streams=_TEXT_STREAMS,
+    priority=455,
+    confidence=PatternConfidence.HIGH,
+    error_kind=ErrorKind.TYPE,
+    severity=DiagnosticSeverity.ERROR,
+    matcher=_match_constant_not_found,
+)
+
+GF_CIRCULAR_PATTERN: Final = DiagnosticPattern(
+    pattern_id="DP-GFCIRC-001",
+    operations=_COMPILE_OPERATIONS,
+    streams=_TEXT_STREAMS,
+    priority=450,
+    confidence=PatternConfidence.HIGH,
+    error_kind=ErrorKind.TYPE,
+    severity=DiagnosticSeverity.ERROR,
+    matcher=_match_circular_definition,
+)
+
 GF_SYNTAX_PATTERN: Final = DiagnosticPattern(
     pattern_id="DP-GFSYN-001",
     operations=_COMPILE_OPERATIONS,
@@ -288,6 +411,9 @@ GF_SYNTAX_PATTERN: Final = DiagnosticPattern(
 COMPILATION_PATTERNS: Final = (
     GF_INTERNAL_PATTERN,
     GF_TYPE_PATTERN,
+    GF_UNIFY_INFORMATION_PATTERN,
+    GF_CONSTANT_NOT_FOUND_PATTERN,
+    GF_CIRCULAR_PATTERN,
     GF_SYNTAX_PATTERN,
 )
 
@@ -298,8 +424,11 @@ def compilation_patterns() -> tuple[DiagnosticPattern, ...]:
 
 __all__ = (
     "COMPILATION_PATTERNS",
+    "GF_CIRCULAR_PATTERN",
+    "GF_CONSTANT_NOT_FOUND_PATTERN",
     "GF_INTERNAL_PATTERN",
     "GF_SYNTAX_PATTERN",
     "GF_TYPE_PATTERN",
+    "GF_UNIFY_INFORMATION_PATTERN",
     "compilation_patterns",
 )

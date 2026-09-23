@@ -1939,3 +1939,27 @@ Compilation validation must always preserve:
 > GF Wordbench may claim that a compile target passed only when it can reproduce the request, preserve the response, verify the required artifacts, and show that the evidence belongs to the current source state.
 
 Neither a green console line, a zero exit code, an existing `.gfo`, nor a previous `.pgf` is sufficient proof.
+
+---
+
+## Compiler warning evidence and Strict structural gate
+
+Starting with Wordbench 1.2.1, successful GF compilation may also carry
+normalized compiler-warning evidence. Warnings are classified as:
+
+- `structural_lock` — `missing lock field ...`; blocking in **Strict mode**;
+- `namespace_conflict` — GF `atomic term ... conflict ...`; visible but
+  non-blocking;
+- `other` — any additional normalized GF warning.
+
+Global Scan JSON/CSV and RGL coverage report occurrence counts. Structural lock
+warnings additionally retain source/line/operation provenance and unique-site
+counts. The GUI **Warnings** tab displays the same categories.
+
+For an external language project with the standard RGL layout, Global Scan
+also includes existing same-suffix public API facades from the language
+`src` parent (`Combinators`, `Constructors`, `Symbolic`, `Syntax`, `Try`). The
+facade parent is added to GF's compile path for those targets. A TEST_RGL T8
+PASS now requires the complete discovered language + standard-facade census,
+not merely all files from the language subdirectory.
+

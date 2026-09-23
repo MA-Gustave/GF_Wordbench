@@ -4,8 +4,8 @@
 |---|---|
 | Document role | Reporting and public artifact authority |
 | Decision status | Accepted |
-| Implementation status | Not implemented |
-| Verification status | Documentation review required |
+| Implementation status | Implemented |
+| Verification status | Runtime and test coverage present |
 | Owner | GF Wordbench maintainers |
 | Last reviewed | 2026-07-23 |
 
@@ -18,6 +18,9 @@
 | `AI_READY.md` | Paquet borné pour analyse assistée. |
 | `manifest.json` | Inventaire, rôles, tailles et intégrité. |
 | `resolved-request.json` | Requête réellement exécutée. |
+| `details/source_lock.json` | Empreinte SHA-256 du census source exact et version GF du Global Scan. |
+| `details/rgl_coverage.json` | Couverture structurelle/module-level du census RGL; la couverture fonctionnelle non prouvée reste `not_assessed`. |
+| `details/compendium_matrix.json` | Matrice TEST_RGL des niveaux de preuve Compendium; les niveaux non exécutés restent `not_assessed`. |
 
 ## Règles
 

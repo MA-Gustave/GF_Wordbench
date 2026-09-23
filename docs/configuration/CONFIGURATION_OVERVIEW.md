@@ -2946,3 +2946,19 @@ Configuration is correct only when:
 - local execution paths remain machine-specific and observable;
 - every stage receives the same immutable interpretation of the language and run;
 - capability claims match the configuration and evidence actually available.
+
+---
+
+## 1.2.2 note — module-suffix support ranking
+
+Path-resolved startup follows ADR-0015: a module suffix may be accepted when one
+candidate is uniquely supported by standard RGL module roles. Wordbench now
+implements that rule directly when several filename-derived suffixes are
+observed.
+
+Support is the number of distinct recognized standard roles attached to each
+suffix. A unique maximum may resolve the directory automatically. Equal support
+remains ambiguous and still requires explicit user selection. This avoids false
+ambiguity from helper modules such as `All<Suffix>Abs` or
+`Structural<Suffix>Res` while preserving genuine multi-language ambiguity such
+as parallel `LangEng` and `LangFre` families.

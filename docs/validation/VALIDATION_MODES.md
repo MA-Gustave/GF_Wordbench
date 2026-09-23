@@ -1028,14 +1028,37 @@ Scan**. This is a Diagnostic scope form, not a fifth validation mode. It selects
 the complete resolved source inventory (subject to `max_files`) and executes
 independent per-source scan/compile work without fail-fast behavior.
 
+For a standard RGL layout where the resolved language directory is a direct
+child of the resolved RGL source root, Global Scan extends the language
+inventory with direct root-level GF API facades carrying the same module suffix.
+For example, a `.../src/albanian/` language with suffix `Sqi` also includes
+root-level facades such as `SyntaxSqi.gf`, `ConstructorsSqi.gf`,
+`SymbolicSqi.gf`, and `TrySqi.gf` when present. The expansion is deliberately
+conservative: it is not applied to disjoint/external language directories, and
+it never pulls in a different language suffix.
+
 The inventory records every selected source even when earlier sources fail.
 Causal classification may mark a failed source as `downstream` when compiler
 evidence identifies another failed module as its blocker; otherwise the failure
 remains `direct` or `ambiguous` according to available evidence.
 
 Global Scan writes expanded machine-readable inventory views under `details/`
-while preserving the canonical raw scan and compile streams. A validation FAIL
-does not mean that the scan execution itself aborted.
+while preserving the canonical raw scan and compile streams. In addition to
+`global_scan.json` and `global_scan.csv`, the diagnostic evidence set includes:
+
+```text
+details/source_lock.json
+details/rgl_coverage.json
+details/compendium_matrix.json
+```
+
+`source_lock.json` binds the evidence to the exact selected source bytes and GF
+version. `rgl_coverage.json` reports module-level census/compile coverage and
+explicitly leaves function-level coverage `not_assessed` unless authoritative
+GF abstract/concrete introspection is available. `compendium_matrix.json` maps
+the run to the Compendium TEST_RGL levels and never marks unexecuted linguistic
+levels as passed merely because compilation succeeded. A validation FAIL does
+not mean that the scan execution itself aborted.
 
 ## 12.4 Required stages
 

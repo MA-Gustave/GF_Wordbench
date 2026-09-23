@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from enum import Enum
+import hashlib
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any, Final
@@ -106,6 +107,14 @@ def build_summary_md(run_result: RunResult) -> str:
         _build_run_summary(run_result),
         _build_outcome(run_result),
     ]
+
+    certification_section = _build_compendium_certification(run_result)
+    if certification_section is not None:
+        sections.append(certification_section)
+
+    compiler_warning_section = _build_compiler_warnings(run_result)
+    if compiler_warning_section is not None:
+        sections.append(compiler_warning_section)
 
     gate_section = _build_release_gates(run_result)
     if gate_section is not None:
@@ -470,6 +479,191 @@ def _main_blockers(run_result: Any) -> list[str]:
         scenario_id = _text(_get(result, "scenario_id", default="Unknown"))
         items.append(f"{_inline_code(scenario_id)} — {_inline_code(_primary_message(result))}")
     return items
+
+
+
+def _portable_source_path(run_result: RunResult, path: Path) -> str:
+    context = _required_attr(_required_attr(run_result, "run_config"), "language_context")
+    resolved = path.resolve(strict=False)
+    if context is not None:
+        roots = (
+            _required_attr(context, "rgl_source_root"),
+            _required_attr(context, "language_directory").parent,
+            _required_attr(context, "language_directory"),
+        )
+        for root in roots:
+            try:
+                return resolved.relative_to(root.resolve(strict=False)).as_posix()
+            except ValueError:
+                pass
+    return resolved.as_posix()
+
+
+def _build_compendium_certification(run_result: Any) -> str | None:
+    config = _required_attr(run_result, "run_config")
+    if _enum_text(_required_attr(config, "mode")).lower() != "diagnostic":
+        return None
+
+    target = _get(config, "target", default=None)
+    if target is not None:
+        kind = _enum_text(_get(target, "kind", default="")).lower()
+        if kind not in {"", "project"}:
+            return None
+
+    totals = _required_attr(run_result, "totals")
+    files_included = _non_negative_count(totals, "files_included")
+    files_fail = _non_negative_count(totals, "files_fail")
+    files_error = _non_negative_count(totals, "files_error")
+    files_skipped = _non_negative_count(totals, "files_skipped")
+    scenarios_seen = _non_negative_count(totals, "scenarios_seen")
+
+    digest = hashlib.sha256()
+    digest.update(b"gf-wordbench-source-lock-v1\0")
+    for result in sorted(
+        _sequence(_required_attr(run_result, "file_results")),
+        key=lambda item: _required_attr(item, "file_path").as_posix().casefold(),
+    ):
+        path = _portable_source_path(run_result, _required_attr(result, "file_path"))
+        fingerprint = _required_attr(result, "fingerprint")
+        source_hash = _text(_required_attr(fingerprint, "hash"))
+        size_bytes = _integer(_required_attr(fingerprint, "size_bytes"), "size_bytes")
+        digest.update(path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(source_hash.encode("ascii"))
+        digest.update(b"\0")
+        digest.update(str(size_bytes).encode("ascii"))
+        digest.update(b"\n")
+
+    compile_pass = (
+        _complete_rgl_census(run_result)
+        and files_included > 0
+        and files_fail == 0
+        and files_error == 0
+        and files_skipped == 0
+    )
+    state_floor = "S02 BASELINE_ESTABLISHED" if compile_pass else "S01 SOURCE_LOCKED"
+    rows = [
+        ("Protocol", _inline_code("TEST_RGL")),
+        ("Source lock SHA-256", _inline_code(digest.hexdigest())),
+        (
+            "Structural compile census",
+            _inline_code("PASS" if compile_pass else "NOT PASSING"),
+        ),
+        ("Complete GF target census", _inline_code(_rgl_census_label(run_result))),
+        ("Evidence-derived state floor", _inline_code(state_floor)),
+        (
+            "Linguistic scenario evidence",
+            _inline_code("ASSESSED" if scenarios_seen else "NOT ASSESSED"),
+        ),
+        ("Linguistic certification", _inline_code("NOT ESTABLISHED")),
+    ]
+    note = (
+        "Compilation establishes structural consistency only. Reviewed scenario/golden "
+        "evidence is still required for linguistic correctness and release maturity."
+    )
+    return "## RGL Certification (Compendium)\n\n" + _table(("Field", "Value"), rows) + "\n\n" + note
+
+_STANDARD_API_FACADE_PREFIXES: Final[tuple[str, ...]] = (
+    "Combinators", "Constructors", "Symbolic", "Syntax", "Try"
+)
+
+
+def _rgl_census_counts(run_result: Any) -> tuple[int, int, int]:
+    config = _required_attr(run_result, "run_config")
+    context = _get(config, "language_context", default=None)
+    file_results = _sequence(_required_attr(run_result, "file_results"))
+    if context is None:
+        return len(file_results), 0, 0
+    language_root = _as_path(_required_attr(context, "language_directory"), "language_directory").resolve(strict=False)
+    rgl_source_root = _as_path(_required_attr(context, "rgl_source_root"), "rgl_source_root").resolve(strict=False)
+    suffix = _text(_get(context, "module_suffix", default=""))
+    facade_root = rgl_source_root if language_root.parent == rgl_source_root else language_root.parent
+    expected = {
+        f"{prefix}{suffix}.gf"
+        for prefix in _STANDARD_API_FACADE_PREFIXES
+        if suffix and (facade_root / f"{prefix}{suffix}.gf").is_file()
+    }
+    language_count = 0
+    facade_count = 0
+    for result in file_results:
+        path = _as_path(_required_attr(result, "file_path"), "file_path").resolve(strict=False)
+        try:
+            path.relative_to(language_root)
+            language_count += 1
+            continue
+        except ValueError:
+            pass
+        if path.parent == facade_root and path.name in expected:
+            facade_count += 1
+    return language_count, facade_count, len(expected)
+
+
+def _complete_rgl_census(run_result: Any) -> bool:
+    language_count, facade_count, expected_facades = _rgl_census_counts(run_result)
+    totals = _required_attr(run_result, "totals")
+    included = _non_negative_count(totals, "files_included")
+    return included > 0 and language_count + facade_count == included and facade_count == expected_facades
+
+
+def _rgl_census_label(run_result: Any) -> str:
+    language_count, facade_count, expected_facades = _rgl_census_counts(run_result)
+    total = language_count + facade_count
+    if expected_facades:
+        return f"{total} = {language_count} language + {facade_count}/{expected_facades} API facades"
+    return f"{total} language targets; no standard API facades discovered"
+
+
+def _build_compiler_warnings(run_result: Any) -> str | None:
+    compiler = []
+    for result in _sequence(_required_attr(run_result, "file_results")):
+        summary = _required_attr(result, "compile_summary")
+        compiler.extend(_sequence(_get(summary, "compiler_warnings", default=())))
+    if not compiler:
+        return "## Compiler Warnings\n\nNone."
+
+    counts: dict[str, int] = {}
+    structural_sites: dict[tuple[str, int | None, str, str], int] = {}
+    for warning in compiler:
+        kind = _enum_text(_get(warning, "kind", default="other")).lower()
+        counts[kind] = counts.get(kind, 0) + 1
+        if kind == "structural_lock":
+            line = _get(warning, "source_line", default=None)
+            if line is not None:
+                line = _integer(line, "source_line")
+            key = (
+                _text(_get(warning, "source_path", default="")),
+                line,
+                _text(_get(warning, "operation", default="")),
+                _text(_get(warning, "message", default="Compiler warning")),
+            )
+            structural_sites[key] = structural_sites.get(key, 0) + 1
+
+    rows = [
+        ("Total compiler warnings", str(len(compiler))),
+        ("Structural lock warnings", str(counts.get("structural_lock", 0))),
+        ("Unique structural lock sites", str(len(structural_sites))),
+        ("Namespace-conflict warnings", str(counts.get("namespace_conflict", 0))),
+        ("Other warnings", str(counts.get("other", 0))),
+    ]
+    lines = ["## Compiler Warnings", "", _table(("Measure", "Count"), rows)]
+    if structural_sites:
+        lines.extend(("", "### Structural lock sites", ""))
+        for (source, line, operation, message), occurrences in sorted(
+            structural_sites.items(),
+            key=lambda item: (item[0][0].casefold(), item[0][1] or 0, item[0][2].casefold()),
+        ):
+            location = source or "unknown source"
+            if line is not None:
+                location += f":{line}"
+            op = f" — `{operation}`" if operation else ""
+            repeat = f" ({occurrences} occurrences across compile targets)" if occurrences > 1 else ""
+            lines.append(f"- `{location}`{op}: {message}{repeat}")
+    lines.extend((
+        "",
+        "Namespace-conflict warnings are reported as compiler hygiene evidence but do not fail Strict mode. "
+        "Structural lock warnings are blocking in Strict mode.",
+    ))
+    return "\n".join(lines)
 
 
 def _build_release_gates(run_result: Any) -> str | None:

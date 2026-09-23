@@ -254,6 +254,7 @@ The inventory below defines the permanent target documentation set.
 | [`docs/validation/STATIC_SCANNING.md`](validation/STATIC_SCANNING.md) | Static GF source checks and their limitations. |
 | [`docs/validation/COMPILATION_VALIDATION.md`](validation/COMPILATION_VALIDATION.md) | Compilation result interpretation and artifact checks. |
 | [`docs/validation/SCENARIO_VALIDATION.md`](validation/SCENARIO_VALIDATION.md) | Scenario registry, execution, assertions and outcomes. |
+| [`docs/validation/LINGUISTIC_REVIEW.md`](validation/LINGUISTIC_REVIEW.md) | Hash-bound external human/AI linguistic review, verdict policy, gold eligibility and Compendium T9/T10 evidence. |
 | [`docs/validation/REGRESSION_COMPARISON.md`](validation/REGRESSION_COMPARISON.md) | Previous-run selection and change classification. |
 | [`docs/validation/RELEASE_GATES.md`](validation/RELEASE_GATES.md) | Mandatory conditions for release readiness. |
 

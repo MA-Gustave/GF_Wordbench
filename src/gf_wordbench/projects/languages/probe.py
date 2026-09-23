@@ -943,7 +943,7 @@ def _classify_modules(
                     code="GF-WB-CONFIG-257",
                     severity=LanguageProbeSeverity.INFO,
                     subject="module_suffix",
-                    message=("The explicit selection resolved a multi-suffix language directory."),
+                    message=("Standard module-role evidence resolved a multi-suffix language directory."),
                     detail=f"Selected suffix: {selected_suffix}",
                     choices=suffixes,
                 )
@@ -1010,7 +1010,40 @@ def _selected_suffix(
         return explicit_suffixes[0]
     if len(suffixes) == 1:
         return suffixes[0]
+
+    supported = _uniquely_supported_suffix(candidates)
+    if supported is not None:
+        return supported
     return None
+
+
+def _uniquely_supported_suffix(
+    candidates: tuple[LanguageModuleCandidate, ...],
+) -> str | None:
+    """Return one suffix when standard RGL role evidence uniquely supports it.
+
+    Helper modules can legally begin with a standard role prefix while adding a
+    descriptive tail to the real language suffix, for example
+    ``AllSqiAbs`` or ``StructuralSqiRes``.  Treating every such tail as an
+    independent language suffix makes a normal language directory look
+    ambiguous.  The startup ADR permits suffix inference when one candidate is
+    uniquely supported by standard module roles, so score each observed suffix
+    by its distinct roles and accept only a unique maximum.  Equal support
+    remains ambiguous and still requires explicit user selection.
+    """
+
+    roles_by_suffix: dict[str, set[LanguageModuleRole]] = {}
+    for candidate in candidates:
+        roles_by_suffix.setdefault(candidate.module_suffix, set()).add(candidate.role)
+    if len(roles_by_suffix) < 2:
+        return next(iter(roles_by_suffix), None)
+
+    support = {suffix: len(roles) for suffix, roles in roles_by_suffix.items()}
+    strongest = max(support.values(), default=0)
+    winners = tuple(suffix for suffix, count in support.items() if count == strongest)
+    if len(winners) != 1:
+        return None
+    return winners[0]
 
 
 def _normalize_inventory(

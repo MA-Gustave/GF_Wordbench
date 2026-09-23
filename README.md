@@ -25,6 +25,12 @@ resolves exactly one portable language identity and one immutable source
 context. Portfolio-scale aggregation belongs to the independent
 `gf-portfolio` product; GF Wordbench has no runtime dependency on it.
 
+Diagnostic Global Scan also emits Compendium-aligned certification evidence. In
+a standard RGL layout it expands the language census to same-suffix root API
+facades, fingerprints the exact census with a source-lock SHA-256, records
+module-level RGL coverage, and emits a TEST_RGL matrix that keeps structural
+compilation separate from linguistic scenario/golden certification.
+
 ---
 
 ## Contents

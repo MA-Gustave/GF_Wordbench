@@ -336,7 +336,7 @@ def _translate_operation(
             GfCommand(
                 operation="run_scenario",
                 executable=request.executable,
-                arguments=("-batch",),
+                arguments=_interactive_search_args(request.gf_path),
                 working_directory=request.working_directory,
                 gf_search_paths=request.gf_path,
                 profile_id=_DEFAULT_PROFILE.profile_id,
@@ -353,7 +353,7 @@ def _translate_operation(
             GfCommand(
                 operation="inspect_grammar",
                 executable=request.executable,
-                arguments=("-batch",),
+                arguments=_interactive_search_args(request.gf_path),
                 working_directory=request.working_directory,
                 gf_search_paths=request.gf_path,
                 profile_id=_DEFAULT_PROFILE.profile_id,
@@ -364,6 +364,19 @@ def _translate_operation(
 
     raise ContractViolationError(f"unsupported GF payload: {type(payload).__name__}")
 
+
+
+def _interactive_search_args(paths: tuple[Path, ...]) -> tuple[str, ...]:
+    """Build Windows-safe GF shell search-path arguments.
+
+    GF 3.12 splits --path on ':' as well as ';', which corrupts Windows
+    drive-letter paths. Repeated -i arguments preserve each directory.
+    """
+    return tuple(
+        part
+        for path in paths
+        for part in ("-i", str(path))
+    ) + ("--run",)
 
 def _inspection_script(payload: GrammarInspectionPayload) -> str:
     subject = "" if payload.subject is None else f" {payload.subject}"

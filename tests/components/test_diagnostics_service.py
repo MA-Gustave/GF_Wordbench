@@ -243,6 +243,99 @@ def test_recognized_gf_syntax_failure_is_successfully_parsed(
     assert result.fatal_detected is False
 
 
+def test_gf_circular_definition_is_reported_as_primary_type_error(
+    tmp_path: Path,
+) -> None:
+    evidence = _evidence(
+        tmp_path,
+        exit_code=1,
+        stderr_text=(
+            "Voc\nInt\nParadigmsSqi.gf:\n"
+            "  circular definitions: mkA2\n"
+        ),
+    )
+
+    result = parse_diagnostics(evidence)
+    primary = _primary(result)
+
+    assert _status(result) is ValidationStatus.OK
+    assert primary is not None
+    assert _pattern_id(primary) == "DP-GFCIRC-001"
+    assert _error_kind(primary) is ErrorKind.TYPE
+    assert str(primary.message) == "circular definitions: mkA2"
+
+
+def test_gf_unify_information_is_reported_as_primary_type_error(
+    tmp_path: Path,
+) -> None:
+    evidence = _evidence(
+        tmp_path,
+        exit_code=1,
+        stderr_text=(
+            "Voc\nInt\nTrySqi.gf:\n"
+            "   cannot unify the information\n"
+            "       oper mkCard : Str -> Card = \\s -> ... ;\n"
+            "   in module ParadigmsSqi with\n"
+            "       oper mkCard = overload { ... } ;\n"
+            "   in module ConstructorsSqi\n"
+        ),
+    )
+
+    result = parse_diagnostics(evidence)
+    primary = _primary(result)
+
+    assert _status(result) is ValidationStatus.OK
+    assert primary is not None
+    assert _pattern_id(primary) == "DP-GFUNIFY-001"
+    assert _error_kind(primary) is ErrorKind.TYPE
+    assert str(primary.message) == "cannot unify the information"
+
+
+def test_gf_constant_not_found_is_reported_as_primary_type_error(
+    tmp_path: Path,
+) -> None:
+    evidence = _evidence(
+        tmp_path,
+        exit_code=1,
+        stderr_text=(
+            "Voc\nInt\nTrySqi.gf:42-45:\n"
+            "  Happened in the renaming of mkDet\n"
+            "   constant not found: Number\n"
+            "   given P, ParadigmsSqi, SyntaxSqi, TrySqi\n"
+        ),
+    )
+
+    result = parse_diagnostics(evidence)
+    primary = _primary(result)
+
+    assert _status(result) is ValidationStatus.OK
+    assert primary is not None
+    assert _pattern_id(primary) == "DP-GFCONST-001"
+    assert _error_kind(primary) is ErrorKind.TYPE
+    assert str(primary.message) == "constant not found: Number"
+
+
+def test_unknown_qualified_constant_is_primary_type_error(tmp_path: Path) -> None:
+    evidence = _evidence(
+        tmp_path,
+        exit_code=1,
+        stderr_text=(
+            "Voc\nTrySqi.gf:42-45:\n"
+            "  Happened in the renaming of mkDet\n"
+            "   unknown qualified constant P.Number\n"
+        ),
+    )
+
+    result = parse_diagnostics(evidence)
+    primary = _primary(result)
+
+    assert _status(result) is ValidationStatus.OK
+    assert primary is not None
+    assert _pattern_id(primary) == "DP-GFCONST-001"
+    assert _error_kind(primary) is ErrorKind.TYPE
+    assert str(primary.message) == "unknown qualified constant P.Number"
+
+
 def test_multiline_type_diagnostic_retains_expected_and_inferred_context(
     tmp_path: Path,
 ) -> None:

@@ -2132,3 +2132,11 @@ A successful run is defined by the selected mode’s required contracts executin
 Therefore:
 
 > No validation decision may be produced by bypassing configuration ownership, external-tool contracts, structured results, evidence preservation, requiredness policy, or final gate evaluation.
+
+---
+
+## Backend linguistic-review evidence
+
+GF Wordbench can now bind external linguistic review to an exact run without coupling the framework to any AI provider. The backend exports normalized scenario outputs with run/source/output hashes, validates a structured reviewer response, and records a deterministic linguistic-review evaluation.
+
+The canonical workflow is documented in `docs/validation/LINGUISTIC_REVIEW.md`. A passing AI review is evidence that the reviewed outputs were judged valid by the named reviewer/model; it is not presented as independent human certification and does not turn unexecuted TEST_RGL levels green.

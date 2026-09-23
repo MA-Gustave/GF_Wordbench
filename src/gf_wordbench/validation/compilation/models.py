@@ -66,6 +66,36 @@ class SourceFingerprint:
 
 
 @unique
+class CompileWarningKind(StrEnum):
+    STRUCTURAL_LOCK = "structural_lock"
+    NAMESPACE_CONFLICT = "namespace_conflict"
+    OTHER = "other"
+
+
+@dataclass(frozen=True, slots=True)
+class CompileWarning:
+    """One normalized non-fatal GF compiler warning."""
+
+    kind: CompileWarningKind
+    message: str
+    source_path: str = ""
+    source_line: int | None = None
+    operation: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, CompileWarningKind):
+            raise TypeError("kind must be CompileWarningKind")
+        _require_text(self.message, field_name="message")
+        _require_text(self.source_path, field_name="source_path", allow_empty=True)
+        _require_text(self.operation, field_name="operation", allow_empty=True)
+        if self.source_line is not None:
+            if isinstance(self.source_line, bool) or not isinstance(self.source_line, int):
+                raise TypeError("source_line must be int or None")
+            if self.source_line < 1:
+                raise ValueError("source_line must be positive")
+
+
+@unique
 class CompileTargetKind(StrEnum):
     SOURCE = "source"
     CHECKPOINT = "checkpoint"
@@ -754,6 +784,11 @@ class GFVersionResult:
             allow_empty=True,
         )
 
+        warnings = tuple(self.compiler_warnings)
+        if not all(isinstance(item, CompileWarning) for item in warnings):
+            raise TypeError("compiler_warnings must contain CompileWarning values")
+        object.__setattr__(self, "compiler_warnings", warnings)
+
         object.__setattr__(self, "executable", executable)
         object.__setattr__(self, "command", command)
         object.__setattr__(self, "stdout_path", stdout_path)
@@ -832,6 +867,7 @@ class CompileSummary:
     produced_artifacts: tuple[Path, ...]
     artifact_checks_passed: bool
     skipped_reason: str = ""
+    compiler_warnings: tuple[CompileWarning, ...] = ()
 
     def __post_init__(self) -> None:
         _require_text(self.target_id, field_name="target_id")
@@ -1451,6 +1487,8 @@ __all__ = (
     "ArtifactCheck",
     "ArtifactCheckItem",
     "CompilePlan",
+    "CompileWarning",
+    "CompileWarningKind",
     "CompileRequest",
     "CompileResult",
     "CompileSummary",
