@@ -2,7 +2,7 @@
 
 **Document ID:** `GF-WB-DOC-ERRATUM-2026-07-23`  
 **Status:** Actif — temporaire  
-**Target path:** `C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench\docs\ERRATUM.md`  
+**Target path:** `C:\mycode\Grammatical-Framework\GF_Wordbench\GF_Wordbench\docs\ERRATUM.md`  
 **Applies to:** snapshot documentaire généré le `2026-07-22` et fichiers déplacés le `2026-07-23`  
 **Owner:** GF Wordbench maintainers  
 **Created:** `2026-07-23`  

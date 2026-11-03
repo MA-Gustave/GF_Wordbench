@@ -577,3 +577,80 @@ def test_compiler_warning_summary_groups_structural_sites() -> None:
     assert summary["other"] == 0
     assert summary["unique_structural_lock_sites"] == 1
     assert summary["structural_lock_sites"][0]["occurrences"] == 2
+
+
+def test_compendium_certification_marks_linguistic_gate_blocked_without_reviewable_scenarios() -> None:
+    run_result = SimpleNamespace(
+        totals=SimpleNamespace(
+            files_included=54,
+            files_fail=27,
+            files_error=0,
+            files_skipped=0,
+            scenarios_seen=50,
+        ),
+        scenario_results=(
+            SimpleNamespace(
+                status=ValidationStatus.FAIL,
+                normalized_output_path=None,
+            ),
+        ),
+    )
+
+    summary = writer._compendium_certification_summary(
+        run_result,
+        source_lock={"aggregate_sha256": "a" * 64},
+        census={"complete_compile_census": False},
+    )
+
+    assert summary["linguistic_test_gate"] == "blocked"
+    assert summary["reviewable_scenarios"] == 0
+    assert summary["linguistic_certification"] == "not_established"
+
+
+def test_rgl_census_summary_classifies_same_language_morphodict(tmp_path: Path) -> None:
+    source_root = tmp_path / "src"
+    language_root = source_root / "albanian"
+    morphodict_root = source_root / "morphodict"
+    language_root.mkdir(parents=True)
+    morphodict_root.mkdir()
+
+    language_files = [language_root / f"Module{index}Sqi.gf" for index in range(3)]
+    facade_files = [source_root / f"{prefix}Sqi.gf" for prefix in (
+        "Combinators", "Constructors", "Symbolic", "Syntax", "Try"
+    )]
+    morphodict_files = [
+        morphodict_root / "MorphoDictSqi.gf",
+        morphodict_root / "MorphoDictSqiAbs.gf",
+    ]
+    for path in (*language_files, *facade_files, *morphodict_files):
+        path.write_text("-- fixture\n", encoding="utf-8")
+
+    file_results = tuple(
+        SimpleNamespace(file_path=path, module_name=path.stem)
+        for path in (*language_files, *facade_files, *morphodict_files)
+    )
+    run_result = SimpleNamespace(
+        run_config=SimpleNamespace(
+            language_context=SimpleNamespace(
+                language_directory=language_root,
+                rgl_source_root=source_root,
+                module_suffix="Sqi",
+            )
+        ),
+        file_results=file_results,
+        totals=SimpleNamespace(
+            files_included=len(file_results),
+            files_fail=0,
+            files_error=0,
+            files_skipped=0,
+        ),
+    )
+
+    summary = writer._rgl_census_summary(run_result)
+    assert summary["scope"] == "rgl_language_plus_api_facades_and_morphodict"
+    assert summary["language_files"] == 3
+    assert summary["api_facade_files"] == 5
+    assert summary["expected_api_facade_files"] == 5
+    assert summary["morphodict_files"] == 2
+    assert summary["expected_morphodict_files"] == 2
+    assert summary["complete_compile_census"] is True

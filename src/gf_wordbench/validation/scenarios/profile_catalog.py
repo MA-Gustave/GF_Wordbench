@@ -80,11 +80,25 @@ def build_profile_scenario_catalog(
             expected_sections=sections,
             expected_artifacts=(),
             input_paths=input_paths,
-            tags=("albanian", _family_tag(scenario_id)),
+            tags=_profile_tags(profile, scenario_id=scenario_id),
         )
 
     return MappingProxyType(catalog)
 
+
+
+def _profile_tags(profile: ProjectConfig, *, scenario_id: str) -> tuple[str, ...]:
+    """Return language/profile-owned scenario tags without coupling the runner.
+
+    Surface-hygiene tags are currently enabled for the audited Albanian
+    validation campaign.  The scenario service consumes only the generic tag
+    semantics and therefore remains language-neutral.
+    """
+    language_code = profile.identity.language_code
+    tags = [language_code, _family_tag(scenario_id)]
+    if language_code == "albanian":
+        tags.extend(("require-nonempty-cases", "forbid-visible-bind"))
+    return tuple(tags)
 
 
 def _working_directory_for_inputs(

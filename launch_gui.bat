@@ -11,13 +11,15 @@ set "GF_WORDBENCH_LOCAL_GUI=%GF_WORDBENCH_VENV_SCRIPTS%\gf-wordbench-gui.exe"
 set "GF_WORDBENCH_LOCAL_PYTHONW=%GF_WORDBENCH_VENV_SCRIPTS%\pythonw.exe"
 set "GF_WORDBENCH_LOCAL_PYTHON=%GF_WORDBENCH_VENV_SCRIPTS%\python.exe"
 set "GF_WORDBENCH_EXIT_CODE=0"
+rem Resolve source package after moving the repository.
+set "PYTHONPATH=%GF_WORDBENCH_ROOT%src;%PYTHONPATH%"
 
 pushd "%GF_WORDBENCH_ROOT%" >nul 2>&1
 if errorlevel 1 goto :repository_error
 
-if exist "%GF_WORDBENCH_LOCAL_GUI%" goto :run_local_entrypoint
 if exist "%GF_WORDBENCH_LOCAL_PYTHONW%" goto :run_local_pythonw
 if exist "%GF_WORDBENCH_LOCAL_PYTHON%" goto :run_local_python
+if exist "%GF_WORDBENCH_LOCAL_GUI%" goto :run_local_entrypoint
 
 where.exe gf-wordbench-gui.exe >nul 2>&1
 if not errorlevel 1 goto :run_path_entrypoint

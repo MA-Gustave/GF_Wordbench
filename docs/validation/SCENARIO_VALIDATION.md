@@ -949,7 +949,13 @@ Examples:
 - unsupported normalization version;
 - normalization failure;
 - corrupted result;
-- required artifact could not be checked.
+- required artifact could not be checked;
+- a fatal GF internal generator failure (for example `Internal error in GeneratePMCFG`)
+  prevents safe interpretation of the scenario contract, even if the shell process exits 0.
+
+When an internal generator failure is followed by shell messages such as `empty grammar, no
+abstract`, preserve both observations but keep the internal generator failure as the primary
+diagnostic. The later shell message is downstream evidence, not a replacement cause.
 
 ### 28.4 `SKIPPED`
 
@@ -988,6 +994,23 @@ Recommended initial assignment:
 Higher-level classification may refine this after all results are available.
 
 The process layer does not assign causal class.
+
+### 29.1 Root-diagnostic precedence inside one scenario execution
+
+Scenario interpretation must not equate stream order with causal priority. A root diagnostic
+may appear on stdout while a downstream shell symptom appears earlier on stderr. Preserve all
+recognized observations and select the primary failure by diagnostic precedence.
+
+Current required precedence for the GF failure family covered by this contract is:
+
+```text
+Internal error in GeneratePMCFG    -> INTERNAL / ERROR / primary
+Cannot find an inflection rule     -> retained nested detail
+empty grammar, no abstract         -> SCRIPT / downstream symptom
+```
+
+A zero OS exit status does not downgrade any of these observations. Raw exit status remains
+process evidence and must not be rewritten to simulate a validation failure.
 
 ---
 
@@ -2983,3 +3006,31 @@ ScenarioSpec
 ```
 
 No stage may skip a link in this evidence chain and still claim scenario success.
+
+---
+
+## 116. Profile-scoped raw-surface hygiene
+
+A language profile may define bounded raw-surface failures that are not safe to normalize away. These checks are profile-owned evidence rules, not a reinterpretation of GF command semantics.
+
+Two generic scenario tags opt into the current raw-surface contracts:
+
+- `require-nonempty-cases`: a `CASE ...` marker must be followed by at least one non-empty realized line before the next CASE/end marker;
+- `forbid-visible-bind`: a literal `&+` token-binding marker may not leak into realized surface text.
+
+The built-in Albanian profile catalog opts into both tags. The service itself does not branch on a language name. The observation records the stdout line and offending marker in `ScenarioDiagnosticObservation`. Scenarios without the tags are unaffected so GF token-binding behavior can still be tested deliberately elsewhere. These checks run on raw output before normalization; normalization must never turn either defect into a pass.
+
+---
+
+## Diagnostic-mode scenario causality after compile roots are known
+
+Diagnostic mode completes the file compile census before running scenarios. If
+a scenario subsequently fails on a GF shell diagnostic and its preserved raw
+stream names a module already classified as a DIRECT compile failure, the
+scenario is classified `DOWNSTREAM` with that module in `blocked_by`.
+
+This post-classification applies only to recognized GF shell dependency
+failures (`constant not found`, `unknown qualified constant`, or `empty grammar,
+no abstract`). Profile surface-contract observations such as empty CASE output
+or visible `&+` remain DIRECT because they are defects in the scenario's own
+observable result.

@@ -26,6 +26,7 @@ The current startup model is path-resolved:
 - the user selects a GF source file or an RGL language directory directly;
 - Wordbench reads that source tree in place and does not copy it into this repository;
 - `ResolvedLanguageContext` owns the selected path, resolved language identity, source root, RGL root, discovered entrypoints and effective GF-path facts;
+- when an exact same-suffix `MorphoDict<Suffix>.gf` or `MorphoDict<Suffix>Abs.gf` exists in the conventional sibling `morphodict` directory, that directory is a bounded same-language GF-path companion and its matching files join the Global Scan census;
 - an explicit `ValidationProfile` is optional and may add only non-derivable policy such as additional selection filters, required or release entrypoints, checkpoints, scenarios, inputs, golds, PGF targets, required artifacts and release gates;
 - a legacy `project/project.toml` may be read only when explicitly supplied as a validation profile; it is not a mandatory root file or startup authority;
 - run state, logs and artifacts are written under the configured output root, normally `<output-root>/<language-key>/run_<run-id>` (with `_gf_wordbench` as the framework default), never into the selected source tree.

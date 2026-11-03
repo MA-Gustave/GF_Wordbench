@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+from types import SimpleNamespace
 
 import pytest
 
@@ -34,6 +35,8 @@ from gf_wordbench.validation.compilation.models import (
     CompileTargetKind,
     CompileWarningKind,
 )
+from gf_wordbench.validation.scenarios.models import ScenarioDiagnosticObservation
+from tests.helpers.builders import make_scenario_result
 
 
 def _context(tmp_path: Path) -> ResolvedLanguageContext:
@@ -721,6 +724,89 @@ def test_external_global_scan_expands_five_standard_api_facades(tmp_path: Path) 
     assert {path.stem for path in inventory}.issuperset(facade_names)
 
 
+def test_external_global_scan_includes_same_suffix_morphodict_companion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_config = _diagnostic_run_config(tmp_path)
+    context = run_config.language_context
+    assert context is not None
+    facade_root = context.language_directory.parent
+    facade_names = (
+        "CombinatorsSqi",
+        "ConstructorsSqi",
+        "SymbolicSqi",
+        "SyntaxSqi",
+        "TrySqi",
+    )
+    for module in facade_names:
+        (facade_root / f"{module}.gf").write_text(
+            f"abstract {module} = {{ cat S ; }}\n",
+            encoding="utf-8",
+        )
+    morphodict_root = facade_root / "morphodict"
+    morphodict_root.mkdir()
+    for module in ("MorphoDictSqi", "MorphoDictSqiAbs"):
+        (morphodict_root / f"{module}.gf").write_text(
+            f"abstract {module} = {{ cat S ; }}\n",
+            encoding="utf-8",
+        )
+    (morphodict_root / "MorphoDictEng.gf").write_text(
+        "abstract MorphoDictEng = { cat S ; }\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(application, "_probe_version", lambda *args, **kwargs: "3.12")
+    compiled: list[str] = []
+
+    def compile_target(
+        run_config,
+        *,
+        source_path,
+        relative,
+        run_paths,
+        run_id,
+        gf_version,
+        token,
+        output_directory=None,
+    ):
+        del run_config, relative, run_id, gf_version, token
+        assert output_directory is not None
+        compiled.append(source_path.stem)
+        return application._CompileEvidence(
+            summary=_diagnostic_summary(
+                source_path=source_path,
+                run_paths=run_paths,
+                output_directory=output_directory,
+                status=ValidationStatus.OK,
+            ),
+            primary_record=None,
+        )
+
+    monkeypatch.setattr(application, "_compile_target_evidence", compile_target)
+    result = application.execute_diagnostic_run(
+        run_config,
+        lambda _event: None,
+        lambda: None,
+        run_id="20260924_220000",
+    )
+
+    assert {"MorphoDictSqi", "MorphoDictSqiAbs"} <= set(compiled)
+    assert "MorphoDictEng" not in compiled
+    assert result.totals.files_included == 10
+    inventory = json.loads(
+        (result.run_paths.details_dir / "global_scan.json").read_text(encoding="utf-8")
+    )
+    census = inventory["rgl_census"]
+    assert census["scope"] == "rgl_language_plus_api_facades_and_morphodict"
+    assert census["language_files"] == 3
+    assert census["api_facade_files"] == 5
+    assert census["morphodict_files"] == 2
+    assert census["expected_morphodict_files"] == 2
+    assert census["morphodict_modules"] == ["MorphoDictSqi", "MorphoDictSqiAbs"]
+    assert census["complete_compile_census"] is True
+
+
 def test_gf_warning_parser_classifies_lock_and_namespace_warning() -> None:
     stderr = """\
 VerbSqi.gf:
@@ -812,3 +898,129 @@ def test_external_global_scan_reports_complete_five_facade_census(
     assert census["api_facade_modules"] == sorted(facade_names)
     assert inventory["compendium_test_matrix"]["highest_evidenced_level"] == "T8"
     assert inventory["compendium_certification"]["structural_compile_gate"] == "pass"
+
+
+
+def test_compile_causality_uses_primary_record_source_location() -> None:
+    summary = SimpleNamespace(
+        status=ValidationStatus.FAIL,
+        error_kind=ErrorKind.TYPE,
+        first_error="constant not found: Number",
+        error_detail="GF could not resolve a referenced constant/type",
+    )
+    upstream_record = SimpleNamespace(
+        source_module="IrregSqi",
+        source_path=Path("IrregSqi.gf"),
+        references=(),
+    )
+    downstream_item = SimpleNamespace(
+        source_path=Path("VerbSqi.gf"),
+        compile_evidence=SimpleNamespace(summary=summary, primary_record=upstream_record),
+    )
+    diagnostic_class, blockers = application._classify_diagnostic_item(
+        downstream_item,
+        failed_modules={"IrregSqi", "VerbSqi"},
+    )
+    assert diagnostic_class is DiagnosticClass.DOWNSTREAM
+    assert blockers == ("IrregSqi",)
+
+    direct_item = SimpleNamespace(
+        source_path=Path("IrregSqi.gf"),
+        compile_evidence=SimpleNamespace(summary=summary, primary_record=upstream_record),
+    )
+    diagnostic_class, blockers = application._classify_diagnostic_item(
+        direct_item,
+        failed_modules={"IrregSqi", "VerbSqi"},
+    )
+    assert diagnostic_class is DiagnosticClass.DIRECT
+    assert blockers == ()
+
+
+def test_scenario_raw_evidence_normalizes_windows_relative_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence = tmp_path / "raw" / "scenarios" / "alb-test.stderr.txt"
+    evidence.parent.mkdir(parents=True)
+    evidence.write_text("constant not found: Number\n", encoding="utf-8")
+
+    observed: list[object] = []
+
+    def _resolve(_run_paths, relative):
+        observed.append(relative)
+        return evidence
+
+    monkeypatch.setattr(application, "resolve_run_relative_path", _resolve)
+    result = SimpleNamespace(
+        stderr_path=PureWindowsPath(r"raw\scenarios\alb-test.stderr.txt"),
+        stdout_path=None,
+    )
+
+    text = application._scenario_raw_evidence_text(result, run_paths=object())
+
+    assert observed == ["raw/scenarios/alb-test.stderr.txt"]
+    assert text == "constant not found: Number\n"
+
+
+def test_scenario_shell_fallout_is_downstream_of_direct_compile_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    relative_stdout = Path("raw/scenarios/alb-test.out.txt")
+    relative_stderr = Path("raw/scenarios/alb-test.err.txt")
+    absolute_stdout = tmp_path / relative_stdout
+    absolute_stderr = tmp_path / relative_stderr
+    absolute_stderr.parent.mkdir(parents=True)
+    absolute_stdout.write_text("", encoding="utf-8")
+    absolute_stderr.write_text(
+        "IrregSqi.gf:3-7:\n"
+        "  Happened in the renaming of personTable\n"
+        "   constant not found: Number\n"
+        "   given ParadigmsSqi, CommonX, CatSqi, IrregSqi\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        application,
+        "resolve_run_relative_path",
+        lambda _run_paths, relative: tmp_path / Path(relative),
+    )
+    scenario = make_scenario_result(
+        scenario_id="alb-test",
+        status=ValidationStatus.FAIL,
+        diagnostic_class=DiagnosticClass.DIRECT,
+        error_kind=ErrorKind.SCRIPT,
+        execution_state=application.ExecutionState.COMPLETED,
+        exit_code=0,
+        stdout_path=relative_stdout,
+        stderr_path=relative_stderr,
+        normalized_output_path=None,
+        diagnostics=(
+            ScenarioDiagnosticObservation(
+                kind="gf_shell_error",
+                source="stderr",
+                message="constant not found: Number",
+                marker="constant not found:",
+                line_number=3,
+            ),
+        ),
+    )
+    file_results = (
+        SimpleNamespace(
+            module_name="IrregSqi",
+            status=ValidationStatus.FAIL,
+            diagnostic_class=DiagnosticClass.DIRECT,
+        ),
+        SimpleNamespace(
+            module_name="VerbSqi",
+            status=ValidationStatus.FAIL,
+            diagnostic_class=DiagnosticClass.DOWNSTREAM,
+        ),
+    )
+
+    (classified,) = application._diagnostic_scenario_results(
+        (scenario,),
+        file_results=file_results,
+        run_paths=object(),
+    )
+    assert classified.diagnostic_class is DiagnosticClass.DOWNSTREAM
+    assert classified.blocked_by == ("IrregSqi",)

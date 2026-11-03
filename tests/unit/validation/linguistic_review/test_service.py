@@ -259,3 +259,22 @@ def test_compendium_overlay_updates_only_t9_t10(tmp_path: Path) -> None:
     assert by_level["T9"]["status"] == "pass"
     assert by_level["T10"]["status"] == "pass"
     assert reviewed["linguistic_review"]["reviewer_kind"] == "ai"
+
+
+def test_reviewable_scenario_results_requires_ok_status_and_normalized_output() -> None:
+    from gf_wordbench.validation.linguistic_review import reviewable_scenario_results
+
+    reviewable = SimpleNamespace(
+        status=ValidationStatus.OK,
+        normalized_output_path=Path("raw/scenarios/ok.normalized.txt"),
+    )
+    failed = SimpleNamespace(
+        status=ValidationStatus.FAIL,
+        normalized_output_path=Path("raw/scenarios/fail.normalized.txt"),
+    )
+    missing_output = SimpleNamespace(
+        status=ValidationStatus.OK,
+        normalized_output_path=None,
+    )
+
+    assert reviewable_scenario_results((reviewable, failed, missing_output)) == (reviewable,)

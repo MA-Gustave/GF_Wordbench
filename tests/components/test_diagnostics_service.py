@@ -313,6 +313,10 @@ def test_gf_constant_not_found_is_reported_as_primary_type_error(
     assert _pattern_id(primary) == "DP-GFCONST-001"
     assert _error_kind(primary) is ErrorKind.TYPE
     assert str(primary.message) == "constant not found: Number"
+    assert primary.source_path == Path("TrySqi.gf")
+    assert primary.source_module == "TrySqi"
+    assert primary.line == 42
+    assert primary.end_line_number == 45
 
 
 def test_unknown_qualified_constant_is_primary_type_error(tmp_path: Path) -> None:
@@ -334,6 +338,10 @@ def test_unknown_qualified_constant_is_primary_type_error(tmp_path: Path) -> Non
     assert _pattern_id(primary) == "DP-GFCONST-001"
     assert _error_kind(primary) is ErrorKind.TYPE
     assert str(primary.message) == "unknown qualified constant P.Number"
+    assert primary.source_path == Path("TrySqi.gf")
+    assert primary.source_module == "TrySqi"
+    assert primary.line == 42
+    assert primary.end_line_number == 45
 
 
 def test_multiline_type_diagnostic_retains_expected_and_inferred_context(

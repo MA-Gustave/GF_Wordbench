@@ -1,3 +1,27 @@
+# GF Wordbench 1.4.0 — SemantiK candidate handoff
+
+GF Wordbench now accepts a fail-closed `semantik-wordbench-handoff-v1` candidate bundle from SemantiK Phrase Ops. This does **not** make Phrase Ops evidence a Wordbench release proof.
+
+The inspector verifies:
+- handoff schema and explicit authority flags;
+- SHA-256 of every declared artifact and source report;
+- source report `PASS` state for migration and advertised SA capability conformance;
+- per-language/case accounting, technical surfaces and capability extensions;
+- exact binding of handoff surfaces back to the source Phrase Ops report;
+- safe materialization only after successful verification.
+
+A valid result is `ACCEPTED_FOR_WORDBENCH_VALIDATION` with `release_eligible=false`. Wordbench still owns native GF reproduction, scenarios, reviewed goldens, linguistic review and the final `READY`/not-ready release decision.
+
+CLI:
+
+```text
+python -m gf_wordbench.validation.semantik_handoff <handoff.zip>
+```
+
+Targeted validation in this environment: **82 tests passed** across the new handoff, linguistic review, scenario service and release-mode tests.
+
+---
+
 # GF Wordbench
 
 **GF Wordbench** is a validation, diagnostics, regression-testing, and
@@ -420,7 +444,10 @@ Install:
 - Git for normal development and reviewed changes.
 
 GF Wordbench records the exact executable and effective GF path used for each
-run.
+run. For standard RGL languages, the selected source inventory is also followed
+transitively to include only referenced shared-family directories (for example
+`romance`, `scandinavian`, or `hindustani`) instead of adding every RGL language
+directory.
 
 ### 2. Create a local environment
 

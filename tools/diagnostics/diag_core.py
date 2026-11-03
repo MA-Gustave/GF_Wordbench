@@ -149,7 +149,7 @@ def load_config() -> DiagConfig:
         "language_path": "",
         "validation_profile": "",
         "output_root": "",
-        "gf_executable": "gf",
+        "gf_executable": "",
         "rgl_root": "",
         "wordbench_command": ["{python}", "-m", "gf_wordbench"],
         "required_paths": [

@@ -25,12 +25,20 @@ if TYPE_CHECKING:
 
 _MAX_BATCH_SIZE: Final[int] = 10_000
 _MAX_SCENARIO_DIAGNOSTICS: Final[int] = 4096
+_GF_INTERNAL_GENERATE_PMCFG_MARKER: Final[str] = "Internal error in GeneratePMCFG"
+_GF_INTERNAL_INFLECTION_DETAIL: Final[str] = "Cannot find an inflection rule"
 _GF_SHELL_FAILURE_MARKERS: Final[tuple[str, ...]] = (
     "Unable to find:",
-    "empty grammar, no abstract",
     "unknown qualified constant",
     "constant not found:",
+    "empty grammar, no abstract",
 )
+_GF_INTERNAL_DIAGNOSTIC_PRIORITY: Final[int] = 100
+_GF_SHELL_DIAGNOSTIC_PRIORITY: Final[int] = 50
+_GF_DOWNSTREAM_DIAGNOSTIC_PRIORITY: Final[int] = 10
+_PROFILE_SURFACE_DIAGNOSTIC_PRIORITY: Final[int] = 40
+_REQUIRE_NONEMPTY_CASES_TAG: Final[str] = "require-nonempty-cases"
+_FORBID_VISIBLE_BIND_TAG: Final[str] = "forbid-visible-bind"
 _T = TypeVar("_T")
 
 
@@ -90,6 +98,8 @@ class _DetectedScenarioDiagnostic:
     message: str
     marker: str
     line_number: int
+    error_kind: ErrorKind = ErrorKind.SCRIPT
+    priority: int = _GF_SHELL_DIAGNOSTIC_PRIORITY
     is_failure: bool = True
 
 
@@ -155,7 +165,10 @@ def run_scenario(
         ),
     )
     _validate_execution_evidence(execution, run_paths=run_paths)
-    observed_diagnostics = _gf_shell_failures(execution)
+    observed_diagnostics = (
+        _gf_shell_failures(execution)
+        + _profile_surface_failures(spec, execution.stdout_text)
+    )
 
     marker_evaluation = cast(
         "_MarkerEvaluation",
@@ -538,14 +551,34 @@ def _interpret_scenario(
             diagnostics=diagnostics,
         )
 
-    if _has_failure_diagnostic(diagnostics):
+    primary_diagnostic = _primary_failure_diagnostic(diagnostics)
+    if primary_diagnostic is not None:
+        if primary_diagnostic.error_kind is ErrorKind.INTERNAL:
+            return _ScenarioInterpretation(
+                status=ValidationStatus.ERROR,
+                diagnostic_class=DiagnosticClass.DIRECT,
+                error_kind=ErrorKind.INTERNAL,
+                primary_message=_bounded_message(
+                    "GF reported an internal generation error: "
+                    f"{primary_diagnostic.message}"
+                ),
+                diagnostics=diagnostics,
+            )
+        if primary_diagnostic.kind.startswith("scenario_surface_"):
+            primary_message = (
+                "Scenario output violates the profile surface contract: "
+                f"{primary_diagnostic.message}"
+            )
+        else:
+            primary_message = (
+                "GF shell reported an execution error: "
+                f"{primary_diagnostic.message}"
+            )
         return _ScenarioInterpretation(
             status=ValidationStatus.FAIL,
             diagnostic_class=DiagnosticClass.DIRECT,
-            error_kind=ErrorKind.SCRIPT,
-            primary_message=_bounded_message(
-                f"GF shell reported an execution error: {diagnostics[0].message}"
-            ),
+            error_kind=primary_diagnostic.error_kind,
+            primary_message=_bounded_message(primary_message),
             diagnostics=diagnostics,
         )
 
@@ -645,43 +678,181 @@ def _interpret_scenario(
         primary_message="Scenario completed successfully.",
     )
 
+
+def _profile_surface_failures(
+    spec: object,
+    stdout_text: str,
+) -> tuple[_DetectedScenarioDiagnostic, ...]:
+    """Detect profile-declared surface failures that GF itself does not reject.
+
+    Scenario tags opt into bounded surface contracts.  This keeps the core
+    language-neutral while allowing a profile to require non-empty CASE output
+    and/or forbid a visible GF ``&+`` token-binding marker.
+    """
+    tags = {str(value) for value in _optional_sequence(spec, "tags")}
+    require_nonempty_cases = _REQUIRE_NONEMPTY_CASES_TAG in tags
+    forbid_visible_bind = _FORBID_VISIBLE_BIND_TAG in tags
+    if not stdout_text or not (require_nonempty_cases or forbid_visible_bind):
+        return ()
+
+    lines = stdout_text.splitlines()
+    observations: list[_DetectedScenarioDiagnostic] = []
+    in_cases = False
+    current_case: tuple[str, int] | None = None
+    current_has_output = False
+
+    def close_case() -> None:
+        nonlocal current_case, current_has_output
+        if current_case is None or current_has_output:
+            current_case = None
+            current_has_output = False
+            return
+        label, line_number = current_case
+        if require_nonempty_cases:
+            observations.append(
+                _DetectedScenarioDiagnostic(
+                    kind="scenario_surface_empty_case",
+                    source="stdout",
+                    message=_bounded_message(f"{label} produced no non-empty output."),
+                    marker="CASE",
+                    line_number=line_number,
+                    error_kind=ErrorKind.SCRIPT,
+                    priority=_PROFILE_SURFACE_DIAGNOSTIC_PRIORITY,
+                )
+            )
+        current_case = None
+        current_has_output = False
+
+    for index, raw_line in enumerate(lines):
+        line_number = index + 1
+        stripped = raw_line.strip()
+        if stripped == "GF_WORDBENCH_BEGIN cases":
+            in_cases = True
+            continue
+        if stripped == "GF_WORDBENCH_END cases":
+            close_case()
+            in_cases = False
+            continue
+        if not in_cases:
+            continue
+        if stripped.startswith("CASE "):
+            close_case()
+            current_case = (stripped, line_number)
+            current_has_output = False
+            continue
+        if current_case is None or not stripped:
+            continue
+        current_has_output = True
+        if forbid_visible_bind and "&+" in stripped:
+            observations.append(
+                _DetectedScenarioDiagnostic(
+                    kind="scenario_surface_token_binding",
+                    source="stdout",
+                    message=_bounded_message(
+                        f"{current_case[0]} exposed GF token-binding marker '&+': {stripped}"
+                    ),
+                    marker="&+",
+                    line_number=line_number,
+                    error_kind=ErrorKind.SCRIPT,
+                    priority=_PROFILE_SURFACE_DIAGNOSTIC_PRIORITY,
+                )
+            )
+        if len(observations) >= _MAX_SCENARIO_DIAGNOSTICS:
+            return tuple(observations)
+
+    if in_cases:
+        close_case()
+    return tuple(observations)
+
 def _gf_shell_failures(
     execution: _ExecutionEvidence,
 ) -> tuple[_DetectedScenarioDiagnostic, ...]:
-    """Return structured GF shell command failures observed in raw output.
+    """Return structured fatal GF diagnostics observed in raw scenario output.
 
-    GF run/interactive mode can exit with status 0 after command-level errors.
-    Scenario success therefore cannot rely on the OS exit code alone.
+    GF run/interactive mode can exit with status 0 after command-level errors,
+    and PGF generation failures can leave later shell commands running against
+    an empty grammar.  Preserve every recognized observation, but attach causal
+    priority so the root GeneratePMCFG failure outranks downstream shell noise.
     """
     observations: list[_DetectedScenarioDiagnostic] = []
     for source, text in (
         ("stderr", execution.stderr_text),
         ("stdout", execution.stdout_text),
     ):
-        for line_number, line in enumerate(text.splitlines(), start=1):
+        lines = text.splitlines()
+        for index, line in enumerate(lines):
+            line_number = index + 1
             stripped = line.strip()
-            marker = next(
-                (
-                    candidate
-                    for candidate in _GF_SHELL_FAILURE_MARKERS
-                    if candidate.casefold() in stripped.casefold()
-                ),
-                None,
-            )
-            if marker is None:
-                continue
-            observations.append(
-                _DetectedScenarioDiagnostic(
-                    kind="gf_shell_error",
-                    source=source,
-                    message=_bounded_message(stripped),
-                    marker=marker,
-                    line_number=line_number,
+            if _GF_INTERNAL_GENERATE_PMCFG_MARKER.casefold() in stripped.casefold():
+                detail = _nearby_internal_inflection_detail(lines, index)
+                message = stripped
+                if detail is not None:
+                    message = (
+                        f"{stripped} {detail}"
+                        if stripped.endswith(":")
+                        else f"{stripped}: {detail}"
+                    )
+                observations.append(
+                    _DetectedScenarioDiagnostic(
+                        kind="gf_internal_generate_pmcfg",
+                        source=source,
+                        message=_bounded_message(message),
+                        marker=_GF_INTERNAL_GENERATE_PMCFG_MARKER,
+                        line_number=line_number,
+                        error_kind=ErrorKind.INTERNAL,
+                        priority=_GF_INTERNAL_DIAGNOSTIC_PRIORITY,
+                    )
                 )
-            )
+            else:
+                marker = next(
+                    (
+                        candidate
+                        for candidate in _GF_SHELL_FAILURE_MARKERS
+                        if candidate.casefold() in stripped.casefold()
+                    ),
+                    None,
+                )
+                if marker is None:
+                    continue
+                priority = (
+                    _GF_DOWNSTREAM_DIAGNOSTIC_PRIORITY
+                    if marker == "empty grammar, no abstract"
+                    else _GF_SHELL_DIAGNOSTIC_PRIORITY
+                )
+                observations.append(
+                    _DetectedScenarioDiagnostic(
+                        kind="gf_shell_error",
+                        source=source,
+                        message=_bounded_message(stripped),
+                        marker=marker,
+                        line_number=line_number,
+                        error_kind=ErrorKind.SCRIPT,
+                        priority=priority,
+                    )
+                )
             if len(observations) >= _MAX_SCENARIO_DIAGNOSTICS:
                 return tuple(observations)
     return tuple(observations)
+
+
+def _nearby_internal_inflection_detail(
+    lines: Sequence[str],
+    index: int,
+) -> str | None:
+    for candidate in lines[index + 1 : index + 4]:
+        stripped = candidate.strip()
+        if _GF_INTERNAL_INFLECTION_DETAIL.casefold() in stripped.casefold():
+            return stripped
+    return None
+
+
+def _primary_failure_diagnostic(
+    diagnostics: Sequence[_DetectedScenarioDiagnostic],
+) -> _DetectedScenarioDiagnostic | None:
+    failures = tuple(observation for observation in diagnostics if observation.is_failure)
+    if not failures:
+        return None
+    return max(failures, key=lambda observation: observation.priority)
 
 
 def _has_failure_diagnostic(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from pathlib import Path
 import re
 from typing import Final
 
@@ -16,6 +17,7 @@ from gf_wordbench.diagnostics.models import (
     PatternMatch,
 )
 from gf_wordbench.kernel.statuses import ErrorKind
+from gf_wordbench.diagnostics.parsing.locations import SourceLocation, extract_source_location
 
 _INTERNAL_ANCHOR: Final = "Internal error in GeneratePMCFG"
 _INTERNAL_DETAIL: Final = "GeneratePMCFG"
@@ -121,6 +123,12 @@ def _build_match(
     detail: str,
     raw_excerpt: str,
     combined_streams: bool = False,
+    source_path: Path | None = None,
+    source_module: str | None = None,
+    line: int | None = None,
+    column: int | None = None,
+    end_line_number: int | None = None,
+    end_column: int | None = None,
 ) -> PatternMatch:
     metadata = {"legacy_source_stream": "combined"} if combined_streams else {}
     return PatternMatch(
@@ -135,8 +143,56 @@ def _build_match(
         detail=detail,
         confidence=confidence,
         raw_excerpt=raw_excerpt,
+        source_path=source_path,
+        source_module=source_module,
+        line=line,
+        column=column,
+        end_line_number=end_line_number,
+        end_column=end_column,
         metadata=metadata,
     )
+
+
+def _preceding_source_location(
+    lines: Sequence[DiagnosticLine],
+    diagnostic_index: int,
+    *,
+    max_distance: int = 6,
+) -> SourceLocation | None:
+    """Return the nearest GF source-location header before a diagnostic line.
+
+    GF commonly emits a location header such as ``IrregSqi.gf:3-7:`` followed
+    by one or more context lines and then the actual diagnostic.  The location
+    is therefore evidence for the following diagnostic even though it is not
+    repeated on the ``constant not found`` line itself.
+    """
+    first = max(0, diagnostic_index - max_distance)
+    for index in range(diagnostic_index - 1, first - 1, -1):
+        candidate = lines[index].text.strip()
+        if not candidate:
+            continue
+        location_text = candidate[:-1] if candidate.endswith(":") else candidate
+        matched = extract_source_location(location_text)
+        if matched is not None:
+            return matched.location
+    return None
+
+
+def _location_match_fields(
+    location: SourceLocation | None,
+) -> dict[str, object]:
+    if location is None:
+        return {}
+    path_text = location.source_path_normalized or location.source_path_raw
+    source_path = Path(path_text)
+    return {
+        "source_path": source_path,
+        "source_module": source_path.stem,
+        "line": location.line,
+        "column": location.column,
+        "end_line_number": location.effective_end_line,
+        "end_column": location.end_column,
+    }
 
 
 def _match_internal(
@@ -276,6 +332,7 @@ def _match_constant_not_found(
             match = _CONSTANT_NOT_FOUND_RE.match(line.text)
             if match is None:
                 continue
+            location = _preceding_source_location(stream_lines, index)
             return _build_match(
                 pattern_id="DP-GFCONST-001",
                 source_stream=stream,
@@ -286,6 +343,7 @@ def _match_constant_not_found(
                 message=match.group("message").strip(),
                 detail="GF could not resolve a referenced constant/type in the active module scope",
                 raw_excerpt=_bounded_excerpt(stream_lines, (index,)),
+                **_location_match_fields(location),
             )
     return None
 

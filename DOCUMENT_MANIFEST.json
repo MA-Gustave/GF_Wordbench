@@ -1,6 +1,11 @@
 {
-  "generated_at": "2026-09-23",
+  "generated_at": "2026-10-01T15:28:33.232717Z",
   "files": [
+    {
+      "path": "CHANGELOG_v1_4.md",
+      "sha256": "ee90b370204ea5ed8c0f1266cc0fddca4180bdb70b52b8be148b0c6328cd60a3",
+      "size": 586
+    },
     {
       "path": "CONTRIBUTING.md",
       "sha256": "2ac3ea4a0c4ff020bca271f2fb67a20a832d7f3090ce4bb2e78064b0b83bd7ae",
@@ -8,8 +13,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "dd1c05258de50627d50941a0f74c5d9d22687b5b27f0a72a426f5a083dd7af36",
-      "size": 30525
+      "sha256": "37f51d08c2b30424fbea5e7467e031f6734b45c74e923a3dd9f1f248ffeee8a5",
+      "size": 31896
     },
     {
       "path": "SECURITY.md",
@@ -43,8 +48,8 @@
     },
     {
       "path": "docs/EXTERNAL_TOOL_CONTRACT_LOCK.md",
-      "sha256": "533ae3196ba55984cc66df877b6a8cb24f52a733cc78985073004d407aca690f",
-      "size": 11101
+      "sha256": "e9c28cb7c4488e253d80f903a24794963d3217eef00901fa168080d25fcd6729",
+      "size": 11877
     },
     {
       "path": "docs/GLOSSARY.md",
@@ -233,8 +238,8 @@
     },
     {
       "path": "docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md",
-      "sha256": "6c00a260c8fe9293a266180703218980c0c34e5d178e9285f05415569cca30f0",
-      "size": 55613
+      "sha256": "89feb7c49da6924944e92c5e268c850269bb46c967d91223bb017eadbc34cff0",
+      "size": 56581
     },
     {
       "path": "docs/decisions/README.md",
@@ -308,8 +313,8 @@
     },
     {
       "path": "docs/diagnostics/KNOWN_DIAGNOSTIC_PATTERNS.md",
-      "sha256": "d8dcd6f20334e1bd0f2b7c6e46dcaaa3a129356825004bfccc2bbf1e27e7820a",
-      "size": 49596
+      "sha256": "a67756db8f65b24730d05a0f2f290d59f4d0a4eb824a8df5a1b1d586b31940a0",
+      "size": 51564
     },
     {
       "path": "docs/diagnostics/TIMEOUTS_AND_PROCESS_FAILURES.md",
@@ -338,8 +343,8 @@
     },
     {
       "path": "docs/gf/GF_PATH_RESOLUTION.md",
-      "sha256": "8aa38c913a5ee84cd8d5c866a50ccf21270133f040f8077b6b084ead624cde78",
-      "size": 38476
+      "sha256": "81cb8f9d033a2a9ac080a0732268f2e97257f5db1215e5428656a461beb39f11",
+      "size": 38729
     },
     {
       "path": "docs/gf/GF_PGF_BUILD.md",
@@ -365,6 +370,11 @@
       "path": "docs/gf/GF_VERSION_COMPATIBILITY.md",
       "sha256": "80324a1c9990d7638c90833ca95083e9ed9ce943e3ca1cc3611b2e7c2b3970e0",
       "size": 1535
+    },
+    {
+      "path": "docs/integration/SEMANTIK_HANDOFF.md",
+      "sha256": "5973cdf95d8cd2f2024142bd976e7b633022d6703c66687ce2cc868b5f1b3ec8",
+      "size": 637
     },
     {
       "path": "docs/operations/AUTOMATION_AND_CI.md",
@@ -503,8 +513,8 @@
     },
     {
       "path": "docs/reports/SUMMARY_MARKDOWN_REFERENCE.md",
-      "sha256": "cda4e358e0e0fdc58cc1542d047ba5a0b487cc2fbd691695a5a522ae32b83ddb",
-      "size": 54160
+      "sha256": "154461c7e35942df1de8eb74906eef9eb70e1b0adc25ce7f61fdd0b178bcf802",
+      "size": 54793
     },
     {
       "path": "docs/scenarios/GOLDEN_TESTS.md",
@@ -583,8 +593,8 @@
     },
     {
       "path": "docs/validation/SCENARIO_VALIDATION.md",
-      "sha256": "f1ea7beac5e06da5379ae3a0dd75f76cdbe2b91b178aa099964d741a7e00767f",
-      "size": 68429
+      "sha256": "5eaf8dfc01ec0b9aeff06f42a1f7e0dd771b88b02a8d5fbbf0c97b16cc8d766b",
+      "size": 71369
     },
     {
       "path": "docs/validation/STATIC_SCANNING.md",

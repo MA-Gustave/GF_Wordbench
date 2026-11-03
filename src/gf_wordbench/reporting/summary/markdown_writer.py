@@ -18,6 +18,7 @@ from urllib.parse import quote
 
 from gf_wordbench.infrastructure.atomic_io import atomic_write_text
 from gf_wordbench.version import __version__
+from gf_wordbench.validation.linguistic_review.service import reviewable_scenario_results
 
 if TYPE_CHECKING:
     from gf_wordbench.runs.models.results import RunResult
@@ -499,6 +500,19 @@ def _portable_source_path(run_result: RunResult, path: Path) -> str:
     return resolved.as_posix()
 
 
+def _linguistic_scenario_evidence(
+    scenario_results: Sequence[Any],
+    *,
+    scenarios_seen: int,
+) -> tuple[str, int]:
+    reviewable = len(reviewable_scenario_results(scenario_results))
+    if reviewable > 0:
+        return "ASSESSED", reviewable
+    if scenarios_seen > 0:
+        return "BLOCKED", 0
+    return "NOT ASSESSED", 0
+
+
 def _build_compendium_certification(run_result: Any) -> str | None:
     config = _required_attr(run_result, "run_config")
     if _enum_text(_required_attr(config, "mode")).lower() != "diagnostic":
@@ -516,6 +530,11 @@ def _build_compendium_certification(run_result: Any) -> str | None:
     files_error = _non_negative_count(totals, "files_error")
     files_skipped = _non_negative_count(totals, "files_skipped")
     scenarios_seen = _non_negative_count(totals, "scenarios_seen")
+    scenario_results = _sequence(_required_attr(run_result, "scenario_results"))
+    linguistic_evidence, reviewable_scenarios = _linguistic_scenario_evidence(
+        scenario_results,
+        scenarios_seen=scenarios_seen,
+    )
 
     digest = hashlib.sha256()
     digest.update(b"gf-wordbench-source-lock-v1\0")
@@ -551,15 +570,17 @@ def _build_compendium_certification(run_result: Any) -> str | None:
         ),
         ("Complete GF target census", _inline_code(_rgl_census_label(run_result))),
         ("Evidence-derived state floor", _inline_code(state_floor)),
+        ("Linguistic scenario evidence", _inline_code(linguistic_evidence)),
         (
-            "Linguistic scenario evidence",
-            _inline_code("ASSESSED" if scenarios_seen else "NOT ASSESSED"),
+            "Reviewable scenarios",
+            _inline_code(f"{reviewable_scenarios}/{scenarios_seen}"),
         ),
         ("Linguistic certification", _inline_code("NOT ESTABLISHED")),
     ]
     note = (
         "Compilation establishes structural consistency only. Reviewed scenario/golden "
-        "evidence is still required for linguistic correctness and release maturity."
+        "evidence is still required for linguistic correctness and release maturity. "
+        "BLOCKED means scenarios were attempted but none produced reviewable normalized output."
     )
     return "## RGL Certification (Compendium)\n\n" + _table(("Field", "Value"), rows) + "\n\n" + note
 
@@ -567,50 +588,105 @@ _STANDARD_API_FACADE_PREFIXES: Final[tuple[str, ...]] = (
     "Combinators", "Constructors", "Symbolic", "Syntax", "Try"
 )
 
+_MORPHODICT_DIRECTORY_NAME: Final[str] = "morphodict"
+_MORPHODICT_MODULE_PREFIX: Final[str] = "MorphoDict"
 
-def _rgl_census_counts(run_result: Any) -> tuple[int, int, int]:
+
+def _rgl_census_counts(run_result: Any) -> tuple[int, int, int, int, int]:
     config = _required_attr(run_result, "run_config")
     context = _get(config, "language_context", default=None)
     file_results = _sequence(_required_attr(run_result, "file_results"))
     if context is None:
-        return len(file_results), 0, 0
-    language_root = _as_path(_required_attr(context, "language_directory"), "language_directory").resolve(strict=False)
-    rgl_source_root = _as_path(_required_attr(context, "rgl_source_root"), "rgl_source_root").resolve(strict=False)
+        return len(file_results), 0, 0, 0, 0
+    language_root = _as_path(
+        _required_attr(context, "language_directory"),
+        "language_directory",
+    ).resolve(strict=False)
+    rgl_source_root = _as_path(
+        _required_attr(context, "rgl_source_root"),
+        "rgl_source_root",
+    ).resolve(strict=False)
     suffix = _text(_get(context, "module_suffix", default=""))
-    facade_root = rgl_source_root if language_root.parent == rgl_source_root else language_root.parent
-    expected = {
+    facade_root = (
+        rgl_source_root
+        if language_root.parent == rgl_source_root
+        else language_root.parent
+    )
+    expected_facades = {
         f"{prefix}{suffix}.gf"
         for prefix in _STANDARD_API_FACADE_PREFIXES
         if suffix and (facade_root / f"{prefix}{suffix}.gf").is_file()
     }
+    morphodict_root = facade_root / _MORPHODICT_DIRECTORY_NAME
+    expected_morphodict = {
+        name
+        for name in (
+            f"{_MORPHODICT_MODULE_PREFIX}{suffix}.gf",
+            f"{_MORPHODICT_MODULE_PREFIX}{suffix}Abs.gf",
+        )
+        if suffix and (morphodict_root / name).is_file()
+    }
     language_count = 0
     facade_count = 0
+    morphodict_count = 0
     for result in file_results:
-        path = _as_path(_required_attr(result, "file_path"), "file_path").resolve(strict=False)
+        path = _as_path(_required_attr(result, "file_path"), "file_path").resolve(
+            strict=False
+        )
         try:
             path.relative_to(language_root)
             language_count += 1
             continue
         except ValueError:
             pass
-        if path.parent == facade_root and path.name in expected:
+        if path.parent == facade_root and path.name in expected_facades:
             facade_count += 1
-    return language_count, facade_count, len(expected)
+        elif path.parent == morphodict_root and path.name in expected_morphodict:
+            morphodict_count += 1
+    return (
+        language_count,
+        facade_count,
+        len(expected_facades),
+        morphodict_count,
+        len(expected_morphodict),
+    )
 
 
 def _complete_rgl_census(run_result: Any) -> bool:
-    language_count, facade_count, expected_facades = _rgl_census_counts(run_result)
+    (
+        language_count,
+        facade_count,
+        expected_facades,
+        morphodict_count,
+        expected_morphodict,
+    ) = _rgl_census_counts(run_result)
     totals = _required_attr(run_result, "totals")
     included = _non_negative_count(totals, "files_included")
-    return included > 0 and language_count + facade_count == included and facade_count == expected_facades
+    return (
+        included > 0
+        and language_count + facade_count + morphodict_count == included
+        and facade_count == expected_facades
+        and morphodict_count == expected_morphodict
+    )
 
 
 def _rgl_census_label(run_result: Any) -> str:
-    language_count, facade_count, expected_facades = _rgl_census_counts(run_result)
-    total = language_count + facade_count
+    (
+        language_count,
+        facade_count,
+        expected_facades,
+        morphodict_count,
+        expected_morphodict,
+    ) = _rgl_census_counts(run_result)
+    total = language_count + facade_count + morphodict_count
+    parts = [f"{language_count} language"]
     if expected_facades:
-        return f"{total} = {language_count} language + {facade_count}/{expected_facades} API facades"
-    return f"{total} language targets; no standard API facades discovered"
+        parts.append(f"{facade_count}/{expected_facades} API facades")
+    if expected_morphodict:
+        parts.append(f"{morphodict_count}/{expected_morphodict} MorphoDict")
+    if len(parts) == 1:
+        return f"{total} language targets; no standard API facades or MorphoDict companions discovered"
+    return f"{total} = " + " + ".join(parts)
 
 
 def _build_compiler_warnings(run_result: Any) -> str | None:

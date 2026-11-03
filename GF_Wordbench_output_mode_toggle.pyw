@@ -48,7 +48,7 @@ def _candidate_roots() -> list[Path]:
 
     add(here)
     add(here.parent)
-    add(Path(r"C:\mycode\Grammatical_Framework"))
+    add(Path(r"C:\mycode\Grammatical-Framework"))
 
     for parent in here.parents:
         add(parent)

@@ -171,6 +171,27 @@ def test_probe_does_not_require_project_toml_catalog_or_language_bundle(
     assert result.status is LanguageProbeStatus.RESOLVED
 
 
+def test_probe_adds_same_suffix_morphodict_companion_to_gf_path(
+    tmp_path: Path,
+) -> None:
+    _rgl_root, source_root, language_directory, _files = _make_rgl_language(tmp_path)
+    morphodict_root = source_root / "morphodict"
+    _write_gf(morphodict_root / "MorphoDictEng.gf")
+    _write_gf(morphodict_root / "MorphoDictEngAbs.gf")
+    _write_gf(morphodict_root / "MorphoDictFin.gf")
+
+    result = probe_language_path(language_directory)
+
+    assert result.status is LanguageProbeStatus.RESOLVED
+    assert result.context is not None
+    assert morphodict_root in result.context.gf_path_requirements
+    assert source_root / "finnish" not in result.context.gf_path_requirements
+    assert all(
+        path.is_relative_to(language_directory)
+        for path in result.context.source_inventory
+    )
+
+
 @pytest.mark.parametrize("explicit_kind", ["repository", "source"])
 def test_explicit_rgl_root_accepts_repository_or_source_root(
     tmp_path: Path,
@@ -436,6 +457,36 @@ def test_external_language_accepts_explicit_disjoint_rgl_dependency_root(
     assert all(path.is_relative_to(external_language) for path in result.context.source_inventory)
 
 
+def test_external_language_adds_project_local_morphodict_companion(
+    tmp_path: Path,
+) -> None:
+    rgl_root, _source_root, _stock_language, _stock_files = _make_rgl_language(
+        tmp_path / "dependencies"
+    )
+    external_language = (
+        tmp_path / "external-project" / "GF" / "lib" / "src" / "albanian"
+    ).resolve()
+    _write_gf(external_language / "LangSqi.gf")
+    _write_gf(external_language / "GrammarSqi.gf")
+    morphodict_root = external_language.parent / "morphodict"
+    _write_gf(morphodict_root / "MorphoDictSqi.gf")
+    _write_gf(morphodict_root / "MorphoDictSqiAbs.gf")
+    _write_gf(morphodict_root / "MorphoDictEng.gf")
+
+    result = probe_language_path(
+        external_language,
+        explicit_rgl_root=rgl_root,
+    )
+
+    assert result.status is LanguageProbeStatus.RESOLVED
+    assert result.context is not None
+    assert morphodict_root in result.context.gf_path_requirements
+    assert all(
+        path.is_relative_to(external_language)
+        for path in result.context.source_inventory
+    )
+
+
 def test_explicit_rgl_root_must_be_a_supported_checkout(tmp_path: Path) -> None:
     external_language = (tmp_path / "external" / "albanian").resolve()
     _write_gf(external_language / "LangSqi.gf")
@@ -568,3 +619,66 @@ def test_unique_standard_role_support_resolves_when_unambiguous_suffix_is_requir
     assert result.context.module_suffix == "Sqi"
     assert result.choices == ()
     assert _diagnostic_codes(result) == ("GF-WB-CONFIG-257",)
+
+
+def test_probe_adds_transitive_shared_family_directory(tmp_path: Path) -> None:
+    rgl_root, source_root, language_directory, _files = _make_rgl_language(
+        tmp_path,
+        relative_language="french",
+        modules=("LangFre.gf", "GrammarFre.gf", "LexiconFre.gf", "CatFre.gf"),
+    )
+    (language_directory / "LangFre.gf").write_text(
+        "concrete LangFre of Lang = GrammarFre, LexiconFre ** { }\n",
+        encoding="utf-8",
+    )
+    (language_directory / "GrammarFre.gf").write_text(
+        "concrete GrammarFre of Grammar = CatFre ** { }\n",
+        encoding="utf-8",
+    )
+    (language_directory / "LexiconFre.gf").write_text(
+        "concrete LexiconFre of Lexicon = CatFre ** { }\n",
+        encoding="utf-8",
+    )
+    (language_directory / "CatFre.gf").write_text(
+        "concrete CatFre of Cat = CatRomance with (ResRomance = ResRomance) ;\n",
+        encoding="utf-8",
+    )
+    romance = source_root / "romance"
+    _write_gf(romance / "CatRomance.gf").write_text(
+        "incomplete concrete CatRomance of Cat = ResRomance ** { }\n",
+        encoding="utf-8",
+    )
+    _write_gf(romance / "ResRomance.gf").write_text(
+        "resource ResRomance = { }\n",
+        encoding="utf-8",
+    )
+    unrelated = source_root / "german"
+    _write_gf(unrelated / "LangGer.gf")
+
+    result = probe_language_path(language_directory, explicit_rgl_root=rgl_root)
+
+    assert result.status is LanguageProbeStatus.RESOLVED
+    assert result.context is not None
+    requirements = result.context.gf_path_requirements
+    assert romance.resolve() in requirements
+    assert unrelated.resolve() not in requirements
+    assert requirements.index(romance.resolve()) < requirements.index(source_root / "abstract")
+
+
+def test_probe_ignores_shared_module_names_in_comments_and_strings(tmp_path: Path) -> None:
+    rgl_root, source_root, language_directory, _files = _make_rgl_language(
+        tmp_path,
+        modules=("LangEng.gf",),
+    )
+    (language_directory / "LangEng.gf").write_text(
+        '-- CatScand is documentation only\nresource LangEng = { oper x = "CatScand" ; }\n',
+        encoding="utf-8",
+    )
+    scandinavian = source_root / "scandinavian"
+    _write_gf(scandinavian / "CatScand.gf")
+
+    result = probe_language_path(language_directory, explicit_rgl_root=rgl_root)
+
+    assert result.status is LanguageProbeStatus.RESOLVED
+    assert result.context is not None
+    assert scandinavian.resolve() not in result.context.gf_path_requirements

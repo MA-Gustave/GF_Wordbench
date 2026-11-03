@@ -1,0 +1,11 @@
+{
+  "schema": "wordbench.minidiag.config.v2",
+  "language_path": "C:/mycode/Grammatical_Framework/Grammatical_Framework-Albanian/AlbanianSQI/GF/lib/src/albanian",
+  "validation_profile": "C:/mycode/Grammatical_Framework/Grammatical_Framework-Albanian/project.toml",
+  "gf_executable": "",
+  "runtime_smoke": {
+    "run_quick": false,
+    "target": "",
+    "strict": false
+  }
+}

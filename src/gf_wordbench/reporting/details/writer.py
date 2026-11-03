@@ -22,6 +22,7 @@ from gf_wordbench.kernel.statuses import (
     ValidationStatus,
 )
 from gf_wordbench.validation.compilation.models import CompileWarningKind
+from gf_wordbench.validation.linguistic_review.service import reviewable_scenario_results
 
 if TYPE_CHECKING:
     from gf_wordbench.runs.models.results import FileResult, RunResult
@@ -40,6 +41,8 @@ _RESERVED: Final[frozenset[str]] = frozenset(
 _GLOBAL_SCAN_CSV: Final[str] = "global_scan.csv"
 _GLOBAL_SCAN_JSON: Final[str] = "global_scan.json"
 _STANDARD_API_FACADE_PREFIXES: Final[tuple[str, ...]] = ("Combinators", "Constructors", "Symbolic", "Syntax", "Try")
+_MORPHODICT_DIRECTORY_NAME: Final[str] = "morphodict"
+_MORPHODICT_MODULE_PREFIX: Final[str] = "MorphoDict"
 _SOURCE_LOCK_JSON: Final[str] = "source_lock.json"
 _RGL_COVERAGE_JSON: Final[str] = "rgl_coverage.json"
 _COMPENDIUM_MATRIX_JSON: Final[str] = "compendium_matrix.json"
@@ -926,6 +929,8 @@ def _rgl_census_summary(run_result: RunResult) -> JsonObject:
             "language_files": run_result.totals.files_included,
             "api_facade_files": 0,
             "api_facade_modules": [],
+            "morphodict_files": 0,
+            "morphodict_modules": [],
             "total_files": run_result.totals.files_included,
             "complete_compile_census": False,
         }
@@ -943,9 +948,20 @@ def _rgl_census_summary(run_result: RunResult) -> JsonObject:
         for prefix in _STANDARD_API_FACADE_PREFIXES
         if suffix and (facade_root / f"{prefix}{suffix}.gf").is_file()
     }
+    morphodict_root = facade_root / _MORPHODICT_DIRECTORY_NAME
+    expected_morphodict_names = {
+        name
+        for name in (
+            f"{_MORPHODICT_MODULE_PREFIX}{suffix}.gf",
+            f"{_MORPHODICT_MODULE_PREFIX}{suffix}Abs.gf",
+        )
+        if suffix and (morphodict_root / name).is_file()
+    }
     language_files = 0
     facade_files = 0
     facade_modules: list[str] = []
+    morphodict_files = 0
+    morphodict_modules: list[str] = []
     for result in run_result.file_results:
         path = result.file_path.resolve(strict=False)
         if _path_is_within(path, language_root):
@@ -953,16 +969,36 @@ def _rgl_census_summary(run_result: RunResult) -> JsonObject:
         elif path.parent == facade_root and path.name in expected_facade_names:
             facade_files += 1
             facade_modules.append(result.module_name)
+        elif path.parent == morphodict_root and path.name in expected_morphodict_names:
+            morphodict_files += 1
+            morphodict_modules.append(result.module_name)
 
-    expanded = facade_files > 0
+    has_facades = bool(expected_facade_names)
+    has_morphodict = bool(expected_morphodict_names)
+    if has_facades and has_morphodict:
+        scope = "rgl_language_plus_api_facades_and_morphodict"
+    elif has_facades:
+        scope = "rgl_language_plus_api_facades"
+    elif has_morphodict:
+        scope = "rgl_language_plus_morphodict"
+    else:
+        scope = "language_directory"
+
+    classified_files = language_files + facade_files + morphodict_files
     return {
-        "scope": "rgl_language_plus_api_facades" if expanded else "language_directory",
+        "scope": scope,
         "module_suffix": context.module_suffix,
         "language_files": language_files,
         "api_facade_files": facade_files,
         "api_facade_modules": sorted(facade_modules),
         "expected_api_facade_files": len(expected_facade_names),
         "expected_api_facade_modules": sorted(Path(name).stem for name in expected_facade_names),
+        "morphodict_files": morphodict_files,
+        "morphodict_modules": sorted(morphodict_modules),
+        "expected_morphodict_files": len(expected_morphodict_names),
+        "expected_morphodict_modules": sorted(
+            Path(name).stem for name in expected_morphodict_names
+        ),
         "total_files": run_result.totals.files_included,
         "complete_compile_census": (
             run_result.totals.files_included > 0
@@ -970,6 +1006,8 @@ def _rgl_census_summary(run_result: RunResult) -> JsonObject:
             and run_result.totals.files_error == 0
             and run_result.totals.files_skipped == 0
             and facade_files == len(expected_facade_names)
+            and morphodict_files == len(expected_morphodict_names)
+            and classified_files == run_result.totals.files_included
         ),
     }
 
@@ -1160,6 +1198,13 @@ def _compendium_certification_summary(
         and totals.files_skipped == 0
     )
     scenarios_present = totals.scenarios_seen > 0
+    reviewable_scenarios = len(reviewable_scenario_results(run_result.scenario_results))
+    if reviewable_scenarios > 0:
+        linguistic_gate = "assessed"
+    elif scenarios_present:
+        linguistic_gate = "blocked"
+    else:
+        linguistic_gate = "not_assessed"
     source_locked = bool(source_lock.get("aggregate_sha256"))
 
     if compile_gate and source_locked:
@@ -1174,7 +1219,8 @@ def _compendium_certification_summary(
         "state_floor": state_floor,
         "source_lock": "pass" if source_locked else "not_established",
         "structural_compile_gate": "pass" if compile_gate else "fail",
-        "linguistic_test_gate": "assessed" if scenarios_present else "not_assessed",
+        "linguistic_test_gate": linguistic_gate,
+        "reviewable_scenarios": reviewable_scenarios,
         "linguistic_certification": "not_established",
         "note": (
             "Compilation proves structural consistency only; linguistic correctness "

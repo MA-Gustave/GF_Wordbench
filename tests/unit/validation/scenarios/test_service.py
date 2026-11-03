@@ -45,6 +45,7 @@ class _Spec:
     normalization_profile_id: str = "scenario-default"
     normalization_version: str = "1.0.0"
     script_sha256: str = "a" * 64
+    tags: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -725,9 +726,15 @@ def test_successful_scenario_runs_each_owner_in_canonical_order(
     assert result.error_kind is ErrorKind.OK
     assert result.primary_message == "Scenario completed successfully."
     assert result.command == harness.execution.command
-    assert result.stdout_path == harness.execution.stdout_path
-    assert result.stderr_path == harness.execution.stderr_path
-    assert result.normalized_output_path == harness.normalized_output_path
+    assert result.stdout_path == Path(
+        harness.execution.stdout_path.relative_to(run_paths.run_dir).as_posix()
+    )
+    assert result.stderr_path == Path(
+        harness.execution.stderr_path.relative_to(run_paths.run_dir).as_posix()
+    )
+    assert result.normalized_output_path == Path(
+        harness.normalized_output_path.relative_to(run_paths.run_dir).as_posix()
+    )
     assert result.gold_match is True
     assert result.assertions == cast(
         "tuple[ScenarioAssertionResult, ...]",
@@ -842,8 +849,12 @@ def test_process_failures_become_structured_error_results(
     assert result.diagnostic_class is DiagnosticClass.AMBIGUOUS
     assert result.error_kind is error_kind
     assert result.primary_message == message
-    assert result.stdout_path == harness.execution.stdout_path
-    assert result.stderr_path == harness.execution.stderr_path
+    assert result.stdout_path == Path(
+        harness.execution.stdout_path.relative_to(run_paths.run_dir).as_posix()
+    )
+    assert result.stderr_path == Path(
+        harness.execution.stderr_path.relative_to(run_paths.run_dir).as_posix()
+    )
     assert normalization.calls == []
     assert harness.calls == ["execute", "markers", "artifacts"]
 
@@ -939,6 +950,66 @@ def test_zero_exit_gf_shell_failure_is_structured_observable_failure(
             marker="unknown qualified constant",
             line_number=4,
         ),
+    )
+
+
+def test_generate_pmcfg_internal_error_outranks_downstream_empty_grammar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec, run_config, run_paths, harness, _, normalization = _ready_harness(
+        tmp_path,
+        monkeypatch,
+    )
+    harness.execution = replace(
+        harness.execution,
+        exit_code=0,
+        stderr_text="empty grammar, no abstract\n",
+        stdout_text=(
+            "Internal error in GeneratePMCFG:\n"
+            '    evalTerm (Predef.error "Cannot find an inflection rule")\n'
+            "GF_WORDBENCH_BEGIN parse-basic\n"
+            "empty grammar, no abstract\n"
+            "GF_WORDBENCH_END parse-basic\n"
+        ),
+    )
+    harness.assertions = ()
+    harness.gold = _Gold(None, None)
+    harness.artifacts = _Artifacts()
+    production_models = SimpleNamespace(
+        ScenarioSectionResult=ScenarioSectionResult,
+        ScenarioDiagnosticObservation=ScenarioDiagnosticObservation,
+        ScenarioResult=ScenarioResult,
+    )
+    _install_harness(
+        monkeypatch,
+        harness,
+        normalization,
+        models=production_models,
+    )
+
+    result = _call_run_scenario(spec, run_config, run_paths)
+
+    assert result.status is ValidationStatus.ERROR
+    assert result.exit_code == 0
+    assert result.diagnostic_class is DiagnosticClass.DIRECT
+    assert result.error_kind is ErrorKind.INTERNAL
+    assert result.primary_message == (
+        "GF reported an internal generation error: "
+        "Internal error in GeneratePMCFG: "
+        'evalTerm (Predef.error "Cannot find an inflection rule")'
+    )
+    assert normalization.calls == []
+    assert result.diagnostics[0].marker == "empty grammar, no abstract"
+    assert result.diagnostics[1] == ScenarioDiagnosticObservation(
+        kind="gf_internal_generate_pmcfg",
+        source="stdout",
+        message=(
+            "Internal error in GeneratePMCFG: "
+            'evalTerm (Predef.error "Cannot find an inflection rule")'
+        ),
+        marker="Internal error in GeneratePMCFG",
+        line_number=1,
     )
 
 
@@ -1439,3 +1510,55 @@ def test_bounded_messages_are_stable_and_finite() -> None:
 
     with pytest.raises(TypeError, match="message must be a string"):
         service._bounded_message(1)  # type: ignore[arg-type]
+
+
+
+def test_profile_surface_failures_detect_empty_case_and_visible_bind() -> None:
+    spec = _Spec(
+        scenario_id="alb-verb-06",
+        script_path=Path("validation/scenarios/alb-verb-06.gfs"),
+        required=True,
+        working_directory=Path.cwd(),
+        timeout_sec=60.0,
+        output_limit_bytes=1024,
+        tags=("verb", "require-nonempty-cases", "forbid-visible-bind"),
+    )
+    stdout = """GF_WORDBENCH_BEGIN cases
+CASE C0157 buy_V2 past sg p3
+
+
+CASE C0160 buy_V2 subj sg p3
+blej &+ ë
+
+GF_WORDBENCH_END cases
+"""
+
+    diagnostics = service._profile_surface_failures(spec, stdout)
+
+    assert [item.kind for item in diagnostics] == [
+        "scenario_surface_empty_case",
+        "scenario_surface_token_binding",
+    ]
+    assert diagnostics[0].line_number == 2
+    assert diagnostics[1].line_number == 6
+    assert diagnostics[0].marker == "CASE"
+    assert diagnostics[1].marker == "&+"
+    assert all(item.error_kind is ErrorKind.SCRIPT for item in diagnostics)
+
+
+def test_profile_surface_failures_do_not_apply_to_generic_scenarios() -> None:
+    spec = _Spec(
+        scenario_id="scenario-basic",
+        script_path=Path("validation/scenarios/scenario-basic.gfs"),
+        required=True,
+        working_directory=Path.cwd(),
+        timeout_sec=60.0,
+        output_limit_bytes=1024,
+    )
+    stdout = """GF_WORDBENCH_BEGIN cases
+CASE C0001 token-binding-probe
+x &+ y
+GF_WORDBENCH_END cases
+"""
+
+    assert service._profile_surface_failures(spec, stdout) == ()

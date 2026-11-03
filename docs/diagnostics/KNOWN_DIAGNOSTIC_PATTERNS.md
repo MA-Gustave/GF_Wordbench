@@ -643,7 +643,11 @@ GeneratePMCFG
 - Inspect both streams.
 - Retain nearby stack/runtime lines as secondary evidence.
 - Do not downgrade to `OTHER`.
-- Do not infer direct/downstream causality here.
+- Do not infer direct/downstream causality in the generic parser.
+- In scenario execution, if this fatal root is observed together with later `empty grammar, no
+  abstract` shell messages, the scenario interpreter must keep this `GeneratePMCFG` diagnostic
+  primary, classify the result as `ERROR` / `INTERNAL`, and retain the shell messages as
+  secondary structured evidence.
 
 ### Known associated evidence
 
@@ -2242,3 +2246,39 @@ use a safe fallback
 mark uncertainty
 add a fixture before adding a new rule
 ```
+
+---
+
+# 62. Profile surface-contract observations
+
+Scenario validation has two opt-in profile observations that supplement, rather than replace, canonical GF diagnostics:
+
+- `scenario_surface_empty_case`: a labeled CASE in the raw `cases` section has no realized output line.
+- `scenario_surface_token_binding`: realized CASE output contains a literal `&+` token-binding marker.
+
+Both are direct blocking `SCRIPT` observations with raw stdout provenance. They are enabled by the generic tags `require-nonempty-cases` and `forbid-visible-bind`; the built-in Albanian catalog opts into both. They must not be promoted into language-neutral GF parser patterns. If a native GF diagnostic is also present, ordinary diagnostic priority still applies.
+
+---
+
+# 63. GF constant-not-found location binding and causal use
+
+`DP-GFCONST-001` binds a `constant not found:` / `unknown qualified constant`
+message to the nearest preceding GF source-location header in the same stream,
+for example:
+
+```text
+IrregSqi.gf:3-7:
+  Happened in the renaming of personTable
+   constant not found: Number
+```
+
+The canonical record therefore carries `source_path=IrregSqi.gf`,
+`source_module=IrregSqi`, and the source range. This is evidence extraction,
+not causal classification. Diagnostic-mode classification may then use the
+located source to classify the matching target as DIRECT and importers as
+DOWNSTREAM.
+
+A scenario shell failure may also be reclassified DOWNSTREAM when its raw
+stdout/stderr names a module already established as a DIRECT compile root.
+Surface-contract failures remain direct scenario failures and are not collapsed
+onto compile roots.

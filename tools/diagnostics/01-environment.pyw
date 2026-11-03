@@ -101,14 +101,22 @@ def run_checks(config: DiagConfig, report: DiagReport, log) -> None:
         timeout=config.timeout("short", 30),
     )
 
-    if executable_available(config.gf_executable):
+    # Do not force a synthetic "gf" override into Wordbench.  When the
+    # mini-suite has an explicit path, validate that exact executable.  When it
+    # does not, bounded PATH discovery is only an environment observation;
+    # N04/N05 remain responsible for exercising Wordbench's authoritative GF
+    # resolution for the selected language/run.
+    explicit_gf = str(config.gf_executable or "").strip()
+    discovered_gf = shutil.which("gf") if not explicit_gf else None
+    gf_candidate = explicit_gf or discovered_gf
+    if gf_candidate and executable_available(gf_candidate):
         result = execute_step(
             config,
             report,
             log,
             step_id="environment.gf.version",
             title="GF executable version",
-            command=[config.gf_executable, "--version"],
+            command=[gf_candidate, "--version"],
             timeout=config.timeout("short", 30),
         )
         if result.exit_code not in {0, None}:
@@ -118,17 +126,28 @@ def run_checks(config: DiagConfig, report: DiagReport, log) -> None:
                 log,
                 step_id="environment.gf.version-fallback",
                 title="GF executable version fallback",
-                command=[config.gf_executable, "-v"],
+                command=[gf_candidate, "-v"],
                 timeout=config.timeout("short", 30),
                 required=False,
             )
+    elif explicit_gf:
+        report.add(
+            "environment.gf.available",
+            FAIL,
+            "toolchain",
+            f"Explicit GF executable is unavailable: {explicit_gf}",
+            recommendation="Correct WORDBENCH_DIAG_GF_EXECUTABLE or diag.config.local.json.",
+        )
     else:
         report.add(
             "environment.gf.available",
-            BLOCKED,
+            WARN,
             "toolchain",
-            f"GF executable is unavailable: {config.gf_executable}",
-            recommendation="Set WORDBENCH_DIAG_GF_EXECUTABLE or diag.config.local.json.",
+            "GF is not explicitly configured for the mini-suite and was not found on PATH",
+            recommendation=(
+                "This does not by itself invalidate Wordbench. Configure a language and run N04/N05; "
+                "set WORDBENCH_DIAG_GF_EXECUTABLE only if Wordbench cannot resolve GF itself."
+            ),
         )
 
     if config.rgl_root is None:

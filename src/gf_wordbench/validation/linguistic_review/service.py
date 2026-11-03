@@ -35,6 +35,24 @@ EVALUATION_JSON_FILENAME: Final[str] = "linguistic_review.json"
 EVALUATION_MD_FILENAME: Final[str] = "linguistic_review.md"
 _MAX_OUTPUT_BYTES: Final[int] = 2 * 1024 * 1024
 
+def reviewable_scenario_results(results: object) -> tuple[object, ...]:
+    """Return scenario results that can supply linguistic-review evidence.
+
+    Reviewability is intentionally narrower than "scenario attempted": the
+    scenario must be structurally successful and own normalized output.
+    """
+    try:
+        values = tuple(results)  # type: ignore[arg-type]
+    except TypeError as exc:
+        raise TypeError("results must be iterable") from exc
+    return tuple(
+        result
+        for result in values
+        if _enum_value(_required_attr(result, "status")) == ValidationStatus.OK.value.lower()
+        and _required_attr(result, "normalized_output_path") is not None
+    )
+
+
 _DEFAULT_INSTRUCTIONS: Final[tuple[str, ...]] = (
     "Judge the generated text only as linguistic evidence; do not infer success from GF exit status.",
     "Use verdict valid only when the text is grammatical and natural in the stated language variety.",
@@ -64,12 +82,10 @@ def build_linguistic_review_request(
     language_key = _required_text(_required_attr(context, "language_key"), field="language_key")
 
     scenarios: list[LinguisticReviewScenario] = []
-    for result in tuple(_required_attr(run_result, "scenario_results")):
-        if _enum_value(_required_attr(result, "status")) != ValidationStatus.OK.value.lower():
-            continue
+    for result in reviewable_scenario_results(
+        _required_attr(run_result, "scenario_results")
+    ):
         relative_output = _required_attr(result, "normalized_output_path")
-        if relative_output is None:
-            continue
         output_path = _run_owned_path(run_dir, relative_output)
         data = output_path.read_bytes()
         if len(data) > _MAX_OUTPUT_BYTES:

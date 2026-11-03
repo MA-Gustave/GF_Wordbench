@@ -80,7 +80,8 @@ Environment overrides are also supported:
 
 ```text
 WORDBENCH_DIAG_REPO_ROOT
-WORDBENCH_DIAG_PROJECT_ROOT
+WORDBENCH_DIAG_LANGUAGE_PATH
+WORDBENCH_DIAG_VALIDATION_PROFILE
 WORDBENCH_DIAG_OUTPUT_ROOT
 WORDBENCH_DIAG_GF_EXECUTABLE
 WORDBENCH_DIAG_RGL_ROOT
@@ -147,3 +148,7 @@ N05 intentionally starts a full release validation and may take significant time
 ## Troubleshooting CLI-wide failures
 
 If package and GUI imports pass but `--help`, `--version`, and all CLI checks fail, inspect the displayed output tail or the per-command `.log` files. This usually indicates a shared CLI entrypoint/import problem rather than a GF or project failure.
+
+## GF resolution note
+
+The mini-suite no longer injects a default `GF_WORDBENCH_GF_EXE=gf` into child processes. If `gf_executable` is left empty, Wordbench keeps ownership of GF resolution (explicit environment/configuration first, then its bounded PATH discovery). N01 reports missing PATH GF as `WARN`; N04/N05 provide the authoritative runtime/release result.

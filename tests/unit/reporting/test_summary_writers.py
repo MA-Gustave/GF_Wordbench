@@ -15,7 +15,7 @@ from gf_wordbench.infrastructure.filesystem import PathContainmentError
 from gf_wordbench.infrastructure.json_io import read_json
 from gf_wordbench.kernel.statuses import OverallStatus, ValidationMode
 from gf_wordbench.reporting.schemas.summary_v1 import SummaryV1ValidationError
-from gf_wordbench.reporting.summary import json_writer
+from gf_wordbench.reporting.summary import json_writer, markdown_writer
 from gf_wordbench.reporting.summary.json_writer import (
     SUMMARY_FILENAME,
     SummaryJsonWriter,
@@ -402,3 +402,70 @@ def test_write_summary_md_rejects_a_destination_outside_the_run_directory(
         write_summary_md(completed_run_result)
 
     assert not outside.exists()
+
+
+def test_linguistic_scenario_evidence_is_blocked_without_reviewable_output() -> None:
+    scenarios = (
+        SimpleNamespace(status="fail", normalized_output_path=None),
+        SimpleNamespace(status="error", normalized_output_path=None),
+    )
+    label, reviewable = markdown_writer._linguistic_scenario_evidence(
+        scenarios,
+        scenarios_seen=2,
+    )
+    assert label == "BLOCKED"
+    assert reviewable == 0
+
+
+def test_linguistic_scenario_evidence_is_assessed_with_successful_output() -> None:
+    scenarios = (
+        SimpleNamespace(status="ok", normalized_output_path=Path("normalized/a.txt")),
+        SimpleNamespace(status="fail", normalized_output_path=None),
+    )
+    label, reviewable = markdown_writer._linguistic_scenario_evidence(
+        scenarios,
+        scenarios_seen=2,
+    )
+    assert label == "ASSESSED"
+    assert reviewable == 1
+
+
+def test_rgl_census_label_includes_same_language_morphodict(tmp_path: Path) -> None:
+    source_root = tmp_path / "src"
+    language_root = source_root / "albanian"
+    morphodict_root = source_root / "morphodict"
+    language_root.mkdir(parents=True)
+    morphodict_root.mkdir()
+
+    language_files = [language_root / f"Module{index}Sqi.gf" for index in range(3)]
+    facade_files = [source_root / f"{prefix}Sqi.gf" for prefix in (
+        "Combinators", "Constructors", "Symbolic", "Syntax", "Try"
+    )]
+    morphodict_files = [
+        morphodict_root / "MorphoDictSqi.gf",
+        morphodict_root / "MorphoDictSqiAbs.gf",
+    ]
+    for path in (*language_files, *facade_files, *morphodict_files):
+        path.write_text("-- fixture\n", encoding="utf-8")
+
+    files = tuple(
+        SimpleNamespace(file_path=path)
+        for path in (*language_files, *facade_files, *morphodict_files)
+    )
+    run_result = SimpleNamespace(
+        run_config=SimpleNamespace(
+            language_context=SimpleNamespace(
+                language_directory=language_root,
+                rgl_source_root=source_root,
+                module_suffix="Sqi",
+            )
+        ),
+        file_results=files,
+        totals=SimpleNamespace(files_included=len(files)),
+    )
+
+    assert markdown_writer._rgl_census_counts(run_result) == (3, 5, 5, 2, 2)
+    assert markdown_writer._complete_rgl_census(run_result) is True
+    assert markdown_writer._rgl_census_label(run_result) == (
+        "10 = 3 language + 5/5 API facades + 2/2 MorphoDict"
+    )

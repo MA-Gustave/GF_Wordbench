@@ -321,3 +321,11 @@ Changing an external-tool contract requires coordinated review of:
 [ ] Wordbench does not execute Portfolio workspaces
 [ ] capability claims have executable or source evidence
 ```
+
+## SemantiK Phrase Ops candidate handoff (v1.4)
+
+GF Wordbench may accept a `semantik-wordbench-handoff-v1` bundle produced by SemantiK Phrase Ops Console as **candidate input only**.
+
+The handoff inspector must fail closed on schema, authority flags, declared SHA-256 values, source-report identity, case accounting, capability declarations, or source-surface mismatches. A successful inspection yields `ACCEPTED_FOR_WORDBENCH_VALIDATION` with `release_eligible=false`.
+
+The handoff does not create reviewed goldens, does not certify linguistic quality, does not build or bless a release PGF, and does not imply `READY`. Wordbench must reproduce the applicable GF/scenario evidence and pass its native linguistic-review and release gates before a release decision can exist.

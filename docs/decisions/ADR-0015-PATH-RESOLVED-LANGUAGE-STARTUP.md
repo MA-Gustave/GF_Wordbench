@@ -31,9 +31,9 @@ one GF source file inside that language directory
 Examples:
 
 ```text
-C:\mycode\Grammatical_Framework\gf-rgl\src\english
-C:\mycode\Grammatical_Framework\gf-rgl\src\english\LangEng.gf
-C:\mycode\Grammatical_Framework\gf-rgl\src\english\AdjectiveEng.gf
+C:\mycode\Grammatical-Framework\gf-rgl\src\english
+C:\mycode\Grammatical-Framework\gf-rgl\src\english\LangEng.gf
+C:\mycode\Grammatical-Framework\gf-rgl\src\english\AdjectiveEng.gf
 ```
 
 Wordbench uses that selection to construct a bounded **language candidate**. It
@@ -858,6 +858,28 @@ explicit path directives or profile requirements supported by existing contracts
 
 Only existing directories are accepted according to required or optional path
 policy.
+
+### 13.2.1 Same-language MorphoDict companion
+
+The RGL may keep a language's generated morphological dictionary in the
+conventional sibling directory `src/morphodict` rather than inside the selected
+language directory. Wordbench may add that directory as a bounded companion
+path only when the active module suffix has an exact matching file:
+
+```text
+MorphoDict<Suffix>.gf
+MorphoDict<Suffix>Abs.gf
+```
+
+For an external language tree, the same rule applies to a project-local sibling
+`morphodict` directory next to the selected language directory. Discovery is
+exact-name and same-suffix only. The companion directory does not authorize
+scanning or importing MorphoDict modules belonging to other language suffixes.
+
+When present, the matching MorphoDict GF files participate in Global Scan's
+compile census and the companion directory is recorded in the effective GF path.
+This is a bounded same-language extension of the resolved context, not an
+all-language path.
 
 ### 13.3 No all-language path
 

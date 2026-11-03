@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
-    [string] $RepoRoot = "C:\mycode\Grammatical_Framework\GF_Wordbench\GF_Wordbench",
-    [string] $EnglishPath = "C:\mycode\Grammatical_Framework\gf-rgl\src\english",
+    [string] $RepoRoot = "C:\mycode\Grammatical-Framework\GF_Wordbench\GF_Wordbench",
+    [string] $EnglishPath = "C:\mycode\Grammatical-Framework\gf-rgl\src\english",
     [switch] $SkipFullSuite,
     [switch] $NoPause
 )
@@ -165,7 +165,7 @@ function Resolve-EnglishLanguagePath {
 
     $Candidates = @(
         $RequestedPath,
-        "C:\mycode\Grammatical_Framework\gf-rgl\src\english",
+        "C:\mycode\Grammatical-Framework\gf-rgl\src\english",
         (Join-Path $RepositoryParent "gf-rgl\src\english"),
         (Join-Path $FrameworkParent "gf-rgl\src\english")
     ) |

@@ -69,3 +69,18 @@ desktop.ini
 
 # Project-owned scenarios, inputs, gold files, sources, and documentation
 # are intentionally not ignored.
+/SmartSnap.pyw
+
+# Additional backup naming variants
+*.bak_*
+*.bak-*
+*.backup
+*.backup-*
+*.backup_*
+
+# Additional transient test directories
+.pytest-tmp/
+test-results/
+playwright-report/
+ZmartZnap.pyw
+GitSink.bat

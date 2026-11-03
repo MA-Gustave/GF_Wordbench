@@ -8,10 +8,10 @@ independent failures and preserving per-file evidence.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 import hashlib
-from pathlib import Path
+from pathlib import Path, PurePath
 import re
 import time
 from typing import Final, Protocol
@@ -37,7 +37,7 @@ from gf_wordbench.kernel.statuses import (
 from gf_wordbench.reporting.details.writer import write_global_scan_reports
 from gf_wordbench.reporting.summary.markdown_writer import write_summary_md
 from gf_wordbench.runs.identity import iter_run_id_candidates
-from gf_wordbench.runs.paths import allocate_run_paths
+from gf_wordbench.runs.paths import allocate_run_paths, resolve_run_relative_path
 from gf_wordbench.runs.public import RunConfig, RunResult
 from gf_wordbench.runs.result_builder import build_file_result, build_run_result
 from gf_wordbench.validation.compilation.gf_adapter import GfProcessAdapter
@@ -86,6 +86,9 @@ _STANDARD_API_FACADE_PREFIXES: Final[tuple[str, ...]] = (
     "Syntax",
     "Try",
 )
+
+_MORPHODICT_DIRECTORY_NAME: Final[str] = "morphodict"
+_MORPHODICT_MODULE_PREFIX: Final[str] = "MorphoDict"
 
 
 class _EventSink(Protocol):
@@ -554,6 +557,14 @@ def execute_diagnostic_run(
         )
         completed += 1
 
+    scenario_results = list(
+        _diagnostic_scenario_results(
+            scenario_results,
+            file_results=file_results,
+            run_paths=run_paths,
+        )
+    )
+
     finished_at = datetime.now(UTC)
     duration_ms = max(0, int((time.monotonic() - started_clock) * 1000))
     result = build_run_result(
@@ -615,13 +626,13 @@ def _expand_rgl_global_census(
     inventory: tuple[Path, ...],
     language_root: Path,
 ) -> tuple[tuple[Path, ...], Path]:
-    """Expand a language inventory with same-suffix public API facades.
+    """Expand a language inventory with same-language public companions.
 
-    Standard in-tree RGL languages keep their facades directly under the RGL
-    source root. External language projects commonly mirror the same layout in
-    their own ``src`` directory while depending on a separate upstream RGL.
-    Global Scan treats both layouts as one compile census without changing the
-    ownership boundary of the resolved language context.
+    Standard RGL languages keep API facades directly under the RGL source root
+    and generated morphology dictionaries under ``src/morphodict``. External
+    language projects commonly mirror both layouts in their own ``src``
+    directory while depending on a separate upstream RGL. Global Scan includes
+    only same-suffix companions, never arbitrary sibling-language modules.
     """
 
     rgl_source_root = context.rgl_source_root.resolve(strict=True)
@@ -636,25 +647,40 @@ def _expand_rgl_global_census(
 
     seen = {path.resolve(strict=True) for path in inventory}
     if in_tree:
-        candidates = tuple(facade_root.glob(f"*{suffix}.gf"))
+        facade_candidates = tuple(facade_root.glob(f"*{suffix}.gf"))
     else:
-        candidates = tuple(
+        facade_candidates = tuple(
             facade_root / f"{prefix}{suffix}.gf"
             for prefix in _STANDARD_API_FACADE_PREFIXES
         )
 
-    facades: list[Path] = []
-    for candidate in candidates:
+    companions: list[Path] = []
+    for candidate in facade_candidates:
         if not candidate.is_file():
             continue
         resolved = candidate.resolve(strict=True)
         if resolved in seen:
             continue
-        facades.append(resolved)
+        companions.append(resolved)
         seen.add(resolved)
 
-    combined = tuple(sorted((*inventory, *facades), key=str))
-    return combined, facade_root if facades else language_root
+    morphodict_root = facade_root / _MORPHODICT_DIRECTORY_NAME
+    if morphodict_root.is_dir():
+        for name in (
+            f"{_MORPHODICT_MODULE_PREFIX}{suffix}.gf",
+            f"{_MORPHODICT_MODULE_PREFIX}{suffix}Abs.gf",
+        ):
+            candidate = morphodict_root / name
+            if not candidate.is_file():
+                continue
+            resolved = candidate.resolve(strict=True)
+            if resolved in seen:
+                continue
+            companions.append(resolved)
+            seen.add(resolved)
+
+    combined = tuple(sorted((*inventory, *companions), key=str))
+    return combined, facade_root if companions else language_root
 
 
 def _diagnostic_sources(
@@ -718,6 +744,98 @@ def _diagnostic_file_results(items: list[_DiagnosticWorkItem]):
             )
         )
     return tuple(sorted(results, key=lambda result: result.file_path.as_posix()))
+
+
+_SCENARIO_DEPENDENCY_MARKERS: Final[frozenset[str]] = frozenset(
+    {"constant not found:", "unknown qualified constant", "empty grammar, no abstract"}
+)
+
+
+def _diagnostic_scenario_results(
+    results,
+    *,
+    file_results,
+    run_paths,
+):
+    """Collapse scenario shell fallout onto already-proven direct compile roots.
+
+    Diagnostic mode compiles the complete source census before running scenarios.
+    When a scenario later reports a GF shell failure and its raw evidence names a
+    module already classified as a direct compile failure, the scenario is
+    downstream of that root rather than an independent blocker.
+    """
+    direct_roots = {
+        str(result.module_name)
+        for result in file_results
+        if result.status in {ValidationStatus.FAIL, ValidationStatus.ERROR}
+        and result.diagnostic_class is DiagnosticClass.DIRECT
+    }
+    if not direct_roots:
+        return tuple(results)
+
+    classified = []
+    for result in results:
+        if result.status not in {ValidationStatus.FAIL, ValidationStatus.ERROR}:
+            classified.append(result)
+            continue
+        if result.diagnostic_class not in {DiagnosticClass.DIRECT, DiagnosticClass.AMBIGUOUS}:
+            classified.append(result)
+            continue
+        diagnostics = tuple(getattr(result, "diagnostics", ()))
+        linkable = any(
+            getattr(observation, "kind", "") == "gf_shell_error"
+            and getattr(observation, "marker", "") in _SCENARIO_DEPENDENCY_MARKERS
+            for observation in diagnostics
+        )
+        if not linkable:
+            classified.append(result)
+            continue
+
+        raw_text = _scenario_raw_evidence_text(result, run_paths=run_paths)
+        blockers = tuple(
+            sorted(
+                module
+                for module in direct_roots
+                if _module_is_named_in_diagnostic_text(raw_text, module)
+            )
+        )
+        if not blockers:
+            classified.append(result)
+            continue
+        classified.append(
+            replace(
+                result,
+                diagnostic_class=DiagnosticClass.DOWNSTREAM,
+                blocked_by=blockers,
+            )
+        )
+    return tuple(classified)
+
+
+def _scenario_raw_evidence_text(result, *, run_paths) -> str:
+    parts: list[str] = []
+    for field_name in ("stderr_path", "stdout_path"):
+        relative = getattr(result, field_name, None)
+        if relative is None:
+            continue
+        if isinstance(relative, PurePath):
+            relative = relative.as_posix()
+        try:
+            path = resolve_run_relative_path(run_paths, relative)
+            parts.append(path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, TypeError, ValueError):
+            continue
+    return "\n".join(parts)
+
+
+def _module_is_named_in_diagnostic_text(text: str, module: str) -> bool:
+    if not text or not module:
+        return False
+    expression = re.compile(
+        rf"(?<![A-Za-z0-9_]){re.escape(module)}(?:\.gf)?(?=[^A-Za-z0-9_]|$)",
+        re.IGNORECASE,
+    )
+    return expression.search(text) is not None
 
 
 def _classify_diagnostic_item(

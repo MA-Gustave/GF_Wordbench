@@ -6,6 +6,6 @@ and are defined by their respective owning modules.
 
 from typing import Final
 
-__version__: Final[str] = "1.3.3"
+__version__: Final[str] = "1.4.0"
 
 __all__ = ("__version__",)

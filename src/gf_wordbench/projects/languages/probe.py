@@ -16,6 +16,7 @@ preflight responsibilities.
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from inspect import Parameter, Signature
@@ -87,6 +88,12 @@ _ENTRYPOINT_ORDER: Final[dict[LanguageModuleRole, int]] = {
     LanguageModuleRole.GRAMMAR: 1,
     LanguageModuleRole.ALL: 2,
 }
+
+_MORPHODICT_DIRECTORY_NAME: Final[str] = "morphodict"
+_MORPHODICT_MODULE_PREFIX: Final[str] = "MorphoDict"
+_DEPENDENCY_MODULE_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"\b[A-Za-z][A-Za-z0-9_]*\b")
+_MAX_DEPENDENCY_INDEX_FILES: Final[int] = 20_000
+_MAX_DEPENDENCY_VISITED_FILES: Final[int] = 8_192
 
 
 @runtime_checkable
@@ -338,6 +345,7 @@ class LanguageProbeService:
         gf_path_requirements = _gf_path_requirements(
             language_directory,
             source_root=roots.source_root,
+            module_suffix=classification.selected_suffix,
             filesystem=self.filesystem,
         )
         candidate = LanguageCandidate(
@@ -700,7 +708,16 @@ def probe_language_path(
         return result
 
     context = result.context
-    if gf_path_resolver is not None:
+    if gf_path_resolver is None:
+        entries = _resolve_rgl_dependency_path_requirements(
+            language_directory=context.language_directory,
+            rgl_source_root=context.rgl_source_root,
+            seed_files=context.source_inventory,
+            base_requirements=context.gf_path_requirements,
+        )
+        if entries:
+            context = replace(context, gf_path_requirements=entries)
+    else:
         observation = _invoke_flexible_port(
             gf_path_resolver,
             ("resolve_language_gf_path", "resolve_gf_path", "resolve"),
@@ -1074,6 +1091,7 @@ def _gf_path_requirements(
     language_directory: Path,
     *,
     source_root: Path,
+    module_suffix: str | None,
     filesystem: LanguageProbeFilesystem,
 ) -> tuple[Path, ...]:
     result = [language_directory]
@@ -1088,6 +1106,15 @@ def _gf_path_requirements(
         if filesystem.is_directory(project_source_root):
             result.append(project_source_root)
 
+    companion = _morphodict_companion_root(
+        language_directory,
+        source_root=source_root,
+        module_suffix=module_suffix,
+        filesystem=filesystem,
+    )
+    if companion is not None:
+        result.append(companion)
+
     result.extend(
         source_root / marker
         for marker in _STANDARD_SOURCE_MARKERS
@@ -1095,6 +1122,219 @@ def _gf_path_requirements(
     )
     return tuple(dict.fromkeys(result))
 
+
+def _morphodict_companion_root(
+    language_directory: Path,
+    *,
+    source_root: Path,
+    module_suffix: str | None,
+    filesystem: LanguageProbeFilesystem,
+) -> Path | None:
+    """Return the bounded same-language ``morphodict`` companion, if present.
+
+    The RGL keeps generated morphological dictionaries in ``src/morphodict``
+    rather than inside each language directory.  External language projects may
+    mirror that layout next to their language directory.  We recognize only the
+    exact active-language modules ``MorphoDict<Suffix>.gf`` and
+    ``MorphoDict<Suffix>Abs.gf``; the directory is never treated as an
+    all-language search path.
+    """
+
+    if not module_suffix:
+        return None
+
+    source_parent = (
+        source_root
+        if language_directory.parent == source_root
+        else language_directory.parent
+    )
+    candidate = source_parent / _MORPHODICT_DIRECTORY_NAME
+    if not filesystem.is_directory(candidate):
+        return None
+
+    expected = (
+        candidate / f"{_MORPHODICT_MODULE_PREFIX}{module_suffix}.gf",
+        candidate / f"{_MORPHODICT_MODULE_PREFIX}{module_suffix}Abs.gf",
+    )
+    if not any(filesystem.is_file(path) for path in expected):
+        return None
+    return candidate
+
+
+
+def _resolve_rgl_dependency_path_requirements(
+    *,
+    language_directory: Path,
+    rgl_source_root: Path,
+    seed_files: Sequence[Path] | Iterable[Path],
+    base_requirements: Sequence[Path] | Iterable[Path] = (),
+) -> tuple[Path, ...]:
+    """Enrich one bounded language GF path with reachable RGL dependencies.
+
+    Shared implementation families such as ``romance``, ``scandinavian`` and
+    ``hindustani`` live outside individual language directories. We index actual
+    RGL module filenames, follow only references reachable from the selected
+    language sources, and add only those parent directories. This preserves the
+    no-all-language-path rule while making valid family dependencies resolvable.
+    """
+
+    language_directory = language_directory.expanduser().resolve(strict=False)
+    rgl_source_root = rgl_source_root.expanduser().resolve(strict=False)
+    if not rgl_source_root.is_dir():
+        return _dedupe_dependency_paths((language_directory, *base_requirements))
+
+    module_index = _build_dependency_module_index(rgl_source_root)
+    queue: deque[Path] = deque()
+    queued: set[str] = set()
+    for seed in seed_files:
+        path = Path(seed).expanduser().resolve(strict=False)
+        if path.is_file() and path.suffix.casefold() == ".gf":
+            key = _dependency_path_key(path)
+            if key not in queued:
+                queued.add(key)
+                queue.append(path)
+
+    discovered_dirs: list[Path] = []
+    seen_dirs: set[str] = {_dependency_path_key(language_directory)}
+    visited_files: set[str] = set()
+
+    while queue and len(visited_files) < _MAX_DEPENDENCY_VISITED_FILES:
+        source = queue.popleft()
+        source_key = _dependency_path_key(source)
+        if source_key in visited_files:
+            continue
+        visited_files.add(source_key)
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+
+        for module_name in tuple(
+            dict.fromkeys(_DEPENDENCY_MODULE_TOKEN_RE.findall(_mask_dependency_text(text)))
+        ):
+            candidates = module_index.get(module_name)
+            if not candidates:
+                continue
+            for dependency in candidates:
+                dep_key = _dependency_path_key(dependency)
+                if dep_key not in visited_files and dep_key not in queued:
+                    queued.add(dep_key)
+                    queue.append(dependency)
+                parent = dependency.parent.resolve(strict=False)
+                if not (
+                    parent == rgl_source_root
+                    or parent.is_relative_to(rgl_source_root)
+                ):
+                    continue
+                parent_key = _dependency_path_key(parent)
+                if parent_key not in seen_dirs:
+                    seen_dirs.add(parent_key)
+                    discovered_dirs.append(parent)
+
+    base = _dedupe_dependency_paths(base_requirements)
+    base_keys = {_dependency_path_key(path) for path in base}
+    ordered: list[Path] = [language_directory]
+    ordered.extend(
+        path
+        for path in discovered_dirs
+        if _dependency_path_key(path) != _dependency_path_key(language_directory)
+        and _dependency_path_key(path) not in base_keys
+    )
+    ordered.extend(base)
+    return _dedupe_dependency_paths(ordered)
+
+
+def _build_dependency_module_index(source_root: Path) -> dict[str, tuple[Path, ...]]:
+    grouped: dict[str, list[Path]] = {}
+    count = 0
+    for directory, dirnames, filenames in os.walk(source_root, followlinks=False):
+        dirnames.sort(key=str.casefold)
+        filenames.sort(key=str.casefold)
+        root = Path(directory)
+        for filename in filenames:
+            if not filename.casefold().endswith(".gf"):
+                continue
+            count += 1
+            if count > _MAX_DEPENDENCY_INDEX_FILES:
+                return {name: tuple(paths) for name, paths in grouped.items()}
+            path = (root / filename).resolve(strict=False)
+            grouped.setdefault(path.stem, []).append(path)
+    return {name: tuple(paths) for name, paths in grouped.items()}
+
+
+def _mask_dependency_text(text: str) -> str:
+    """Mask GF strings and line/block comments before module-token scanning."""
+
+    out: list[str] = []
+    i = 0
+    block_depth = 0
+    in_string = False
+    length = len(text)
+    while i < length:
+        pair = text[i : i + 2]
+        ch = text[i]
+        if in_string:
+            if ch == "\\" and i + 1 < length:
+                out.extend((" ", " "))
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            out.append("\n" if ch == "\n" else " ")
+            i += 1
+            continue
+        if block_depth:
+            if pair == "{-":
+                block_depth += 1
+                out.extend((" ", " "))
+                i += 2
+                continue
+            if pair == "-}":
+                block_depth -= 1
+                out.extend((" ", " "))
+                i += 2
+                continue
+            out.append("\n" if ch == "\n" else " ")
+            i += 1
+            continue
+        if pair == "--":
+            end = text.find("\n", i + 2)
+            if end < 0:
+                out.extend(" " * (length - i))
+                break
+            out.extend(" " * (end - i))
+            i = end
+            continue
+        if pair == "{-":
+            block_depth = 1
+            out.extend((" ", " "))
+            i += 2
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(" ")
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _dedupe_dependency_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
+    result: list[Path] = []
+    seen: set[str] = set()
+    for raw in paths:
+        path = Path(raw).expanduser().resolve(strict=False)
+        key = _dependency_path_key(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(path)
+    return tuple(result)
+
+
+def _dependency_path_key(path: Path) -> str:
+    return os.path.normcase(os.path.normpath(os.fspath(path)))
 
 def _base_capability_statuses() -> tuple[LanguageCapabilityStatus, ...]:
     return (

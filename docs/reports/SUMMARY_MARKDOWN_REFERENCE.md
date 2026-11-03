@@ -2935,3 +2935,20 @@ SECURITY.md
 Therefore:
 
 > Render every claim from structured evidence, keep the canonical outline stable, prioritize direct and required failures, preserve scenario and regression visibility, link to owned evidence, and never turn Markdown prose into the machine source of truth.
+
+---
+
+# 47. Compendium linguistic-evidence availability
+
+The `RGL Certification (Compendium)` table distinguishes three states for
+scenario evidence:
+
+- `NOT ASSESSED`: no scenarios were attempted;
+- `BLOCKED`: scenarios were attempted, but none completed with reviewable
+  normalized output;
+- `ASSESSED`: at least one successful scenario produced normalized output that
+  can enter the linguistic-review request.
+
+The table also reports `Reviewable scenarios` as `N/seen`. `BLOCKED` must not be
+rendered as `ASSESSED`, because attempted scenarios that fail before producing
+normalized output do not constitute linguistic evidence.
