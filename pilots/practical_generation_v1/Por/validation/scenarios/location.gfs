@@ -1,0 +1,9 @@
+-- Semantic pilot location: Spatial relationship
+-- Expected meaning (English gloss): Mira is in the house.
+-- GF_WORDBENCH_INPUT_SHA256 e90857a85c7c899c8399d13bdae7ad0d7219f176cb1802647f13068b55198f6d validation/inputs/DefluensLocation.gf
+-- GF_WORDBENCH_INPUT_SHA256 12c99093cb84e1a394f829f06e4bb57c69eb63ff78d168ed162c145623c7e607 validation/inputs/DefluensLocationPor.gf
+i DefluensLocationPor.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensLocationPor Realize
+ps "GF_WORDBENCH_END linearize"
+q

@@ -1,0 +1,9 @@
+-- Semantic pilot obligation: Obligation distinct from possibility
+-- Expected meaning (English gloss): You must wait.
+-- GF_WORDBENCH_INPUT_SHA256 c75a115bc54f4bcaa1cf389584ca9923185304baa2ec2be00f98f2a6879abd36 validation/inputs/DefluensObligation.gf
+-- GF_WORDBENCH_INPUT_SHA256 306c67df7543e2b11abc0c68f413d42d68e1436e86aa0e5b04062b4d607f446f validation/inputs/DefluensObligationIta.gf
+i DefluensObligationIta.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensObligationIta Realize
+ps "GF_WORDBENCH_END linearize"
+q

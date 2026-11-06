@@ -1,0 +1,9 @@
+-- Semantic pilot past-state: Past state
+-- Expected meaning (English gloss): Mira was tired.
+-- GF_WORDBENCH_INPUT_SHA256 b1b256bac870f11c039de312cc0e2d3953f04788bd7706577b1bb72e877d3701 validation/inputs/DefluensPastState.gf
+-- GF_WORDBENCH_INPUT_SHA256 434aaf6bbd19e00a3eab7b33a85f3554fe63522bac56c4ca3a4eac3759a1df71 validation/inputs/DefluensPastStateAfr.gf
+i DefluensPastStateAfr.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensPastStateAfr Realize
+ps "GF_WORDBENCH_END linearize"
+q

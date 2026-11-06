@@ -1,0 +1,9 @@
+-- Semantic pilot prohibition: Negative imperative
+-- Expected meaning (English gloss): Do not wait!
+-- GF_WORDBENCH_INPUT_SHA256 9009d9377c2e951205b1b18fdd0cd200441efd384a023442a5ff30ab8bfd063e validation/inputs/DefluensProhibition.gf
+-- GF_WORDBENCH_INPUT_SHA256 a38f0b2e749f23236824d29d4158b0fa54eec209e50fa651d1bb153c2bb8b885 validation/inputs/DefluensProhibitionSwe.gf
+i DefluensProhibitionSwe.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensProhibitionSwe Realize
+ps "GF_WORDBENCH_END linearize"
+q

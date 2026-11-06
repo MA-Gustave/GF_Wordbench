@@ -61,6 +61,9 @@ dev = [
 
 [project.scripts]
 gf-wordbench = "gf_wordbench.entrypoints.cli.main:main"
+gf-wordbench-practical = "gf_wordbench.practical.cli:main"
+gf-wordbench-practical-pilot = "gf_wordbench.practical.pilot:main"
+gf-wordbench-practical-batch = "gf_wordbench.practical.batch:main"
 
 [project.gui-scripts]
 gf-wordbench-gui = "gf_wordbench.entrypoints.gui.main:main"
@@ -76,9 +79,11 @@ packages = ["src/gf_wordbench"]
 include = [
   "/.github",
   "/docs",
+  "/profiles",
   "/scripts",
   "/src",
   "/templates",
+  "/pilots",
   "/tests",
   "/*.bat",
   "/*.json",

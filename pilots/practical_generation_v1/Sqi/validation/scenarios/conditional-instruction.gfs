@@ -1,0 +1,9 @@
+-- Semantic pilot conditional-instruction: Instruction linked to a condition
+-- Expected meaning (English gloss): If Mira arrives, wait!
+-- GF_WORDBENCH_INPUT_SHA256 faf7ef427bc58864e13a2cac5bc56db659e89744f11118095d5c84e4e23b79b4 validation/inputs/DefluensConditionalInstruction.gf
+-- GF_WORDBENCH_INPUT_SHA256 7c8a7cfa79332e3ad33edb12ebdf9c71b60982eedb24bad16140025c4642e473 validation/inputs/DefluensConditionalInstructionSqi.gf
+i DefluensConditionalInstructionSqi.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensConditionalInstructionSqi Realize
+ps "GF_WORDBENCH_END linearize"
+q

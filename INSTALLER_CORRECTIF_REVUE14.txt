@@ -1,0 +1,15 @@
+ARS MAGNA DEFLUENS — CORRECTIF WORD BENCH v0.1.4 (14 LANGUES)
+
+Extraire les fichiers du correctif dans :
+C:\mycode\Grammatical-Framework\GF_Wordbench
+
+Aucun fichier RGL modifie. Ce correctif ajoute un outil de revue
+linguistique pour les 14 langues testees 15/15.
+
+Commandes :
+  .\Lancer_Revue_14_Langues.bat audit
+  .\Lancer_Revue_14_Langues.bat repeat
+  .\Lancer_Revue_14_Langues.bat compare
+  .\Lancer_Revue_14_Langues.bat finalize "CHEMIN_DU_JSON_EXPORTE"
+
+Un audit ne certifie PAS linguistiquement les sorties.

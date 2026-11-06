@@ -1,0 +1,333 @@
+{
+  "schema_id": "defluens.lexical-stabilization",
+  "schema_version": "0.2.1",
+  "source_baseline": "WordBench v0.2.0",
+  "selected_languages": [
+    "Dan",
+    "Dut",
+    "Fre",
+    "Ger",
+    "Ita",
+    "Nno",
+    "Nor",
+    "Por",
+    "Spa",
+    "Swe"
+  ],
+  "scenarios_patched": 31,
+  "status": "proposed_not_gf_validated",
+  "gold_approved": false,
+  "changes": [
+    {
+      "lang": "Fre",
+      "scenario": "past-event",
+      "previous_sha256": "3fb44da3ea2f064a8c6e869eee6bbcabe89df9657de420ebf62a28c904822dc2",
+      "source_sha256": "eadbc0fd32772b7645c2b8e4047431b96d9c30bf10f8132c9bdd9fdc930aaa1d",
+      "actions": [
+        "ParadigmsFre.etreV"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Fre",
+      "scenario": "future-reference",
+      "previous_sha256": "764b431feca6a1379809c973219f50e44c1818ece8250313f512da033abb476b",
+      "source_sha256": "a2141b8b9ccd1afc98845d6a6fb8ef85ffa1b953c5f47036fc4e4e51bb8974d1",
+      "actions": [
+        "IrregFre.revenir_V"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Fre",
+      "scenario": "condition-real",
+      "previous_sha256": "a98a87104ac1967364e33b37c8d431a3f771ef0cdadf194b68fe7654900762f4",
+      "source_sha256": "41c71abf61b140e0c72e68634afe916378c1504adc28ce9f81b9ade08052f7e8",
+      "actions": [
+        "semantic lexeme: device works"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Fre",
+      "scenario": "temporal-order",
+      "previous_sha256": "ca3819b23745a858272b45e652b34e94f19979b6d035e50f487979c1f3ac49bd",
+      "source_sha256": "f031b09a13a34d1bcc0474f43a936bcf8f3e381c35ef10fa4a3232ed312c9aba",
+      "actions": [
+        "ParadigmsFre.reflV"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Spa",
+      "scenario": "past-state",
+      "previous_sha256": "b69c4fc5d8d4d8144ebcf73e96fe9394ced802004e9d119a521a19d8ef306ee2",
+      "source_sha256": "fdf1d902f44cfc7910d84d84faae985868b61f4454d82839b6964e8b64a1c81d",
+      "actions": [
+        "ParadigmsSpa.estarCopula"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Ger",
+      "scenario": "past-event",
+      "previous_sha256": "c5315f3696d19a7d0db5aa1d1b23d79ac374ba9dd9bb18e146e8edb16314360e",
+      "source_sha256": "ff0d871922acc2cd46d79865984c57e2a616d25a79828c0595d2e279c89956f9",
+      "actions": [
+        "IrregGer.kommen_V + ParadigmsGer.mkV prefix"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Ger",
+      "scenario": "quantity",
+      "previous_sha256": "74e19f0a3c94bb9b043b726e637c2f5cf6015bdc0c8a287e60674d6597b33c3a",
+      "source_sha256": "9aef5c3d93e159c39bc0e2a1c5661a499360da0ac9c02b603a94965e52a0c257",
+      "actions": [
+        "IrregGer.tragen_V"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Ger",
+      "scenario": "temporal-order",
+      "previous_sha256": "0c1b4f900b3014c456c8f92a1d459235e7f13d5a3e001a706f1390498fba6904",
+      "source_sha256": "893b38d41b4f33276b5ea4e7273c443eeb03fa3b9d612d7cf12cf155130829ca",
+      "actions": [
+        "regular non-reflexive rests"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Dut",
+      "scenario": "past-event",
+      "previous_sha256": "bcb957d78d797fbb68926b32cf7b93f07d6483f159259cc9bc5756b0f22707db",
+      "source_sha256": "6689624a28651af85625503e9bf573a66325b08fff2cc013b1b93164fbed1534",
+      "actions": [
+        "IrregDut.komen_V + ParadigmsDut.mkV prefix"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Dut",
+      "scenario": "condition-real",
+      "previous_sha256": "0d6885033f07dee155211d9681937768b7100d0f225a042685fd2c8d908ecb42",
+      "source_sha256": "11a8acf568be64ede56c8de1979f26b3599a6f79117d31091eeaa9fc5fcdf404",
+      "actions": [
+        "ParadigmsDut.neuter"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Dut",
+      "scenario": "source-attribution",
+      "previous_sha256": "ccb8d5789b59be387baa46f06d7c3d79e435093a023cd076988f7b2f420ab6d5",
+      "source_sha256": "e97b166b43a52c4611a51634e1e9f659be6bad6baa4b49c66694d56ffec49785",
+      "actions": [
+        "ParadigmsDut.neuter"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Swe",
+      "scenario": "past-event",
+      "previous_sha256": "22fd00a437a3b50a3e29d57c74eaecd503c76170173091b1d29cce8b8b33c7f5",
+      "source_sha256": "f93f4cf4a8012c5ad59aac370f8291bd32e985a9fcb6763ba1be7705e74ea484",
+      "actions": [
+        "ParadigmsSwe.mkV six forms"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Swe",
+      "scenario": "condition-real",
+      "previous_sha256": "0eb44432d1705762693cbd1b733e0616144c74a656856c2dcea326a77e47916a",
+      "source_sha256": "88f098f481509c07d3e4ef924b1c789b8373b7fb8890c1b237c18779c721c69c",
+      "actions": [
+        "ParadigmsSwe.mkV six forms"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Swe",
+      "scenario": "conditional-instruction",
+      "previous_sha256": "b4860aaa073e408d38fc222e9e2868bb4d2e4ae8f31ccb85efd54b05114002d8",
+      "source_sha256": "a7133d3cde1be91576aea74ae0a965b34e8a8014f3d423e71393c1162e671ee9",
+      "actions": [
+        "ParadigmsSwe.mkV six forms"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Swe",
+      "scenario": "quantity",
+      "previous_sha256": "1a01c736420b37250d0754b05993ff11c8a3884de29f6b0141d065b44d530eb4",
+      "source_sha256": "a43a993a125bc68566d887df9f2492bfba1031b72562c8cd73a722b48c467f81",
+      "actions": [
+        "IrregSwe.bära_V"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Dan",
+      "scenario": "past-event",
+      "previous_sha256": "6bcf420b3309723655dfbd905a23f6163df1704e8b85e6aa7db17e2dc43e3a95",
+      "source_sha256": "2ee3d7e35f4ec568d79d71e6987cf1684c950ecc2343b22246bfca1d912e034d",
+      "actions": [
+        "ParadigmsDan.mkV three forms"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Dan",
+      "scenario": "condition-real",
+      "previous_sha256": "98cd2e9723f87b918deefa8f4be0fdc2fb8b45c6993edc84862ae847d12f3449",
+      "source_sha256": "db53d62eb29caddaf92f0ecbdef9b8cedc928376157a2eb4c4ee40dd7789bb0d",
+      "actions": [
+        "ParadigmsDan.neutrum"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Dan",
+      "scenario": "source-attribution",
+      "previous_sha256": "bddcac66d736e9a6ce1af7a0af4469db0d18f95e163edf3ad82b970ac5aa5f18",
+      "source_sha256": "e5c47b6bb089c888ee9953696317007d2395533e2bbc5f57168facc5dbe480b3",
+      "actions": [
+        "ParadigmsDan.neutrum"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Dan",
+      "scenario": "temporal-order",
+      "previous_sha256": "9135063bebc445a9acf4333512646d3471fd6f42e588264ae4e62d507e6f1fbf",
+      "source_sha256": "32ca72f6f681a214dbba788cd41e0d3edcc957db5f7ec4805a2a6d03a20d7cdf",
+      "actions": [
+        "ParadigmsDan.neutrum"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nor",
+      "scenario": "past-event",
+      "previous_sha256": "01fb59171d47057c2f60e5a6ea44fc0c359b8f2b5a7884da9496c967a91953f3",
+      "source_sha256": "eff19a5c90c1cd326a3a61c2844bda4f98c77ef92b35d79c7f598e970ea7b40f",
+      "actions": [
+        "ParadigmsNor.mkV three forms"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nor",
+      "scenario": "condition-real",
+      "previous_sha256": "b618258c82cc7aab2b1109e53b91bea61f61375b4786e8049bfd048971371535",
+      "source_sha256": "04cfd1b91956420668c98b00197bb256fc8b7e12c1f310dd29723452d28c8e3c",
+      "actions": [
+        "ParadigmsNor.neutrum"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nor",
+      "scenario": "source-attribution",
+      "previous_sha256": "1ec573c5e2b302eb86dce13e61eb4da0d5f5752a2a31ed300e6ce6459c031e3e",
+      "source_sha256": "f33480bedb7339ec8714974074760194ab65552c071c5ff3ade640d26f7656f9",
+      "actions": [
+        "ParadigmsNor.neutrum"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nor",
+      "scenario": "temporal-order",
+      "previous_sha256": "8126a620b03e525bc0be99a8cf6512eafeba95005d4b26a685a97c714a433c4b",
+      "source_sha256": "520b6f817c34233790c694ebc7b63e1dc20b262fdbb002057b80d22ad87f7976",
+      "actions": [
+        "ParadigmsNor.neutrum"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nno",
+      "scenario": "past-event",
+      "previous_sha256": "07a4f75483f6844adfe8b62749b293515aeb0bbfb1e4067fceb2d8e60812a779",
+      "source_sha256": "20ca07797a6d53c2bdcc65edc43d30dfc7aae052c08c699f50187da9555cf3eb",
+      "actions": [
+        "IrregNno.komme_V"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nno",
+      "scenario": "condition-real",
+      "previous_sha256": "df0d7b98c821d3d35d3e9e079f0de984cd33aaf11da8b2ce824f215690548d21",
+      "source_sha256": "5e5b9b8c404173cfbc5bb87bdfd791b87e02d06b53331c9d98f9c86c89d65dec",
+      "actions": [
+        "IrregNno.komme_V",
+        "ParadigmsNno.neutrum"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nno",
+      "scenario": "conditional-instruction",
+      "previous_sha256": "b5b327a5b977e2c4bd81e14124ce3386512fa672bad252e261ba5054c090625f",
+      "source_sha256": "1b78952d194f42d4e17451541cc61bd0d223c94eb08dbf583f502733b2aab6e1",
+      "actions": [
+        "IrregNno.komme_V"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nno",
+      "scenario": "quantity",
+      "previous_sha256": "aa9484f5cba968450879aa18eab3ebcf695b81d8708dcaf48d4c24a56899beeb",
+      "source_sha256": "85427f8614e875e9846ccee4727645e4eec1239de02d2e1592defe9ff16e3e1e",
+      "actions": [
+        "IrregNno.bære_V"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nno",
+      "scenario": "source-attribution",
+      "previous_sha256": "82de441e6d8ff6d2c263cb1dc75ece8babcb1bf62fd76a304d68c574bd93a2d9",
+      "source_sha256": "c67f18cbf0881c732330dd7e8d2226c27ca6bcdaafe933503a7f1123887b3143",
+      "actions": [
+        "ParadigmsNno.neutrum"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Nno",
+      "scenario": "temporal-order",
+      "previous_sha256": "4c07363f5331f299421266a99643c7d7f790cd298566c3091dcbfe59ba65a1af",
+      "source_sha256": "69dbda418ef92f6ea5ce5100fe5d3bfede7e6157132611073332532acf578732",
+      "actions": [
+        "ParadigmsNno.neutrum"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Ita",
+      "scenario": "past-event",
+      "previous_sha256": "0f2b8cfa7f8e0eb53b9501e2eb0485800d1dfc1b3b46f2ab74607f74fd7a1f4c",
+      "source_sha256": "38b31be56dfd2e97620ea139eb746ea437fb55dcd0bba691935acd001a94fb44",
+      "actions": [
+        "ParadigmsIta.essereV"
+      ],
+      "gf_executed": false
+    },
+    {
+      "lang": "Por",
+      "scenario": "past-state",
+      "previous_sha256": "c867aa262d145377c628b63d9c5cbd047781801b8d04c7a6ec2977023b51f2a2",
+      "source_sha256": "8978937cc48b37eb4bc2c45e8bbf4d76fdaef0d5b4abdd00ed741c8de294aa44",
+      "actions": [
+        "ParadigmsPor.estarCopula"
+      ],
+      "gf_executed": false
+    }
+  ]
+}

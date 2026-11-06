@@ -1,0 +1,48 @@
+{
+  "schema_id": "defluens.lexical-stabilization",
+  "schema_version": "0.2.3",
+  "source_baseline": "WordBench v0.2.2",
+  "diagnostic_run": "defluens-stabilization-v022-20261103T211036Z-0097800.zip",
+  "scenarios_patched": 3,
+  "selected_languages": [
+    "Afr",
+    "Por"
+  ],
+  "status": "proposed_pending_windows_gf",
+  "gold_approved": false,
+  "changes": [
+    {
+      "lang": "Afr",
+      "scenario": "obligation",
+      "module": "DefluensObligationAfr.gf",
+      "method": "african_typed_modal_form",
+      "previous_sha256": "2367d7be321b4e2604d23fd662ff31ae8bd5548dd75ab65b09297a77dc88e5d8",
+      "source_sha256": "ee74987a310a435c15771c45454e631fd54abdc8abe53ab9a0dbd7176d5c2894",
+      "script_sha256": "f9ea3e389690d3a5640a9bf27bee52e2329cbaf585e0e573821f4cc7cbc5d0d8",
+      "gf_executed": false,
+      "gold_approved": false
+    },
+    {
+      "lang": "Afr",
+      "scenario": "possibility",
+      "module": "DefluensPossibilityAfr.gf",
+      "method": "african_typed_modal_form",
+      "previous_sha256": "f4facdf58d5c3f632d31c14fab860c5d4a1b37330b37db4213abc7928370a891",
+      "source_sha256": "0a9a67a74f4630ccd778fd948b998a815f9d78c6ba124d8c03b1db1b89f3cee7",
+      "script_sha256": "9a63104439f0cd18ed018852177fc9f71a2d40de7afd6f019a66a4cc395cf703",
+      "gf_executed": false,
+      "gold_approved": false
+    },
+    {
+      "lang": "Por",
+      "scenario": "conditional-instruction",
+      "module": "DefluensConditionalInstructionPor.gf",
+      "method": "portuguese_paramx_number_person_import",
+      "previous_sha256": "cf43e759ba35b57ab24e889e24d3b15338b87f6dbd75ec68e2d122fab957aa44",
+      "source_sha256": "afa2b58aa124bc45629ae838d0a5073de8acb89747ce969bf62328b2e25f5cc3",
+      "script_sha256": "3f865cbc9430d95c2da7b0d6ab39ae43e54a4bb3241c34e13e7d41db8bf27f1f",
+      "gf_executed": false,
+      "gold_approved": false
+    }
+  ]
+}

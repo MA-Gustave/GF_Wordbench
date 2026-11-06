@@ -1,0 +1,9 @@
+-- Semantic pilot factual-negation: Negated proposition
+-- Expected meaning (English gloss): Mira is not ready.
+-- GF_WORDBENCH_INPUT_SHA256 eac91bb9015a583e5d1e9ec8f2eb65f5f1c94b45f81910a5365184f833395968 validation/inputs/DefluensFactualNegation.gf
+-- GF_WORDBENCH_INPUT_SHA256 e2b952aa1e7bdf9812faa7eae718471fb64e2bb46077d2cd7f14cde446ff0b8c validation/inputs/DefluensFactualNegationPol.gf
+i DefluensFactualNegationPol.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensFactualNegationPol Realize
+ps "GF_WORDBENCH_END linearize"
+q

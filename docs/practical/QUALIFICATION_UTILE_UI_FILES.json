@@ -1,0 +1,19 @@
+{
+  "package": "GF WordBench Practical Qualification GUI, main-window integration",
+  "schema_version": "1.2.1",
+  "policy": "candidate-only; 14 focus languages default; 15 required; 5 optional excluded",
+  "files": {
+    "LIRE_MOI_QUALIFICATION_UTILE.md": "081102f43b58e63dcfdaf613931c8eb725d439be9c0387f02408949334a666a0",
+    "Qualification_Langues_Utiles.pyw": "e1d9dda6c38977719933b35b0bb30e7832602ed81bfca3c41883edafb08fd6aa",
+    "docs/practical/QUALIFICATION_UTILE_UI.md": "5a19faf6386f8d895c35ad3e27adc7633f545aa38a8cd03c7dde278107350711",
+    "docs/practical/INTEGRATION_QUALIFICATION_WORDBENCH_v1.1.md": "a080ec76f2a8ba6d8eae5397f23ab48ee0e61b50301096c0214f397f7da4f7d9",
+    "tests/unit/practical/test_practical_campaign_ui.py": "08f07d9f9d6f0a89861d732e975a6a9b8df7ab9b5f79034df2dd7620d2202b40",
+    "tests/unit/practical/test_practical_tool_launcher.py": "c638e83c5ac0679c456524203012d34a28892d5702f7dba3b3394225961e1d3d",
+    "tests/integration/gui/test_main_runtime_composition.py": "738306cbb68d15a38d2debafdead8726889d6dbdbc66f28ad503556d1b883c34",
+    "src/gf_wordbench/entrypoints/gui/practical_tool.py": "901f2471437f249dd16be3808a4a8a09b9d5ec9cbfc2b68d257d35a7ab2ec974",
+    "src/gf_wordbench/entrypoints/gui/window.py": "39ed2c794843294c25c2b055644a42c2d4233b7f51d8cc1f9143893420805145",
+    "src/gf_wordbench/entrypoints/gui/runtime.py": "991d3c7ab5a48f4f2f63a72643a74286ce70006f58b27e466a93551132d41eca",
+    "README.md": "952b5d5a83efe940cb0e45925ea696ad41b5ce6c3ce02d6964259b867841ce41"
+  },
+  "layout": "canonical nested Git checkout (rootless zip extracted in .git directory)"
+}

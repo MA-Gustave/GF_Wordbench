@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string] $RepoRoot = "C:\mycode\Grammatical-Framework\GF_Wordbench\GF_Wordbench",
+    [string] $RepoRoot = $PSScriptRoot,
     [string] $EnglishPath = "C:\mycode\Grammatical-Framework\gf-rgl\src\english",
     [switch] $SkipFullSuite,
     [switch] $NoPause

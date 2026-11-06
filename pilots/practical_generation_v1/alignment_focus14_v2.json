@@ -1,0 +1,68 @@
+{
+  "schema_id": "defluens.rgl-backed-alignment-policy",
+  "schema_version": "2.0",
+  "purpose": "Limited semantic generation, not exhaustive tense/aspect/mood coverage",
+  "languages": [
+    "Eng",
+    "Fre",
+    "Spa",
+    "Ger",
+    "Dut",
+    "Swe",
+    "Dan",
+    "Nor",
+    "Nno",
+    "Fin",
+    "Est",
+    "Afr",
+    "Ita",
+    "Por"
+  ],
+  "lexicon_entries_required": [
+    "book_N",
+    "house_N",
+    "say_VS"
+  ],
+  "ready_from_lexicon": [
+    "Eng",
+    "Fre",
+    "Spa",
+    "Dut",
+    "Fin",
+    "Est",
+    "Ita",
+    "Por"
+  ],
+  "feminine_test_persona": [
+    "Fre",
+    "Spa",
+    "Ger",
+    "Nor",
+    "Nno",
+    "Ita",
+    "Por"
+  ],
+  "meeting_feminine": [
+    "Fre",
+    "Spa",
+    "Ger",
+    "Ita",
+    "Por"
+  ],
+  "return_lemma_override": {
+    "Dan": "returnere",
+    "Nor": "returnere"
+  },
+  "past_event_anterior": [
+    "Fre",
+    "Spa",
+    "Ita"
+  ],
+  "limitations": [
+    "No native GF executable bundled: semantic outcomes must be retested on Windows",
+    "Lexicon module imports may add RGL transitive dependencies",
+    "No golden outputs or linguistic approvals are created",
+    "The candidate phrases are probes, not certified language coverage",
+    "ready_A is intentionally not reused for Ger (fertig), Swe (färdig), Afr (reg) to preserve the intended prepared/ready sense"
+  ]
+}

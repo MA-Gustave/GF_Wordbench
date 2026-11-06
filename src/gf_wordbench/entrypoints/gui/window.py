@@ -121,6 +121,7 @@ class MainWindow(QMainWindow):
     open_project_requested = Signal()
     language_switch_requested = Signal()
     test_environment_requested = Signal()
+    practical_qualification_requested = Signal()
     open_last_run_requested = Signal()
     open_reports_requested = Signal()
     settings_requested = Signal()
@@ -200,6 +201,14 @@ class MainWindow(QMainWindow):
         self.test_environment_action = self._new_action(
             "Test Environment",
             object_name="testEnvironmentAction",
+        )
+        self.practical_qualification_action = self._new_action(
+            "Practical Qualification (15 capabilities)…",
+            object_name="practicalQualificationAction",
+        )
+        self.practical_qualification_action.setToolTip(
+            "Open the separate WordBench practical campaign window. "
+            "14 candidate languages are preselected; no automatic certification."
         )
         self.open_last_run_action = self._new_action(
             "Open Run Directory",
@@ -295,6 +304,8 @@ class MainWindow(QMainWindow):
         run_menu.addAction(self.cancel_action)
         run_menu.addSeparator()
         run_menu.addAction(self.test_environment_action)
+        run_menu.addSeparator()
+        run_menu.addAction(self.practical_qualification_action)
 
         view_menu = self.menuBar().addMenu("&View")
         view_menu.addAction(self.open_last_run_action)
@@ -360,6 +371,16 @@ class MainWindow(QMainWindow):
         self.run_button.setDefault(True)
         self.run_button.setAccessibleName("Run scan")
 
+        self.practical_qualification_button = QPushButton("Practical Qualification…", bar)
+        self.practical_qualification_button.setObjectName("practicalQualificationButton")
+        self.practical_qualification_button.setAccessibleName(
+            "Open multilingual practical qualification"
+        )
+        self.practical_qualification_button.setToolTip(
+            "14 recommended languages; 15 useful capabilities per language. "
+            "Runs a separate candidate-only tool."
+        )
+
         self.cancel_button = QPushButton("Cancel", bar)
         self.cancel_button.setObjectName("cancelRunButton")
         self.cancel_button.setAccessibleName("Cancel active validation run")
@@ -371,6 +392,7 @@ class MainWindow(QMainWindow):
         self.open_reports_button.setObjectName("openReportsButton")
 
         layout.addWidget(self.run_button)
+        layout.addWidget(self.practical_qualification_button)
         layout.addWidget(self.cancel_button)
         layout.addStretch(1)
 
@@ -451,6 +473,9 @@ class MainWindow(QMainWindow):
         self.test_environment_action.triggered.connect(
             lambda _checked=False: self.test_environment_requested.emit()
         )
+        self.practical_qualification_action.triggered.connect(
+            lambda _checked=False: self.practical_qualification_requested.emit()
+        )
         self.open_last_run_action.triggered.connect(
             lambda _checked=False: self.open_last_run_requested.emit()
         )
@@ -465,6 +490,9 @@ class MainWindow(QMainWindow):
         self.exit_action.triggered.connect(self.close)
 
         self.run_button.clicked.connect(lambda _checked=False: self.run_requested.emit())
+        self.practical_qualification_button.clicked.connect(
+            lambda _checked=False: self.practical_qualification_requested.emit()
+        )
         self.cancel_button.clicked.connect(self._request_cancel)
         self.open_last_run_button.clicked.connect(
             lambda _checked=False: self.open_last_run_requested.emit()
@@ -518,6 +546,8 @@ class MainWindow(QMainWindow):
         self.run_action.setEnabled(not running and self._run_available)
         self.open_project_action.setEnabled(not running)
         self.test_environment_action.setEnabled(not running)
+        self.practical_qualification_action.setEnabled(not running)
+        self.practical_qualification_button.setEnabled(not running)
         self.settings_action.setEnabled(not running)
         self.cancel_action.setEnabled(running and not cancelling)
 

@@ -1,0 +1,9 @@
+-- Semantic pilot source-attribution: Attributed statement
+-- Expected meaning (English gloss): Mira says that the device is ready.
+-- GF_WORDBENCH_INPUT_SHA256 e48c12b6d3c02c37155a5ff49fdbc0803496433b0164866bb55c466aed9e3e6d validation/inputs/DefluensSourceAttribution.gf
+-- GF_WORDBENCH_INPUT_SHA256 bf4200aa807bc0cc3ec4d82f2950bec323473a3284b523ad053014e256c9d1f6 validation/inputs/DefluensSourceAttributionRus.gf
+i DefluensSourceAttributionRus.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensSourceAttributionRus Realize
+ps "GF_WORDBENCH_END linearize"
+q

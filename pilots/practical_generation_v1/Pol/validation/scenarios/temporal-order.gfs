@@ -1,0 +1,9 @@
+-- Semantic pilot temporal-order: Temporal ordering
+-- Expected meaning (English gloss): Mira rests after the meeting.
+-- GF_WORDBENCH_INPUT_SHA256 f614c141b5f0ade64303f8cc08f1e7ffa2ea8fce19d9c560724b23c346e25591 validation/inputs/DefluensTemporalOrder.gf
+-- GF_WORDBENCH_INPUT_SHA256 a32f0cfc82eddbce448d41acb8a2d4841744cd5b6dfb1cbc07cb77dd8753c9d3 validation/inputs/DefluensTemporalOrderPol.gf
+i DefluensTemporalOrderPol.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensTemporalOrderPol Realize
+ps "GF_WORDBENCH_END linearize"
+q

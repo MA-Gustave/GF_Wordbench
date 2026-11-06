@@ -118,11 +118,11 @@ def _candidate_source_roots(config: DiagConfig) -> tuple[Path, ...]:
     candidates: list[Path] = []
     if config.rgl_root is not None:
         candidates.append(Path(config.rgl_root) / "src")
+    from gf_wordbench.entrypoints.gui.workspace_layout import sibling_from_repository
     candidates.extend(
         (
             config.repo_root / "gf-rgl" / "src",
-            config.repo_root.parent / "gf-rgl" / "src",
-            config.repo_root.parent.parent / "gf-rgl" / "src",
+            sibling_from_repository(config.repo_root, "gf-rgl") / "src",
         )
     )
 

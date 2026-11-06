@@ -76,13 +76,12 @@ def _diagnostic_language_path(
     if config.rgl_root is not None:
         candidate_roots.append(Path(config.rgl_root))
 
-    # Common checkout layouts around:
-    #   .../Grammatical_Framework/GF_Wordbench/GF_Wordbench
+    # The checkout may be inside its containing GF_Wordbench directory.
+    from gf_wordbench.entrypoints.gui.workspace_layout import sibling_from_repository
     candidate_roots.extend(
         (
             config.repo_root / "gf-rgl",
-            config.repo_root.parent / "gf-rgl",
-            config.repo_root.parent.parent / "gf-rgl",
+            sibling_from_repository(config.repo_root, "gf-rgl"),
         )
     )
 

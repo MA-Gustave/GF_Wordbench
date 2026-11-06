@@ -1485,21 +1485,18 @@ def _default_workspace_paths(
 ) -> tuple[Path | None, Path | None]:
     """Resolve bounded local defaults for the standard Grammatical_Framework layout.
 
-    GF Wordbench remains portable: no drive letter or user-specific absolute path is
-    embedded in the application.  When the repository is installed as
-    ``<suite>/GF_Wordbench/GF_Wordbench``, the two sibling development checkouts
-    used by this workspace are offered as convenience defaults if they actually
-    exist.  Missing paths fail closed to ``None`` and the normal chooser remains
-    available.
+    The canonical Git checkout is ``<suite>/GF_Wordbench/GF_Wordbench``.
+    The outer ``GF_Wordbench`` is a containing folder, not an active checkout.
+    The RGL and optional Albanian language checkout are siblings of that
+    containing folder. Missing paths fail closed to ``None``.
     """
 
     if not isinstance(workspace_root, Path):
         raise TypeError("workspace_root must be a pathlib.Path")
     root = workspace_root.resolve(strict=False)
-    if root.name == "GF_Wordbench" and root.parent.name == "GF_Wordbench":
-        suite_root = root.parent.parent
-    else:
-        suite_root = root.parent
+    from gf_wordbench.entrypoints.gui.workspace_layout import workspace_from_repository
+
+    suite_root = workspace_from_repository(root)
 
     language = (
         suite_root

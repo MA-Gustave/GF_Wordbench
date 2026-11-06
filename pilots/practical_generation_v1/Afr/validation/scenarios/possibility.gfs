@@ -1,0 +1,9 @@
+-- Semantic pilot possibility: Possibility, not fact
+-- Expected meaning (English gloss): Mira can return.
+-- GF_WORDBENCH_INPUT_SHA256 750976be69979a05610fd429013cedbaa2be0b694f27baf904264cf4fc1b4713 validation/inputs/DefluensPossibility.gf
+-- GF_WORDBENCH_INPUT_SHA256 0a9a67a74f4630ccd778fd948b998a815f9d78c6ba124d8c03b1db1b89f3cee7 validation/inputs/DefluensPossibilityAfr.gf
+i DefluensPossibilityAfr.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensPossibilityAfr Realize
+ps "GF_WORDBENCH_END linearize"
+q

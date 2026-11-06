@@ -1,0 +1,9 @@
+-- Semantic pilot past-event: Completed event
+-- Expected meaning (English gloss): Mira arrived.
+-- GF_WORDBENCH_INPUT_SHA256 74ec21fbf62dff939123d26ce526fba184d16d6d8eacdcabeeb6f7808478b37f validation/inputs/DefluensPastEvent.gf
+-- GF_WORDBENCH_INPUT_SHA256 28bc14f697db43cded13bb48d4f10e4068808c57e902ecdd35fafd898e3824c3 validation/inputs/DefluensPastEventSqi.gf
+i DefluensPastEventSqi.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensPastEventSqi Realize
+ps "GF_WORDBENCH_END linearize"
+q

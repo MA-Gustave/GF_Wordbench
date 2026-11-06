@@ -1,0 +1,9 @@
+-- Semantic pilot instruction: Positive imperative
+-- Expected meaning (English gloss): Wait!
+-- GF_WORDBENCH_INPUT_SHA256 40bc55471cfc496901e133b61dbf1f8006fa392b244657651fcfb15a59117a64 validation/inputs/DefluensInstruction.gf
+-- GF_WORDBENCH_INPUT_SHA256 c64ddfa892b153d84bf4f16f36586da1d48e10890f38e6a75ae5e9ab8f9a3b11 validation/inputs/DefluensInstructionEng.gf
+i DefluensInstructionEng.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensInstructionEng Realize
+ps "GF_WORDBENCH_END linearize"
+q

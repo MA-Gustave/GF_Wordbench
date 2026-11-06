@@ -1,4 +1,24 @@
+> **Integrated practical qualification (2026-11-05):** The main desktop
+> window now offers **Run → Practical Qualification (15 capabilities)…** and a
+> corresponding button. This opens the existing candidate-only `.pyw` with
+> the 14 reviewed-focus languages preselected. The other six pilot languages
+> remain available for diagnostic selection; no human certification is implied.
+> See [the practical GUI guide](docs/practical/QUALIFICATION_UTILE_UI.md).
+>
+> **Nouveau : Campagne Ars Magna Defluens sur 20 langues.** Dans PowerShell :
+> `.\Lancer_Campagne_Multilingue.bat check`, puis
+> `.\Lancer_Campagne_Multilingue.bat smoke`, puis
+> `.\Lancer_Campagne_Multilingue.bat full`.
+> Les rapports consolidés et le ZIP partageable sont créés dans **Downloads**.
+> Voir `docs/CAMPAGNE_MULTILINGUE_DEFLUENS_v013.md`.
+> **Aucune phrase candidate n'est une preuve d'équivalence linguistique validée.**
+
 # GF Wordbench 1.4.0 — SemantiK candidate handoff
+> **Ecosystem name update (2026-11-03):** The multi-language orchestration
+> project is now **Ars Magna Defluens** (formerly Ars Magna Lulli / Ars Magna).
+> WordBench still owns per-language GF validation. See
+> [integration responsibilities](docs/integration/ARS_MAGNA_DEFLUENS.md).
+
 
 GF Wordbench now accepts a fail-closed `semantik-wordbench-handoff-v1` candidate bundle from SemantiK Phrase Ops. This does **not** make Phrase Ops evidence a Wordbench release proof.
 
@@ -1129,3 +1149,74 @@ GF Wordbench is distributed under the terms documented in
 
 Third-party components, including Grammatical Framework and language resources,
 retain their own licenses.
+
+
+## Ars Magna Defluens — practical generation pilot (2026-11-03)
+
+A **non-certifying, executable pilot** for 15 practical linguistic
+capabilities is available in `pilots/practical_generation_v1/{Eng,Fre,Sqi}`.
+It uses native GF `.gfs` scripts and WordBench's process boundary to generate
+review candidates, and never auto-approves linguistic results.
+
+On Windows: `Lancer_Pilote_Pratique.bat Eng check`, then
+`Lancer_Pilote_Pratique.bat Eng smoke`. For the full 15-case pilot,
+`Lancer_Pilote_Pratique.bat Eng full` (or `Fre` / `Sqi`).
+
+See [pilot instructions](docs/practical/PILOTE_15_FONCTIONS_DEFLUENS.md).
+**No real GF 3.12 run and no language-specific gold review has yet been performed**
+for these new probes; Observatory must not treat the pilot as canonical proof.
+
+### Ars Magna Defluens — revue ciblée des 14 langues (v0.1.4)
+
+Le lanceur `Lancer_Revue_14_Langues.bat` propose `audit` (revue de 210
+preuves existantes sans GF), `repeat` (nouvelle campagne réelle, 14 langues
+seulement), `compare` (répétabilité), et `finalize` (validation des décisions
+humaines). Rapports et interface HTML locale dans Downloads.
+Voir [le protocole de revue](docs/practical/REVUE_14_LANGUES_DEFLUENS_v014.md).
+Une sortie GF n'est **jamais automatiquement approuvée**.
+
+
+## Alignement lexical RGL — 14 langues (v0.2.0)
+
+Le lanceur `Lancer_Alignement_14_Langues.bat` vérifie puis rejoue les 15
+capacités dans les 14 langues cibles. Les modules du pilote réutilisent des
+entrées `LexiconXXX` existantes et sont verrouillés par SHA. Voir
+`docs/practical/ALIGNEMENT_RGL_14_LANGUES_v020.md`. **Ces sources sont des
+propositions non validées GF**, pas des golds linguistiques.
+
+## SemantiK Architect practical evidence handoff
+
+After a complete 14-language batch, run `Lancer_Handoff_SemantiK.bat` to create
+`Downloads\Ars_Magna_Defluens\semantik_handoff.json`. This exports
+candidate-only GF evidence with explicit SA↔GF contract gaps; it is **not** a
+WordBench READY release, PGF artifact or SemantiK conformance proof. See
+`docs/integration/DEFLUENS_SA_DEVELOPMENT_HANDOFF.md`.
+
+### Defluens v0.5 / French PGF development candidate
+
+`Lancer_Premier_PGF_SemantiK.bat` (or `python tools/build_semantik_profile3_candidate.py`) compiles the five-case *SA-owned* French GF profile via the existing WordBench GF build boundary, writing a hash-locked candidate under Downloads. This is not a language release or 15-capability certification. See `docs/integration/SEMANTIK_PROFILE3_DEVELOPMENT_v05.md`.
+
+## v0.6 — one selected Defluens GF probe
+
+`tools/preview_defluens_capability.py` executes one locked practical intent in
+one prepared language via the established WordBench pilot engine; no new GF
+engine, SA mapping or release gate is introduced. See
+[`docs/integration/DEFLUENS_SINGLE_GF_PREVIEW_v06.md`](docs/integration/DEFLUENS_SINGLE_GF_PREVIEW_v06.md).
+
+## Defluens parametric semantic candidate (v0.7)
+
+The existing [`tools/build_semantik_profile3_candidate.py`](tools/build_semantik_profile3_candidate.py) now accepts `--profile defluens-attribute-fr-1 --rgl-root <gf-rgl>` for a separate French **RGL-backed** PGF candidate, without altering its original Konstellation-3 default. Semantic/grammar/profile sources remain owned by SemantiK Architect; WordBench only compiles, hashes and stages the candidate. See [`docs/integration/DEFLUENS_TYPED_ATTRIBUTE_v07.md`](docs/integration/DEFLUENS_TYPED_ATTRIBUTE_v07.md).
+
+
+## Repository-layout consolidation — v1.2 (2026-11-05)
+
+This distribution has **one** authoritative `GF_Wordbench` directory. The
+legacy duplicate `GF_Wordbench/GF_Wordbench` is removed. The canonical root
+owns `pyproject.toml`, `src`, `tests`, `pilots`, `launch_gui.bat` and the
+practical qualification `.pyw`. The main Qt GUI exposes **Run → Practical
+Qualification…**, selecting 14 candidate languages by default, with exactly
+15 practical required capabilities (no five optional capabilities).
+
+See [installation guide](README_INSTALLATION_SINGLE_ROOT.md) and
+[architecture decision](docs/architecture/SINGLE_REPOSITORY_ROOT_v1.2.md).
+Historical pilot results are **GF candidates**, not language certification.

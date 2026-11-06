@@ -340,7 +340,7 @@ GF_Wordbench
 Example Windows location:
 
 ```text
-C:\mycode\Grammatical-Framework\GF_Wordbench\GF_Wordbench
+C:\mycode\Grammatical-Framework\GF_Wordbench
 ```
 
 The repository may be cloned to another local parent path.

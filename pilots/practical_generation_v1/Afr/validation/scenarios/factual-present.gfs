@@ -1,0 +1,9 @@
+-- Semantic pilot factual-present: Present factual predicate
+-- Expected meaning (English gloss): Mira is ready.
+-- GF_WORDBENCH_INPUT_SHA256 a5a9d20a2c238e2922538c1a7b251e198f0e674112c0094e64e593f237d1df8d validation/inputs/DefluensFactualPresent.gf
+-- GF_WORDBENCH_INPUT_SHA256 5c8da0a53f6f717fe93d53f6dde1196411b763d2a282de47b3868bb46747a74a validation/inputs/DefluensFactualPresentAfr.gf
+i DefluensFactualPresentAfr.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensFactualPresentAfr Realize
+ps "GF_WORDBENCH_END linearize"
+q

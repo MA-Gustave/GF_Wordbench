@@ -267,7 +267,7 @@ def test_primary_configuration_workflow_is_not_wrapped_in_a_scroll_area(
 def test_workspace_default_gf_executable_is_derived_from_repository_location(
     tmp_path: Path,
 ) -> None:
-    repository_root = tmp_path / "GF_Wordbench" / "GF_Wordbench"
+    repository_root = tmp_path / "GF_Wordbench"
     repository_root.mkdir(parents=True)
     executable = tmp_path / "gf-3.12-windows" / "gf.exe"
     executable.parent.mkdir(parents=True)
@@ -281,7 +281,7 @@ def test_workspace_default_gf_executable_is_derived_from_repository_location(
 def test_workspace_default_gf_executable_is_optional_when_missing(
     tmp_path: Path,
 ) -> None:
-    repository_root = tmp_path / "GF_Wordbench" / "GF_Wordbench"
+    repository_root = tmp_path / "GF_Wordbench"
     repository_root.mkdir(parents=True)
 
     assert _workspace_default_gf_executable(repository_root=repository_root) is None
@@ -374,3 +374,29 @@ def test_run_worker_terminal_signal_is_reemitted_on_gui_thread(
     assert callback_threads, "worker finished signal was not delivered"
     assert callback_threads[0] == qapplication.thread()
     assert handle.wait_for_shutdown(1_000) is True
+
+
+def test_practical_qualification_is_integrated_without_starting_gf(
+    tmp_path: Path, qapplication: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Main Qt shell delegates to a separate window rather than duplicating GF."""
+    from gf_wordbench.entrypoints.gui import runtime as runtime_module
+
+    runtime = build_main_runtime(qapplication, _external_context(tmp_path))
+    window = runtime.window
+    called = []
+    monkeypatch.setattr(runtime_module, 'launch_qualification', lambda: called.append(True))
+    assert window.practical_qualification_action.text().startswith('Practical Qualification')
+    assert window.practical_qualification_button.isEnabled()
+    assert window.practical_qualification_action.isEnabled()
+
+    window.practical_qualification_action.trigger()
+    window.practical_qualification_button.click()
+    assert called == [True, True]
+
+    window.set_run_state(WindowRunState.RUNNING)
+    assert not window.practical_qualification_action.isEnabled()
+    assert not window.practical_qualification_button.isEnabled()
+    window.set_run_state(WindowRunState.READY)
+    assert window.practical_qualification_action.isEnabled()
+    runtime.shutdown()

@@ -1,0 +1,27 @@
+schema_id = "gf-wordbench.project"
+schema_version = "1.0"
+
+[project]
+id = "defluens-nno-pilot"
+name = "Ars Magna Defluens practical pilot — Nno"
+language_code = "nynorsk"
+root = "."
+
+[sources]
+directory = "validation/inputs"
+glob = "*.gf"
+include_regex = "^[A-Z][A-Za-z0-9_]*[.]gf$"
+exclude_regex = "[.]bak[.]gf$"
+
+[gf]
+path_parts = []
+minimum_version = ""
+
+[modules]
+entrypoints = ["DefluensFactualPresentNno.gf"]
+checkpoints = ["DefluensFactualPresentNno.gf"]
+
+[validation]
+required_scenarios = ["factual-present", "past-event", "past-state", "future-reference", "factual-negation", "temporal-order", "condition-real", "possibility", "source-attribution", "quantity", "location", "instruction", "prohibition", "obligation", "conditional-instruction"]
+optional_scenarios = []
+release_requires_pgf = false

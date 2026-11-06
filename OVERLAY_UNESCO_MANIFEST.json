@@ -1,0 +1,11 @@
+{
+  "format": "kristal.unesco-overlay-manifest/1.0",
+  "target_root": "C:\\mycode\\Grammatical-Framework\\GF_Wordbench",
+  "additive": true,
+  "requires_other_overlays": true,
+  "files": {
+    "README_OVERLAY_UNESCO_GF.md": "328323f5c34dedf9f9b5cd7ed99400124d43d8ca9002213cd4fe24256cdbff66",
+    "tools/test_unesco_gf_build.py": "6740fe90d3dd69bfeca9259d838746b04fb8a21345bac937dbf331f36090992c",
+    "tools/unesco_gf_build.py": "64e8805a85c0069414138cbd23fe0edf3604fd686c8f5a6c173775046cb8a678"
+  }
+}

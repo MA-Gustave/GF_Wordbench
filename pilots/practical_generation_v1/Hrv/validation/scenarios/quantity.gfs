@@ -1,0 +1,9 @@
+-- Semantic pilot quantity: Explicit quantity
+-- Expected meaning (English gloss): Mira carries two books.
+-- GF_WORDBENCH_INPUT_SHA256 25216408473ac87b6c5194a5252a6fc375345afa8c1c1fb01e6fe3b7fd560b7f validation/inputs/DefluensQuantity.gf
+-- GF_WORDBENCH_INPUT_SHA256 0cbd49510f8907e67161c25251cc4eded372af32295af5c13f6a4e0c24dedcec validation/inputs/DefluensQuantityHrv.gf
+i DefluensQuantityHrv.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensQuantityHrv Realize
+ps "GF_WORDBENCH_END linearize"
+q

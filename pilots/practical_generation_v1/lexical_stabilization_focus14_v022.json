@@ -1,0 +1,85 @@
+{
+  "schema_id": "defluens.lexical-stabilization",
+  "schema_version": "0.2.2",
+  "source_baseline": "WordBench v0.2.1",
+  "selected_languages": [
+    "Afr",
+    "Est",
+    "Por"
+  ],
+  "scenarios_patched": 7,
+  "status": "proposed_pending_windows_gf",
+  "gold_approved": false,
+  "changes": [
+    {
+      "lang": "Afr",
+      "scenario": "past-event",
+      "method": "african_anterior_participle",
+      "previous_sha256": "791b1b15400b88b3ad07c983cec1eb8dac11ee18fa49f8bb199a4cbedb72491a",
+      "source_sha256": "78e7b1b379e530b49b9a4ab4e99bd819387b5cabfdbfdce5440bd6681c3ee28d",
+      "script_sha256": "e83f22268c894f59ba51fd02fcda578943fd8163394c1e71bb54c33dd45056b6",
+      "gf_executed": false,
+      "gold_approved": false
+    },
+    {
+      "lang": "Afr",
+      "scenario": "obligation",
+      "method": "african_modal_without_te",
+      "previous_sha256": "4c5f6c84985a87a64e8f65f013eefdbddad2936d7d0c7e51b2e8744d163f2536",
+      "source_sha256": "2367d7be321b4e2604d23fd662ff31ae8bd5548dd75ab65b09297a77dc88e5d8",
+      "script_sha256": "657eac0f3c31f927625337d6c8f4beb6e2fe2cee7f3917ac6d21ca0d5348f4e7",
+      "gf_executed": false,
+      "gold_approved": false
+    },
+    {
+      "lang": "Afr",
+      "scenario": "possibility",
+      "method": "african_modal_without_te",
+      "previous_sha256": "2947c2ffb2ee7d77433bce4c8b51d435263bf85ec0ae74c25ced634352b5b6b8",
+      "source_sha256": "f4facdf58d5c3f632d31c14fab860c5d4a1b37330b37db4213abc7928370a891",
+      "script_sha256": "e5b69a6ec8a2ed3512883c8b97bb05e1f2975867c249091a70bb2d6d2e202db4",
+      "gf_executed": false,
+      "gold_approved": false
+    },
+    {
+      "lang": "Afr",
+      "scenario": "prohibition",
+      "method": "african_moenie_imperative",
+      "previous_sha256": "e3e87012d0c6dcbaf3665d4941c05827fe8c5a713ce3ee5c7dd48e5d2d601025",
+      "source_sha256": "7ac04f2f810bbcaf6af5788fc50e48a15e2cd85dcb1e6614d00834c992c49804",
+      "script_sha256": "439cca9dccb8b8e8210e68dd087dc3c111498e3039faaf125442f272e5deece7",
+      "gf_executed": false,
+      "gold_approved": false
+    },
+    {
+      "lang": "Est",
+      "scenario": "conditional-instruction",
+      "method": "estonian_condition_after_imperative",
+      "previous_sha256": "d7ae6ea42bc817867ea2c92c8809be836f8133068552be2133cb7c2ed03e7b1f",
+      "source_sha256": "5c856f2f65db1072c3b4c6360b3359ce38957dfd2044db87a868e92ba6c35340",
+      "script_sha256": "b1e73265544f3c5cf91417e8973cd7372763a6d9d8ee31af3de4bbf712adf63e",
+      "gf_executed": false,
+      "gold_approved": false
+    },
+    {
+      "lang": "Por",
+      "scenario": "conditional-instruction",
+      "method": "portuguese_future_subjunctive",
+      "previous_sha256": "b8c86eeeb9668f6b480c59c4d2742d4a8a32c0267196a2a11061ff0ee459705b",
+      "source_sha256": "cf43e759ba35b57ab24e889e24d3b15338b87f6dbd75ec68e2d122fab957aa44",
+      "script_sha256": "dc44b3e9f390b26d03caac2c5a03c2c4dba4916284787f7a70b78a32a3846fac",
+      "gf_executed": false,
+      "gold_approved": false
+    },
+    {
+      "lang": "Por",
+      "scenario": "past-event",
+      "method": "portuguese_simple_perfective_past",
+      "previous_sha256": "2fbef35954fe539c582cf6558680d8621eb1c5fcee09f6b2aa4698841008c232",
+      "source_sha256": "48f513ff4148b65f453589b909a31c2f367fde4e342beb3f6c12c381377677f4",
+      "script_sha256": "bdcd9ef1d566e323b4cf4205a9fec689e4867a38246f3e13ee7deedf3ff5e2df",
+      "gf_executed": false,
+      "gold_approved": false
+    }
+  ]
+}

@@ -237,7 +237,7 @@ Using Git:
 
 ```powershell
 git clone <repository-url>
-Set-Location GF_Wordbench\GF_Wordbench
+Set-Location GF_Wordbench
 ```
 
 When working from an existing local checkout:

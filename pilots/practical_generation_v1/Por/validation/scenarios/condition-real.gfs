@@ -1,0 +1,9 @@
+-- Semantic pilot condition-real: Real-world condition
+-- Expected meaning (English gloss): If Mira arrives, the device works.
+-- GF_WORDBENCH_INPUT_SHA256 de217c76ff334ada279cdd1c1fb8b0cba883f833ddcbd8329c6f137d8403d874 validation/inputs/DefluensConditionReal.gf
+-- GF_WORDBENCH_INPUT_SHA256 32949db95f0d2232e35989827d7b25857ace35506184a1a297a916a544e3562c validation/inputs/DefluensConditionRealPor.gf
+i DefluensConditionRealPor.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensConditionRealPor Realize
+ps "GF_WORDBENCH_END linearize"
+q

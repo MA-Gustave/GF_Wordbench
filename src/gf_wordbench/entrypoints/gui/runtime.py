@@ -31,6 +31,7 @@ from gf_wordbench.projects.models import ProjectConfig
 from gf_wordbench.runs.application import execute_diagnostic_run, execute_quick_run
 from gf_wordbench.runs.identity import iter_run_id_candidates
 
+from .practical_tool import launch_qualification
 from .panels.project import LanguageContextPanel
 from .panels.validation import (
     ValidationChoice,
@@ -251,11 +252,23 @@ class PathResolvedMainGuiRuntime:
         self._window.cancel_requested.connect(self._cancel_run)
         self._window.settings_requested.connect(self._configure_gf_executable)
         self._window.test_environment_requested.connect(self._test_environment)
+        self._window.practical_qualification_requested.connect(
+            self._launch_practical_qualification
+        )
         self._window.open_last_run_requested.connect(self._open_last_run)
         self._window.open_reports_requested.connect(self._open_reports)
         panel = self._require_validation_panel()
         panel.values_changed.connect(lambda _values: self._refresh_run_available())
         panel.browse_target_requested.connect(self._browse_target)
+
+    def _launch_practical_qualification(self) -> None:
+        """Open candidate-only 15-capability campaign without starting GF here."""
+        if self._closed or self._window.run_state is not WindowRunState.READY:
+            return
+        try:
+            launch_qualification()
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._show_exception("Practical qualification could not start.", exc)
 
     def _open_validation_profile(self, profile_path: object) -> None:
         path = Path(profile_path)
@@ -759,18 +772,18 @@ def _workspace_default_gf_executable(
 ) -> Path | None:
     """Return the workspace-local GF 3.12 executable when present.
 
-    The installed Wordbench repository normally lives at
-    ``<workspace>/GF_Wordbench/GF_Wordbench``.  Keep the default portable by
-    deriving the workspace from the running package instead of hard-coding a
-    drive letter.  Explicit ``GF_WORDBENCH_GF_EXE`` configuration still has
-    higher precedence, while PATH discovery remains the final fallback.
+    The canonical Git checkout is ``<workspace>/GF_Wordbench/GF_Wordbench``.
+    Resolve the compiler in ``<workspace>/gf-3.12-windows`` without a drive
+    letter. A single-directory checkout is supported as well. Explicit
+    ``GF_WORDBENCH_GF_EXE`` still takes precedence; PATH is the last fallback.
     """
 
     root = repository_root
     if root is None:
         root = Path(__file__).resolve().parents[4]
-    workspace_root = root.parent.parent
-    candidate = (workspace_root / "gf-3.12-windows" / "gf.exe").resolve(
+    from gf_wordbench.entrypoints.gui.workspace_layout import sibling_from_repository
+
+    candidate = (sibling_from_repository(root, "gf-3.12-windows") / "gf.exe").resolve(
         strict=False
     )
     if _is_gf_executable(candidate):

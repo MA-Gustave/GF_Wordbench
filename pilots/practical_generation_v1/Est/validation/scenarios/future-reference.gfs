@@ -1,0 +1,9 @@
+-- Semantic pilot future-reference: Future reference
+-- Expected meaning (English gloss): Mira will return.
+-- GF_WORDBENCH_INPUT_SHA256 4cd768a328370f65b62dfc1ed32a1f630387b5b17216af3232e10baf140e25b4 validation/inputs/DefluensFutureReference.gf
+-- GF_WORDBENCH_INPUT_SHA256 a7707348a2a135f3a7696dfe692e8de28965a039cd40407da66596f72c4cd2f4 validation/inputs/DefluensFutureReferenceEst.gf
+i DefluensFutureReferenceEst.gf
+ps "GF_WORDBENCH_BEGIN linearize"
+l -lang=DefluensFutureReferenceEst Realize
+ps "GF_WORDBENCH_END linearize"
+q

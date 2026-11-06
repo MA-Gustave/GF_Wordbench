@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-01T15:28:33.232717Z",
+  "generated_at": "2026-11-05T23:59:00Z",
   "files": [
     {
       "path": "CHANGELOG_v1_4.md",
@@ -13,8 +13,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "37f51d08c2b30424fbea5e7467e031f6734b45c74e923a3dd9f1f248ffeee8a5",
-      "size": 31896
+      "sha256": "952b5d5a83efe940cb0e45925ea696ad41b5ce6c3ce02d6964259b867841ce41",
+      "size": 37244
     },
     {
       "path": "SECURITY.md",
@@ -23,7 +23,7 @@
     },
     {
       "path": "docs/00_ERRATUM.md",
-      "sha256": "9ad91dfe51d1373f6a2a59c4f94acab540ecd29657b2d76cb6039e3535a54e0e",
+      "sha256": "e60b8f1e070fe847b1e0b764666b81c0ff880d5ac358bb5b06c2a5a83b09e340",
       "size": 14935
     },
     {
@@ -238,7 +238,7 @@
     },
     {
       "path": "docs/decisions/ADR-0015-PATH-RESOLVED-LANGUAGE-STARTUP.md",
-      "sha256": "89feb7c49da6924944e92c5e268c850269bb46c967d91223bb017eadbc34cff0",
+      "sha256": "93eaae48d212bc180ec16125949a537473449162dcb3f5be5f427ceb6c0b92be",
       "size": 56581
     },
     {
@@ -268,8 +268,8 @@
     },
     {
       "path": "docs/development/DEVELOPMENT_SETUP.md",
-      "sha256": "42ff5bd856b1dd8b76088d575e7e4cce95b75a290c0c8fa27cd5c09ff938018d",
-      "size": 43114
+      "sha256": "711dbd807d7ede943c293732ff781c67356b3c5d94c80a67610ce94ab011fc16",
+      "size": 43101
     },
     {
       "path": "docs/development/EXTENDING_GF_WORDBENCH.md",
@@ -443,8 +443,8 @@
     },
     {
       "path": "docs/reference/FILE_NAMING_CONVENTIONS.md",
-      "sha256": "3f4b3a292a36c61ebc36288f1bea3df81669a6011e43ff652d616d531864b75a",
-      "size": 98460
+      "sha256": "8ace6baace190fe8d0f6896923720f28c8afb80dd6a71cbcb43ceed150c06fec",
+      "size": 98447
     },
     {
       "path": "docs/reference/SCHEMA_INDEX.md",

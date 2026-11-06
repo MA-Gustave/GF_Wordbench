@@ -1,0 +1,196 @@
+{
+  "schema_id": "defluens.pilot-catalog",
+  "schema_version": "1.0",
+  "language_code": "Swe",
+  "rgl_directory": "swedish",
+  "lexical_seeds_reviewed": false,
+  "gold_approved": false,
+  "lexical_status": "provisional_unreviewed",
+  "scenarios": [
+    {
+      "id": "factual-present",
+      "semantic_intent": "Present factual predicate",
+      "meaning_en": "Mira is ready.",
+      "module": "DefluensFactualPresentSwe.gf",
+      "abstract_module": "DefluensFactualPresent.gf",
+      "script": "validation/scenarios/factual-present.gfs",
+      "gold": "not-approved",
+      "source_sha256": "a837f7d42d00279879131a47725ca7f23e62817209ff49dca4a0d21fe871d750",
+      "script_sha256": "720d65b5367f252e0e1afe54f75f711d4dfd1ef6d103f73fccb5b9110252a0e0"
+    },
+    {
+      "id": "past-event",
+      "semantic_intent": "Completed event",
+      "meaning_en": "Mira arrived.",
+      "module": "DefluensPastEventSwe.gf",
+      "abstract_module": "DefluensPastEvent.gf",
+      "script": "validation/scenarios/past-event.gfs",
+      "gold": "not-approved",
+      "source_sha256": "f93f4cf4a8012c5ad59aac370f8291bd32e985a9fcb6763ba1be7705e74ea484",
+      "script_sha256": "c667e0902d9b7371f1fe7905d055c73353434e101e4ba7510dfde1aaa8bdb2df"
+    },
+    {
+      "id": "past-state",
+      "semantic_intent": "Past state",
+      "meaning_en": "Mira was tired.",
+      "module": "DefluensPastStateSwe.gf",
+      "abstract_module": "DefluensPastState.gf",
+      "script": "validation/scenarios/past-state.gfs",
+      "gold": "not-approved",
+      "source_sha256": "614ee1c364e31fa4dcee952c0cdc42007e57f202233d872ad19e47a7ba189987",
+      "script_sha256": "5e73037f27a5322ae6d903e26e912d4b599571cb1639e1ca71eca766339b82bb"
+    },
+    {
+      "id": "future-reference",
+      "semantic_intent": "Future reference",
+      "meaning_en": "Mira will return.",
+      "module": "DefluensFutureReferenceSwe.gf",
+      "abstract_module": "DefluensFutureReference.gf",
+      "script": "validation/scenarios/future-reference.gfs",
+      "gold": "not-approved",
+      "source_sha256": "397632a7f782f331d84bf8b16758bbd9145c3e7e77bf0792ff2af807dac671ad",
+      "script_sha256": "b7af586dc722e9caaf82d295a5b5d5db8542eb90e9a14da98f18cdc95b5c915c"
+    },
+    {
+      "id": "factual-negation",
+      "semantic_intent": "Negated proposition",
+      "meaning_en": "Mira is not ready.",
+      "module": "DefluensFactualNegationSwe.gf",
+      "abstract_module": "DefluensFactualNegation.gf",
+      "script": "validation/scenarios/factual-negation.gfs",
+      "gold": "not-approved",
+      "source_sha256": "a076dff4da595b9c4df02073f6898541167dda0fe9f2a8e082b4cad528c03e1a",
+      "script_sha256": "ffce0587d6ebd81afe50c4dba1a307bef2cad5497fc83154c999ca5a8f2769f4"
+    },
+    {
+      "id": "temporal-order",
+      "semantic_intent": "Temporal ordering",
+      "meaning_en": "Mira rests after the meeting.",
+      "module": "DefluensTemporalOrderSwe.gf",
+      "abstract_module": "DefluensTemporalOrder.gf",
+      "script": "validation/scenarios/temporal-order.gfs",
+      "gold": "not-approved",
+      "source_sha256": "45e775990c7238bc0e1f6974027705f1f83f5028afd756d926ad56ccdd657613",
+      "script_sha256": "274ce2b6560f8712bf0fa5afa2edb71ca8a233fa03e8baa683cbc61835266be2"
+    },
+    {
+      "id": "condition-real",
+      "semantic_intent": "Real-world condition",
+      "meaning_en": "If Mira arrives, the device works.",
+      "module": "DefluensConditionRealSwe.gf",
+      "abstract_module": "DefluensConditionReal.gf",
+      "script": "validation/scenarios/condition-real.gfs",
+      "gold": "not-approved",
+      "source_sha256": "88f098f481509c07d3e4ef924b1c789b8373b7fb8890c1b237c18779c721c69c",
+      "script_sha256": "7de85c21c89be20dcb449e4280b625570efd718638dfeae8d891ce61df941cda"
+    },
+    {
+      "id": "possibility",
+      "semantic_intent": "Possibility, not fact",
+      "meaning_en": "Mira can return.",
+      "module": "DefluensPossibilitySwe.gf",
+      "abstract_module": "DefluensPossibility.gf",
+      "script": "validation/scenarios/possibility.gfs",
+      "gold": "not-approved",
+      "source_sha256": "919c79fec5b9aec0dca9900449f1cc413e2767f1769f6b7eb40a0428d4bd7196",
+      "script_sha256": "e249c267e7d9256f48a4e06ca737e963122cc7a2e3513e438208cf393dcbff99"
+    },
+    {
+      "id": "source-attribution",
+      "semantic_intent": "Attributed statement",
+      "meaning_en": "Mira says that the device is ready.",
+      "module": "DefluensSourceAttributionSwe.gf",
+      "abstract_module": "DefluensSourceAttribution.gf",
+      "script": "validation/scenarios/source-attribution.gfs",
+      "gold": "not-approved",
+      "source_sha256": "385836a6e54d7409d6c1678d10f6db8f3589dd6b4f40362375545262ddc40dca",
+      "script_sha256": "61b98735a0ffba2479192c81f39d9021f0ad55e3348355de7daf0b7553bb3490"
+    },
+    {
+      "id": "quantity",
+      "semantic_intent": "Explicit quantity",
+      "meaning_en": "Mira carries two books.",
+      "module": "DefluensQuantitySwe.gf",
+      "abstract_module": "DefluensQuantity.gf",
+      "script": "validation/scenarios/quantity.gfs",
+      "gold": "not-approved",
+      "source_sha256": "a43a993a125bc68566d887df9f2492bfba1031b72562c8cd73a722b48c467f81",
+      "script_sha256": "71f8a6f7714a2f3aa4818178d2d924ab04ae329d540b2b565f7bfc9b071a1d9e"
+    },
+    {
+      "id": "location",
+      "semantic_intent": "Spatial relationship",
+      "meaning_en": "Mira is in the house.",
+      "module": "DefluensLocationSwe.gf",
+      "abstract_module": "DefluensLocation.gf",
+      "script": "validation/scenarios/location.gfs",
+      "gold": "not-approved",
+      "source_sha256": "5c6c7566fbfa6c51173316269e5a7d845312243f0420f5c1a6151b5135c5d613",
+      "script_sha256": "e77939bacae8f763da63b269f61cba877de7bad4ecb2ea4a675f6797fd7c7c40"
+    },
+    {
+      "id": "instruction",
+      "semantic_intent": "Positive imperative",
+      "meaning_en": "Wait!",
+      "module": "DefluensInstructionSwe.gf",
+      "abstract_module": "DefluensInstruction.gf",
+      "script": "validation/scenarios/instruction.gfs",
+      "gold": "not-approved",
+      "source_sha256": "c30dc8a210ba214a3caeddbd6579a40662c073e7078723921cd497e149b612b7",
+      "script_sha256": "97e1c4cd655d811707af05c5f85f7ab06372d2cb332a5823e256616f6a933f55"
+    },
+    {
+      "id": "prohibition",
+      "semantic_intent": "Negative imperative",
+      "meaning_en": "Do not wait!",
+      "module": "DefluensProhibitionSwe.gf",
+      "abstract_module": "DefluensProhibition.gf",
+      "script": "validation/scenarios/prohibition.gfs",
+      "gold": "not-approved",
+      "source_sha256": "a38f0b2e749f23236824d29d4158b0fa54eec209e50fa651d1bb153c2bb8b885",
+      "script_sha256": "584a40baf4774a27eb2c2256e6f689cbcfe2921ef9e4aa41c5952607c3221b1f"
+    },
+    {
+      "id": "obligation",
+      "semantic_intent": "Obligation distinct from possibility",
+      "meaning_en": "You must wait.",
+      "module": "DefluensObligationSwe.gf",
+      "abstract_module": "DefluensObligation.gf",
+      "script": "validation/scenarios/obligation.gfs",
+      "gold": "not-approved",
+      "source_sha256": "5db2e3ae6ceb7f86a2d3dea8ed0bb76a8da0095b1c3c16dfc79e32345d1f3aa4",
+      "script_sha256": "f5c06ecbdc5f07e55c293d18e599048b2c7289e487905d2ae13a75f77daf8a92"
+    },
+    {
+      "id": "conditional-instruction",
+      "semantic_intent": "Instruction linked to a condition",
+      "meaning_en": "If Mira arrives, wait!",
+      "module": "DefluensConditionalInstructionSwe.gf",
+      "abstract_module": "DefluensConditionalInstruction.gf",
+      "script": "validation/scenarios/conditional-instruction.gfs",
+      "gold": "not-approved",
+      "source_sha256": "a7133d3cde1be91576aea74ae0a965b34e8a8014f3d423e71393c1162e671ee9",
+      "script_sha256": "f4a89da483001e5130af13e56ea0918e2d692d631c895ec7706a14a64680ec1f"
+    }
+  ],
+  "alignment": {
+    "policy": "alignment_focus14_v2.json",
+    "status": "proposed_not_gf_validated",
+    "rgl_source_sha256": {
+      "swedish/LexiconSwe.gf": "4af0934aef84c181eddff186fe9983a53cc0318200ad9fc705ee5c4f8704d326",
+      "swedish/ParadigmsSwe.gf": "a77ecbd0a48d21ad3eb2a1b8030398597c0a7a2610e0db5575e856c31f0871c8"
+    },
+    "gold_approved": false
+  },
+  "stabilization": {
+    "version": "0.2.1",
+    "status": "pending_real_GF_execution",
+    "gold_approved": false,
+    "scenarios": [
+      "past-event",
+      "condition-real",
+      "conditional-instruction",
+      "quantity"
+    ]
+  }
+}
